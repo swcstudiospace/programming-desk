@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Pre-commit hook — the cheap checks that must run before a commit exists.
+#
+# Install:  ln -sf ../../ci/hooks/pre-commit .git/hooks/pre-commit
+#
+# This runs the secret scanner only. It is deliberately fast: a slow hook is a hook people
+# disable, and a disabled hook catches nothing. The heavier gates run in CI.
+#
+# NEVER bypass this with --no-verify (PD-3). If it is wrong, fix the gate.
+
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+GATE="$REPO_ROOT/ci/gates/check_secrets.py"
+
+if [[ ! -f "$GATE" ]]; then
+    echo "pre-commit: $GATE not found; skipping secret scan" >&2
+    exit 0
+fi
+
+echo "pre-commit: scanning staged files for secrets (G-3)..."
+
+if ! python3 "$GATE" --staged; then
+    cat >&2 <<'MSG'
+
+COMMIT BLOCKED — G-3 found a potential secret in the staged changes.
+
+If it is real:
+  1. Do NOT just unstage it. If it was ever committed, it is compromised — rotate it.
+  2. Remove it from the staged change.
+  3. Use an environment variable or a secret manager instead.
+
+If it is a false positive:
+  Add '# pragma: allowlist secret' on the line, with a comment saying why.
+
+Do NOT use --no-verify. That skips the check rather than resolving it (PD-3).
+See skills/security/secrets-handling/SKILL.md
+MSG
+    exit 1
+fi
+
+echo "pre-commit: OK"

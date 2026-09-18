@@ -1,0 +1,206 @@
+# Path ownership manifest.
+#
+# Every file in the repository resolves to EXACTLY ONE owning bot. This is what makes a
+# platform/domain decomposition workable: without it, a single feature touching mobile, API and
+# infrastructure has three bots editing the same branch with no clear authority, and the last
+# writer wins by accident rather than by decision.
+#
+# Rules:
+#   - Patterns are gitignore-style globs, matched against repo-relative paths.
+#   - LAST matching pattern wins, so put general rules first and specific overrides after.
+#   - A path matching nothing is UNOWNED, and ci/gates/check_ownership.py fails the build.
+#     Unowned files are not a minor lint problem: they are the exact places where two bots
+#     silently collide.
+#   - A bot may only modify paths it owns. Cross-bot work goes through the contract-first
+#     protocol in docs/cross-bot-protocol.md.
+#
+# Validate:  python3 ci/gates/check_ownership.py --validate-manifest
+
+version: 1
+
+bots:
+  bot-01-systems-backend:
+    name: Systems & Backend
+    languages: [rust, python]
+    description: Services, APIs, data layer, performance-critical code.
+
+  bot-02-web-edge:
+    name: Web & Edge
+    languages: [typescript, javascript]
+    runtimes: [deno, node, vercel-edge]
+    description: Browser frontend, edge functions, Vercel deployment surface.
+
+  bot-03-android:
+    name: Android
+    languages: [kotlin, java]
+    description: Android application, Compose UI, Gradle build, Play Store release.
+
+  bot-04-ios:
+    name: iOS
+    languages: [swift, objective-c]
+    description: iOS application, SwiftUI, Xcode project, App Store release.
+
+  bot-05-infrastructure:
+    name: Infrastructure & DevEx
+    languages: [hcl, yaml, bash]
+    description: IaC, Kubernetes, CI/CD, remote dev machine, observability.
+
+  bot-06-quality-security:
+    name: Quality & Security
+    description: >
+      Cross-cutting review, test strategy, secrets, supply chain, release gates.
+      The only bot with READ access everywhere. Its write scope is deliberately narrow.
+
+# ---------------------------------------------------------------------------
+# Ownership
+# ---------------------------------------------------------------------------
+ownership:
+
+  # --- Backend / systems -------------------------------------------------
+  - pattern: "services/**"
+    owner: bot-01-systems-backend
+  - pattern: "crates/**"
+    owner: bot-01-systems-backend
+  - pattern: "**/*.rs"
+    owner: bot-01-systems-backend
+  - pattern: "Cargo.toml"
+    owner: bot-01-systems-backend
+  - pattern: "Cargo.lock"
+    owner: bot-01-systems-backend
+  - pattern: "**/*.py"
+    owner: bot-01-systems-backend
+  - pattern: "pyproject.toml"
+    owner: bot-01-systems-backend
+  - pattern: "uv.lock"
+    owner: bot-01-systems-backend
+  - pattern: "migrations/**"
+    owner: bot-01-systems-backend
+
+  # --- Web / edge --------------------------------------------------------
+  - pattern: "web/**"
+    owner: bot-02-web-edge
+  - pattern: "apps/web/**"
+    owner: bot-02-web-edge
+  - pattern: "edge/**"
+    owner: bot-02-web-edge
+  - pattern: "**/*.ts"
+    owner: bot-02-web-edge
+  - pattern: "**/*.tsx"
+    owner: bot-02-web-edge
+  - pattern: "package.json"
+    owner: bot-02-web-edge
+  - pattern: "deno.json"
+    owner: bot-02-web-edge
+  - pattern: "deno.lock"
+    owner: bot-02-web-edge
+  - pattern: "vercel.json"
+    owner: bot-02-web-edge
+
+  # --- Android -----------------------------------------------------------
+  - pattern: "android/**"
+    owner: bot-03-android
+  - pattern: "**/*.kt"
+    owner: bot-03-android
+  - pattern: "**/*.kts"
+    owner: bot-03-android
+  - pattern: "**/build.gradle"
+    owner: bot-03-android
+
+  # --- iOS ---------------------------------------------------------------
+  - pattern: "ios/**"
+    owner: bot-04-ios
+  - pattern: "**/*.swift"
+    owner: bot-04-ios
+  - pattern: "**/*.xcodeproj/**"
+    owner: bot-04-ios
+  - pattern: "**/Package.swift"
+    owner: bot-04-ios
+
+  # --- Infrastructure ----------------------------------------------------
+  - pattern: "infra/**"
+    owner: bot-05-infrastructure
+  - pattern: "**/*.tf"
+    owner: bot-05-infrastructure
+  - pattern: "**/*.tfvars"
+    owner: bot-05-infrastructure
+  - pattern: "k8s/**"
+    owner: bot-05-infrastructure
+  - pattern: "deploy/**"
+    owner: bot-05-infrastructure
+  - pattern: "Dockerfile*"
+    owner: bot-05-infrastructure
+  - pattern: "docker-compose*.yml"
+    owner: bot-05-infrastructure
+  - pattern: ".github/workflows/**"
+    owner: bot-05-infrastructure
+  - pattern: "scripts/dev/**"
+    owner: bot-05-infrastructure
+
+  # --- Quality & security ------------------------------------------------
+  # Narrow on purpose. Bot 6's authority is the gates and the review, not the code.
+  - pattern: "ci/gates/**"
+    owner: bot-06-quality-security
+  - pattern: "ci/hooks/**"
+    owner: bot-06-quality-security
+  - pattern: ".pre-commit-config.yaml"
+    owner: bot-06-quality-security
+  - pattern: "SECURITY.md"
+    owner: bot-06-quality-security
+  - pattern: "ownership.yaml"
+    owner: bot-06-quality-security
+
+  # --- Shared contracts --------------------------------------------------
+  # The interface surface between bots. Contract-first protocol applies: a change here
+  # requires the consumer sign-off recorded in the receipt. See docs/cross-bot-protocol.md.
+  - pattern: "contracts/**"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "**/*.proto"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "openapi.yaml"
+    owner: bot-06-quality-security
+    contract_surface: true
+
+  # --- Verification receipts ---------------------------------------------
+  # Every bot writes receipts, so a single shared .receipts/ would be a permanently
+  # contended path. Per-bot subdirectories keep one owner per path and stop a bot
+  # from editing another bot's evidence.
+  - pattern: ".receipts/bot-01-systems-backend/**"
+    owner: bot-01-systems-backend
+  - pattern: ".receipts/bot-02-web-edge/**"
+    owner: bot-02-web-edge
+  - pattern: ".receipts/bot-03-android/**"
+    owner: bot-03-android
+  - pattern: ".receipts/bot-04-ios/**"
+    owner: bot-04-ios
+  - pattern: ".receipts/bot-05-infrastructure/**"
+    owner: bot-05-infrastructure
+  - pattern: ".receipts/bot-06-quality-security/**"
+    owner: bot-06-quality-security
+
+  # --- Docs --------------------------------------------------------------
+  - pattern: "docs/**"
+    owner: bot-06-quality-security
+  - pattern: "README.md"
+    owner: bot-06-quality-security
+
+# ---------------------------------------------------------------------------
+# Consumers of each contract surface.
+# A breaking change to a contract requires an acknowledgement from every listed consumer
+# before the gate passes. This is what stops a backend bot shipping a field rename that
+# silently breaks the iOS client three weeks before anyone notices.
+# ---------------------------------------------------------------------------
+contract_consumers:
+  "contracts/api/**":
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios
+  "contracts/events/**":
+    - bot-01-systems-backend
+    - bot-02-web-edge
+    - bot-05-infrastructure
+  "openapi.yaml":
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios

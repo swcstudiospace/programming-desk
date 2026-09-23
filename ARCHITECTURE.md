@@ -89,6 +89,15 @@ specialists). Lead therefore stays **outside** the Programming Desk channel and 
 1:1 via `SendToAgent`. The channel is for short status after assignment — never a substitute for
 tickets. Operating model: `docs/desk-operating-model.md`.
 
+Real builds go through a **double uplift** before dispatch: a long nested XML spec, a Graph of
+Thought of **5–8 nodes**, a Chain of Thought of **4–8 steps per node** (sequential by default),
+dense Notion + Linear rows (one issue per node, one sub-issue per step), then a second uplift
+that injects live tracker URLs. LEAD orchestrates that path (`skills/gotxcot-uplift`,
+`skills/trackplan-dispatch`). LEAD does not implement product code. Default runtime is a Cursor
+Cloud Agent; Hermes is optional and not a second source of truth. Policy:
+`docs/gotxcot-cloud-pipeline.md`. GitHub remains the contract of record:
+`docs/github-sot-orchestration.md`.
+
 ## 3. The ownership model
 
 Every path resolves to exactly one owner via `ownership.yaml`. Last matching pattern wins.

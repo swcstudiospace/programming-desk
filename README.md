@@ -12,6 +12,9 @@ infrastructure — decomposed by platform, with ownership and verification enfor
 |---|---|
 | Understand the seven seats and the orchestrator pattern | `ARCHITECTURE.md` |
 | How LEAD tickets and reports | `docs/desk-operating-model.md` |
+| Dense GoTxCoT double uplift (5–8 nodes, 4–8 sub-issues) | `docs/gotxcot-cloud-pipeline.md`, `skills/gotxcot-uplift/` |
+| Dispatch to Cursor Cloud Agent or Hermes | `skills/trackplan-dispatch/` |
+| GitHub source of truth, Greptile, Hermes lanes | `docs/github-sot-orchestration.md` |
 | Know who owns which file | `ownership.yaml` |
 | See the gates and what enforces each | `docs/quality-gates.md` |
 | Build a feature spanning several bots | `docs/cross-bot-protocol.md` |
@@ -119,7 +122,14 @@ path every bot needed to write to. Both are fixed and covered by regression test
 ### 1. Bot prompts
 
 Each bot's system prompt is `prompts/_shared/core-directives.xml` **prepended to** its own file.
-Substitute the `{{PLACEHOLDER}}` values.
+Substitute the `{{PLACEHOLDER}}` values. Regenerate assembled copies with:
+
+```bash
+./scripts/assemble-prompts.sh
+```
+
+That writes `prompts-assembled/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml` and the matching
+`prompts/{SEAT}.xml` aliases.
 
 Suggested models: Opus for LEAD, SYSTEMS, and QUALITY (judgement); Sonnet for WEB/ANDROID/IOS/INFRA (throughput).
 
@@ -168,12 +178,17 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 ├── ownership.yaml               Path → owner. The manifest G-1 enforces
 ├── docs/
 │   ├── quality-gates.md         G-1..G-6: rule → script → evidence
+│   ├── gotxcot-cloud-pipeline.md  Double uplift, 5–8 nodes, 4–8 sub-issues
+│   ├── github-sot-orchestration.md  GitHub SoT, Cloud/Hermes, Greptile
 │   ├── cross-bot-protocol.md    Contract-first protocol for multi-bot features
 │   └── handoff-contracts.md     Event envelope and payload schemas
 ├── prompts/
 │   ├── _shared/core-directives.xml
-│   └── bot-0{1..6}-*.xml
+│   └── bot-0{0..6}-*.xml
+├── vendor/ultrathink-policy/    VPS engine constant/prompt patch
 ├── skills/                      L1 summary → L2 method → L3 references
+│   ├── gotxcot-uplift/          LEAD: first uplift → second uplift
+│   ├── trackplan-dispatch/      LEAD: Cursor Cloud Agent or Hermes
 │   ├── verification-receipts/   The G-2 artefact. Always loaded
 │   ├── contract-first-changes/  Breaking-change analysis
 │   ├── code-review/             Review order; what to let go

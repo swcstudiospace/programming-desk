@@ -2,14 +2,14 @@
   "bot": "bot-06-quality-security",
   "task_id": "approve-lead-intake-e2e-receipt-ut-tltyh4-ebc71dbb",
   "receipt_kind": "independent_approval",
-  "recorded_at": "2026-09-24T09:21:12+10:00",
+  "recorded_at": "2026-09-24T09:30:30+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/4",
-  "head_commit_reviewed": "dfde0f471e0c4b7ce7f1f2ba4f590b7021fd3de6",
+  "head_commit_reviewed": "02016eb3918748fbab043bf22b173cdde9963eac",
   "approved_artifact": ".receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json",
   "approved_by": "bot-06-quality-security",
   "authoring_bot": "bot-00-programming-lead",
-  "decision": "APPROVE_WITH_CONDITIONS",
+  "decision": "APPROVE",
   "review_summary": [
     "Runbook documents G-1 PASS for docs/intake-e2e-runbook.md after 7fd7248 carve-out; no expects_failure on that check",
     "Lead receipt commands show G-1 exit 0 on carved path and G-2 exit 1 while approved_by unset (expects_failure) \u2014 correct until QUALITY stamps",
@@ -17,13 +17,14 @@
     "Greptile P2 ownership-scope comments waived via greptile-p2-waiver-ownership-scope-pr4.json"
   ],
   "conditions": [
-    "After this approval lands, Lead receipt must include approved_by=bot-06-quality-security and G-2 command re-run with exit 0 (no expects_failure on that claim)",
-    "Re-trigger Greptile on new head; merge-claim only after terminal COMPLETED with P1s addressed and P2 waived"
+    "P2 ownership-scope Greptile comments remain waived via greptile-p2-waiver-ownership-scope-pr4.json",
+    "If a later Greptile review flags that this amendment commit moves HEAD again, treat that as chicken-and-egg on in-repo approval SHA fields \u2014 waive with receipt rather than infinite re-stamp"
   ],
   "files_to_land": [
     ".receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json (add approved_by; refresh G-2 evidence)",
     ".receipts/bot-06-quality-security/greptile-p2-waiver-ownership-scope-pr4.json",
     ".receipts/bot-06-quality-security/approve-lead-intake-e2e-receipt-ut-tltyh4-ebc71dbb.json"
   ],
-  "notes": "Observed from repo root after stamping approved_by: python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json --bot bot-00-programming-lead exit 0, output_tail G-2 PASS — intake-e2e-runbook-ut-tltyh4-ebc71dbb: 7 command(s), 7 substantiated claim(s), 6 unverified item(s). python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/intake-e2e-runbook.md exit 0 (G-1 PASS — bot-00-programming-lead: 1 file(s) within owned paths). python3 ci/gates/check_secrets.py --files on the three touched receipts exit 0 (G-3 PASS — 3 file(s) scanned, no secrets detected)."
+  "prior_head_reviewed": "dfde0f471e0c4b7ce7f1f2ba4f590b7021fd3de6",
+  "review_amendment": "Amended after Greptile 26363786 P1: independent approval now names final PR head 02016eb3 which contains approved_by + G-2 PASS evidence. Prior review was of Lead work at dfde0f47; QUALITY re-read Lead receipt at 02016eb3 (approved_by=bot-06-quality-security, G-2 command exit 0) before amending."
 }

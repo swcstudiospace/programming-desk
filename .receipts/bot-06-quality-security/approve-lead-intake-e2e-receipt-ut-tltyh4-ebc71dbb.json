@@ -1,0 +1,31 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "approve-lead-intake-e2e-receipt-ut-tltyh4-ebc71dbb",
+  "receipt_kind": "independent_approval",
+  "recorded_at": "2026-09-24T09:38:08+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/4",
+  "head_commit_reviewed": "02016eb3918748fbab043bf22b173cdde9963eac",
+  "approved_artifact": ".receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json",
+  "approved_by": "bot-06-quality-security",
+  "authoring_bot": "bot-00-programming-lead",
+  "decision": "APPROVE",
+  "review_summary": [
+    "Lead artifact at 02016eb: approved_by=bot-06-quality-security; check_receipt.py G-2 PASS (exit 0) with 7 commands / 7 claims",
+    "Runbook documents G-1 PASS for docs/intake-e2e-runbook.md after 7fd7248 carve-out; no expects_failure on that check",
+    "ownership.yaml not modified in LEAD/QUALITY follow-ups after carve-out; agent-bus forward carve-outs kept per Ove",
+    "Greptile review 26365454 @ 5f6b84fd COMPLETED confidence 5/5 (safe to merge); remaining P2 stale-summary fixed in this amendment"
+  ],
+  "conditions": [
+    "P2 ownership-scope comments waived via greptile-p2-waiver-ownership-scope-pr4.json",
+    "Historical Greptile comments superseded by code or waived \u2014 see greptile-comment-disposition-pr4.json"
+  ],
+  "files_to_land": [
+    ".receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json (add approved_by; refresh G-2 evidence)",
+    ".receipts/bot-06-quality-security/greptile-p2-waiver-ownership-scope-pr4.json",
+    ".receipts/bot-06-quality-security/approve-lead-intake-e2e-receipt-ut-tltyh4-ebc71dbb.json"
+  ],
+  "prior_head_reviewed": "dfde0f471e0c4b7ce7f1f2ba4f590b7021fd3de6",
+  "review_amendment": "Summary rewritten to describe current approved artifact (approved_by set, G-2 PASS). Addresses Greptile 26365454 P2 277891215.",
+  "stamp_commit_note": "QUALITY receipt amendments after stamp live at PR head 5f6b84fd66ed30eba95e1dbc3b51c22533ab85bd; Lead artifact approved is 02016eb3918748fbab043bf22b173cdde9963eac"
+}

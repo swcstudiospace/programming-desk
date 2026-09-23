@@ -252,6 +252,12 @@ ownership:
     owner: bot-00-programming-lead
   - pattern: "vendor/ultrathink-policy/**"
     owner: bot-00-programming-lead
+  - pattern: "docs/intake-e2e-runbook.md"
+    owner: bot-00-programming-lead
+  - pattern: "docs/vps-agent-bus.md"
+    owner: bot-00-programming-lead
+  - pattern: "skills/agent-bus/**"
+    owner: bot-00-programming-lead
 
   # Shared skills and the Greptile gate stay with QUALITY (last match over any
   # broader skills rule that might be added later).

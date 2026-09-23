@@ -1,0 +1,73 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-comment-disposition-pr4",
+  "receipt_kind": "greptile_comment_disposition",
+  "recorded_at": "2026-09-24T09:38:08+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/4",
+  "latest_review": {
+    "id": "26365454",
+    "status": "COMPLETED",
+    "commit": "5f6b84fd66ed30eba95e1dbc3b51c22533ab85bd",
+    "confidence": "5/5",
+    "greptile_says": "appears safe to merge"
+  },
+  "dispositions": [
+    {
+      "id": "277891215",
+      "title": "Stale approval summary",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "note": "review_summary rewritten to current approved_by + G-2 PASS state"
+    },
+    {
+      "id": "277885300",
+      "title": "Approval targets previous head",
+      "severity": "P1",
+      "action": "FIXED_THEN_WAIVE_CHICKEN_EGG",
+      "note": "head_commit_reviewed set to 02016eb; later stamp-only heads (5f6b84fd+) do not require re-approval of Lead artifact"
+    },
+    {
+      "id": "277836667",
+      "title": "Missing receipt approval",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "note": "Lead receipt has approved_by; G-2 PASS at 02016eb"
+    },
+    {
+      "id": "277836668",
+      "title": "Ownership check is stale",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "note": "Runbook documents G-1 PASS after carve-out (dfde0f47)"
+    },
+    {
+      "id": "277836133",
+      "title": "Ownership instructions are stale",
+      "severity": "P1-related",
+      "action": "FIXED_IN_CODE",
+      "note": "Same as above"
+    },
+    {
+      "id": "277879160",
+      "title": "Runbook replaced by placeholder",
+      "severity": "P1",
+      "action": "SUPERSEDED",
+      "note": "Commit 92c2ba66 superseded by dfde0f47 restore"
+    },
+    {
+      "id": "277836669",
+      "title": "Ownership scope expands",
+      "severity": "P2",
+      "action": "WAIVED",
+      "waiver": "greptile-p2-waiver-ownership-scope-pr4.json"
+    },
+    {
+      "id": "277836132",
+      "title": "Carve-outs preassign absent paths",
+      "severity": "P2-related",
+      "action": "WAIVED",
+      "waiver": "greptile-p2-waiver-ownership-scope-pr4.json"
+    }
+  ]
+}

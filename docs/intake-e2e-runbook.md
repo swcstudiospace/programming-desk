@@ -297,7 +297,7 @@ Sub-issues (4 per node):
 - `agent_bus_health`, `agent_bus_start_job`, `agent_bus_get_job`, and `agent_bus_wait_job` were not invoked. No Lane B job id exists for this graph in this receipt.
 - `skills/agent-bus` and `docs/vps-agent-bus.md` are not on `origin/main`. Env file location for `BUS_TOKEN` is therefore not documented here.
 - Greptile review 26348840 completed at `becec09` with confidence 3/5. That is not a clean review and not a merge claim. This follow-up does not re-trigger Greptile.
-- `approved_by` on the Lead receipt is still unset. QUALITY (`bot-06-quality-security`) sets it. LEAD does not.
+- `approved_by` on the Lead receipt is `bot-06-quality-security`, set by QUALITY. LEAD did not self-approve. The P2 ownership-scope waive receipt is `.receipts/bot-06-quality-security/greptile-p2-waiver-ownership-scope-pr4.json`.
 - G-1 for `bot-00-programming-lead` on `docs/intake-e2e-runbook.md` passes under the `7fd7248` carve-out. The pre-carve-out FOREIGN result is historical only.
 - PR → Notion/Linear sync was not run. No tracker rows were created or updated by this change.
 - The VPS `claude-ultrathink` constant patch and the stdio `hermes-mcp-bridge` rebuild were not done.

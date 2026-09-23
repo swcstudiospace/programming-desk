@@ -1,0 +1,67 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p2-waiver-ownership-scope-pr4",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-24T09:21:12+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 4,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/4",
+    "merge_request_id": "68352155",
+    "head_commit_at_prepare": "becec09a5b67afad84b8fa91b3d9426d537a4b73",
+    "note": "Activated after LEAD CA land dfde0f47; ownership.yaml unchanged KEEP carve-outs.",
+    "head_commit_sha": "dfde0f471e0c4b7ce7f1f2ba4f590b7021fd3de6"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "authorized_by": "Ove (via LEAD): KEEP docs/vps-agent-bus.md + skills/agent-bus/** carve-outs; do not narrow ownership.yaml unless Ove reverses",
+    "why": "Forward LEAD carve-outs for agent-bus paths are intentional Lead-orchestrator scope, not accidental expansion. Intake E2E smoke already agreed last-match-wins LEAD ownership for the runbook and related agent-bus docs/skills. Greptile P2 correctly flags breadth; product decision is to keep them with an explicit waiver rather than reverse ownership.yaml.",
+    "decision": "KEEP_CARVEOUTS",
+    "do_not": "Do not narrow ownership.yaml for this P2 unless Ove reverses",
+    "quality_ack": "bot-06-quality-security reviewed Lead receipt at dfde0f47 (G-1 PASS claims match observed commands; approved_by set independently in companion commit)."
+  },
+  "comments_waived": [
+    {
+      "greptile_comment_id": "277836669",
+      "github_comment_id": "PRRC_kwDOUgQ0os7zqD6n",
+      "severity": "P2",
+      "title": "Ownership scope expands",
+      "path": "ownership.yaml",
+      "line_start": 257,
+      "line_end": 260,
+      "addressed_at_prepare": false
+    },
+    {
+      "greptile_comment_id": "277836132",
+      "github_comment_id": "pending-26348715-1",
+      "severity": "P2-related",
+      "title": "Carve-outs preassign absent paths",
+      "path": "ownership.yaml",
+      "line_start": 257,
+      "line_end": 260,
+      "note": "Earlier review duplicate of the same ownership-scope finding; waived together",
+      "addressed_at_prepare": false
+    }
+  ],
+  "not_waived": [
+    {
+      "greptile_comment_id": "277836667",
+      "title": "Missing receipt approval",
+      "note": "LEAD will re-run G-1; QUALITY sets independent approved_by when reviewing \u2014 not waived"
+    },
+    {
+      "greptile_comment_id": "277836668",
+      "title": "Ownership check is stale",
+      "note": "LEAD CA updates runbook prose \u2014 fix in code, not waiver"
+    }
+  ],
+  "activation_checklist": [
+    "LEAD CA pushes runbook + Lead receipt updates on PR #4 branch",
+    "QUALITY sets approved_by on Lead receipt (independent)",
+    "Set this receipt status to ACTIVE and record head_commit_sha",
+    "Force-add commit receipt to PR branch if required",
+    "Re-poll Greptile list_merge_request_comments; issue merge-claim verdict"
+  ],
+  "activated_at": "2026-09-24T09:21:12+10:00"
+}

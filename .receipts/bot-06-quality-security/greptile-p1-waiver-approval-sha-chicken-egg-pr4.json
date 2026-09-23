@@ -1,0 +1,30 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p1-waiver-approval-sha-chicken-egg-pr4",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-24T09:33:30+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 4,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/4",
+    "head_at_prepare": "5f6b84fd66ed30eba95e1dbc3b51c22533ab85bd",
+    "approved_artifact_head": "02016eb3918748fbab043bf22b173cdde9963eac",
+    "head_at_activate": "5f6b84fd66ed30eba95e1dbc3b51c22533ab85bd"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "why": "In-repo independent approval cannot name the commit that adds the approval without a follow-up commit that moves HEAD. QUALITY reviewed Lead work at dfde0f47, stamped approved_by at 02016eb (G-2 PASS observed), then amended the QUALITY approval receipt to name 02016eb. Commit 5f6b84fd only updates QUALITY receipt JSON (approval SHA + P2 waive head); it does not change Lead runbook/receipt content. Further re-stamping approval to each new HEAD would loop forever. Waive Greptile P1 that requires approval.head_commit_reviewed == current HEAD when the delta is stamp-only QUALITY receipts.",
+    "decision": "WAIVE_CHICKEN_EGG_APPROVAL_SHA",
+    "scope": "QUALITY receipt JSON SHA-field updates only; does not waive missing approved_by or other P1s"
+  },
+  "activate_when": "Greptile terminal review on 5f6b84fd (or later stamp-only head) re-raises approval-targets-previous-head",
+  "activated_at": "2026-09-24T09:38:08+10:00",
+  "comments_waived": [
+    {
+      "greptile_comment_id": "277885300",
+      "title": "Approval targets previous head",
+      "note": "Fixed for 02016eb; waive re-raise on stamp-only HEAD moves"
+    }
+  ]
+}

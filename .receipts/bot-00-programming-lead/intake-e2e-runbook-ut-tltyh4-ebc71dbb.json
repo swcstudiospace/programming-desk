@@ -1,1 +1,110 @@
-PLACEHOLDER_RECEIPT
+{
+  "task_id": "intake-e2e-runbook-ut-tltyh4-ebc71dbb",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-09-23T18:52:18Z",
+  "completed_at": "2026-09-23T23:05:33Z",
+  "graph_id": "ut-tltyh4-ebc71dbb",
+  "runtime": "cursor-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "node_count": 5,
+  "subissue_counts": {"n1": 4, "n2": 4, "n3": 4, "n4": 4, "n5": 4},
+  "linear_ids": [
+    "SPE-140", "SPE-145", "SPE-144", "SPE-142", "SPE-143",
+    "SPE-137", "SPE-159", "SPE-160", "SPE-153", "SPE-152",
+    "SPE-139", "SPE-155", "SPE-146", "SPE-161", "SPE-150",
+    "SPE-141", "SPE-158", "SPE-156", "SPE-149", "SPE-148",
+    "SPE-138", "SPE-154", "SPE-157", "SPE-151", "SPE-147"
+  ],
+  "notion_task_url": "https://www.notion.so/3e4bc1a0c7ae81d3aa4ae3dd210969f7",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/4",
+  "agent_id": null,
+  "commands": [
+    {
+      "cmd": "python3 -c \"from pathlib import Path; t=Path('docs/intake-e2e-runbook.md').read_text(); req=['## Overview and when to use','## Stage map','## Lane A Cloud Agent and Lane B agent bus','## Lead receipt checklist','## Ownership and out of scope','## Failure modes','ut-tltyh4-ebc71dbb','TRACKER_GAPS','7fd7248','Do not put','expects_failure','on that command']; miss=[x for x in req if x not in t]; stale='Expect the second ownership command to exit non-zero'; miss += [stale] if stale in t else []; print(miss or 'ok'); raise SystemExit(0 if not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c \"import re,pathlib; t=pathlib.Path('docs/intake-e2e-runbook.md').read_text(); ids=sorted(set(re.findall(r'SPE-\\d+', t))); exp=['SPE-%d'%i for i in range(137,162)]; print(len(ids)); raise SystemExit(0 if ids==exp else 1)\"",
+      "exit_code": 0,
+      "output_tail": "25"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/intake-e2e-runbook.md .receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/intake-e2e-runbook.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/intake-e2e-runbook.md .receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json docs/vps-agent-bus.md skills/agent-bus/SKILL.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 81 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Runbook still has the six required sections and tells operators the runbook ownership check exits 0, with no expects_failure on that check",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Worked tracker map lists Linear ids SPE-137 through SPE-161 (5 issues + 20 sub-issues)",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Secret scan of the runbook and this receipt reports no committed secret",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1 for bot-00-programming-lead on docs/intake-e2e-runbook.md exits 0 after the 7fd7248 last-match carve-out",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1 still passes for the Lead receipt and for the forward paths docs/vps-agent-bus.md and skills/agent-bus/SKILL.md; those carve-outs were not narrowed",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Ownership manifest validates at 81 rules, matching QUALITY carve-out receipt g1-lead-intake-e2e-carveout",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-2 rejects this receipt while approved_by is unset; QUALITY (bot-06-quality-security) must set it before merge; LEAD did not forge it",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "Notion and Linear URLs were copied from the supplied second-uplift ISSUES block; this session did not re-fetch the pages, so link liveness is unverified",
+    "agent_bus_health, agent_bus_start_job, agent_bus_get_job, and agent_bus_wait_job were not called; no Lane B job id for ut-tltyh4-ebc71dbb",
+    "docs/vps-agent-bus.md and skills/agent-bus/** are still not files on the branch; the 7fd7248 patterns were left in place",
+    "Greptile review 26348840 COMPLETED at becec09 with confidence 3/5. This follow-up does not re-trigger Greptile and does not claim the review clean",
+    "approved_by is omitted on purpose. Independent approval is required from QUALITY (bot-06-quality-security) before merge. QUALITY will set approved_by in a follow-up. No in-repo instruction authorizes LEAD to fill that field",
+    "Greptile P2 (agent-bus forward rules) is waived by QUALITY. The waive receipt belongs under .receipts/bot-06-quality-security/ and was not present at becec09. LEAD did not write it",
+    "PR to Notion/Linear field sync was not run; no tracker rows were created or updated",
+    "VPS claude-ultrathink constant patch and hermes-mcp-bridge rebuild were not done"
+  ],
+  "blockers": [
+    "G-2: approved_by is unset. Merge stays blocked until bot-06-quality-security sets it on this receipt."
+  ],
+  "notes": "ownership.yaml was not modified in this commit. QUALITY commit 7fd7248 already added last-match LEAD rules for docs/intake-e2e-runbook.md, docs/vps-agent-bus.md, and skills/agent-bus/**. skills/greptile-merge-gate/** stays QUALITY.",
+  "files_changed": [
+    "docs/intake-e2e-runbook.md",
+    ".receipts/bot-00-programming-lead/intake-e2e-runbook-ut-tltyh4-ebc71dbb.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null
+}

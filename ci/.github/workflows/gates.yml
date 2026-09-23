@@ -34,9 +34,10 @@ jobs:
         run: |
           # Convention: the branch name is prefixed with the bot id,
           # e.g. bot-03-android/feat-push-notifications
+          # or bot-00-programming-lead/desk-model for the orchestrator.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           BOT="${BRANCH%%/*}"
-          if [[ ! "$BOT" =~ ^bot-0[1-6]- ]]; then
+          if [[ ! "$BOT" =~ ^bot-0[0-6]- ]]; then
             echo "::error::Branch '$BRANCH' does not start with a bot id (bot-0N-name/...)."
             echo "::error::G-1 cannot attribute the change without one."
             exit 1

@@ -3,6 +3,11 @@
 Bots coordinate through typed events rather than direct calls, so that every handoff is logged,
 replayable and attributable.
 
+LEAD (`bot-00-programming-lead`) is the integrating orchestrator. A specialist may start work on
+`ticket.assigned` from LEAD, or on a direct ask from Ove with LEAD copied. Desk chat is status.
+It is not an event that authorises scope. LEAD is outside the six-member Programming Desk channel;
+these events are how the desk reaches LEAD without putting LEAD in that channel.
+
 ## Envelope
 
 ```json
@@ -31,15 +36,18 @@ replayable and attributable.
 
 | Event | Emitter | Consumer | Effect |
 |---|---|---|---|
-| `contract.proposed` | any | consumers | Acknowledgement requested |
-| `contract.acknowledged` | consumer | proposer | One ack recorded |
-| `contract.rejected` | consumer | proposer | **Blocks merge.** Blocker stated |
+| `ticket.assigned` | bot-00 | named specialist | **Authorises that specialist's scope** |
+| `ticket.escalated` | specialist | bot-00 | Blocker, scope change, or cross-seat need |
+| `contract.proposed` | any | consumers, bot-00 | Acknowledgement requested |
+| `contract.acknowledged` | consumer | proposer, bot-00 | One ack recorded |
+| `contract.rejected` | consumer | proposer, bot-00 | **Blocks merge.** Blocker stated |
 | `contract.merged` | bot-06 | all | **Unlocks implementation** |
-| `implementation.started` | any | integrator | Parallel work begins |
-| `implementation.completed` | any | integrator, bot-06 | Receipt attached |
-| `review.requested` | any | bot-06 | Review queued |
-| `review.completed` | bot-06 | author | approve / request_changes / block |
-| `gate.failed` | CI | author | Which gate, and why |
+| `implementation.started` | specialist | bot-00 | Status only. Does not widen the ticket |
+| `implementation.completed` | specialist | bot-00, bot-06 | Receipt attached |
+| `review.requested` | any | bot-06, bot-00 | Review queued |
+| `review.completed` | bot-06 | author, bot-00 | approve / request_changes / block |
+| `lead.consolidated` | bot-00 | Ove, bot-06 | Receipts and the QUALITY verdict in one status |
+| `gate.failed` | CI | author, bot-00 | Which gate, and why |
 | `deploy.requested` | any | human gate | Needs rollback plan (G-5) |
 | `destructive.requested` | any | human gate | Needs approval (G-6) |
 | `incident.declared` | any | all | **Broadcast. Non-incident deploys pause** |
@@ -100,10 +108,11 @@ does not fix.
 
 | Event | Key |
 |---|---|
+| `ticket.assigned` | `task_id + ':' + bot_id` |
 | `contract.proposed` | `change_id` |
 | `implementation.completed` | `task_id + ':' + commit_sha` |
 | `review.completed` | `review_id` |
+| `lead.consolidated` | `correlation_id + ':' + head_sha` |
 | `deploy.requested` | `commit_sha + ':' + environment` |
 
-The orchestrator keeps a processed-key set with a 30-day TTL; duplicates are acknowledged and
-dropped.
+LEAD keeps a processed-key set with a 30-day TTL; duplicates are acknowledged and dropped.

@@ -100,11 +100,11 @@ python3 -c "import xml.etree.ElementTree as ET,glob; files=sorted(glob.glob('pro
 # Ownership manifest self-check
 python3 ci/gates/check_ownership.py --validate-manifest
 
-# Gate test suite — 86 tests against real fixtures
+# Gate test suite — 90 tests against real fixtures
 python3 -m pytest ci/tests/ -v
 ```
 
-**Status:** 8/8 prompts parse (core + 7 seats) · 86/86 gate tests pass · manifest validates · end-to-end verified
+**Status:** 8/8 prompts parse (core + 7 seats) · 90/90 gate tests pass · manifest validates · end-to-end verified
 against a real git repository.
 
 The gate suite found four real bugs during development, including one design flaw: the receipt
@@ -184,7 +184,7 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 └── ci/
     ├── gates/                   Six executable gate scripts + run_all.py
     ├── hooks/                   pre-commit (secret scan) + install.sh
-    ├── tests/test_gates.py      86 tests against real fixtures
+    ├── tests/test_gates.py      90 tests against real fixtures
     └── .github/workflows/       CI workflow, including a gate self-test job
 ```
 

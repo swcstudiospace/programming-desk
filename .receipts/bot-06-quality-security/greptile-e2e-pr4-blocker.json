@@ -1,0 +1,97 @@
+{
+  "task_id": "greptile-e2e-pr4-blocker",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-09-23T22:14:33Z",
+  "completed_at": "2026-09-23T22:14:33Z",
+  "verdict": "BLOCKED",
+  "merge_claim": false,
+  "pr": {
+    "url": "https://github.com/SomeRandmGuyy/programming-desk/pull/4",
+    "number": 4,
+    "head_sha_at_check": "7fd72483917b052dd1de3501ff80ea019eecacda"
+  },
+  "commands": [
+    {
+      "cmd": "greptile_mcp_call get_me",
+      "exit_code": 0,
+      "observed": "principal=API_KEY; organizations=[{handle:swcstudio, name:Spectrum Web CO}]"
+    },
+    {
+      "cmd": "greptile_mcp_call list_repositories",
+      "exit_code": 0,
+      "observed": "total=224 returned=20; all sampled names under swcstudiospace/*; no SomeRandmGuyy/*"
+    },
+    {
+      "cmd": "greptile_mcp_call trigger_code_review name=SomeRandmGuyy/programming-desk remote=github defaultBranch=main prNumber=4",
+      "exit_code": 1,
+      "observed": "Repository not found: SomeRandmGuyy/programming-desk on github"
+    },
+    {
+      "cmd": "greptile_mcp_call add_repository / create_repository",
+      "exit_code": 1,
+      "observed": "Method not found (no MCP registration surface)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Greptile MCP is authenticated to Spectrum Web CO (swcstudio)",
+      "evidence": [
+        0
+      ]
+    },
+    {
+      "claim": "Greptile repository inventory does not include SomeRandmGuyy/programming-desk",
+      "evidence": [
+        1
+      ]
+    },
+    {
+      "claim": "Live Greptile E2E on PR #4 cannot start until the repo is registered/enabled in Greptile",
+      "evidence": [
+        2
+      ]
+    },
+    {
+      "claim": "MCP cannot add_repository; registration is a GitHub App + Greptile dashboard action",
+      "evidence": [
+        3
+      ]
+    }
+  ],
+  "unverified": [
+    "Whether Greptile Apps is installed on the SomeRandmGuyy personal GitHub account",
+    "Whether transferring or mirroring programming-desk under swcstudiospace is preferred by Ove",
+    "Greptile review content for PR #4 (never queued)",
+    "G-2..G-6 CI green status on PR #4 after head 7fd7248 (not re-run in this receipt)"
+  ],
+  "blocker": {
+    "id": "GREPTILE-REPO-NOT-REGISTERED",
+    "summary": "SomeRandmGuyy/programming-desk is not in Greptile's connected repository set for the swcstudio API key.",
+    "required_human_action": [
+      "Install or Configure Greptile Apps on the SomeRandmGuyy GitHub account (or move the desk repo under swcstudiospace where Greptile already reviews).",
+      "Grant repository access to SomeRandmGuyy/programming-desk.",
+      "In app.greptile.com: Code Providers \u2192 link the SomeRandmGuyy account/org to Spectrum Web CO \u2192 Enable programming-desk for reviews.",
+      "Confirm list_repositories returns SomeRandmGuyy/programming-desk, then LEAD/QUALITY re-trigger trigger_code_review on PR #4."
+    ],
+    "docs": [
+      "https://www.greptile.com/docs/quickstart",
+      "https://www.greptile.com/docs/integrations/github-gitlab-integration",
+      "skills/greptile-merge-gate/SKILL.md (FAILED/unavailable \u2192 blocker; do not claim merge)"
+    ]
+  },
+  "files_changed": [
+    ".receipts/bot-06-quality-security/greptile-e2e-pr4-blocker.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [
+    {
+      "operation": "record Greptile E2E blocker (no merge claim)",
+      "approved_by": "bot-00-programming-lead",
+      "at": "2026-09-23T22:14:33Z",
+      "blast_radius": "Documentation of gate status only; no ownership or gate weakening"
+    }
+  ],
+  "approved_by": "bot-00-programming-lead",
+  "notes": "LEAD triggered per greptile-merge-gate; QUALITY owns verdict. Do not merge. Do not waive silently."
+}

@@ -1,4 +1,4 @@
-# Architecture — Six-Bot Programming Operating System
+# Architecture — Seven-Seat Programming Desk
 
 ## 1. Design premise
 
@@ -21,44 +21,62 @@ The second structural problem is a consequence of decomposing by platform rather
 lifecycle: **ownership collision**. One feature spanning API, web and mobile means three bots on
 the same branch with no clear authority. Section 3 is the answer.
 
-## 2. The six bots
+The third is **unassigned work**. A desk channel that invents tasks will have specialists editing
+code nobody asked for. LEAD, outside that channel, is the answer: Ove talks to LEAD, LEAD writes
+tickets, specialists execute tickets. The loop is `docs/desk-operating-model.md`.
+
+## 2. Seven seats, six in the channel
+
+The live Programming Desk chat channel holds **at most six members**. LEAD is not one of them.
+SYSTEMS, WEB, ANDROID, IOS, INFRA, and QUALITY fill those seats. LEAD orchestrates by ticket and
+by direct message, from outside the channel.
 
 ```
-                         ┌───────────────────────────────┐
-                         │  Bot 6 — Quality & Security   │
-                         │  reads everything, owns gates │
-                         └───────────────┬───────────────┘
-                                         │ reviews
-     ┌──────────────┬──────────────┬─────┴────────┬──────────────┬──────────────┐
-     │              │              │              │              │              │
-┌────▼─────┐  ┌─────▼────┐  ┌──────▼───┐  ┌───────▼──┐  ┌────────▼──────┐       │
-│  Bot 1   │  │  Bot 2   │  │  Bot 3   │  │  Bot 4   │  │    Bot 5      │       │
-│ Systems  │  │ Web &    │  │ Android  │  │   iOS    │  │Infrastructure │       │
-│ Backend  │  │  Edge    │  │          │  │          │  │   & DevEx     │       │
-│rust,py   │  │ts,deno   │  │ kotlin   │  │  swift   │  │ tf,k8s,ci     │       │
-└────┬─────┘  └─────┬────┘  └──────┬───┘  └───────┬──┘  └────────┬──────┘       │
-     │              │              │              │              │              │
-     └──────────────┴──────────────┴──────────────┴──────────────┘              │
-                                   │                                            │
-                          ┌────────▼─────────┐                                  │
-                          │    contracts/    │◀─────────────────────────────────┘
-                          │ the only shared  │
-                          │     surface      │
-                          └──────────────────┘
+                              Ove (human)
+                                   │
+                                   ▼
+                    ┌──────────────────────────────────┐
+                    │  LEAD — bot-00-programming-lead  │
+                    │  outside the desk channel        │
+                    │  tickets · dispatch · consolidate│
+                    └────────────────┬─────────────────┘
+                                     │ assigns tickets
+     ┌──────────┬──────────┬─────────┴────────┬──────────┬──────────────┐
+     │          │          │                  │          │              │
+┌────▼─────┐┌───▼────┐┌────▼─────┐┌───────────▼┐┌────────▼─────┐┌───────▼──────┐
+│ SYSTEMS  ││  WEB   ││ ANDROID  ││    IOS     ││    INFRA     ││   QUALITY    │
+│  bot-01  ││ bot-02 ││  bot-03  ││   bot-04   ││    bot-05    ││    bot-06    │
+│ rust, py ││ts,deno ││ kotlin   ││   swift    ││  tf, k8s, ci ││ reads all    │
+└────┬─────┘└───┬────┘└────┬─────┘└─────┬──────┘└──────┬───────┘│ writes gates │
+     │          │          │            │             │        └──────┬───────┘
+     └──────────┴──────────┴────────────┴─────────────┘               │
+                               │                                      │
+                      ┌────────▼─────────┐                            │
+                      │    contracts/    │◀───────────────────────────┘
+                      │ the only shared  │
+                      │     surface      │
+                      └──────────────────┘
+
+     Programming Desk channel: the six specialists. LEAD is not in it.
 ```
 
-| Bot | Owns | Primary languages |
-|---|---|---|
-| **1 — Systems & Backend** | Services, APIs, data layer, performance-critical code | Rust, Python |
-| **2 — Web & Edge** | Browser frontend, edge functions, Vercel deploys | TypeScript, Deno |
-| **3 — Android** | Android app, Compose UI, Gradle, Play release | Kotlin |
-| **4 — iOS** | iOS app, SwiftUI, Xcode, App Store release | Swift |
-| **5 — Infrastructure & DevEx** | IaC, Kubernetes, CI/CD, remote dev machine, observability | HCL, YAML, Bash |
-| **6 — Quality & Security** | Review, test strategy, secrets, supply chain, the gates themselves | — |
+| Seat | Bot id | Owns | Primary languages |
+|---|---|---|---|
+| **LEAD** | `bot-00-programming-lead` | Desk operating model, its prompt, its receipts. Not specialist code. | — |
+| **SYSTEMS** | `bot-01-systems-backend` | Services, APIs, data layer, performance-critical code | Rust, Python |
+| **WEB** | `bot-02-web-edge` | Browser frontend, edge functions, Vercel deploys | TypeScript, Deno |
+| **ANDROID** | `bot-03-android` | Android app, Compose UI, Gradle, Play release | Kotlin |
+| **IOS** | `bot-04-ios` | iOS app, SwiftUI, Xcode, App Store release | Swift |
+| **INFRA** | `bot-05-infrastructure` | IaC, Kubernetes, CI/CD, remote dev machine, observability | HCL, YAML, Bash |
+| **QUALITY** | `bot-06-quality-security` | Review, test strategy, secrets, supply chain, the gates themselves | — |
 
-Bot 6 is deliberately asymmetric: **read access everywhere, write access almost nowhere**. It
-owns `ci/gates/`, `contracts/`, `SECURITY.md` and `ownership.yaml`, and nothing else. A reviewer
-that can rewrite the code it is reviewing is not a reviewer.
+QUALITY is deliberately asymmetric: **read access everywhere, write access almost nowhere**. It
+owns `ci/gates/`, `contracts/`, `SECURITY.md` and `ownership.yaml`, and almost nothing else. A
+reviewer that can rewrite the code it is reviewing is not a reviewer. `docs/desk-operating-model.md`
+is LEAD's, not QUALITY's.
+
+In-repo identity is the callsign and bot id. Live agent UUIDs live in the Grok Bot agent map.
+They are not stored here and they are not required runtime configuration.
 
 ## 3. The ownership model
 
@@ -69,26 +87,30 @@ otherwise, and it also fails on *unowned* paths — a file matching no pattern i
 two bots collide silently, so it is treated as an error rather than a default.
 
 This is what makes platform decomposition workable. Without it, "add push notifications" becomes
-Bot 1, 3, 4 and 5 all editing the same branch, and the resulting merge is decided by timing.
+SYSTEMS, ANDROID, IOS and INFRA all editing the same branch, and the resulting merge is decided
+by timing.
 
-### Cross-bot features: contract-first
+### Cross-bot features: LEAD orchestrates, contract first
 
-A feature spanning bots is not one bot doing everything. It is:
+A feature spanning seats is not one bot doing everything, and it is not a specialist nominating
+itself. LEAD is the integrating orchestrator.
 
 ```
-1. INTEGRATING BOT   owns the user-facing surface, drafts the contract change
-2. CONTRACT PR       merged to contracts/ FIRST, with every consumer acknowledging
-3. IMPLEMENTATION    each bot implements its side, in its own paths, in parallel
-4. INTEGRATION       verified against the contract, not against another bot's code
+1. LEAD             one ticket per specialist; names paths and acceptance
+2. CONTRACT PR      merged to contracts/ FIRST, with every consumer acknowledging
+3. IMPLEMENTATION   each specialist, own paths, own receipt, in parallel
+4. QUALITY          reviews the receipts and the change; does not patch the code
+5. LEAD             consolidates for Ove
 ```
 
-The contract merges before any implementation. Bots then work in parallel against a fixed
+The contract merges before any implementation. Specialists then work in parallel against a fixed
 interface instead of against each other's moving code. Full protocol in
-`docs/cross-bot-protocol.md`.
+`docs/cross-bot-protocol.md`. Day-to-day intake is `docs/desk-operating-model.md`.
 
 Breaking a contract requires a version bump, a migration note, and an acknowledgement from every
 consumer listed in `contract_consumers`. This is the control that stops a field rename in the API
-silently breaking the iOS client.
+silently breaking the iOS client. LEAD chases the acknowledgements. LEAD does not ack on a
+specialist's behalf.
 
 ## 4. Quality gates
 
@@ -104,7 +126,8 @@ advisory and a failing exit code is not.
 | **G-5** | No deploy without a tested rollback plan | `check_rollback.py` |
 | **G-6** | Destructive operations require explicit human approval | `check_rollback.py` |
 
-Details and the evidence each produces: `docs/quality-gates.md`.
+The seven-seat desk does not add a seventh gate and does not relax these six. LEAD's tickets do
+not override them. Details and the evidence each produces: `docs/quality-gates.md`.
 
 ## 5. Verification receipts
 
@@ -133,36 +156,42 @@ Three properties make this work:
 - **`unverified` is mandatory and may not be empty-by-omission.** A bot that ran unit tests but
   no integration tests says so. Honest incompleteness is a passing state; silent incompleteness
   is not.
-- **Receipts are append-only and a bot cannot sign its own approval.** Bot 6 or a human does.
+- **Receipts are append-only and a bot cannot sign its own approval.** QUALITY or a human does.
+
+LEAD's consolidation receipt cites commands LEAD actually ran, and points at specialist receipt
+paths. It does not restate their test runs as LEAD's own evidence.
 
 The design point: the gate does not ask a bot whether it verified something. It asks for the exit
 code. A model can be confident about a claim; it cannot fabricate a `0` that CI will re-run.
 
-## 6. What each bot may not do
+## 6. What each seat may not do
 
-| Bot | Must not |
+| Seat | Must not |
 |---|---|
-| All | Claim completion without a receipt; modify unowned paths; commit secrets; disable a gate |
-| 1 Backend | Change a contract without consumer acks; run a destructive migration without approval |
-| 2 Web & Edge | Promote to Vercel production without a rollback plan; ship a secret to the client bundle |
-| 3 Android | Upload to Play production without staged rollout; bump `minSdk` without consumer sign-off |
-| 4 iOS | Submit to App Store without a reviewed release note; change entitlements silently |
-| 5 Infrastructure | `terraform apply` to production without a reviewed plan; delete stateful resources without approval |
-| 6 Quality | Modify implementation code to make a test pass; approve its own work |
+| All | Claim completion without a receipt; modify unowned paths; commit secrets; disable a gate; invent work from desk chat |
+| LEAD | Implement specialist paths; join the six-member Programming Desk channel; treat chat as a ticket; approve LEAD's own operating-model edit |
+| SYSTEMS | Change a contract without consumer acks; run a destructive migration without approval |
+| WEB | Promote to Vercel production without a rollback plan; ship a secret to the client bundle |
+| ANDROID | Upload to Play production without staged rollout; bump `minSdk` without consumer sign-off |
+| IOS | Submit to App Store without a reviewed release note; change entitlements silently |
+| INFRA | `terraform apply` to production without a reviewed plan; delete stateful resources without approval |
+| QUALITY | Modify implementation code to make a test pass; approve its own work; dispatch other specialists |
 
-That last row matters most. The reviewer fixing the code it reviews is how a quality gate becomes
-a rubber stamp.
+That last row matters. The reviewer fixing the code it reviews is how a quality gate becomes a
+rubber stamp.
 
 ## 7. Escalation
 
 | Condition | Behaviour |
 |---|---|
-| Gate fails | Stop. Report the gate and the reason. Never disable, never `--no-verify`. |
-| Ownership conflict | Open a contract-first thread; do not edit the other bot's paths. |
+| Gate fails | Stop. Report the gate and the reason to LEAD. Never disable, never `--no-verify`. |
+| Ownership conflict | Escalate to LEAD. Open a contract-first thread. Do not edit the other seat's paths. |
+| Desk chat suggests work | Ask LEAD for a ticket. Do not start. |
+| Direct ask from Ove | Do the work. Copy LEAD. |
 | Cannot verify a claim | Move it to `unverified` and say so. Do not assert it. |
 | Test fails and the fix is unclear | Investigate the code under test before the test. A failing test is usually correct. |
-| Destructive op needed | Human approval, recorded in the receipt, before execution. |
-| Contract change needed mid-implementation | Stop implementation. Amend the contract. Re-acknowledge. |
+| Destructive op needed | Human approval, recorded in the receipt, before execution. A ticket is not that approval. |
+| Contract change needed mid-implementation | Stop implementation. LEAD amends the tickets. Re-acknowledge. |
 
 ## 8. Stack
 
@@ -170,4 +199,4 @@ a rubber stamp.
 - **Edge/hosting:** Vercel
 - **Infra:** Terraform, Kubernetes, GitHub Actions
 - **Remote dev:** dedicated Linux dev machine — see `skills/platforms/remote-dev-machine/`
-- **Models:** Opus for Bots 1 and 6 (design and review judgement), Sonnet for 2–5 (throughput)
+- **Models:** Opus for LEAD, SYSTEMS, and QUALITY (orchestration, design, and review judgement); Sonnet for WEB, ANDROID, IOS, and INFRA (throughput)

@@ -540,6 +540,7 @@ class TestG5G6RollbackAndDestructive:
 class TestReceiptDirectoryOwnership:
 
     @pytest.mark.parametrize("bot", [
+        "bot-00-programming-lead",
         "bot-01-systems-backend", "bot-02-web-edge", "bot-03-android",
         "bot-04-ios", "bot-05-infrastructure", "bot-06-quality-security",
     ])
@@ -560,3 +561,33 @@ class TestReceiptDirectoryOwnership:
                      "--files", ".receipts/task.json")
         assert r.returncode == 1
         assert "UNOWNED" in r.stderr
+
+    def test_lead_owns_orchestrator_paths(self):
+        """LEAD owns the operating model, its prompt, and its receipts — not the desk's code."""
+        r = run_gate(
+            "check_ownership.py", "--bot", "bot-00-programming-lead",
+            "--files",
+            "docs/desk-operating-model.md",
+            "prompts/bot-00-programming-lead.xml",
+            ".receipts/bot-00-programming-lead/task.json",
+        )
+        assert r.returncode == 0, r.stderr
+
+    def test_quality_does_not_own_the_operating_model(self):
+        """docs/** is QUALITY, except the operating model, where last-match gives it to LEAD."""
+        r = run_gate(
+            "check_ownership.py", "--bot", "bot-06-quality-security",
+            "--files", "docs/desk-operating-model.md",
+        )
+        assert r.returncode == 1
+        assert "FOREIGN" in r.stderr
+        assert "bot-00-programming-lead" in r.stderr
+
+    def test_lead_cannot_edit_specialist_paths(self):
+        r = run_gate(
+            "check_ownership.py", "--bot", "bot-00-programming-lead",
+            "--files", "services/api/main.py",
+        )
+        assert r.returncode == 1
+        assert "FOREIGN" in r.stderr
+        assert "bot-01-systems-backend" in r.stderr

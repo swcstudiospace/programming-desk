@@ -18,6 +18,9 @@ came from the skill or from its application.
 
 | Skill | Bots | Purpose |
 |---|---|---|
+| `gotxcot-uplift` | LEAD | First XML uplift, GoT 5–8, sequential CoT 4–8 steps/node, kickoff, second uplift with URLs |
+| `trackplan-dispatch` | LEAD | Dispatch the second-uplift XML to Cursor Cloud Agent (default) or Hermes |
+| `greptile-merge-gate` | QUALITY | Merge-claim Greptile gate. Does not replace G-1…G-6 |
 | `verification-receipts` | all | The G-2 artefact. **Always loaded.** |
 | `contract-first-changes` | 1, 6 | Breaking-change analysis, consumer impact |
 | `code-review` | 6 | Review order, what to flag, what to let go |

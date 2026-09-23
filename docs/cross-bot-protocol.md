@@ -1,16 +1,12 @@
 # Cross-Bot Protocol
 
-How a feature spanning multiple seats gets built without the specialists colliding.
+How a feature spanning multiple bots gets built without the bots colliding.
 
-LEAD (`bot-00-programming-lead`) is the integrating orchestrator. LEAD writes the tickets, names
-the seats, and consolidates when the work returns. Specialists do not nominate themselves and do
-not start from desk chat. Intake and dispatch live in `docs/desk-operating-model.md`; this
-document is the contract ordering those tickets have to follow.
+**Programming Lead (LEAD / bot-00)** is the integrating orchestrator: opens cross-bot work, dispatches concrete tickets via SendToAgent, and consolidates receipts. LEAD does not implement specialist paths. See `docs/desk-operating-model.md`.
 
 This document exists because the system is decomposed by platform rather than by lifecycle. That
-choice buys deep platform expertise per seat and costs a clear owner for any feature that crosses
-platforms. The protocol is the payment. LEAD is outside the six-member Programming Desk channel
-and does not implement the feature in order to integrate it.
+choice buys deep platform expertise per bot and costs a clear owner for any feature that crosses
+platforms. The protocol is the payment.
 
 ---
 
@@ -34,9 +30,9 @@ writing Swift it does not specialise in, badly.
 
 ```
    ┌─────────────────────────────────────────────────────────────────┐
-   │ 1. LEAD TICKETS                                                 │
-   │    One ticket per specialist. Paths, acceptance, non-goals.     │
-   │    LEAD integrates. No specialist self-nominates.               │
+   │ 1. NOMINATE (LEAD opens)                                        │
+   │    LEAD nominates the integrating seat (user-facing surface).   │
+   │    Ambiguous? The bot the user would blame if it broke.         │
    └───────────────────────────┬─────────────────────────────────────┘
                                ▼
    ┌─────────────────────────────────────────────────────────────────┐
@@ -47,15 +43,15 @@ writing Swift it does not specialise in, badly.
    └───────────────────────────┬─────────────────────────────────────┘
                                ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ 3. IMPLEMENT  ── in parallel, each specialist in its OWN paths  │
-   │    Against the contract. Never against another seat's code.     │
+   │ 3. IMPLEMENT  ── in parallel, each bot in its OWN paths         │
+   │    Against the contract. Never against another bot's code.      │
    │    Each produces its own verification receipt.                  │
    └───────────────────────────┬─────────────────────────────────────┘
                                ▼
    ┌─────────────────────────────────────────────────────────────────┐
-   │ 4. REVIEW AND CONSOLIDATE                                       │
-   │    QUALITY reviews. LEAD consolidates receipts for Ove.         │
-   │    LEAD does not re-implement and does not replace the review.  │
+   │ 4. INTEGRATE (LEAD consolidates)                                │
+   │    Integrating seat verifies end to end; LEAD consolidates.     │
+   │    QUALITY (Bot 6) reviews. Receipts are consolidated by LEAD.  │
    └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -65,21 +61,19 @@ rather than a moving one.
 
 ---
 
-## Step 1 — LEAD writes the tickets
+## Step 1 — Nominate the integrating bot
 
-LEAD is always the integrator. The table says which specialist LEAD assigns to each surface, not
-which specialist gets to run the feature.
+The bot that owns the surface the user actually touches.
 
-| Feature | Specialist LEAD assigns | Why that seat implements it |
+| Feature | Integrating bot | Why |
 |---|---|---|
-| Push notifications | SYSTEMS, plus ANDROID, IOS, INFRA | SYSTEMS owns the send API; clients and credentials are separate seats |
-| New onboarding screen | WEB, ANDROID, or IOS | Whichever platform ships it; one ticket per platform if all three |
-| Faster search | SYSTEMS | The work is server-side; clients consume unchanged |
-| Offline mode on mobile | ANDROID or IOS | Client-owned; the backend contract barely moves |
-| Cutting deploy time | INFRA | Wholly within its domain |
+| Push notifications | Bot 1 (Backend) | It owns the send API that everything else consumes |
+| New onboarding screen | Bot 2 / 3 / 4 | Whichever platform ships it; one per platform if all three |
+| Faster search | Bot 1 (Backend) | The work is server-side; clients consume unchanged |
+| Offline mode on mobile | Bot 3 or Bot 4 | Client-owned; the backend contract barely moves |
+| Cutting deploy time | Bot 5 (Infrastructure) | Wholly within its domain |
 
-Tie-break, when two seats could own a surface: **the seat the user would blame if that surface
-broke.** LEAD still consolidates either way. LEAD does not ack a contract for a specialist.
+Tie-break: **the bot the user would blame if the feature broke.**
 
 ## Step 2 — The contract PR
 
@@ -129,12 +123,10 @@ has not built yet, it builds against the contract with a stub. If the stub revea
 wrong, that is a contract amendment — go back to step 2. It is not a reason to reach into Bot 1's
 paths.
 
-## Step 4 — QUALITY reviews, LEAD consolidates
+## Step 4 — Integrate
 
-QUALITY reviews the change set, including whether the implementations match the contract they
-acked. QUALITY does not patch the code. LEAD then consolidates the receipts and that verdict for
-Ove. LEAD's consolidation cites specialist receipt paths and the gate commands LEAD actually ran.
-It is not a second implementation pass, and it is not a substitute for the review.
+The integrating bot verifies end to end and consolidates receipts. Bot 6 reviews the whole change
+set, including whether the implementations actually match the contract they acked.
 
 ---
 
@@ -157,11 +149,10 @@ interface is found in production.
 
 | Anti-pattern | Why it fails | Instead |
 |---|---|---|
-| "I'll just edit their file, it's a one-liner" | Bypasses ownership, invisible to the owner, G-1 blocks it | Contract change or a request to the owner, ticketed by LEAD |
+| "I'll just edit their file, it's a one-liner" | Bypasses ownership, invisible to the owner, G-1 blocks it | Contract change or a request to the owner |
 | Implementation before contract | Contract gets retrofitted to the first implementation; other consumers inherit its accidents | Contract PR first, always |
 | Rubber-stamp acknowledgement | Reintroduces the exact bug the protocol prevents | Check the field types; ack means "I can build this" |
-| One bot does everything | Loses the platform expertise the decomposition bought | LEAD tickets each seat; LEAD does not become the doer |
-| Specialist starts from desk chat | Chat is status, not a ticket | Wait for a LEAD ticket, or a direct ask from Ove copied to LEAD |
+| One bot does everything | Loses the platform expertise the decomposition bought | Nominate an integrator, not a doer |
 | Local workaround for a wrong contract | Becomes a hidden second contract | Stop and amend |
 | Verbal agreement in a thread | Not machine-checkable, not durable, invisible to G-4 | Record it in the contract PR |
 
@@ -171,9 +162,8 @@ interface is found in production.
 
 Not every change needs this. Use judgement:
 
-- **Single-seat change, no contract touched** → LEAD still writes the ticket (or Ove asks that
-  seat directly and the seat copies LEAD). Ownership and receipt gates apply; this protocol's
-  contract steps do not.
+- **Single-bot change, no contract touched** → just build it. Ownership and receipt gates apply,
+  nothing else.
 - **Additive, non-breaking contract change** → contract PR still first, but acknowledgement is
   informational rather than blocking.
 - **Breaking change** → full protocol, no exceptions.

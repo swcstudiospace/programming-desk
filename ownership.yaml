@@ -1,9 +1,5 @@
 # Path ownership manifest.
 #
-# Seven seats. bot-00-programming-lead (LEAD) orchestrates from outside the Programming Desk
-# channel, which holds at most six members (bot-01 through bot-06). LEAD writes tickets and
-# does not implement specialist paths.
-#
 # Every file in the repository resolves to EXACTLY ONE owning bot. This is what makes a
 # platform/domain decomposition workable: without it, a single feature touching mobile, API and
 # infrastructure has three bots editing the same branch with no clear authority, and the last
@@ -26,10 +22,8 @@ bots:
   bot-00-programming-lead:
     name: Programming Lead
     description: >
-      Orchestrator outside the specialist team. Ove messages LEAD; LEAD writes tickets
-      and dispatches bot-01 through bot-06. Not a member of the six-seat Programming Desk
-      channel. Owns the desk operating model, its own prompt, and its own receipts.
-      Does not implement specialist paths.
+      Desk orchestrator. Intake, tickets, dispatch, consolidation, user reporting.
+      Does not own product code. Sits outside the Programming Desk channel.
 
   bot-01-systems-backend:
     name: Systems & Backend
@@ -178,6 +172,8 @@ ownership:
   # Every bot writes receipts, so a single shared .receipts/ would be a permanently
   # contended path. Per-bot subdirectories keep one owner per path and stop a bot
   # from editing another bot's evidence.
+  - pattern: ".receipts/bot-00-programming-lead/**"
+    owner: bot-00-programming-lead
   - pattern: ".receipts/bot-01-systems-backend/**"
     owner: bot-01-systems-backend
   - pattern: ".receipts/bot-02-web-edge/**"
@@ -190,8 +186,6 @@ ownership:
     owner: bot-05-infrastructure
   - pattern: ".receipts/bot-06-quality-security/**"
     owner: bot-06-quality-security
-  - pattern: ".receipts/bot-00-programming-lead/**"
-    owner: bot-00-programming-lead
 
   # --- Docs --------------------------------------------------------------
   - pattern: "docs/**"
@@ -199,10 +193,7 @@ ownership:
   - pattern: "README.md"
     owner: bot-06-quality-security
 
-  # --- Programming Lead --------------------------------------------------
-  # docs/** above is QUALITY. This file is the exception: last matching pattern wins,
-  # so LEAD owns the operating model and nothing else under docs/.
-  # The desk channel holds six specialists; LEAD stays outside it.
+  # --- Lead orchestrator (narrow; last match wins over docs/**) ------------
   - pattern: "docs/desk-operating-model.md"
     owner: bot-00-programming-lead
   - pattern: "prompts/bot-00-programming-lead.xml"
@@ -227,3 +218,4 @@ contract_consumers:
     - bot-02-web-edge
     - bot-03-android
     - bot-04-ios
+

@@ -1,8 +1,8 @@
 # Programming Agent System
 
-A seven-seat desk for software development across backend, web, Android, iOS and infrastructure.
-LEAD orchestrates from outside the team. Six specialists execute assigned tickets. Ownership and
-verification are enforced in CI.
+A **seven-seat** operating system for software development across backend, web, Android, iOS and
+infrastructure — decomposed by platform, with ownership and verification enforced in CI.
+**Programming Lead** orchestrates from outside the desk channel; six specialists execute.
 
 ---
 
@@ -10,48 +10,37 @@ verification are enforced in CI.
 
 | If you want to | Read |
 |---|---|
-| See how work enters and leaves the desk | `docs/desk-operating-model.md` |
-| Understand the seven seats and why they are shaped this way | `ARCHITECTURE.md` |
+| Understand the seven seats and the orchestrator pattern | `ARCHITECTURE.md` |
+| How LEAD tickets and reports | `docs/desk-operating-model.md` |
 | Know who owns which file | `ownership.yaml` |
 | See the gates and what enforces each | `docs/quality-gates.md` |
-| Build a feature spanning several seats | `docs/cross-bot-protocol.md` |
+| Build a feature spanning several bots | `docs/cross-bot-protocol.md` |
 | Deploy the bots | `prompts/` |
 | Understand a platform in depth | `skills/platforms/` |
 | Run or extend the gates | `ci/gates/` |
 
 ---
 
-## Seven seats, six in the channel
-
-The live Programming Desk chat channel holds at most six members. LEAD stays outside it.
-Ove messages LEAD. LEAD writes tickets and dispatches specialists. Specialists execute those
-tickets, or a direct ask from Ove with LEAD copied. Desk chat is status and coordination, not a
-backlog.
+## The seven seats
 
 ```
-                         Ove
-                          │
-                          ▼
-               ┌─────────────────────┐
-               │ LEAD  (bot-00)      │  outside the channel
-               │ tickets · dispatch  │  (six seats maximum)
-               │ consolidates        │
-               └──────────┬──────────┘
-    ┌─────────┬───────────┼──────────┬──────────┬────────────┐
-┌───▼───┐┌────▼───┐┌──────▼──┐┌──────▼──┐┌──────▼───┐┌───────▼────┐
-│SYSTEMS││  WEB   ││ ANDROID ││   IOS   ││  INFRA   ││  QUALITY   │
-│bot-01 ││ bot-02 ││ bot-03  ││ bot-04  ││ bot-05   ││  bot-06    │
-│rust,py││ts,deno ││ kotlin  ││  swift  ││ tf,k8s,ci││ reads all  │
-└───────┘└────────┘└─────────┘└─────────┘└──────────┘└────────────┘
-                    └──────▶ contracts/ ◀──────┘
-                       the only shared surface
+         Ove ──▶ LEAD (outside channel) ──tickets──▶ specialists
+                      │
+         ┌────────────┴──────────────────────────────────────┐
+         │ Desk channel (max 6): SYSTEMS WEB ANDROID IOS     │
+         │                     INFRA QUALITY                 │
+         └───────────────────────────────────────────────────┘
+                              QUALITY reviews (asymmetric)
 ```
 
-QUALITY is deliberately asymmetric: read access everywhere, write access almost nowhere. A
-reviewer that can rewrite the code it reviews is not a reviewer.
+| Seat | Role |
+|---|---|
+| **LEAD** | Intake, tickets, dispatch, consolidate, report to Ove |
+| **SYSTEMS / WEB / ANDROID / IOS / INFRA** | Implement in owned paths; report receipts to LEAD |
+| **QUALITY** | Review, gates, contracts — read everywhere, write almost nowhere |
 
-Live agent UUIDs live in the Grok Bot agent map. This repository identifies seats by callsign and
-bot id only.
+Lead stays outside because the Programming Desk channel allows at most six members. Details:
+`docs/desk-operating-model.md`.
 
 ---
 
@@ -63,43 +52,15 @@ bot id only.
 reasoning convincingly about why it works, and reporting success without executing it.**
 
 Every completion claim is backed by a receipt recording commands actually run and their actual
-exit codes:
-
-```json
-{
-  "commands": [
-    { "cmd": "pytest tests/api", "exit_code": 1 },
-    { "cmd": "pytest tests/api", "exit_code": 0 }
-  ],
-  "claims": [
-    { "claim": "reproduced the failure", "evidence_command_index": 0, "expects_failure": true },
-    { "claim": "fix resolves it",        "evidence_command_index": 1 }
-  ],
-  "unverified": ["integration suite not run — no database in this environment"],
-  "approved_by": "bot-06-quality-security"
-}
-```
-
-The gate does not ask whether a bot verified something. It asks for the exit code, and CI can
-re-run the command. A model can be confident about a claim it never tested; it cannot fabricate a
-`0` that survives re-execution.
-
-Three properties do the work: every claim cites a command, `unverified` is mandatory and specific,
-and a bot cannot approve itself. `expects_failure` supports the reproduce-first pattern — and the
-gate checks that such a command actually *did* fail, so the flag cannot launder a broken claim.
-
-LEAD's consolidation cites the specialist receipts. It does not pretend LEAD ran their suites.
+exit codes. LEAD consolidates specialist receipts and QUALITY approval before telling Ove
+something is done — LEAD does not fabricate evidence.
 
 ### 2. Path ownership
 
 Platform decomposition buys deep platform expertise and costs a clear owner for anything crossing
 platforms. `ownership.yaml` pays that cost: every path resolves to exactly one bot, and a path
-matching nothing is a **build failure** — an unowned file is precisely where two bots collide
-silently.
-
-Cross-platform features use the contract-first protocol: LEAD tickets the seats, the contract
-merges **before** any implementation, every consumer acknowledges, then the specialists implement
-in parallel against a fixed interface instead of against each other's moving code.
+matching nothing is a **build failure**. Cross-platform features use the contract-first protocol
+with LEAD as integrating orchestrator.
 
 ---
 
@@ -115,7 +76,7 @@ in parallel against a fixed interface instead of against each other's moving cod
 | **G-6** | Destructive operations need recorded human approval | `check_rollback.py` |
 
 Gates are executable and fail the build. Not prompt text — prompt text is advisory and a non-zero
-exit code is not. The seven-seat model does not add or weaken a gate.
+exit code is not.
 
 ```bash
 python3 ci/gates/run_all.py --bot bot-01-systems-backend \
@@ -131,18 +92,20 @@ Everything here has been run.
 ```bash
 pip install pyyaml pytest
 
-# XML prompts parse
-python3 -c "import xml.etree.ElementTree as ET,glob; [ET.parse(f) for f in glob.glob('prompts/**/*.xml',recursive=True)]"
+# XML source prompts parse (core + seven seat files).
+# prompts/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml and prompts-assembled/
+# are those sources concatenated for runtime load, so they are two XML roots.
+python3 -c "import xml.etree.ElementTree as ET,glob; files=sorted(glob.glob('prompts/bot-*.xml')+glob.glob('prompts/_shared/*.xml')); assert len(files)==8, files; [ET.parse(f) for f in files]"
 
 # Ownership manifest self-check
 python3 ci/gates/check_ownership.py --validate-manifest
 
-# Gate test suite
+# Gate test suite — 90 tests against real fixtures
 python3 -m pytest ci/tests/ -v
 ```
 
-**Status:** 8/8 prompts parse · 90/90 gate tests pass · manifest validates (7 bots) · end-to-end
-verified against a real git repository.
+**Status:** 8/8 prompts parse (core + 7 seats) · 90/90 gate tests pass · manifest validates · end-to-end verified
+against a real git repository.
 
 The gate suite found four real bugs during development, including one design flaw: the receipt
 gate rejected any claim citing a failing command, which broke the reproduce-first pattern the
@@ -156,13 +119,9 @@ path every bot needed to write to. Both are fixed and covered by regression test
 ### 1. Bot prompts
 
 Each bot's system prompt is `prompts/_shared/core-directives.xml` **prepended to** its own file.
-Substitute the `{{PLACEHOLDER}}` values. LEAD's file is `prompts/bot-00-programming-lead.xml`.
+Substitute the `{{PLACEHOLDER}}` values.
 
-Suggested models: Opus for LEAD, SYSTEMS, and QUALITY (orchestration, design, and review
-judgement); Sonnet for WEB, ANDROID, IOS, and INFRA (throughput).
-
-Deploy LEAD outside the Programming Desk channel. That channel holds six members; the specialists
-are those six.
+Suggested models: Opus for LEAD, SYSTEMS, and QUALITY (judgement); Sonnet for WEB/ANDROID/IOS/INFRA (throughput).
 
 ### 2. Ownership manifest
 
@@ -182,9 +141,8 @@ cp ci/.github/workflows/gates.yml .github/workflows/gates.yml
 ./ci/hooks/install.sh
 ```
 
-Branch naming convention: `bot-03-android/feat-push-notifications`, or
-`bot-00-programming-lead/desk-model` for LEAD's own paths. The workflow derives the acting bot
-from the prefix — G-1 cannot attribute a change without it.
+Branch naming convention: `bot-03-android/feat-push-notifications`. The workflow derives the acting
+bot from the prefix — G-1 cannot attribute a change without it.
 
 Make the gates **required status checks**. A gate that can be merged past is a suggestion.
 
@@ -206,16 +164,14 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 ## Layout
 
 ```
-├── ARCHITECTURE.md              Seven seats, ownership model, gates, escalation
+├── ARCHITECTURE.md              Six bots, ownership model, gates, escalation
 ├── ownership.yaml               Path → owner. The manifest G-1 enforces
 ├── docs/
-│   ├── desk-operating-model.md  Intake → ticket → dispatch → receipt → QUALITY → LEAD → Ove
 │   ├── quality-gates.md         G-1..G-6: rule → script → evidence
-│   ├── cross-bot-protocol.md    Contract-first protocol; LEAD integrates
+│   ├── cross-bot-protocol.md    Contract-first protocol for multi-bot features
 │   └── handoff-contracts.md     Event envelope and payload schemas
 ├── prompts/
 │   ├── _shared/core-directives.xml
-│   ├── bot-00-programming-lead.xml
 │   └── bot-0{1..6}-*.xml
 ├── skills/                      L1 summary → L2 method → L3 references
 │   ├── verification-receipts/   The G-2 artefact. Always loaded
@@ -228,7 +184,7 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 └── ci/
     ├── gates/                   Six executable gate scripts + run_all.py
     ├── hooks/                   pre-commit (secret scan) + install.sh
-    ├── tests/test_gates.py      Gate tests against real fixtures
+    ├── tests/test_gates.py      90 tests against real fixtures
     └── .github/workflows/       CI workflow, including a gate self-test job
 ```
 
@@ -243,12 +199,8 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 - Destructive operations without recorded human approval
 - A bot approving its own work
 - A reviewer fixing the code it is reviewing
-- A specialist starting work because the desk channel suggested it
-- LEAD joining the six-member Programming Desk channel, or implementing a specialist's paths
 
-Each of the first seven is enforced in a gate script, not only in prompt text. The last two are
-operating rules: the channel limit is a platform constraint, and chat-is-not-a-ticket is how LEAD
-stays the only place new work is created.
+Each is enforced in a gate script, not only in prompt text.
 
 ---
 
@@ -260,3 +212,4 @@ evidence encode guesses.
 Likely next: `performance-profiling`, `incident-response`, `database-design`, `api-versioning`,
 `accessibility`, and per-service `domains/<service>` skills once services grow their own
 conventions.
+

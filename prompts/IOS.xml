@@ -6,7 +6,7 @@
 <core_directives version="1.0">
 
   <organisation>
-    <repository>SomeRandmGuyy/programming-desk</repository>
+    <repository>swcstudiospace/programming-desk</repository>
     <default_branch>main</default_branch>
     <ownership_manifest>ownership.yaml</ownership_manifest>
     <receipt_directory>.receipts/bot-04-ios/</receipt_directory>

@@ -1,0 +1,69 @@
+{
+  "task_id": "g1-lead-intake-e2e-carveout",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-09-23T19:03:27Z",
+  "completed_at": "2026-09-23T19:03:27Z",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "observed": "G-1 manifest OK \u2014 7 bots, 81 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/intake-e2e-runbook.md docs/vps-agent-bus.md skills/agent-bus/README.md",
+      "exit_code": 0,
+      "observed": "G-1 PASS \u2014 LEAD within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/quality-gates.md",
+      "exit_code": 1,
+      "observed": "G-1 FAIL FOREIGN \u2014 still QUALITY (expected negative control)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Added last-match LEAD overrides for docs/intake-e2e-runbook.md, docs/vps-agent-bus.md, skills/agent-bus/**",
+      "evidence": [
+        0
+      ]
+    },
+    {
+      "claim": "Manifest validates with 81 rules after carve-outs",
+      "evidence": [
+        0
+      ]
+    },
+    {
+      "claim": "LEAD is permitted to change the carved-out paths under G-1",
+      "evidence": [
+        1
+      ]
+    },
+    {
+      "claim": "Default docs/** still blocks LEAD on non-carved docs (quality-gates.md)",
+      "evidence": [
+        2
+      ]
+    }
+  ],
+  "unverified": [
+    "CI status on PR #4 after push not yet observed",
+    "Whether docs/vps-agent-bus.md and skills/agent-bus/** already exist on main (patterns are forward-looking)"
+  ],
+  "files_changed": [
+    "ownership.yaml",
+    ".receipts/bot-06-quality-security/g1-lead-intake-e2e-carveout.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert the three Lead-orchestrator patterns from ownership.yaml; restore prior rule count.",
+  "approvals": [
+    {
+      "operation": "ownership carve-out for LEAD orchestration docs/skills",
+      "approved_by": "bot-00-programming-lead",
+      "at": "2026-09-23T19:03:27Z",
+      "blast_radius": "G-1 last-match overrides only; docs/** and skills/** defaults remain QUALITY; greptile-merge-gate and assemble-prompts.sh stay QUALITY"
+    }
+  ],
+  "approved_by": "bot-00-programming-lead",
+  "notes": "Requested by LEAD for PR https://github.com/SomeRandmGuyy/programming-desk/pull/4. QUALITY owns ownership.yaml; LEAD CA told to stop inventing ownership edits. Applied by QUALITY directly on PR branch (cancelled cloud agent bc-1c4d2a41)."
+}

@@ -23,33 +23,43 @@ bots:
     name: Programming Lead
     description: >
       Desk orchestrator. Intake, tickets, dispatch, consolidation, user reporting.
-      Does not own product code. Sits outside the Programming Desk channel.
+      Does not own product code. Sits in the Programming Desk channel. QUALITY is
+      off-channel for post-build merge-gate.
 
   bot-01-systems-backend:
-    name: Systems & Backend
+    name: Systems & Design
     languages: [rust, python]
-    description: Services, APIs, data layer, performance-critical code.
+    description: >
+      Services, APIs, data layer, performance-critical code, and product/system design
+      artifacts (flows, component specs, design tokens consumed by clients).
 
   bot-02-web-edge:
-    name: Web & Edge
+    name: Web & Desktop
     languages: [typescript, javascript]
-    runtimes: [deno, node, vercel-edge]
-    description: Browser frontend, edge functions, Vercel deployment surface.
+    runtimes: [deno, node, vercel-edge, electron, tauri]
+    description: >
+      Browser frontend, edge functions, Vercel surface, and desktop shells (Electron/Tauri).
 
   bot-03-android:
-    name: Android
+    name: Android & Play Release
     languages: [kotlin, java]
-    description: Android application, Compose UI, Gradle build, Play Store release.
+    description: >
+      Android application, Compose UI, Gradle build, Play Console, staged rollout, and store listing.
+      Play release files live under android/.
 
   bot-04-ios:
-    name: iOS
+    name: iOS & App Store
     languages: [swift, objective-c]
-    description: iOS application, SwiftUI, Xcode project, App Store release.
+    description: >
+      iOS application, SwiftUI, Xcode project, App Store Connect, TestFlight, and App Review.
+      App Store files live under ios/.
 
   bot-05-infrastructure:
-    name: Infrastructure & DevEx
-    languages: [hcl, yaml, bash]
-    description: IaC, Kubernetes, CI/CD, remote dev machine, observability.
+    name: Infra & WEB3
+    languages: [hcl, yaml, bash, solidity]
+    description: >
+      IaC, Kubernetes, CI/CD, remote dev, observability, plus WEB3 ops (RPC, wallets, chain deploys,
+      indexer/infra). Protobuf files stay with QUALITY even under web3/ or chains/.
 
   bot-06-quality-security:
     name: Quality & Security
@@ -161,12 +171,11 @@ ownership:
   - pattern: "contracts/**"
     owner: bot-06-quality-security
     contract_surface: true
-  - pattern: "**/*.proto"
-    owner: bot-06-quality-security
-    contract_surface: true
   - pattern: "openapi.yaml"
     owner: bot-06-quality-security
     contract_surface: true
+  # **/*.proto is restated after the dual-domain directory rules. Last match wins,
+  # and a directory such as web3/** must not take contract_surface off a .proto file.
 
   # --- Verification receipts ---------------------------------------------
   # Every bot writes receipts, so a single shared .receipts/ would be a permanently
@@ -265,6 +274,33 @@ ownership:
     owner: bot-06-quality-security
   - pattern: "scripts/assemble-prompts.sh"
     owner: bot-06-quality-security
+
+  # Dual-domain directories. Last match wins over earlier language globs and over docs/**.
+  # Play release stays under android/** (ANDROID). App Store stays under ios/** (IOS).
+  # QUALITY security stays on ci/gates, SECURITY.md, contracts, and **/*.proto below.
+  - pattern: "design/**"
+    owner: bot-01-systems-backend
+  - pattern: "docs/design/**"
+    owner: bot-01-systems-backend
+  - pattern: "desktop/**"
+    owner: bot-02-web-edge
+  - pattern: "apps/desktop/**"
+    owner: bot-02-web-edge
+  - pattern: "electron/**"
+    owner: bot-02-web-edge
+  - pattern: "tauri/**"
+    owner: bot-02-web-edge
+  - pattern: "web3/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/web3/**"
+    owner: bot-05-infrastructure
+  - pattern: "chains/**"
+    owner: bot-05-infrastructure
+  # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY
+  # contract_surface. Do not duplicate this pattern; validate-manifest rejects duplicates.
+  - pattern: "**/*.proto"
+    owner: bot-06-quality-security
+    contract_surface: true
 
 # ---------------------------------------------------------------------------
 # Consumers of each contract surface.

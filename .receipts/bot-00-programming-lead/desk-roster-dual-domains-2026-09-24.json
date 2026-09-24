@@ -1,0 +1,101 @@
+{
+  "task_id": "desk-roster-dual-domains-2026-09-24",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-09-24T14:10:00Z",
+  "completed_at": "2026-09-24T14:22:02Z",
+  "runtime": "cursor-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "graph_id": "none",
+  "agent_id": null,
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+  "supersedes_pr": "https://github.com/swcstudiospace/programming-desk/pull/8",
+  "commands": [
+    {
+      "cmd": "python3 -c 'import sys; from pathlib import Path; sys.path.insert(0,\"ci/gates\"); from check_ownership import load_manifest, resolve_owner; m=load_manifest(Path(\"ownership.yaml\")); want={\"web3/api.proto\":(\"bot-06-quality-security\",True),\"chains/foo.proto\":(\"bot-06-quality-security\",True),\"web3/rpc.yaml\":(\"bot-05-infrastructure\",False),\"chains/Token.sol\":(\"bot-05-infrastructure\",False),\"design/tokens.json\":(\"bot-01-systems-backend\",False),\"docs/design/flow.md\":(\"bot-01-systems-backend\",False),\"desktop/src/main.ts\":(\"bot-02-web-edge\",False),\"electron/main.js\":(\"bot-02-web-edge\",False),\"tauri/src/main.rs\":(\"bot-02-web-edge\",False),\"android/store/listing.txt\":(\"bot-03-android\",False),\"ios/App/store.txt\":(\"bot-04-ios\",False)}; bad=[(p,resolve_owner(p,m)) for p,(o,c) in want.items() if resolve_owner(p,m)!=(o,c)]; print(bad or \"ok\"); raise SystemExit(0 if not bad else 1)'",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml docs/desk-operating-model.md docs/gotxcot-cloud-pipeline.md .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files ownership.yaml prompts/_shared/core-directives.xml prompts-assembled/LEAD.xml prompts-assembled/QUALITY.xml",
+      "exit_code": 1,
+      "duration_s": 0.05,
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  ownership.yaml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/_shared/core-directives.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.04,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "web3 and chains protobuf paths stay QUALITY contract_surface; design, desktop, web3, and chains directories resolve to SYSTEMS, WEB, and INFRA; Play listing under android/ stays ANDROID and App Store text under ios/ stays IOS",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1 passes for bot-00 on the LEAD prompt, the operating model, the pipeline doc, and this roster receipt",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-1 fails for bot-00 on ownership.yaml, shared directives, and assembled LEAD/QUALITY prompts because those paths are owned by QUALITY",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this roster receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on the branch tip that contains the Merge-claim head rule.",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "The live desk host roster (LEAD in the channel, QUALITY out) was already updated on the host before this commit. This session did not query the host. The GitHub copy now matches that roster.",
+    "QUALITY reviews ownership.yaml and the assembled prompts. The mixed-owner one-merge is recorded with expects_failure. It is not a stamp.",
+    "PR #8 is superseded by PR #7. This receipt does not merge either pull request.",
+    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7.",
+    "QUALITY stamped approved_by after Greptile review 26588229 COMPLETED 5/5 on tip 5c2332b990d7eb07c09329ce1dd436e1615fb780. This stamp file's containing commit SHA is intentionally not written into the receipt tree.",
+    "Did not undraft or merge PR #7. PR #8 stays superseded."
+  ],
+  "blockers": [],
+  "files_changed": [
+    "ownership.yaml",
+    "docs/desk-operating-model.md",
+    "docs/gotxcot-cloud-pipeline.md",
+    "prompts/bot-00-programming-lead.xml",
+    ".receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "approved_by": "bot-06-quality-security",
+  "prior_quality_stamp": {
+    "approved_by": "bot-06-quality-security",
+    "approved_at": "2026-09-24T14:33:04Z",
+    "covered_commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "greptile_review_id": "26515901",
+    "greptile_confidence": "4/5",
+    "status": "not the live approved_by",
+    "note": "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction."
+  },
+  "receipt_honesty_corrected_at": "2026-09-24T18:33:51Z",
+  "approved_at": "2026-09-25T04:44:50+10:00",
+  "quality_stamp": {
+    "approved_by": "bot-06-quality-security",
+    "approved_at": "2026-09-25T04:44:50+10:00",
+    "covered_commit_prose": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "greptile_review_id": "26588229",
+    "greptile_confidence": "5/5",
+    "greptile_status": "COMPLETED",
+    "verdict": "CLEAR_WITH_WAIVERS",
+    "note": "QUALITY stamped after Greptile COMPLETED on tip 5c2332b. Receipt-push commit SHA is not embedded here to avoid stale-head recursion."
+  },
+  "post_stamp_note": "Claims that expect G-2 failure while approved_by was empty are historical for the pre-stamp tip. Live approved_by is now bot-06-quality-security."
+}

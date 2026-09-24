@@ -21,9 +21,10 @@ The second structural problem is a consequence of decomposing by platform rather
 lifecycle: **ownership collision**. One feature spanning API, web and mobile means three bots on
 the same branch with no clear authority. Section 3 is the answer.
 
-The third structural problem is **operator interface**: when Ove messages a six-member desk
-channel, work dissolves into chat vibes. Section 2a is the answer — Programming Lead sits
-**outside** the channel (platform max 6 members) and orchestrates via concrete tickets.
+The third structural problem is **operator interface**: when Ove messages the desk channel,
+work dissolves into chat vibes. Section 2a is the answer — Programming Lead sits **in** the
+channel with the five build seats and still assigns by concrete 1:1 tickets. QUALITY is the
+off-channel seat (platform max 6).
 
 ## 2. The seven seats
 
@@ -32,9 +33,9 @@ channel, work dissolves into chat vibes. Section 2a is the answer — Programmin
                          │
                          ▼
               ┌──────────────────────┐
-              │  LEAD — Programming  │  OUTSIDE channel
+              │  LEAD — Programming  │  IN the channel
               │  Lead / Orchestrator │  tickets via SendToAgent
-              │  bot-00              │
+              │  bot-00              │  reports to Ove 1:1
               └──────────┬───────────┘
                          │ dispatch / consolidate
          ┌───────────────┼───────────────────────────────┐
@@ -42,11 +43,11 @@ channel, work dissolves into chat vibes. Section 2a is the answer — Programmin
          ▼               ▼                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │              Programming Desk channel (max 6)               │
-│  SYSTEMS │ WEB │ ANDROID │ IOS │ INFRA │ QUALITY            │
+│  LEAD │ SYSTEMS │ WEB │ ANDROID │ IOS │ INFRA               │
 └─────────────────────────────────────────────────────────────┘
 
                          ┌───────────────────────────────┐
-                         │  QUALITY — Bot 6 (asymmetric) │
+                         │  QUALITY — Bot 6 off-channel  │
                          │  reads everything, owns gates │
                          └───────────────┬───────────────┘
                                          │ reviews
@@ -70,24 +71,26 @@ channel, work dissolves into chat vibes. Section 2a is the answer — Programmin
 | Seat | Bot id | Owns | Primary languages |
 |---|---|---|---|
 | **LEAD** | bot-00-programming-lead | Orchestration docs + lead prompt + own receipts | — |
-| **SYSTEMS** | bot-01-systems-backend | Services, APIs, data layer, performance-critical code | Rust, Python |
-| **WEB** | bot-02-web-edge | Browser frontend, edge functions, Vercel deploys | TypeScript, Deno |
-| **ANDROID** | bot-03-android | Android app, Compose UI, Gradle, Play release | Kotlin |
-| **IOS** | bot-04-ios | iOS app, SwiftUI, Xcode, App Store release | Swift |
-| **INFRA** | bot-05-infrastructure | IaC, Kubernetes, CI/CD, remote dev machine, observability | HCL, YAML, Bash |
-| **QUALITY** | bot-06-quality-security | Review, test strategy, secrets, supply chain, the gates | — |
+| **SYSTEMS** | bot-01-systems-backend | Services, APIs, data, design artifacts (`design/**`, `docs/design/**`) | Rust, Python |
+| **WEB** | bot-02-web-edge | Browser, edge, Vercel, desktop shells (`desktop/**`, `electron/**`, `tauri/**`) | TypeScript, Deno |
+| **ANDROID** | bot-03-android | Android app, Compose, Gradle, Play release under `android/**` | Kotlin |
+| **IOS** | bot-04-ios | iOS app, SwiftUI, Xcode, App Store release under `ios/**` | Swift |
+| **INFRA** | bot-05-infrastructure | IaC, Kubernetes, CI/CD, WEB3 ops (`web3/**`, `chains/**`). Not `**/*.proto`. | HCL, YAML, Bash |
+| **QUALITY** | bot-06-quality-security | Review, secrets, supply chain, the gates, `**/*.proto` contract surface. Off-channel. | — |
 
 QUALITY remains deliberately asymmetric: **read access everywhere, write access almost nowhere**.
 It owns `ci/gates/`, `contracts/`, `SECURITY.md` and `ownership.yaml` (except the narrow Lead
 overrides for `docs/desk-operating-model.md` and `prompts/bot-00-programming-lead.xml`). A
 reviewer that can rewrite the code it is reviewing is not a reviewer.
 
-### 2a. Orchestrator pattern (why Lead is outside the channel)
+### 2a. Orchestrator pattern (Lead in the channel, QUALITY off-channel)
 
-Platform channels allow at most **six** members. The desk needs seven seats (Lead + six
-specialists). Lead therefore stays **outside** the Programming Desk channel and messages seats
-1:1 via `SendToAgent`. The channel is for short status after assignment — never a substitute for
-tickets. Operating model: `docs/desk-operating-model.md`.
+Platform channels allow at most **six** members. The six are LEAD plus the five build seats.
+QUALITY stays **off-channel** and receives post-build review tickets 1:1. LEAD still messages
+seats 1:1 via `SendToAgent`. The Desk carries full human-visible traffic from build seats
+(not status-only) and LEAD's required dispatch note. It is not the assignment bus. LEAD reports
+to Ove in the LEAD↔Ove 1:1 and polls held (priority false) handoffs at the start of every turn.
+Operating model: `docs/desk-operating-model.md`.
 
 Real builds go through a **double uplift** before dispatch: a long nested XML spec, a Graph of
 Thought of **5–8 nodes**, a Chain of Thought of **4–8 steps per node** (sequential by default),

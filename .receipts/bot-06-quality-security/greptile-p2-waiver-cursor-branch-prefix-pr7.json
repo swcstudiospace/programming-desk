@@ -1,0 +1,29 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p2-waiver-cursor-branch-prefix-pr7",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-24T23:02:03+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 7,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+    "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "head_at_clear": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "head_at_clear_prose": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "greptile_review_id_at_clear": "26588229"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "why": "Branch cursor/desk-human-visible-surface-101e is a Cloud Agent branch. gates.yml derives acting bot from prefix before first slash and will not attribute bot-00. Lead receipt already lists this under unverified; workflow file was not edited. Messaging-policy content is independent of that CI attribution step.",
+    "decision": "KEEP_CURSOR_BRANCH",
+    "quality_ack": "QUALITY acknowledges known CA branch-prefix limitation; not a reason alone to rewrite gates.yml in this PR."
+  },
+  "comments_waived": [
+    {
+      "greptile_comment_id": "278399494",
+      "title": "Branch name blocks gates"
+    }
+  ],
+  "last_confirmed_at": "2026-09-25T04:44:50+10:00"
+}

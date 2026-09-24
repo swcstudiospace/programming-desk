@@ -2,7 +2,7 @@
 
 A **seven-seat** operating system for software development across backend, web, Android, iOS and
 infrastructure — decomposed by platform, with ownership and verification enforced in CI.
-**Programming Lead** orchestrates from outside the desk channel; six specialists execute.
+**Programming Lead** sits in the desk channel and orchestrates by 1:1 tickets. QUALITY is off-channel. The five build seats execute.
 
 ---
 
@@ -27,13 +27,13 @@ infrastructure — decomposed by platform, with ownership and verification enfor
 ## The seven seats
 
 ```
-         Ove ──▶ LEAD (outside channel) ──tickets──▶ specialists
+         Ove ──1:1──▶ LEAD (in channel; reports 1:1) ──tickets──▶ build seats
                       │
          ┌────────────┴──────────────────────────────────────┐
-         │ Desk channel (max 6): SYSTEMS WEB ANDROID IOS     │
-         │                     INFRA QUALITY                 │
+         │ Desk channel (max 6): LEAD SYSTEMS WEB ANDROID    │
+         │                       IOS INFRA                   │
          └───────────────────────────────────────────────────┘
-                              QUALITY reviews (asymmetric)
+                    QUALITY off-channel; reviews via LEAD 1:1
 ```
 
 | Seat | Role |
@@ -42,8 +42,8 @@ infrastructure — decomposed by platform, with ownership and verification enfor
 | **SYSTEMS / WEB / ANDROID / IOS / INFRA** | Implement in owned paths; report receipts to LEAD |
 | **QUALITY** | Review, gates, contracts — read everywhere, write almost nowhere |
 
-Lead stays outside because the Programming Desk channel allows at most six members. Details:
-`docs/desk-operating-model.md`.
+QUALITY stays off-channel because the Programming Desk channel allows at most six members.
+Details: `docs/desk-operating-model.md`.
 
 ---
 

@@ -1,0 +1,447 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-comment-disposition-pr7",
+  "receipt_kind": "greptile_comment_disposition",
+  "recorded_at": "2026-09-25T04:44:50+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+  "pr_number": 7,
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. Writing this commit's own SHA into the tree would change the SHA and recreate the stale-head bug. Greptile COMPLETED review 26588229 (5/5) covered tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 before this QUALITY receipt push. Last COMPLETED-on-tip before receipt push: 5c2332b990d7eb07c09329ce1dd436e1615fb780.",
+  "editor_note": "QUALITY re-gate after Greptile COMPLETED on tip 5c2332b. Stamps CLEAR_WITH_WAIVERS. Does not invent Greptile scores.",
+  "latest_review": {
+    "id": "26588229",
+    "status": "COMPLETED",
+    "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "confidence": "5/5",
+    "completed_at": "2026-09-24T18:43:14.574Z",
+    "source": "greptile_get_code_review via QUALITY this wake",
+    "note": "Last reviewed commit matches live PR tip 5c2332b before this receipt-only QUALITY push."
+  },
+  "prior_reviews": [
+    {
+      "id": "26588065",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:39:25.177Z",
+      "note": "Earlier tip attempt SKIPPED; superseded by COMPLETED 26588229."
+    },
+    {
+      "id": "26587970",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:47.956Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26587823",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:32.410Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26587564",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:02.130Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26585514",
+      "status": "COMPLETED",
+      "commit": "ddc113bcd20e6b59e30060db1f863ea39d25a8ca",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T18:33:34.455Z",
+      "note": "COMPLETED on parent only; does not cover tip."
+    },
+    {
+      "id": "26545196",
+      "status": "SKIPPED",
+      "commit": "c5c8b5ee68b31c960af90415497b5147527964cc",
+      "completed_at": "2026-09-24T16:16:49.385Z",
+      "note": "Not the target."
+    },
+    {
+      "id": "26518097",
+      "status": "COMPLETED",
+      "commit": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T14:38:30.580Z"
+    },
+    {
+      "id": "26515901",
+      "status": "COMPLETED",
+      "commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T14:30:18.106Z"
+    }
+  ],
+  "api_note": "Greptile API may still show addressed=false on historical comments. QUALITY dispositions below cover review 26588229 COMPLETED on tip 5c2332b and the prior trail.",
+  "dispositions": [
+    {
+      "id": "278402750",
+      "title": "Specialist rules reach LEAD",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "audience=build-seats / lead / quality plus assemble-prompts.sh strip; LEAD assembled no longer contains build-seat Desk-only absolute.",
+      "github_discussion_id": "4093876271"
+    },
+    {
+      "id": "278399496",
+      "title": "Specialist rules also reach LEAD",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Same audience filter as 278402750."
+    },
+    {
+      "id": "278402754",
+      "title": "Held handoffs may stall work",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-00-programming-lead",
+      "path": "prompts/bot-00-programming-lead.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "LEAD held_handoff_poll + PD-7 audience=lead poll rules; LEAD is in Desk.",
+      "github_discussion_id": "4093876280"
+    },
+    {
+      "id": "278399492",
+      "title": "Held handoffs may stall LEAD",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-00-programming-lead",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Same as 278402754."
+    },
+    {
+      "id": "278402751",
+      "title": "Direct-request priorities conflict",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-01-systems-backend",
+      "path": "prompts/bot-01-systems-backend.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "intake_protocol now priority false wait-for-LEAD-plan; same pattern on bot-02..06.",
+      "github_discussion_id": "4093876292"
+    },
+    {
+      "id": "278399956",
+      "title": "Conflicting handoff priorities",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-01-systems-backend",
+      "path": "prompts/bot-01-systems-backend.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Same as 278402751."
+    },
+    {
+      "id": "278402755",
+      "title": "LEAD loses the pre-edit plan",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "direct_from_ove: held handoff then wait before edit.",
+      "github_discussion_id": "4093876299"
+    },
+    {
+      "id": "278402749",
+      "title": "Widget selections lack return routing",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-00-programming-lead",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "LEAD true-widget return: Desk post + SendToAgent asking seat priority true.",
+      "github_discussion_id": "4093876308"
+    },
+    {
+      "id": "278402752",
+      "title": "Receipt lacks required approval",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
+      "github_discussion_id": "4093876318",
+      "historical_action": "WAIVE",
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
+    },
+    {
+      "id": "278399957",
+      "title": "Receipt lacks approval",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
+      "historical_action": "WAIVE",
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
+    },
+    {
+      "id": "278399495",
+      "title": "Receipt lacks independent approval",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
+      "historical_action": "WAIVE",
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
+    },
+    {
+      "id": "278402757",
+      "title": "Completion posts lack review status",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "awaiting-review / pending QUALITY label in PD-7, desk_membership, operating model.",
+      "github_discussion_id": "4093876337"
+    },
+    {
+      "id": "278402753",
+      "title": "Dispatch note remains optional elsewhere",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-00-programming-lead",
+      "path": "prompts/bot-00-programming-lead.xml",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Dispatch phase Desk note is required.",
+      "github_discussion_id": "4093876351"
+    },
+    {
+      "id": "278399959",
+      "title": "Channel table remains outdated",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-00-programming-lead",
+      "path": "docs/desk-operating-model.md",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Channel table updated for full human-visible traffic."
+    },
+    {
+      "id": "278408080",
+      "title": "Review threads misidentified",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "bc45975 corrected disposition commentId mapping; this receipt supersedes.",
+      "github_discussion_id": "4093937667"
+    },
+    {
+      "id": "278402756",
+      "title": "Changed paths fail ownership",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
+      "note": "One-merge coherence waive; QUALITY reviewed ownership.yaml + assembled prompts.",
+      "github_discussion_id": "4093876333",
+      "waiver_file_status": "ACTIVE"
+    },
+    {
+      "id": "278399958",
+      "title": "Mixed ownership blocks G-1",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
+      "note": "Covered by ownership one-merge waiver.",
+      "waiver_file_status": "ACTIVE"
+    },
+    {
+      "id": "278399493",
+      "title": "Cross-bot edits fail ownership",
+      "severity": "P1",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": "prompts/_shared/core-directives.xml",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
+      "note": "Covered by ownership one-merge waiver.",
+      "waiver_file_status": "ACTIVE"
+    },
+    {
+      "id": "278399494",
+      "title": "Branch name blocks gates",
+      "severity": "P2",
+      "action": "WAIVE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
+      "note": "Cloud Agent cursor/ branch prefix; gates.yml not rewritten.",
+      "waiver_file_status": "ACTIVE"
+    },
+    {
+      "id": "278407336",
+      "title": "Merge-claim receipt is unusable",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
+      "note": "Placeholder was replaced at a45d779. The later CLEAR_WITH_WAIVERS text at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf does not cover its own head and is withdrawn pending re-review."
+    },
+    {
+      "id": "278408051",
+      "title": "Waiver receipts are missing",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
+      "note": "Waiver + disposition files present on branch."
+    },
+    {
+      "id": "278501192",
+      "id_source": "recorded by QUALITY on ddc113b; not re-issued by this edit",
+      "github_discussion_id": "4094854457",
+      "title": "Clearance cites an earlier head",
+      "severity": "P1",
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "honesty-fix-CA",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "c5c8b5ee68b31c960af90415497b5147527964cc",
+      "note": "Honesty fix withdrew CLEAR_WITH_WAIVERS to BLOCKED. Finding from the review QUALITY recorded as 26518097 on b2eef4a. The later ddc113b review still required the pending target to move off c5c8b5e; see the current-tip outcome."
+    },
+    {
+      "id": "278501193",
+      "id_source": "recorded by QUALITY on ddc113b; not re-issued by this edit",
+      "github_discussion_id": "4094854475",
+      "title": "Approval blocker remains stale",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "honesty-fix-CA",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "fixed_at": "c5c8b5ee68b31c960af90415497b5147527964cc",
+      "note": "Blockers match empty live approved_by. The prior stamp stays in prior_quality_stamp. Same wording on the roster receipt."
+    },
+    {
+      "id": "4095971664",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4095971664",
+      "title": "Claim references fail G-2",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
+      "note": "Claims use evidence_command_index. Non-zero evidence sets expects_failure. No Greptile internal id is invented for this GitHub comment."
+    },
+    {
+      "id": "4095971676",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4095971676",
+      "title": "Historical dispositions were removed",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
+      "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
+      "note": "Restores the 21 historical outcomes from c5c8b5e, the two honesty-head outcomes, and the ddc113b outcomes. Withdrawn chicken-egg rows are marked DOES_NOT_COVER_CURRENT_HEAD rather than left as active WAIVE."
+    },
+    {
+      "id": "4096016172",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4096016172",
+      "title": "Review targets an older commit",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
+      "note": "c5c8b5e stays recorded as SKIPPED review 26545196. The pending target is the branch tip, not c5c8b5e. ddc113b remains the last COMPLETED commit LEAD supplied (4/5) and does not cover the tip."
+    },
+    {
+      "id": "4096016183",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4096016183",
+      "title": "Withdrawn waiver counted as unchanged",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
+      "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
+      "note": "Counts split active waivers from DOES_NOT_COVER_CURRENT_HEAD / WITHDRAWN_FROM_CURRENT_HEAD. The merge claim lists the chicken-egg waiver only in the withdrawn group."
+    },
+    {
+      "id": "4096017662",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4096017662",
+      "title": "Re-review targets an older head",
+      "severity": "P1",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
+      "note": "head_commit_sha is null because this file cannot embed the SHA of the commit that contains it. Pending review is the tip. Do not request COMPLETED on c5c8b5e."
+    },
+    {
+      "id": "4097109791",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4097109791",
+      "title": "Secret scan uses placeholder paths",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "note": "Tip merge-claim lists six real paths in the correction command; QUALITY re-gate secret-scan command lists all 35 real PR paths. No <35 PR paths> placeholder."
+    },
+    {
+      "id": "4097191466",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4097191466",
+      "title": "PR-specific target in shared policy",
+      "severity": "P2",
+      "action": "WAIVE",
+      "owner": "bot-00-programming-lead",
+      "path": "docs/desk-operating-model.md",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p2-waiver-pr-specific-operating-model-pr7.json",
+      "waiver_file_status": "ACTIVE",
+      "note": "Greptile marks non-blocking. General merge-claim head rule remains in lines 106-109. PR-specific tip lines 111-115 were the intentional non-receipt nudge that broke the c5c8b5e/SKIPPED loop for this PR. LEAD may generalize those lines after merge. Not a P1; does not block CLEAR_WITH_WAIVERS.",
+      "from_review": "26588229"
+    }
+  ],
+  "counts": {
+    "historical_fixed_in_code": 12,
+    "historical_fixed_in_followup": 2,
+    "honesty_head_fixed_in_followup": 2,
+    "active_waivers": 4,
+    "chicken_egg_waive_on_completed_tip": 3,
+    "current_tip_fixed_in_code": 6,
+    "tip_completed_waive_p2": 1,
+    "note": "active_waivers = ownership (3) + cursor-branch (1). chicken_egg_waive_on_completed_tip = 3 rows re-activated after tip COMPLETED. tip_completed_waive_p2 = PR-specific operating-model P2. current_tip_fixed_in_code includes the five honesty/schema fixes plus secret-scan path fix."
+  },
+  "waiver_accounting": {
+    "active": [
+      ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
+      ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
+      ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
+      ".receipts/bot-06-quality-security/greptile-p2-waiver-pr-specific-operating-model-pr7.json"
+    ],
+    "does_not_cover_current_head": [],
+    "note": "Chicken-egg waiver re-activated after Greptile COMPLETED on tip; covers stamp only."
+  },
+  "coverage_note": "Gate cleared CLEAR_WITH_WAIVERS after Greptile COMPLETED 5/5 on 5c2332b990d7eb07c09329ce1dd436e1615fb780. No open P1s. One new P2 waived (PR-specific operating-model lines)."
+}

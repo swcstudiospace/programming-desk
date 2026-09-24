@@ -1,0 +1,41 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p1-waiver-approval-chicken-egg-pr7",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-25T04:44:50+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 7,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+    "merge_request_id": "68670553",
+    "head_commit_sha": null,
+    "head_at_clear_prose": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "greptile_review_id": "26588229",
+    "greptile_confidence": "5/5"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "why": "Greptile COMPLETED review 26588229 on tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 at confidence 5/5 with no open P1s. The sole chicken-egg issue is that approved_by must stay empty until COMPLETED+CLEAR; QUALITY now stamps approved_by=bot-06-quality-security on both LEAD receipts and the merge-claim. Prior bc45975 stamp was withdrawn from later heads; this reactivation covers the tip COMPLETED stamp only.",
+    "decision": "STAMP_AND_WAIVE_CHICKEN_EGG_EMPTY_APPROVED_BY",
+    "quality_ack": "bot-06-quality-security stamps approved_by on both LEAD receipts and the merge-claim at this CLEAR_WITH_WAIVERS turn after tip COMPLETED.",
+    "scope": "Greptile P1 empty approved_by on desk-human-visible-surface and desk-roster-dual-domains receipts; does not waive other defects"
+  },
+  "comments_waived": [
+    {
+      "greptile_comment_id": "278402752",
+      "title": "Receipt lacks required approval"
+    },
+    {
+      "greptile_comment_id": "278399957",
+      "title": "Receipt lacks approval"
+    },
+    {
+      "greptile_comment_id": "278399495",
+      "title": "Receipt lacks independent approval"
+    }
+  ],
+  "live_stamp_status": "STAMPED_ON_COMPLETED_TIP",
+  "prior_status": "DOES_NOT_COVER_CURRENT_HEAD",
+  "coverage_note": "Re-activated for tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 after review 26588229 COMPLETED 5/5. Does not authorize merge of a later non-receipt tip without re-gate."
+}

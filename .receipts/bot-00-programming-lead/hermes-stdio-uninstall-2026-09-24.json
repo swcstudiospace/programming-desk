@@ -2,7 +2,7 @@
   "task_id": "hermes-stdio-uninstall-2026-09-24",
   "bot": "bot-00-programming-lead",
   "started_at": "2026-09-24T00:46:00Z",
-  "completed_at": "2026-09-24T01:07:01Z",
+  "completed_at": "2026-09-24T01:12:00Z",
   "runtime": "cursor-cloud",
   "lane": "A",
   "repo": "https://github.com/swcstudiospace/programming-desk",
@@ -43,7 +43,7 @@
       "output_tail": "G-2 FAIL — approved_by is missing — work must be reviewed by someone else"
     },
     {
-      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); start=t.index(\"<stage id=\\\"7\\\"\"); end=t.index(\"</stage>\", start); stage=t[start:end]; need=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\",\"handoff_to_hermes\",\"Do not SSH the packet as a code handoff\",\"not a stop condition\",\"Do not rebuild the stdio bridge\",\"Agent Bus supersedes it\"]; bad=[\"needsAuth\",\"bridge is missing\",\"If Hermes is needsAuth\"]; problems=[n for n in need if n not in stage]+[b for b in bad if b in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); start=t.index(\"<stage id=\\\"7\\\"\"); end=t.index(\"</stage>\", start); stage=t[start:end]; need=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\",\"handoff_to_hermes\",\"Do not SSH the packet as a code handoff\",\"Record a Lane B blocker only when\",\"does not require local stdio\",\"Do not rebuild hermes-mcp-bridge.mjs\"]; bad=[\"needsAuth\",\"bridge is missing\",\"If Hermes is needsAuth\"]; problems=[n for n in need if n not in stage]+[b for b in bad if b in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
       "exit_code": 0,
       "output_tail": "ok"
     },
@@ -61,6 +61,11 @@
       "cmd": "python3 ci/gates/check_secrets.py --files prompts/bot-00-programming-lead.xml skills/trackplan-dispatch/SKILL.md",
       "exit_code": 0,
       "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; old=\"If Hermes is needsAuth or the bridge is missing\"; src=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); lead=Path(\"prompts/LEAD.xml\").read_text(); asm=Path(\"prompts-assembled/LEAD.xml\").read_text(); problems=[]; problems += [\"stale stop still in bot-00\"] if old in src else []; problems += [\"assembled LEAD.xml missing old sentence\"] if old not in lead else []; problems += [\"prompts-assembled/LEAD.xml missing old sentence\"] if old not in asm else []; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
     }
   ],
   "claims": [
@@ -108,10 +113,14 @@
     {
       "claim": "Secret scan of the LEAD prompt and the dispatch skill reports no committed secret",
       "evidence_command_index": 10
+    },
+    {
+      "claim": "Greptile P1 stop sentence is gone from bot-00 source and still present in QUALITY-owned prompts/LEAD.xml and prompts-assembled/LEAD.xml",
+      "evidence_command_index": 11
     }
   ],
   "unverified": [
-    "prompts/LEAD.xml and prompts-assembled/** still contain the old stage 7 sentence. They are QUALITY-owned and were not edited. QUALITY assembles after this LEAD source change.",
+    "Greptile P1 at 96324f4 read the runtime prompt. prompts/LEAD.xml and prompts-assembled/LEAD.xml still contain 'If Hermes is needsAuth or the bridge is missing'. Those paths are QUALITY-owned and were not edited. QUALITY must re-run scripts/assemble-prompts.sh after merge, or on this PR if they choose, before the assembled runtime copy matches bot-00.",
     "agent_bus_health returned status ok with runtimes hermes, muse, grok-build, omp, claude-code in this session. commands[] does not re-invoke that MCP tool, so a later re-run of this receipt does not re-check live bus health.",
     "agent_bus_start_job was not called. No Hermes job id and no Hermes draft PR exist for this cleanup.",
     "Greptile was not triggered and merge was not requested.",

@@ -241,7 +241,8 @@
     <stage id="7" name="dispatch">
       <step>Hand the second-uplift XML to skills/trackplan-dispatch. Default runtime remains Cursor Cloud Agent. Use Hermes / Agent Bus only when the operator asked or the ticket runtime is a bus runtime.</step>
       <step>Prefer Lane B through connected MCP user-hermes-agent using agent_bus_health, agent_bus_start_job, agent_bus_get_job, and agent_bus_wait_job. handoff_to_hermes is the Hermes-only durable EXECUTE fallback, not the preferred multi-runtime path.</step>
-      <step>Stop and record a blocker only if those preferred agent_bus_* tools are unavailable, unauthorized, or fail. A missing local stdio user-hermes server or a missing /workspace/hermes-mcp-bridge.mjs is not a stop condition. Do not rebuild the stdio bridge. Agent Bus supersedes it. Do not SSH the packet as a code handoff.</step>
+      <step>Record a Lane B blocker only when agent_bus_health, agent_bus_start_job, agent_bus_get_job, or agent_bus_wait_job on connected user-hermes-agent is unavailable, unauthorized, or returns an error. Do not SSH the packet as a code handoff.</step>
+      <step>Lane B does not require local stdio user-hermes. Do not rebuild hermes-mcp-bridge.mjs. Agent Bus on user-hermes-agent supersedes that stdio path.</step>
       <step>Lane C tickets still cite the Graph ID and the URLs for the nodes that seat owns. You still do not implement.</step>
     </stage>
   </double_uplift_protocol>
@@ -263,7 +264,7 @@
     <mode name="url_invention">Typing a plausible Notion link. Forbidden. Use TRACKER_GAPS and the receipt.</mode>
     <mode name="lead_implements">Editing a specialist path "while you're here". Forbidden. PD-2.</mode>
     <mode name="done_from_tracker">Telling Ove the work shipped because Status is Implementing. Forbidden. PD-1.</mode>
-    <mode name="hermes_via_ssh">Using the VPS shell as the code handoff. Stop. Lane B stops when agent_bus_* is unavailable, unauthorized, or fails. A missing local stdio user-hermes or hermes-mcp-bridge.mjs is not that stop. Do not rebuild the stdio bridge. INFRA owns SSH for ops, not as a secret code path.</mode>
+    <mode name="hermes_via_ssh">Using the VPS shell as the code handoff. Forbidden. Lane B is blocked only when agent_bus_* on user-hermes-agent is unavailable, unauthorized, or fails. Local stdio user-hermes is not required. Do not rebuild hermes-mcp-bridge.mjs. INFRA owns SSH for ops, not as a secret code path.</mode>
     <mode name="e2e_claim">Saying the pipeline was verified end to end because the skill exists. Authoring is not a launch.</mode>
   </failure_modes>
 
@@ -322,7 +323,7 @@
 
   <operator_language>
     <rule>Tell Ove the lane, the Graph ID, and what is unverified. Do not open with a status adjective.</rule>
-    <rule>If dispatch did not happen, the first sentence says why (quota, agent_bus_* unavailable or unauthorized or failed, missing repo URL). A missing stdio bridge is not that reason.</rule>
+    <rule>If dispatch did not happen, the first sentence says why (quota, agent_bus_* unavailable or unauthorized or failed, missing repo URL). Do not name a missing stdio bridge as that reason.</rule>
     <rule>Specialist receipts are cited by path. You do not paraphrase them into a stronger claim than they made.</rule>
   </operator_language>
 

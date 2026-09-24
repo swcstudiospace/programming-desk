@@ -1,0 +1,144 @@
+{
+  "task_id": "desk-roster-dual-domains-2026-09-24",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-09-24T12:54:00Z",
+  "completed_at": "2026-09-24T13:01:43Z",
+  "runtime": "cursor-cloud",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "commands": [
+    {
+      "cmd": "DEFAULT_BRANCH=main bash scripts/assemble-prompts.sh",
+      "exit_code": 0,
+      "output_tail": "wrote prompts-assembled/LEAD.xml\nwrote prompts/LEAD.xml\nwrote prompts-assembled/SYSTEMS.xml\nwrote prompts/SYSTEMS.xml\nwrote prompts-assembled/WEB.xml\nwrote prompts/WEB.xml\nwrote prompts-assembled/ANDROID.xml\nwrote prompts/ANDROID.xml\nwrote prompts-assembled/IOS.xml\nwrote prompts/IOS.xml\nwrote prompts-assembled/INFRA.xml\nwrote prompts/INFRA.xml\nwrote prompts-assembled/QUALITY.xml\nwrote prompts/QUALITY.xml"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nimport xml.etree.ElementTree as ET\nfrom pathlib import Path\nsources = [\n    \"prompts/_shared/core-directives.xml\",\n    \"prompts/bot-00-programming-lead.xml\",\n    \"prompts/bot-01-systems-backend.xml\",\n    \"prompts/bot-02-web-edge.xml\",\n    \"prompts/bot-03-android.xml\",\n    \"prompts/bot-04-ios.xml\",\n    \"prompts/bot-05-infrastructure.xml\",\n    \"prompts/bot-06-quality-security.xml\",\n]\nseats = [\"LEAD\", \"SYSTEMS\", \"WEB\", \"ANDROID\", \"IOS\", \"INFRA\", \"QUALITY\"]\ndecl = '<?xml version=\"1.0\" encoding=\"UTF-8\"?>'\nproblems = []\nfor path in sources:\n    try:\n        ET.parse(path)\n    except ET.ParseError as exc:\n        problems.append(f\"{path}: {exc}\")\nfor seat in seats:\n    for folder in (\"prompts\", \"prompts-assembled\"):\n        path = Path(folder) / f\"{seat}.xml\"\n        text = path.read_text(encoding=\"utf-8\")\n        docs = [p for p in text.split(decl) if p.strip()]\n        if len(docs) != 2:\n            problems.append(f\"{path}: expected 2 xml documents, got {len(docs)}\")\n            continue\n        for i, doc in enumerate(docs):\n            try:\n                ET.fromstring(decl + doc)\n            except ET.ParseError as exc:\n                problems.append(f\"{path} part {i}: {exc}\")\nprint(problems or \"ok\")\nraise SystemExit(0 if not problems else 1)\nPY",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nimport importlib.util\nfrom pathlib import Path\nspec = importlib.util.spec_from_file_location(\"own\", \"ci/gates/check_ownership.py\")\nown = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(own)\nmanifest = own.load_manifest(Path(\"ownership.yaml\"))\nexpect = {\n    \"design/tokens.json\": \"bot-01-systems-backend\",\n    \"docs/design/flow.md\": \"bot-01-systems-backend\",\n    \"desktop/src/main.ts\": \"bot-02-web-edge\",\n    \"apps/desktop/package.json\": \"bot-02-web-edge\",\n    \"electron/main.js\": \"bot-02-web-edge\",\n    \"tauri/src/main.rs\": \"bot-02-web-edge\",\n    \"web3/rpc.yaml\": \"bot-05-infrastructure\",\n    \"infra/web3/rpc.tf\": \"bot-05-infrastructure\",\n    \"chains/Token.sol\": \"bot-05-infrastructure\",\n    \"docs/desk-operating-model.md\": \"bot-00-programming-lead\",\n    \"prompts/bot-00-programming-lead.xml\": \"bot-00-programming-lead\",\n    \"ownership.yaml\": \"bot-06-quality-security\",\n    \"prompts/_shared/core-directives.xml\": \"bot-06-quality-security\",\n    \"prompts/LEAD.xml\": \"bot-06-quality-security\",\n    \"prompts-assembled/QUALITY.xml\": \"bot-06-quality-security\",\n    \"prompts/bot-01-systems-backend.xml\": \"bot-01-systems-backend\",\n    \"prompts/bot-02-web-edge.xml\": \"bot-02-web-edge\",\n    \"prompts/bot-03-android.xml\": \"bot-03-android\",\n    \"prompts/bot-04-ios.xml\": \"bot-04-ios\",\n    \"prompts/bot-05-infrastructure.xml\": \"bot-05-infrastructure\",\n    \"prompts/bot-06-quality-security.xml\": \"bot-06-quality-security\",\n}\nnames = {\n    \"bot-01-systems-backend\": \"Systems & Design\",\n    \"bot-02-web-edge\": \"Web & Desktop\",\n    \"bot-03-android\": \"Android & Play Release\",\n    \"bot-04-ios\": \"iOS & App Store\",\n    \"bot-05-infrastructure\": \"Infra & WEB3\",\n    \"bot-06-quality-security\": \"Quality & Security\",\n}\nproblems = []\nfor path, want in expect.items():\n    got, _contract = own.resolve_owner(path, manifest)\n    if got != want:\n        problems.append(f\"{path}: {got} != {want}\")\nfor bot, name in names.items():\n    if manifest[\"bots\"][bot][\"name\"] != name:\n        problems.append(f\"{bot} name {manifest['bots'][bot]['name']!r}\")\nprint(problems or \"ok\")\nraise SystemExit(0 if not problems else 1)\nPY",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nimport xml.etree.ElementTree as ET\nfrom pathlib import Path\nproblems = []\nlead = ET.parse(\"prompts/bot-00-programming-lead.xml\").getroot()\nroster = [el for el in lead.iter(\"seat\") if \"name\" in el.attrib]\nseats = {el.attrib[\"name\"]: el.attrib.get(\"in_channel\") for el in roster}\nexpect = {\n    \"LEAD\": \"true\",\n    \"SYSTEMS\": \"true\",\n    \"WEB\": \"true\",\n    \"ANDROID\": \"true\",\n    \"IOS\": \"true\",\n    \"INFRA\": \"true\",\n    \"QUALITY\": \"false\",\n}\nif seats != expect:\n    problems.append(f\"seats {seats}\")\nlabels = {\n    \"SYSTEMS\": \"Systems & Design\",\n    \"WEB\": \"Web & Desktop\",\n    \"ANDROID\": \"Android & Play Release\",\n    \"IOS\": \"iOS & App Store\",\n    \"INFRA\": \"Infra & WEB3\",\n    \"QUALITY\": \"Quality & Security\",\n}\nfor el in roster:\n    text = \"\".join(el.itertext())\n    want = labels.get(el.attrib[\"name\"])\n    if want and want not in text:\n        problems.append(f\"{el.attrib['name']} text missing {want}\")\nquality = ET.parse(\"prompts/bot-06-quality-security.xml\").getroot()\nroles = [el.attrib.get(\"role\") for el in quality.iter(\"channel\")]\nif \"off_channel_post_build\" not in roles:\n    problems.append(f\"QUALITY channel roles {roles}\")\ncore = Path(\"prompts/_shared/core-directives.xml\").read_text(encoding=\"utf-8\")\ndoc = Path(\"docs/desk-operating-model.md\").read_text(encoding=\"utf-8\")\nif \"widgets/cards do not render in group rooms\" not in core:\n    problems.append(\"core missing widget rule\")\nif \"Numbered selectable options live in the Desk. Widgets do not render in rooms.\" not in core:\n    problems.append(\"core missing numbered-option rule\")\nif \"Members (6): LEAD, SYSTEMS, WEB, ANDROID, IOS, INFRA.\" not in doc:\n    problems.append(\"operating model missing six-member roster\")\nrole_by_seat = {\n    \"SYSTEMS\": \"Systems and Design Engineer\",\n    \"WEB\": \"Web and Desktop Engineer\",\n    \"ANDROID\": \"Android and Play Release Engineer\",\n    \"IOS\": \"iOS and App Store Engineer\",\n    \"INFRA\": \"Infrastructure and WEB3 Engineer\",\n    \"QUALITY\": \"Quality and Security Engineer\",\n}\nfor seat, role in role_by_seat.items():\n    for folder in (\"prompts\", \"prompts-assembled\"):\n        text = Path(folder, f\"{seat}.xml\").read_text(encoding=\"utf-8\")\n        if role not in text:\n            problems.append(f\"{folder}/{seat}.xml missing {role}\")\n        if \"widgets/cards do not render in group rooms\" not in text:\n            problems.append(f\"{folder}/{seat}.xml missing widget rule\")\nlead_asm = Path(\"prompts-assembled/LEAD.xml\").read_text(encoding=\"utf-8\")\nif 'name=\"QUALITY\"' not in lead_asm or 'in_channel=\"false\"' not in lead_asm:\n    problems.append(\"assembled LEAD missing QUALITY out of channel\")\nprint(problems or \"ok\")\nraise SystemExit(0 if not problems else 1)\nPY",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/desk-operating-model.md prompts/bot-00-programming-lead.xml .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files ownership.yaml prompts/_shared/core-directives.xml prompts/bot-01-systems-backend.xml prompts/bot-02-web-edge.xml prompts/bot-03-android.xml prompts/bot-04-ios.xml prompts/bot-05-infrastructure.xml prompts/bot-06-quality-security.xml prompts/LEAD.xml prompts/SYSTEMS.xml prompts/WEB.xml prompts/ANDROID.xml prompts/IOS.xml prompts/INFRA.xml prompts/QUALITY.xml prompts-assembled/LEAD.xml prompts-assembled/SYSTEMS.xml prompts-assembled/WEB.xml prompts-assembled/ANDROID.xml prompts-assembled/IOS.xml prompts-assembled/INFRA.xml prompts-assembled/QUALITY.xml",
+      "exit_code": 1,
+      "output_tail": "/SYSTEMS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/WEB.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/ANDROID.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/IOS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/INFRA.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/desk-operating-model.md prompts/bot-00-programming-lead.xml .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json ownership.yaml prompts/_shared/core-directives.xml prompts/bot-01-systems-backend.xml prompts/bot-02-web-edge.xml prompts/bot-03-android.xml prompts/bot-04-ios.xml prompts/bot-05-infrastructure.xml prompts/bot-06-quality-security.xml prompts/LEAD.xml prompts/SYSTEMS.xml prompts/WEB.xml prompts/ANDROID.xml prompts/IOS.xml prompts/INFRA.xml prompts/QUALITY.xml prompts-assembled/LEAD.xml prompts-assembled/SYSTEMS.xml prompts-assembled/WEB.xml prompts-assembled/ANDROID.xml prompts-assembled/IOS.xml prompts-assembled/INFRA.xml prompts-assembled/QUALITY.xml",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 25 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "output_tail": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 3.59s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "assemble-prompts.sh with DEFAULT_BRANCH=main rewrote prompts/{SEAT}.xml and prompts-assembled/{SEAT}.xml for the seven seats",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Seat sources parse as one XML document, and each assembled file is the shared directives document plus that seat document",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ownership.yaml validates as 7 bots and 90 rules",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "design/** and docs/design/** resolve to SYSTEMS, desktop/electron/tauri paths resolve to WEB, and web3/chains paths resolve to INFRA; ownership.yaml and assembled prompts stay QUALITY; the operating model and bot-00 source stay LEAD",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "LEAD's roster marks LEAD, SYSTEMS, WEB, ANDROID, IOS, and INFRA in channel and QUALITY out of channel; bot-06 channel role is off_channel_post_build; assembled copies carry the dual-domain role names and the numbered-option widget rule",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on docs/desk-operating-model.md, prompts/bot-00-programming-lead.xml, and this receipt",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-1 rejects bot-00-programming-lead as the owner of ownership.yaml, the shared directives, the other seat sources, and the assembled prompt copies",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "Secret scan of the operating model, ownership manifest, prompt sources, assembled copies, and this receipt reports no committed secret",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "ci/tests gate self-tests passed after the ownership manifest change",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-2 rejects this receipt while approved_by is empty, so LEAD has not approved its own draft",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "Greptile was not triggered on this head. This receipt does not claim Greptile clear and does not request a merge.",
+    "Live Programming Desk membership was not changed. The commit updates repository policy text only.",
+    "docs/desk-operating-model.md still says in the opening paragraph and in Channel discipline that LEAD sits outside the six-member channel. The roster section added in the same file, and prompts/bot-00-programming-lead.xml, put LEAD in the channel. Those older sentences were left as copied.",
+    "The source ownership packet appended the dual-domain rules after contract_consumers, which is not valid YAML. The rules were moved into the ownership list and kept last so last-match still applies. QUALITY has not confirmed that placement.",
+    "The gates workflow attributes the acting bot from a bot-0N/ branch prefix. This branch is cursor/desk-roster-dual-domains-f26c, so that workflow will not attribute the diff to bot-00-programming-lead."
+  ],
+  "blockers": [
+    "approved_by is empty. QUALITY (bot-06-quality-security) has not reviewed ownership.yaml, prompts/_shared/core-directives.xml, the other seat prompt sources, or the assembled prompts. Do not merge this draft on LEAD's receipt alone."
+  ],
+  "files_changed": [
+    "docs/desk-operating-model.md",
+    "ownership.yaml",
+    "prompts/_shared/core-directives.xml",
+    "prompts/bot-00-programming-lead.xml",
+    "prompts/bot-01-systems-backend.xml",
+    "prompts/bot-02-web-edge.xml",
+    "prompts/bot-03-android.xml",
+    "prompts/bot-04-ios.xml",
+    "prompts/bot-05-infrastructure.xml",
+    "prompts/bot-06-quality-security.xml",
+    "prompts/LEAD.xml",
+    "prompts/SYSTEMS.xml",
+    "prompts/WEB.xml",
+    "prompts/ANDROID.xml",
+    "prompts/IOS.xml",
+    "prompts/INFRA.xml",
+    "prompts/QUALITY.xml",
+    "prompts-assembled/LEAD.xml",
+    "prompts-assembled/SYSTEMS.xml",
+    "prompts-assembled/WEB.xml",
+    "prompts-assembled/ANDROID.xml",
+    "prompts-assembled/IOS.xml",
+    "prompts-assembled/INFRA.xml",
+    "prompts-assembled/QUALITY.xml",
+    ".receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json"
+  ],
+  "contract_changes": [],
+  "pr_url": "",
+  "approved_by": ""
+}

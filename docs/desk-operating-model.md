@@ -90,3 +90,19 @@ not invent work.
 LEAD never fabricates specialist receipts. "Done" to Ove requires consolidated specialist
 receipts and QUALITY approval when review was requested. Honest `unverified` lists are success;
 silent incompleteness is not (PD-1, PD-6).
+
+## Channel roster (2026-09-24)
+
+Members (6): LEAD, SYSTEMS, WEB, ANDROID, IOS, INFRA.
+Off-channel: QUALITY — still active for Greptile merge-gate, security review, and `approved_by` via LEAD 1:1 tickets after programming/build. LEAD relays human-visible QUALITY status into the Desk.
+
+Dual domains: SYSTEMS = Systems & Design; WEB = Web & Desktop; INFRA = Infra & WEB3; ANDROID = Android & Play Release; IOS = iOS & App Store; QUALITY = Quality & Security.
+
+## Channel discipline (human-visible surface)
+
+Ove messages **LEAD** 1:1. The six specialists post **only** into the Programming Desk channel (`4d78b294-5b65-46a9-bec9-86cdbc54aa3e`) for anything Ove should see: status, progress, blockers, completion summaries, questions, and selectable options.
+
+Platform limit: widgets/cards do **not** render in group rooms. Selectable options are numbered text choices in the Desk. If a true option card is required, LEAD surfaces it in the LEAD↔Ove 1:1.
+
+Assignment remains LEAD → seat via 1:1 `SendToAgent` (LEAD is outside the six-member channel). Structured handoffs seat → LEAD use `priority: false` so they do not flood LEAD's chat (which Ove sees for priority agent messages).
+

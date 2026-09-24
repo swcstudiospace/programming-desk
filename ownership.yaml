@@ -23,33 +23,40 @@ bots:
     name: Programming Lead
     description: >
       Desk orchestrator. Intake, tickets, dispatch, consolidation, user reporting.
-      Does not own product code. Sits outside the Programming Desk channel.
+      Does not own product code. Sits IN the Programming Desk channel; QUALITY is off-channel for post-build merge-gate.
 
   bot-01-systems-backend:
-    name: Systems & Backend
+    name: Systems & Design
     languages: [rust, python]
-    description: Services, APIs, data layer, performance-critical code.
+    description: >
+      Services, APIs, data layer, performance-critical code, and product/system design
+      artifacts (flows, component specs, design tokens consumed by clients).
 
   bot-02-web-edge:
-    name: Web & Edge
+    name: Web & Desktop
     languages: [typescript, javascript]
-    runtimes: [deno, node, vercel-edge]
-    description: Browser frontend, edge functions, Vercel deployment surface.
+    runtimes: [deno, node, vercel-edge, electron, tauri]
+    description: >
+      Browser frontend, edge functions, Vercel surface, and desktop shells (Electron/Tauri).
 
   bot-03-android:
-    name: Android
+    name: Android & Play Release
     languages: [kotlin, java]
-    description: Android application, Compose UI, Gradle build, Play Store release.
+    description: >
+      Android application, Compose UI, Gradle build, Play Console, staged rollout, and store listing.
 
   bot-04-ios:
-    name: iOS
+    name: iOS & App Store
     languages: [swift, objective-c]
-    description: iOS application, SwiftUI, Xcode project, App Store release.
+    description: >
+      iOS application, SwiftUI, Xcode project, App Store Connect, TestFlight, and App Review.
 
   bot-05-infrastructure:
-    name: Infrastructure & DevEx
-    languages: [hcl, yaml, bash]
-    description: IaC, Kubernetes, CI/CD, remote dev machine, observability.
+    name: Infra & WEB3
+    languages: [hcl, yaml, bash, solidity]
+    description: >
+      IaC, Kubernetes, CI/CD, remote dev, observability, plus WEB3 ops (RPC, wallets, chain deploys,
+      indexer/infra — not product smart-contract product code unless ticketed).
 
   bot-06-quality-security:
     name: Quality & Security
@@ -266,6 +273,34 @@ ownership:
   - pattern: "scripts/assemble-prompts.sh"
     owner: bot-06-quality-security
 
+  # Dual-domain directories (2026-09-24). The source packet appended these
+  # rules after contract_consumers, which is not valid YAML. They are ownership
+  # rules and stay last so a directory match wins over earlier language globs
+  # and over docs/**.
+  # --- Design (SYSTEMS second domain) -----------------------------------
+  - pattern: "design/**"
+    owner: bot-01-systems-backend
+  - pattern: "docs/design/**"
+    owner: bot-01-systems-backend
+
+  # --- Desktop (WEB second domain) --------------------------------------
+  - pattern: "desktop/**"
+    owner: bot-02-web-edge
+  - pattern: "apps/desktop/**"
+    owner: bot-02-web-edge
+  - pattern: "electron/**"
+    owner: bot-02-web-edge
+  - pattern: "tauri/**"
+    owner: bot-02-web-edge
+
+  # --- WEB3 infra (INFRA second domain) ---------------------------------
+  - pattern: "web3/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/web3/**"
+    owner: bot-05-infrastructure
+  - pattern: "chains/**"
+    owner: bot-05-infrastructure
+
 # ---------------------------------------------------------------------------
 # Consumers of each contract surface.
 # A breaking change to a contract requires an acknowledgement from every listed consumer
@@ -285,4 +320,3 @@ contract_consumers:
     - bot-02-web-edge
     - bot-03-android
     - bot-04-ios
-

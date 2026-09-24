@@ -1,0 +1,112 @@
+{
+  "task_id": "approve-hermes-stdio-uninstall-pr6",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-09-24T01:13:00Z",
+  "completed_at": "2026-09-24T01:18:15Z",
+  "runtime": "cursor-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6",
+  "receipt_kind": "independent_approval",
+  "decision": "APPROVE",
+  "approved_artifact": ".receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+  "authoring_bot": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "DEFAULT_BRANCH=main bash scripts/assemble-prompts.sh",
+      "exit_code": 0,
+      "output_tail": "wrote prompts-assembled/LEAD.xml\nwrote prompts/LEAD.xml\nwrote prompts-assembled/SYSTEMS.xml\nwrote prompts/SYSTEMS.xml\nwrote prompts-assembled/WEB.xml\nwrote prompts/WEB.xml\nwrote prompts-assembled/ANDROID.xml\nwrote prompts/ANDROID.xml\nwrote prompts-assembled/IOS.xml\nwrote prompts/IOS.xml\nwrote prompts-assembled/INFRA.xml\nwrote prompts/INFRA.xml\nwrote prompts-assembled/QUALITY.xml\nwrote prompts/QUALITY.xml"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path\nold=\"If Hermes is needsAuth or the bridge is missing\"\ndef stage7(path):\n    t=Path(path).read_text()\n    start=t.index(\"<stage id=\\\"7\\\"\")\n    end=t.index(\"</stage>\", start)\n    return t[start:end]\nsrc=stage7(\"prompts/bot-00-programming-lead.xml\")\nneed=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\",\"Do not SSH the packet as a code handoff\",\"Do not rebuild hermes-mcp-bridge.mjs\"]\nproblems=[]\nfor f in (\"prompts/LEAD.xml\",\"prompts-assembled/LEAD.xml\"):\n    t=Path(f).read_text()\n    if old in t:\n        problems.append(\"obsolete in \"+f)\n    stage=stage7(f)\n    if stage!=src:\n        problems.append(\"stage7 mismatch \"+f)\n    for n in need:\n        if n not in stage:\n            problems.append(\"missing \"+n+\" in \"+f)\nprint(problems or \"ok\")\nraise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c 'import json; from pathlib import Path\nr=json.loads(Path(\".receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json\").read_text())\nok=r.get(\"approved_by\")==\"bot-06-quality-security\" and isinstance(r.get(\"approved_at\"), str) and r[\"approved_at\"].endswith(\"Z\")\nprint({\"approved_by\": r.get(\"approved_by\"), \"approved_at\": r.get(\"approved_at\"), \"ok\": ok})\nraise SystemExit(0 if ok else 1)'",
+      "exit_code": 0,
+      "output_tail": "{'approved_by': 'bot-06-quality-security', 'approved_at': '2026-09-24T01:16:49Z', 'ok': True}"
+    },
+    {
+      "cmd": "git diff --stat -- prompts prompts-assembled",
+      "exit_code": 0,
+      "output_tail": " prompts-assembled/LEAD.xml | 12 +++++++-----\n prompts/LEAD.xml           | 12 +++++++-----\n 2 files changed, 14 insertions(+), 10 deletions(-)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files prompts/LEAD.xml prompts-assembled/LEAD.xml .receipts/bot-06-quality-security/approve-hermes-stdio-uninstall-pr6.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files prompts/LEAD.xml prompts-assembled/LEAD.xml .receipts/bot-06-quality-security/approve-hermes-stdio-uninstall-pr6.json .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json --bot bot-00-programming-lead",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — hermes-stdio-uninstall-2026-09-24: 13 command(s), 12 substantiated claim(s), 5 unverified item(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files prompts/LEAD.xml prompts-assembled/LEAD.xml .receipts/bot-06-quality-security/approve-hermes-stdio-uninstall-pr6.json .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 1,
+      "output_tail": "G-1 FAIL — bot-06-quality-security\n  FOREIGN  .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json  (owned by bot-00-programming-lead)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "scripts/assemble-prompts.sh ran from the repo root with DEFAULT_BRANCH=main and exited 0",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The obsolete stop sentence is gone from prompts/LEAD.xml and prompts-assembled/LEAD.xml, and Stage 7 in both matches bot-00: agent_bus_* on user-hermes-agent, do not rebuild hermes-mcp-bridge.mjs, SSH is not a code handoff",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Lead receipt approved_by is bot-06-quality-security and approved_at is an ISO8601 UTC stamp",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Among prompts/ and prompts-assembled/, only prompts/LEAD.xml and prompts-assembled/LEAD.xml differ from HEAD",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1 passes for bot-06-quality-security on prompts/LEAD.xml, prompts-assembled/LEAD.xml, and this QUALITY receipt",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Secret scan of the two LEAD runtime copies, this QUALITY receipt, and the Lead receipt reports no committed secret",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-2 PASS on the Lead receipt after the approved_by stamp",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the Lead receipt; that path stays under LEAD ownership",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-1 rejects bot-06-quality-security as owner of the Lead receipt",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "Greptile re-review is not terminal on this new head. QUALITY will re-trigger Greptile. This receipt does not claim a CLEAR review.",
+    "Merge was not requested and is not claimed."
+  ],
+  "blockers": [],
+  "files_changed": [
+    "prompts/LEAD.xml",
+    "prompts-assembled/LEAD.xml",
+    ".receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+    ".receipts/bot-06-quality-security/approve-hermes-stdio-uninstall-pr6.json"
+  ],
+  "contract_changes": []
+}

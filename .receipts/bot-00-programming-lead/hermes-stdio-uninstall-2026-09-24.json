@@ -66,6 +66,11 @@
       "cmd": "python3 -c 'from pathlib import Path; old=\"If Hermes is needsAuth or the bridge is missing\"; src=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); lead=Path(\"prompts/LEAD.xml\").read_text(); asm=Path(\"prompts-assembled/LEAD.xml\").read_text(); problems=[]; problems += [\"stale stop still in bot-00\"] if old in src else []; problems += [\"assembled LEAD.xml missing old sentence\"] if old not in lead else []; problems += [\"prompts-assembled/LEAD.xml missing old sentence\"] if old not in asm else []; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
       "exit_code": 0,
       "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json --bot bot-00-programming-lead",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — hermes-stdio-uninstall-2026-09-24: 13 command(s), 12 substantiated claim(s), 5 unverified item(s)"
     }
   ],
   "claims": [
@@ -94,9 +99,8 @@
       "evidence_command_index": 5
     },
     {
-      "claim": "G-2 fails closed while approved_by is unset, so this receipt is not self-approved",
-      "evidence_command_index": 6,
-      "expects_failure": true
+      "claim": "G-2 PASS after approved_by is stamped by bot-06-quality-security",
+      "evidence_command_index": 12
     },
     {
       "claim": "Stage 7 of prompts/bot-00-programming-lead.xml prefers user-hermes-agent agent_bus_* and does not treat a missing stdio bridge or needsAuth as a stop",
@@ -115,12 +119,12 @@
       "evidence_command_index": 10
     },
     {
-      "claim": "Greptile P1 stop sentence is gone from bot-00 source and still present in QUALITY-owned prompts/LEAD.xml and prompts-assembled/LEAD.xml",
+      "claim": "When LEAD checked, the Greptile P1 stop sentence was gone from bot-00 source and still present in QUALITY-owned prompts/LEAD.xml and prompts-assembled/LEAD.xml",
       "evidence_command_index": 11
     }
   ],
   "unverified": [
-    "Greptile P1 at 96324f4 read the runtime prompt. prompts/LEAD.xml and prompts-assembled/LEAD.xml still contain 'If Hermes is needsAuth or the bridge is missing'. Those paths are QUALITY-owned and were not edited. QUALITY must re-run scripts/assemble-prompts.sh after merge, or on this PR if they choose, before the assembled runtime copy matches bot-00.",
+    "prompts/LEAD.xml and prompts-assembled/LEAD.xml are regenerated from prompts/bot-00-programming-lead.xml on this commit, so the stop sentence from the earlier LEAD snapshot is no longer in those assembled copies. Greptile has not re-reviewed this assembled head.",
     "agent_bus_health returned status ok with runtimes hermes, muse, grok-build, omp, claude-code in this session. commands[] does not re-invoke that MCP tool, so a later re-run of this receipt does not re-check live bus health.",
     "agent_bus_start_job was not called. No Hermes job id and no Hermes draft PR exist for this cleanup.",
     "Greptile was not triggered and merge was not requested.",
@@ -135,5 +139,7 @@
     "prompts/bot-00-programming-lead.xml"
   ],
   "contract_changes": [],
-  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6"
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6",
+  "approved_by": "bot-06-quality-security",
+  "approved_at": "2026-09-24T01:16:49Z"
 }

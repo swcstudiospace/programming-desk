@@ -63,6 +63,12 @@
       "exit_code": 1,
       "duration_s": 0.026,
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md"
+    },
+    {
+      "cmd": "python3 -c '\nimport subprocess\nexpected = {\n  \".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\",\n  \"docs/desk-operating-model.md\",\n  \"prompts/_shared/core-directives.xml\",\n  \"prompts/bot-00-programming-lead.xml\",\n  \"prompts/bot-01-systems-backend.xml\",\n  \"prompts/bot-02-web-edge.xml\",\n  \"prompts/bot-03-android.xml\",\n  \"prompts/bot-04-ios.xml\",\n  \"prompts/bot-05-infrastructure.xml\",\n  \"prompts/bot-06-quality-security.xml\",\n  \"prompts-assembled/ANDROID.xml\",\n  \"prompts-assembled/INFRA.xml\",\n  \"prompts-assembled/IOS.xml\",\n  \"prompts-assembled/LEAD.xml\",\n  \"prompts-assembled/QUALITY.xml\",\n  \"prompts-assembled/SYSTEMS.xml\",\n  \"prompts-assembled/WEB.xml\",\n  \"prompts/ANDROID.xml\",\n  \"prompts/INFRA.xml\",\n  \"prompts/IOS.xml\",\n  \"prompts/LEAD.xml\",\n  \"prompts/QUALITY.xml\",\n  \"prompts/SYSTEMS.xml\",\n  \"prompts/WEB.xml\",\n}\nfiles = [l for l in subprocess.check_output([\"git\",\"diff\",\"--name-only\",\"origin/main...HEAD\"], text=True).splitlines() if l]\nmissing = sorted(expected - set(files))\nextra = sorted(set(files) - expected)\nprefixes = (\"services/\", \"web/\", \"apps/\", \"android/\", \"ios/\", \"infra/\", \"crates/\", \"edge/\", \"k8s/\", \"deploy/\")\nproduct = [f for f in files if f.startswith(prefixes)]\nprint({\"count\": len(files), \"missing\": missing, \"extra\": extra, \"product\": product})\nraise SystemExit(0 if not missing and not extra and not product else 1)\n' ",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "{'count': 24, 'missing': [], 'extra': [], 'product': []}"
     }
   ],
   "claims": [
@@ -103,6 +109,10 @@
       "claim": "G-2 fails closed while approved_by is empty",
       "evidence_command_index": 8,
       "expects_failure": true
+    },
+    {
+      "claim": "git diff origin/main...HEAD is the 24-path messaging-policy set and contains no services, web, android, ios, or infra path",
+      "evidence_command_index": 9
     }
   ],
   "unverified": [
@@ -111,7 +121,7 @@
     "The live desk host was not queried in this session. No SendToAgent or SendToUser call was made here. Seat runtime behavior was not exercised.",
     "Greptile was not triggered. Merge was not requested.",
     "ci/tests/test_gates.py was not run. ci/gates and ci/.github/workflows/gates.yml were not edited. That workflow derives the acting bot from the branch name before the first slash and rejects names that do not match bot-0[0-6]-. This branch is cursor/desk-human-visible-surface-101e, so that step fails if the workflow runs.",
-    "The product-path command checks the explicit 23-file list. It does not by itself prove the git diff contains no other paths."
+    "git diff origin/main...HEAD was checked at e711c36ab7223af32d3e9191d97096d6e91d9846. A later commit that only edits this receipt keeps the same path set; re-run the diff command to confirm."
   ],
   "blockers": [
     "QUALITY has not stamped approved_by.",

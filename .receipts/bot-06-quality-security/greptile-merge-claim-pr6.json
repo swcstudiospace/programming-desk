@@ -1,0 +1,62 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-merge-claim-pr6",
+  "receipt_kind": "greptile_merge_claim",
+  "recorded_at": "2026-09-24T11:24:16+10:00",
+  "supersedes": {
+    "prior_verdict": "BLOCKED",
+    "prior_head": "96324f4d76d101bbe5102e7247b7dc2a8c264874",
+    "prior_review_id": "26380557"
+  },
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6",
+  "pr_number": 6,
+  "head_commit_sha": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+  "greptile": {
+    "latest_review_id": "26385313",
+    "status": "COMPLETED",
+    "commit_sha": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+    "confidence": "5/5",
+    "completed_at": "2026-09-24T01:22:36.082Z",
+    "summary": "safe to merge; previously blocking runtime prompt corrected; no new actionable defects; prior finding fully fixed"
+  },
+  "verdict": "CLEAR_WITH_WAIVERS",
+  "merge_claim": {
+    "allowed": true,
+    "note": "Greptile gate satisfied for PR #6 at 452a591. QUALITY does not merge. LEAD/human may undraft and merge after G-1..G-6 remain green on the merge path."
+  },
+  "gates_reminder": "G-1..G-6 still required. Greptile does not replace desk gates.",
+  "approved_lead_artifact": {
+    "path": ".receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+    "approved_by": "bot-06-quality-security",
+    "approved_at": "2026-09-24T01:16:49Z",
+    "approval_receipt": ".receipts/bot-06-quality-security/approve-hermes-stdio-uninstall-pr6.json"
+  },
+  "comment_disposition": {
+    "receipt": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr6.json",
+    "note": "API still shows addressed=false on three historical comments; latest review 26385313 at head raised no new findings. All three disposed FIXED_IN_FOLLOWUP with verified file evidence."
+  },
+  "waivers": [],
+  "fixed_in_code_or_followup": [
+    {
+      "id": "277942907",
+      "title": "LEAD Prompt Still Blocks Lane",
+      "fixed_at": "452a5918223ffe8dd21363900f8b24293a7f1da4"
+    },
+    {
+      "id": "277943172",
+      "title": "Stale prompt blocks Lane B",
+      "fixed_at": "452a5918223ffe8dd21363900f8b24293a7f1da4"
+    },
+    {
+      "id": "277943173",
+      "title": "Fallback message shape undefined",
+      "fixed_at": "6951e6ccfcc7bcb5c9a520ce541daf7c3b3cd2ec"
+    }
+  ],
+  "unverified": [
+    "Greptile API addressed flags not flipped; disposition receipt covers that lag.",
+    "QUALITY did not re-run full G-1..G-6 suite in this turn beyond prior CA gate commands on assemble/approval commit.",
+    "Lane B live agent_bus_start_job E2E not claimed by this docs PR."
+  ]
+}

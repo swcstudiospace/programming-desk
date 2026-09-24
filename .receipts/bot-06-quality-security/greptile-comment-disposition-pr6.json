@@ -1,0 +1,44 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-comment-disposition-pr6",
+  "receipt_kind": "greptile_comment_disposition",
+  "recorded_at": "2026-09-24T11:24:16+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6",
+  "pr_number": 6,
+  "head_commit_sha": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+  "latest_review": {
+    "id": "26385313",
+    "status": "COMPLETED",
+    "commit": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+    "confidence": "5/5",
+    "greptile_says": "safe to merge; previously blocking runtime prompt has been corrected and no new actionable defects remain"
+  },
+  "api_note": "Greptile API still lists all three historical comments as addressed=false and reviewCompleteness 0/3. Latest review 26385313 at head raised no new findings and states the prior finding is fully fixed. Disposition below records code fixes; no KEEP waiver of product scope.",
+  "dispositions": [
+    {
+      "id": "277942907",
+      "title": "LEAD Prompt Still Blocks Lane",
+      "severity": "P1",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+      "note": "bot-00 Stage 7 fixed at 6951e6c (agent_bus_* preference; no bridge/needsAuth stop). QUALITY assembled prompts/LEAD.xml and prompts-assembled/LEAD.xml at 452a591; obsolete sentence absent; agent_bus_start_job present."
+    },
+    {
+      "id": "277943172",
+      "title": "Stale prompt blocks Lane B",
+      "severity": "P1-sibling",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "452a5918223ffe8dd21363900f8b24293a7f1da4",
+      "note": "Same substance as 277942907; runtime assembled LEAD matches bot-00 after assemble-prompts.sh."
+    },
+    {
+      "id": "277943173",
+      "title": "Fallback message shape undefined",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "6951e6ccfcc7bcb5c9a520ce541daf7c3b3cd2ec",
+      "note": "skills/trackplan-dispatch/SKILL.md documents handoff_to_hermes messages as array of free-form objects (typically role/content); poll get_task; no parallel re-submit."
+    }
+  ]
+}

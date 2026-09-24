@@ -1,0 +1,150 @@
+{
+  "task_id": "desk-human-visible-surface-2026-09-24",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-09-24T12:50:15Z",
+  "completed_at": "2026-09-24T12:52:08Z",
+  "runtime": "cursor-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "graph_id": "none",
+  "agent_id": null,
+  "pr_url": null,
+  "commands": [
+    {
+      "cmd": "python3 -c '\nfrom pathlib import Path\nproblems = []\ncore = Path(\"prompts/_shared/core-directives.xml\").read_text()\nstart = core.index(\"<desk_orchestration id=\\\"PD-7\\\"\")\nend = core.index(\"</desk_orchestration>\", start)\npd7 = core[start:end]\nfor n in [\n  \"Ove messages LEAD 1:1\",\n  \"id=\\\"4d78b294-5b65-46a9-bec9-86cdbc54aa3e\\\"\",\n  \"SendToAgent to that channel id\",\n  \"Never SendToUser\",\n  \"widgets/cards do not render in group rooms\",\n  \"numbered choices\",\n  \"priority false\",\n  \"priority true for narrative status\",\n]:\n  if n not in pd7:\n    problems.append(\"PD-7 missing: \" + n)\nif \"only human-visible surface\" not in core:\n  problems.append(\"desk_channel_discipline sentence missing\")\nif \"Numbered selectable options live in the Desk\" not in core:\n  problems.append(\"numbered desk rule missing\")\nspecialists = [\n  \"prompts/bot-01-systems-backend.xml\",\n  \"prompts/bot-02-web-edge.xml\",\n  \"prompts/bot-03-android.xml\",\n  \"prompts/bot-04-ios.xml\",\n  \"prompts/bot-05-infrastructure.xml\",\n  \"prompts/bot-06-quality-security.xml\",\n]\nfor p in specialists:\n  t = Path(p).read_text()\n  bstart = t.index(\"<desk_membership>\")\n  bend = t.index(\"</desk_membership>\", bstart)\n  block = t[bstart:bend]\n  for n in [\n    \"role=\\\"human_visible_surface\\\"\",\n    \"Only human-visible surface\",\n    \"numbered selectable-option prompts\",\n    \"Widgets/cards do not render in group rooms\",\n    \"SendToAgent LEAD priority false\",\n    \"selectable-option widget in a private 1:1\",\n    \"Never SendToAgent LEAD priority true\",\n    \"4d78b294-5b65-46a9-bec9-86cdbc54aa3e\",\n  ]:\n    if n not in block:\n      problems.append(p + \" missing: \" + n)\nlead = Path(\"prompts/bot-00-programming-lead.xml\").read_text()\nfor n in [\n  \"Ove messages YOU 1:1\",\n  \"human-visible voice is Programming Desk only\",\n  \"surface a true widget\",\n  \"rooms cannot render widgets\",\n  \"held (priority false)\",\n  \"4d78b294-5b65-46a9-bec9-86cdbc54aa3e\",\n  \"Expect specialist human-visible replies in the Desk\",\n]:\n  if n not in lead:\n    problems.append(\"bot-00 missing: \" + n)\ndoc = Path(\"docs/desk-operating-model.md\").read_text()\nfor n in [\n  \"## Channel discipline (human-visible surface)\",\n  \"Ove messages **LEAD** 1:1\",\n  \"4d78b294-5b65-46a9-bec9-86cdbc54aa3e\",\n  \"widgets/cards do **not** render in group rooms\",\n  \"numbered text choices\",\n  \"LEAD\u2194Ove 1:1\",\n  \"priority: false\",\n]:\n  if n not in doc:\n    problems.append(\"operating model missing: \" + n)\npairs = [\n  (\"bot-00-programming-lead\", \"LEAD\"),\n  (\"bot-01-systems-backend\", \"SYSTEMS\"),\n  (\"bot-02-web-edge\", \"WEB\"),\n  (\"bot-03-android\", \"ANDROID\"),\n  (\"bot-04-ios\", \"IOS\"),\n  (\"bot-05-infrastructure\", \"INFRA\"),\n  (\"bot-06-quality-security\", \"QUALITY\"),\n]\nfor bot, seat in pairs:\n  a = Path(\"prompts-assembled/\" + seat + \".xml\").read_text()\n  b = Path(\"prompts/\" + seat + \".xml\").read_text()\n  src = Path(\"prompts/\" + bot + \".xml\").read_text()\n  if a != b:\n    problems.append(\"prompts/\" + seat + \".xml != prompts-assembled/\" + seat + \".xml\")\n  if \"{{BOT_ID}}\" in a or \"{{DEFAULT_BRANCH}}\" in a:\n    problems.append(\"unsubstituted placeholder in \" + seat)\n  if (\".receipts/\" + bot + \"/\") not in a:\n    problems.append(\"BOT_ID not substituted in \" + seat)\n  if \"<default_branch>main</default_branch>\" not in a:\n    problems.append(\"DEFAULT_BRANCH not substituted in \" + seat)\n  if \"Ove messages LEAD 1:1\" not in a:\n    problems.append(\"PD-7 missing from assembled \" + seat)\n  if not a.rstrip(\"\\n\").endswith(src.rstrip(\"\\n\")):\n    problems.append(\"seat body is not the suffix of assembled \" + seat)\nprint(problems or \"ok\")\nraise SystemExit(0 if not problems else 1)\n' ",
+      "exit_code": 0,
+      "duration_s": 0.028,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c '\nimport hashlib, os, pathlib, subprocess\nfiles = [\n  \"prompts-assembled/LEAD.xml\", \"prompts/LEAD.xml\",\n  \"prompts-assembled/SYSTEMS.xml\", \"prompts/SYSTEMS.xml\",\n  \"prompts-assembled/WEB.xml\", \"prompts/WEB.xml\",\n  \"prompts-assembled/ANDROID.xml\", \"prompts/ANDROID.xml\",\n  \"prompts-assembled/IOS.xml\", \"prompts/IOS.xml\",\n  \"prompts-assembled/INFRA.xml\", \"prompts/INFRA.xml\",\n  \"prompts-assembled/QUALITY.xml\", \"prompts/QUALITY.xml\",\n]\ndef digests():\n    return {f: hashlib.sha256(pathlib.Path(f).read_bytes()).hexdigest() for f in files}\nbefore = digests()\nenv = os.environ.copy()\nenv[\"DEFAULT_BRANCH\"] = \"main\"\nr = subprocess.run([\"bash\", \"scripts/assemble-prompts.sh\"], env=env, capture_output=True, text=True)\nafter = digests()\nchanged = [f for f in files if before[f] != after[f]]\nprint({\"assemble_exit\": r.returncode, \"changed\": changed})\nraise SystemExit(0 if r.returncode == 0 and not changed else 1)\n' ",
+      "exit_code": 0,
+      "duration_s": 0.062,
+      "output_tail": "{'assemble_exit': 0, 'changed': []}"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml docs/desk-operating-model.md",
+      "exit_code": 0,
+      "duration_s": 0.067,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/_shared/core-directives.xml prompts/bot-00-programming-lead.xml prompts/bot-01-systems-backend.xml prompts/bot-02-web-edge.xml prompts/bot-03-android.xml prompts/bot-04-ios.xml prompts/bot-05-infrastructure.xml prompts/bot-06-quality-security.xml docs/desk-operating-model.md prompts-assembled/LEAD.xml prompts-assembled/SYSTEMS.xml prompts-assembled/WEB.xml prompts-assembled/ANDROID.xml prompts-assembled/IOS.xml prompts-assembled/INFRA.xml prompts-assembled/QUALITY.xml prompts/LEAD.xml prompts/SYSTEMS.xml prompts/WEB.xml prompts/ANDROID.xml prompts/IOS.xml prompts/INFRA.xml prompts/QUALITY.xml",
+      "exit_code": 1,
+      "duration_s": 0.053,
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  prompts/_shared/core-directives.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/bot-01-systems-backend.xml  (owned by bot-01-systems-backend)\n  FOREIGN  prompts/bot-02-web-edge.xml  (owned by bot-02-web-edge)\n  FOREIGN  prompts/bot-03-android.xml  (owned by bot-03-android)\n  FOREIGN  prompts/bot-04-ios.xml  (owned by bot-04-ios)\n  FOREIGN  prompts/bot-05-infrastructure.xml  (owned by bot-05-infrastructure)\n  FOREIGN  prompts/bot-06-quality-security.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/SYSTEMS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/WEB.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/ANDROID.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/IOS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/INFRA.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/SYSTEMS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/WEB.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/ANDROID.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/IOS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/INFRA.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/QUALITY.xml  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files prompts/_shared/core-directives.xml prompts/bot-00-programming-lead.xml prompts/bot-01-systems-backend.xml prompts/bot-02-web-edge.xml prompts/bot-03-android.xml prompts/bot-04-ios.xml prompts/bot-05-infrastructure.xml prompts/bot-06-quality-security.xml docs/desk-operating-model.md prompts-assembled/LEAD.xml prompts-assembled/SYSTEMS.xml prompts-assembled/WEB.xml prompts-assembled/ANDROID.xml prompts-assembled/IOS.xml prompts-assembled/INFRA.xml prompts-assembled/QUALITY.xml prompts/LEAD.xml prompts/SYSTEMS.xml prompts/WEB.xml prompts/ANDROID.xml prompts/IOS.xml prompts/INFRA.xml prompts/QUALITY.xml",
+      "exit_code": 0,
+      "duration_s": 0.285,
+      "output_tail": "G-3 PASS \u2014 23 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c '\nfiles = [\n  \"prompts/_shared/core-directives.xml\",\n  \"prompts/bot-00-programming-lead.xml\",\n  \"prompts/bot-01-systems-backend.xml\",\n  \"prompts/bot-02-web-edge.xml\",\n  \"prompts/bot-03-android.xml\",\n  \"prompts/bot-04-ios.xml\",\n  \"prompts/bot-05-infrastructure.xml\",\n  \"prompts/bot-06-quality-security.xml\",\n  \"docs/desk-operating-model.md\",\n  \"prompts-assembled/LEAD.xml\",\n  \"prompts-assembled/SYSTEMS.xml\",\n  \"prompts-assembled/WEB.xml\",\n  \"prompts-assembled/ANDROID.xml\",\n  \"prompts-assembled/IOS.xml\",\n  \"prompts-assembled/INFRA.xml\",\n  \"prompts-assembled/QUALITY.xml\",\n  \"prompts/LEAD.xml\",\n  \"prompts/SYSTEMS.xml\",\n  \"prompts/WEB.xml\",\n  \"prompts/ANDROID.xml\",\n  \"prompts/IOS.xml\",\n  \"prompts/INFRA.xml\",\n  \"prompts/QUALITY.xml\",\n]\nprefixes = (\"services/\", \"web/\", \"apps/\", \"android/\", \"ios/\", \"infra/\", \"crates/\", \"edge/\", \"k8s/\", \"deploy/\")\nbad = [f for f in files if f.startswith(prefixes)]\nprint(bad or \"ok\")\nraise SystemExit(0 if not bad else 1)\n' ",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml docs/desk-operating-model.md .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "exit_code": 0,
+      "duration_s": 0.052,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files prompts/_shared/core-directives.xml prompts/bot-00-programming-lead.xml prompts/bot-01-systems-backend.xml prompts/bot-02-web-edge.xml prompts/bot-03-android.xml prompts/bot-04-ios.xml prompts/bot-05-infrastructure.xml prompts/bot-06-quality-security.xml docs/desk-operating-model.md prompts-assembled/LEAD.xml prompts-assembled/SYSTEMS.xml prompts-assembled/WEB.xml prompts-assembled/ANDROID.xml prompts-assembled/IOS.xml prompts-assembled/INFRA.xml prompts-assembled/QUALITY.xml prompts/LEAD.xml prompts/SYSTEMS.xml prompts/WEB.xml prompts/ANDROID.xml prompts/IOS.xml prompts/INFRA.xml prompts/QUALITY.xml .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "exit_code": 0,
+      "duration_s": 0.293,
+      "output_tail": "G-3 PASS \u2014 24 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.026,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "PD-7, the six specialist desk_membership blocks, the LEAD prompt, and docs/desk-operating-model.md contain the Desk human-visible surface policy, and each prompts/{SEAT}.xml matches prompts-assembled/{SEAT}.xml with branch main and that seat bot id substituted",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Re-running scripts/assemble-prompts.sh with DEFAULT_BRANCH=main left the 14 assembled seat copies byte-identical",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on prompts/bot-00-programming-lead.xml and docs/desk-operating-model.md",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1 fails for bot-00-programming-lead on the 23-file messaging-policy set because shared core, seat sources bot-01 through bot-06, and assembled prompts are owned by other bots",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "Secret scan of the 23 messaging-policy files reports no committed secret",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "None of the 23 messaging-policy paths sit under services, web, android, ios, or infra",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the two LEAD paths plus this receipt",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Secret scan of the 23 messaging-policy files plus this receipt reports no committed secret",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-2 fails closed while approved_by is empty",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "approved_by is empty. G-2 fails closed until QUALITY (bot-06-quality-security) stamps this receipt. This run does not claim QUALITY clearance or a Greptile clear.",
+    "G-1 on the 23-file set fails for bot-00-programming-lead. prompts/_shared/core-directives.xml, prompts-assembled/*.xml, and prompts/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml are owned by bot-06-quality-security. prompts/bot-01-systems-backend.xml through prompts/bot-06-quality-security.xml are owned by those seats. They are in this branch so one messaging-policy merge carries the shared prefix, the seat sources, and the regenerated assembled prompts together. QUALITY must stamp approved_by and any merge-claim. ownership.yaml was not edited.",
+    "The live desk host was not queried in this session. No SendToAgent or SendToUser call was made here. Seat runtime behavior was not exercised.",
+    "Greptile was not triggered. Merge was not requested.",
+    "ci/tests/test_gates.py was not run. ci/gates and ci/.github/workflows/gates.yml were not edited. That workflow derives the acting bot from the branch name before the first slash and rejects names that do not match bot-0[0-6]-. This branch is cursor/desk-human-visible-surface-101e, so that step fails if the workflow runs.",
+    "The product-path command checks the explicit 23-file list. It does not by itself prove the git diff contains no other paths."
+  ],
+  "blockers": [
+    "QUALITY has not stamped approved_by.",
+    "Path ownership for the shared core, specialist prompt sources, and assembled prompts is foreign to bot-00-programming-lead. The manifest was left unchanged."
+  ],
+  "files_changed": [
+    "docs/desk-operating-model.md",
+    "prompts/_shared/core-directives.xml",
+    "prompts/bot-00-programming-lead.xml",
+    "prompts/bot-01-systems-backend.xml",
+    "prompts/bot-02-web-edge.xml",
+    "prompts/bot-03-android.xml",
+    "prompts/bot-04-ios.xml",
+    "prompts/bot-05-infrastructure.xml",
+    "prompts/bot-06-quality-security.xml",
+    "prompts-assembled/ANDROID.xml",
+    "prompts-assembled/INFRA.xml",
+    "prompts-assembled/IOS.xml",
+    "prompts-assembled/LEAD.xml",
+    "prompts-assembled/QUALITY.xml",
+    "prompts-assembled/SYSTEMS.xml",
+    "prompts-assembled/WEB.xml",
+    "prompts/ANDROID.xml",
+    "prompts/INFRA.xml",
+    "prompts/IOS.xml",
+    "prompts/LEAD.xml",
+    "prompts/QUALITY.xml",
+    "prompts/SYSTEMS.xml",
+    "prompts/WEB.xml",
+    ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "approved_by": ""
+}

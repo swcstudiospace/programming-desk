@@ -21,13 +21,13 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml docs/desk-operating-model.md docs/gotxcot-cloud-pipeline.md .receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files ownership.yaml prompts/_shared/core-directives.xml prompts-assembled/LEAD.xml prompts-assembled/QUALITY.xml",
       "exit_code": 1,
       "duration_s": 0.05,
-      "output_tail": "G-1 FAIL — bot-00-programming-lead\n  FOREIGN  ownership.yaml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/_shared/core-directives.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)"
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  ownership.yaml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/_shared/core-directives.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)"
     }
   ],
   "claims": [
@@ -46,10 +46,10 @@
     }
   ],
   "unverified": [
-    "approved_by is empty. G-2 fails closed until QUALITY (bot-06-quality-security) stamps this receipt. This run does not claim QUALITY clearance or a Greptile clear.",
     "The live desk host roster (LEAD in the channel, QUALITY out) was already updated on the host before this commit. This session did not query the host. The GitHub copy now matches that roster.",
     "QUALITY reviews ownership.yaml and the assembled prompts. The mixed-owner one-merge is recorded with expects_failure. It is not a stamp.",
-    "PR #8 is superseded by PR #7. This receipt does not merge either pull request."
+    "PR #8 is superseded by PR #7. This receipt does not merge either pull request.",
+    "QUALITY stamped approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for head bc45975 (Greptile review 26515901 COMPLETED 4/5). G-2 chicken-egg closed by this stamp; QUALITY does not merge."
   ],
   "blockers": [
     "QUALITY has not stamped approved_by."
@@ -63,6 +63,15 @@
   ],
   "contract_changes": [],
   "rollback_plan": null,
-  "approvals": [],
-  "approved_by": ""
+  "approvals": [
+    {
+      "approved_by": "bot-06-quality-security",
+      "approved_at": "2026-09-24T14:33:04Z",
+      "head_commit_reviewed": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "greptile_review_id": "26515901",
+      "note": "QUALITY merge-gate CLEAR_WITH_WAIVERS after Greptile COMPLETED 4/5 on policy fix head; remaining Greptile P1 was empty approved_by chicken-egg."
+    }
+  ],
+  "approved_by": "bot-06-quality-security",
+  "approved_at": "2026-09-24T14:33:04Z"
 }

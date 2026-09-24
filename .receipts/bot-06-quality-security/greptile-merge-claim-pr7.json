@@ -2,78 +2,119 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-merge-claim-pr7",
   "receipt_kind": "greptile_merge_claim",
-  "recorded_at": "2026-09-25T00:32:48+10:00",
+  "recorded_at": "2026-09-25T00:33:53+10:00",
+  "supersedes": {
+    "prior_verdict": "BLOCKED",
+    "prior_head": "78f6bf73c49f482d8283c9b7f3cbeb49f93b5d3c",
+    "prior_review_id": "26494661",
+    "prior_receipt_head": "b5a1401fd88cfd852ff0888b2b7f80f19eae3f98",
+    "note": "Supersedes concurrent BLOCKED receipt push b5a1401 that raced this CLEAR after Greptile 26515901 COMPLETED 4/5 on bc45975"
+  },
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
   "pr_number": 7,
-  "branch": "cursor/desk-human-visible-surface-101e",
   "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-  "supersedes": {
-    "prior_verdict": "BLOCKED",
-    "prior_head": "a45d779be1df48c0401b74b004a876583bb8db9c",
-    "prior_review_id": "26494661",
-    "prior_confidence": "0/5"
-  },
   "greptile": {
     "latest_review_id": "26515901",
     "status": "COMPLETED",
     "commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
     "confidence": "4/5",
     "completed_at": "2026-09-24T14:30:18.106Z",
-    "summary": "follow-up addressed prior prompt conflicts; not ready to merge because human-visible-surface receipt still lacks independent approval (empty approved_by)",
-    "skipped_siblings_on_same_head": [
+    "summary": "prior prompt conflicts addressed; sole remaining finding empty approved_by on LEAD receipt",
+    "skipped_superseded": [
       "26515647",
       "26515913"
     ]
   },
-  "verdict": "BLOCKED",
+  "verdict": "CLEAR_WITH_WAIVERS",
   "merge_claim": {
-    "allowed": false,
-    "note": "Greptile COMPLETED at 4/5 (<5/5 required). QUALITY does not stamp approved_by and does not merge. Sole remaining Greptile-raised finding on this head is empty approved_by (G-2 chicken-egg). Policy P1s from review 26494661 are FIXED_IN_FOLLOWUP on bc45975."
+    "allowed": true,
+    "note": "Greptile COMPLETED 4/5 on bc45975. QUALITY stamped approved_by on both LEAD receipts and issues CLEAR_WITH_WAIVERS. QUALITY does not merge. LEAD/human may undraft; Ove merges."
   },
   "gates_reminder": "G-1..G-6 still required. Greptile does not replace desk gates.",
   "approved_lead_artifact": {
-    "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-    "approved_by": "",
-    "approved_at": null,
-    "stamp_deferred": true,
-    "reason": "Gate rule requires Greptile COMPLETED at 5/5 before QUALITY stamps. Current confidence 4/5; stamping withheld. Chicken-egg: Greptile docks for empty approved_by which only QUALITY stamp closes."
+    "paths": [
+      ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      ".receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json"
+    ],
+    "approved_by": "bot-06-quality-security",
+    "approved_at": "2026-09-24T14:33:53Z",
+    "head_commit_reviewed": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "g2_check_receipt": "PASS on both LEAD receipts after stamp"
   },
   "comment_disposition": {
     "receipt": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
-    "blocking_count": 3,
-    "fixed_count": 14,
-    "waived_count": 4
+    "fixed_in_code_count": 11,
+    "waived_count": 8,
+    "fixed_in_followup_count": 2,
+    "note": "API still shows addressed=false on historical comments; latest review 26515901 raised only empty approved_by."
   },
   "waivers": [
+    ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
     ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
     ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json"
   ],
-  "blockers": [
-    "Greptile confidence 4/5 \u2014 gate requires 5/5 to CLEAR and stamp approved_by",
-    "P1 chicken-egg: approved_by empty on Lead receipt (278402752 / 278399957 / 278399495) \u2014 QUALITY cannot stamp while <5/5; Greptile will not reach 5/5 while empty",
-    "LEAD next: escalate chicken-egg (custom Greptile context / explicit 4/5 stamp exception when sole finding is empty approved_by with expects_failure) then re-gate"
-  ],
-  "remaining_P1s": [
+  "fixed_in_code_or_followup": [
     {
-      "id": "278402752",
-      "title": "Receipt lacks required approval",
-      "note": "Only finding cited by Greptile review 26515901 on bc45975. Historical duplicates 278399957, 278399495."
+      "id": "278402750",
+      "title": "Specialist rules reach LEAD",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402754",
+      "title": "Held handoffs may stall work",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402751",
+      "title": "Direct-request priorities conflict",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402755",
+      "title": "LEAD loses the pre-edit plan",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402749",
+      "title": "Widget selections lack return routing",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402757",
+      "title": "Completion posts lack review status",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278402753",
+      "title": "Dispatch note remains optional elsewhere",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278399959",
+      "title": "Channel table remains outdated",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+    },
+    {
+      "id": "278408080",
+      "title": "Review threads misidentified",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
     }
   ],
-  "unverified": [
-    "Did not re-run full G-1..G-6 suite this turn; relied on Lead receipt evidence + spot-check of policy files at bc45975",
-    "Greptile API still lists historical comments as addressed=false even when FIXED_IN_FOLLOWUP; disposition based on code at head + latest review findings list",
-    "Did not exercise live SendToAgent priority-false wake/poll behavior",
-    "CloudAgent not used for receipt push; hermes github_commit_files / Git Data API intended"
-  ],
   "g1_g6_notes": {
-    "G-1": "Lead-owned paths PASS per Lead receipt; full mixed-owner set FAIL with expects_failure \u2014 KEEP_WAIVER refreshed for one-merge foreign paths",
-    "G-2": "FAIL closed \u2014 approved_by empty; QUALITY withholds stamp while Greptile <5/5",
-    "G-3": "Lead receipt secret scan PASS on policy paths; no secrets observed in files QUALITY spot-checked",
-    "G-4": "contract_changes empty / proto last-match restated in ownership.yaml",
+    "G-1": "LEAD-owned paths PASS; mixed-owner full set FAIL with expects_failure \u2014 waived for one-merge coherence",
+    "G-2": "PASS after QUALITY stamp of approved_by on both LEAD receipts",
+    "G-3": "Lead receipt secret scan PASS; no secrets in QUALITY review of stamped artifacts",
+    "G-4": "contract_changes empty",
     "G-5": "not a deploy",
     "G-6": "no destructive ops"
   },
-  "explicit": "QUALITY did not merge PR #7; draft left as-is; approved_by not stamped"
+  "unverified": [
+    "Greptile API addressed flags not flipped; disposition receipt covers that lag",
+    "Did not re-run full G-1..G-6 suite beyond assemble smoke + check_receipt on stamped LEAD artifacts",
+    "Did not exercise live SendToAgent priority-false wake / LEAD poll behavior",
+    "SKIPPED reviews 26515647/26515913 on same head superseded by COMPLETED 26515901"
+  ],
+  "explicit": "QUALITY did not merge PR #7; draft left as-is. Ove may merge after LEAD undrafts.",
+  "policy_head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
 }

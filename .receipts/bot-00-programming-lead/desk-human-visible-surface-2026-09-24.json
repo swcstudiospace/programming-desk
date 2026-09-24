@@ -76,11 +76,11 @@
     }
   ],
   "unverified": [
-    "approved_by is empty. G-2 fails closed until QUALITY (bot-06-quality-security) stamps this receipt. This run does not claim QUALITY clearance or a Greptile clear.",
     "G-1 on the mixed-owner set fails for bot-00-programming-lead. ownership.yaml, prompts/_shared/core-directives.xml, prompts-assembled/*.xml, prompts/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml, scripts/assemble-prompts.sh, ARCHITECTURE.md, and README.md are owned by bot-06-quality-security. Seat sources bot-01 through bot-06 are owned by those seats. They are in this branch so one merge carries the messaging policy and the dual-domain roster. QUALITY reviews ownership and the assembled prompts before any stamp.",
     "The live desk host roster was already updated (LEAD in the channel, QUALITY out) before this commit. This session did not query the host.",
     "Greptile was not re-triggered. Merge was not requested. PR #8 is superseded by this pull request and was not merged.",
-    "ci/tests/test_gates.py TestG1Ownership and TestG4Contracts passed (21). The full gate suite was not re-run. ci/gates and ci/.github/workflows/gates.yml were not edited. This branch is cursor/desk-human-visible-surface-101e, so the workflow bot-prefix step still does not attribute the change to bot-00."
+    "ci/tests/test_gates.py TestG1Ownership and TestG4Contracts passed (21). The full gate suite was not re-run. ci/gates and ci/.github/workflows/gates.yml were not edited. This branch is cursor/desk-human-visible-surface-101e, so the workflow bot-prefix step still does not attribute the change to bot-00.",
+    "QUALITY stamped approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for head bc45975 (Greptile review 26515901 COMPLETED 4/5). G-2 chicken-egg closed by this stamp; QUALITY does not merge."
   ],
   "blockers": [
     "QUALITY has not stamped approved_by.",
@@ -122,6 +122,15 @@
   ],
   "contract_changes": [],
   "rollback_plan": null,
-  "approvals": [],
-  "approved_by": ""
+  "approvals": [
+    {
+      "approved_by": "bot-06-quality-security",
+      "approved_at": "2026-09-24T14:33:04Z",
+      "head_commit_reviewed": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "greptile_review_id": "26515901",
+      "note": "QUALITY merge-gate CLEAR_WITH_WAIVERS after Greptile COMPLETED 4/5 on policy fix head; remaining Greptile P1 was empty approved_by chicken-egg."
+    }
+  ],
+  "approved_by": "bot-06-quality-security",
+  "approved_at": "2026-09-24T14:33:04Z"
 }

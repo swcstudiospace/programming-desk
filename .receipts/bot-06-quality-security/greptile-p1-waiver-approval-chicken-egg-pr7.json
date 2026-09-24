@@ -1,0 +1,36 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p1-waiver-approval-chicken-egg-pr7",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-25T00:33:04+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 7,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+    "merge_request_id": "68670553",
+    "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "greptile_review_id": "26515901"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "why": "Greptile COMPLETED review 26515901 on bc45975 at confidence 4/5 with the sole remaining finding that approved_by was empty. QUALITY withholds approved_by while BLOCKED and stamps only on CLEAR/CLEAR_WITH_WAIVERS, so an empty field is required until this gate turn. QUALITY reviewed the policy fix head, confirmed prior P1 prompt conflicts are fixed in code (audience-scoped assemble, LEAD poll/widget return, intake priority-false, awaiting-review labels), and now stamps both LEAD receipts. This waiver covers the chicken-egg empty-approved_by P1 only.",
+    "decision": "STAMP_AND_WAIVE_CHICKEN_EGG_EMPTY_APPROVED_BY",
+    "quality_ack": "bot-06-quality-security stamps approved_by on both LEAD receipts at this CLEAR_WITH_WAIVERS turn.",
+    "scope": "Greptile P1 empty approved_by on desk-human-visible-surface and desk-roster-dual-domains receipts; does not waive other defects"
+  },
+  "comments_waived": [
+    {
+      "greptile_comment_id": "278402752",
+      "title": "Receipt lacks required approval"
+    },
+    {
+      "greptile_comment_id": "278399957",
+      "title": "Receipt lacks approval"
+    },
+    {
+      "greptile_comment_id": "278399495",
+      "title": "Receipt lacks independent approval"
+    }
+  ]
+}

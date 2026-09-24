@@ -51,7 +51,7 @@
       "expects_failure": true
     },
     {
-      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this roster receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on this head.",
+      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this roster receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on the branch tip that contains the Merge-claim head rule.",
       "evidence_command_index": 3,
       "expects_failure": true
     }
@@ -60,12 +60,13 @@
     "The live desk host roster (LEAD in the channel, QUALITY out) was already updated on the host before this commit. This session did not query the host. The GitHub copy now matches that roster.",
     "QUALITY reviews ownership.yaml and the assembled prompts. The mixed-owner one-merge is recorded with expects_failure. It is not a stamp.",
     "PR #8 is superseded by PR #7. This receipt does not merge either pull request.",
-    "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction.",
-    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7."
+    "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the branch tip.",
+    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7.",
+    "Greptile was not called on this pass. Review 26545196 SKIPPED on c5c8b5ee68b31c960af90415497b5147527964cc is not the target. LEAD's supplied COMPLETED summary is confidence 4/5 on ddc113bcd20e6b59e30060db1f863ea39d25a8ca only. That score is not applied to the tip."
   ],
   "blockers": [
-    "Live approved_by is empty. QUALITY's 2026-09-24T14:33:04Z stamp covered bc459751192b80d5950b2d2b3349e7b2981c18a6 only and is not the live field. G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on this head.",
-    "Greptile review 26515901 (4/5) covers bc459751192b80d5950b2d2b3349e7b2981c18a6 only. This receipt head is pending re-review. Merge is not allowed."
+    "Live approved_by is empty. QUALITY's 2026-09-24T14:33:04Z stamp covered bc459751192b80d5950b2d2b3349e7b2981c18a6 only and is not the live field. G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the branch tip that contains the Merge-claim head rule.",
+    "Do not request Greptile on c5c8b5ee68b31c960af90415497b5147527964cc (26545196 SKIPPED). The COMPLETED 4/5 summary LEAD supplied covers ddc113bcd20e6b59e30060db1f863ea39d25a8ca only and does not cover the tip. Merge is not allowed."
   ],
   "files_changed": [
     "ownership.yaml",
@@ -87,5 +88,5 @@
     "status": "not the live approved_by",
     "note": "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction."
   },
-  "receipt_honesty_corrected_at": "2026-09-24T16:09:03Z"
+  "receipt_honesty_corrected_at": "2026-09-24T18:33:51Z"
 }

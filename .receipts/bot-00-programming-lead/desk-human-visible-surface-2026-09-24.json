@@ -81,7 +81,7 @@
       "expects_failure": true
     },
     {
-      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on this head.",
+      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on the branch tip that contains the Merge-claim head rule.",
       "evidence_command_index": 6,
       "expects_failure": true
     }
@@ -90,12 +90,13 @@
     "G-1 on the mixed-owner set fails for bot-00-programming-lead. ownership.yaml, prompts/_shared/core-directives.xml, prompts-assembled/*.xml, prompts/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml, scripts/assemble-prompts.sh, ARCHITECTURE.md, and README.md are owned by bot-06-quality-security. Seat sources bot-01 through bot-06 are owned by those seats. They are in this branch so one merge carries the messaging policy and the dual-domain roster. QUALITY reviews ownership and the assembled prompts before any stamp.",
     "The live desk host roster was already updated (LEAD in the channel, QUALITY out) before this commit. This session did not query the host.",
     "ci/tests/test_gates.py TestG1Ownership and TestG4Contracts passed (21). The full gate suite was not re-run. ci/gates and ci/.github/workflows/gates.yml were not edited. This branch is cursor/desk-human-visible-surface-101e, so the workflow bot-prefix step still does not attribute the change to bot-00.",
-    "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction.",
-    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7."
+    "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the branch tip.",
+    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7.",
+    "Greptile was not called on this pass. Review 26545196 SKIPPED on c5c8b5ee68b31c960af90415497b5147527964cc is not the target. LEAD's supplied COMPLETED summary is confidence 4/5 on ddc113bcd20e6b59e30060db1f863ea39d25a8ca only. That score is not applied to the tip."
   ],
   "blockers": [
-    "Live approved_by is empty. QUALITY's 2026-09-24T14:33:04Z stamp covered bc459751192b80d5950b2d2b3349e7b2981c18a6 only and is not the live field. G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on this head.",
-    "Greptile review 26515901 (4/5) covers bc459751192b80d5950b2d2b3349e7b2981c18a6 only. This receipt head is pending re-review. Merge is not allowed."
+    "Live approved_by is empty. QUALITY's 2026-09-24T14:33:04Z stamp covered bc459751192b80d5950b2d2b3349e7b2981c18a6 only and is not the live field. G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the branch tip that contains the Merge-claim head rule.",
+    "Do not request Greptile on c5c8b5ee68b31c960af90415497b5147527964cc (26545196 SKIPPED). The COMPLETED 4/5 summary LEAD supplied covers ddc113bcd20e6b59e30060db1f863ea39d25a8ca only and does not cover the tip. Merge is not allowed."
   ],
   "files_changed": [
     ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
@@ -144,5 +145,5 @@
     "status": "not the live approved_by",
     "note": "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction."
   },
-  "receipt_honesty_corrected_at": "2026-09-24T16:09:03Z"
+  "receipt_honesty_corrected_at": "2026-09-24T18:33:51Z"
 }

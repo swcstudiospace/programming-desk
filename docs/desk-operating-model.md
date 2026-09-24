@@ -101,6 +101,24 @@ LEAD never fabricates specialist receipts. "Done" to Ove requires consolidated s
 receipts and QUALITY approval when review was requested. Honest `unverified` lists are success;
 silent incompleteness is not (PD-1, PD-6).
 
+## Merge-claim head rule
+
+A merge-claim receipt names the commit Greptile COMPLETED and does not claim CLEAR or
+CLEAR_WITH_WAIVERS for a later tip that review did not cover. `merge_claim.allowed` stays
+false and the verdict stays BLOCKED until Greptile's status on that tip is COMPLETED and
+QUALITY stamps `approved_by`. Until that stamp, `approved_by` stays empty and G-2 fails closed.
+
+SKIPPED is not a pass. Do not send LEAD back to review an older SHA after the branch has moved.
+The pending target is the tip of `cursor/desk-human-visible-surface-101e` that contains this
+section. Parent at authoring: `ddc113bcd20e6b59e30060db1f863ea39d25a8ca` (COMPLETED 4/5; that
+score is not a score for this tip). Do not re-request review of
+`c5c8b5ee68b31c960af90415497b5147527964cc`.
+
+Claims cite `evidence_command_index`, the field G-2 reads. A waiver whose status is
+`DOES_NOT_COVER_CURRENT_HEAD`, or whose live stamp is `WITHDRAWN`, is not an active waiver
+and is not an unchanged historical waiver. This file cannot store the SHA of the commit that
+adds it; writing that SHA would change it.
+
 ## Channel roster
 
 Members (6): LEAD, SYSTEMS (Systems & Design), WEB (Web & Desktop), ANDROID (Android & Play Release), IOS (iOS & App Store), INFRA (Infra & WEB3).

@@ -2,7 +2,7 @@
 
 **Locked:** 2026-09-24 (Sydney)  
 **Audience:** Programming Lead wiring intake → trackers → runtime lanes → PR gates.  
-**Status:** Design recorded. End-to-end not verified. Linear MCP connected (dense smoke passed). **TrackPlan dispatcher skill written** (`skills/trackplan-dispatch/`). **GoTxCoT double-uplift skill written** (`skills/gotxcot-uplift/`). **Greptile↔QUALITY merge-gate skill written** (`skills/greptile-merge-gate/`). Hermes MCP still blocked (see §Gaps).
+**Status:** Design recorded. End-to-end not verified. Linear MCP connected (dense smoke passed). **TrackPlan dispatcher skill written** (`skills/trackplan-dispatch/`). **GoTxCoT double-uplift skill written** (`skills/gotxcot-uplift/`). **Greptile↔QUALITY merge-gate skill written** (`skills/greptile-merge-gate/`). Lane B control is `user-hermes-agent` (HTTP, connected) via `agent_bus_*`. Local stdio `user-hermes` was intentionally uninstalled on the desk host on 2026-09-24; do not rebuild `hermes-mcp-bridge.mjs`. A Lane B job that lands a draft PR is still not verified (see §Gaps).
 
 **Density (locked):** GoT **5–8 nodes**, CoT **4–8 steps per node** (each step a Linear sub-issue), CoT fill **sequential by default**, **two uplift passes**. The dispatcher consumes the **second** uplift (live Notion and Linear URLs inside the XML). Compact Linear remains quota-fallback only.
 
@@ -40,7 +40,7 @@ Ticket / TrackPlan
 | Lane | When | Who executes | Durable output |
 |---|---|---|---|
 | **A — Cursor Cloud Agent** | Desk-owned application/code work; default after the **second uplift** | Cloud Agent with the second-uplift XML (`<ISSUES>` nested, live URLs for 5–8 nodes and 4–8 sub-issues each); Notion `Agent` = `cursor-cloud` | Branch + draft PR + `.receipts/` |
-| **B — VPS Hermes** | Ticket/runtime says `hermes` — heavy compute, long jobs, Hermes-specific skills/plugins | Hermes on VPS (prefer MCP once connected; see §5) | Same: branch + draft PR + receipts. Hermes **picks up from GitHub**, not chat paste |
+| **B — VPS Hermes** | Ticket/runtime says `hermes` — heavy compute, long jobs, Hermes-specific skills/plugins | Hermes on VPS through connected `user-hermes-agent` (`agent_bus_*`; see §5). `handoff_to_hermes` is Hermes-only fallback | Same: branch + draft PR + receipts. Hermes **picks up from GitHub**, not chat paste |
 | **C — Specialist 1:1** | Path ownership is clear (`ownership.yaml`); LEAD dispatches concrete tickets | SYSTEMS / WEB / ANDROID / IOS / INFRA / QUALITY via `SendToAgent` | Same GitHub contract; specialist never invents work from channel vibes |
 
 Lanes compose: LEAD may run Lane A/B for a Graph node while Lane C specialists own path slices. Cross-platform features still follow contract-first (`cross-bot-protocol.md`); LEAD integrates.
@@ -156,15 +156,15 @@ QUALITY checklist includes Greptile status via `skills/greptile-merge-gate/SKILL
 
 | Path | Use for |
 |---|---|
-| **Hermes MCP** (once auth + bridge work) | Dispatch / status of Hermes agent work packets; preferred Lane B control plane |
+| **Hermes MCP** `user-hermes-agent` (HTTP, connected) | Dispatch / status of Hermes work packets. Live Lane B tools are `agent_bus_health`, `agent_bus_start_job`, `agent_bus_get_job`, and `agent_bus_wait_job`. `handoff_to_hermes` is Hermes-only fallback |
 | **SSH to VPS** | Infra ops that **INFRA owns** (host, services, non-code ops) — not the default code handoff channel |
 | **GitHub PR** | All code work landing place, regardless of runtime |
 
-Today (honest):
+Today (desk host, 2026-09-24):
 
-- `user-hermes-agent` — **needsAuth** (not usable until OAuth / auth completes on the Desk host).
-- `user-hermes` (stdio) — **broken** (missing `/workspace/hermes-mcp-bridge.mjs`).
-- Do not paper over this with chat paste or undocumented SSH “just this once” for application PRs.
+- `user-hermes-agent` — **connected** (HTTP). Preferred Lane B path is `agent_bus_*`. `agent_bus_health` returned `status: ok` with runtimes `hermes`, `muse`, `grok-build`, `omp`, `claude-code`. `handoff_to_hermes` stays a Hermes-only fallback; do not use it for a goal that already has an Agent Bus job.
+- `user-hermes` (local stdio) — **uninstalled**. Removal on 2026-09-24 was intentional. The server had pointed at a missing `/workspace/hermes-mcp-bridge.mjs`. Agent Bus on `user-hermes-agent` supersedes `hermes-mcp-bridge.mjs`. Do not rebuild the bridge and do not reinstall the stdio server.
+- A failed `agent_bus_*` call is a stop. Do not paper over it with chat paste or undocumented SSH for application PRs.
 
 ### 5.2 VPS repos (implementation later — not wired as desk SoT today)
 
@@ -179,7 +179,7 @@ Host noted in desk docs: `root@187.77.130.10` (shared root access is a known ris
 | `agent-handoff` | Handoff packet conventions |
 | `agent-swarm` | Multi-agent coordination |
 
-**Do not claim these are wired into Programming Desk LEAD dispatch today.** Point implementers at them when building Lane B; keep GitHub SoT and this doc’s handoff contract as the desk contract.
+**Do not claim these repos are wired into Programming Desk LEAD dispatch today.** Lane B dispatch from the desk uses connected `user-hermes-agent`. These host repos are future integration context. GitHub SoT and this doc’s handoff contract stay the desk contract.
 
 ### 5.3 Code vs infra
 
@@ -193,9 +193,9 @@ Host noted in desk docs: `root@187.77.130.10` (shared root access is a known ris
 | Gap | Why it blocks E2E |
 |---|---|
 | **Linear MCP** | **Connected 2026-09-24.** Dense smoke SPE-135/SPE-136 on Spectrum Web Co verified and canceled. |
-| **Hermes MCP** — `user-hermes-agent` needsAuth; `user-hermes` stdio bridge missing (`hermes-mcp-bridge.mjs`) | Lane B cannot be dispatched cleanly from the Desk host |
+| **Hermes stdio MCP** — `user-hermes` uninstalled 2026-09-24 | **Closed for the missing-bridge blocker.** Do not rebuild `hermes-mcp-bridge.mjs`. Live Lane B is connected `user-hermes-agent` (`agent_bus_*`); `handoff_to_hermes` is Hermes-only fallback. A desk Lane B job that opens a draft PR is still unverified |
 | **GoTxCoT double uplift** | **Written** — `skills/gotxcot-uplift/SKILL.md`. First XML uplift, GoT 5–8, sequential CoT 4–8 steps/node, dense kickoff, second uplift with live URLs. VPS engine may still be on MIN_NODES=3 until `vendor/ultrathink-policy/` is applied there. **E2E not verified.** |
-| **TrackPlan → CloudAgent / Hermes dispatcher skill** | **Written** — `skills/trackplan-dispatch/SKILL.md`. Consumes the **second-uplift** XML (URLs included) + `runtime`. **E2E not verified.** Lane B still blocked by Hermes auth/bridge. |
+| **TrackPlan → CloudAgent / Hermes dispatcher skill** | **Written** — `skills/trackplan-dispatch/SKILL.md`. Consumes the **second-uplift** XML (URLs included) + `runtime`. **E2E not verified.** Lane B uses connected `user-hermes-agent` Agent Bus. Stdio `user-hermes` stays uninstalled. |
 | **Greptile in QUALITY checklist** | **Skill written** — `skills/greptile-merge-gate/SKILL.md` + QUALITY prompt checklist. **E2E not verified.** Live MCP calls may need re-auth (`get_me` needsAuth at authoring). |
 | **PR → Notion/Linear sync skill** | Mirror after merge (analogue to ultrathink-sync); must not invent tracker rows |
 | **VPS Hermes repos** | Present on host; not integrated as desk runtime |
@@ -251,4 +251,5 @@ Upstream planning stays in [`gotxcot-cloud-pipeline.md`](./gotxcot-cloud-pipelin
 | `vendor/ultrathink-policy/README.md` | VPS constant/prompt patch (MIN_NODES=5, MIN_STEPS=4) |
 | `skills/greptile-merge-gate/SKILL.md` | QUALITY merge-claim Greptile gate |
 | MCP `user-greptile` | PR code review trigger + comments |
-| MCP `user-hermes-agent` / `user-hermes` | Lane B control (blocked today) |
+| MCP `user-hermes-agent` | Lane B control (HTTP, connected). `agent_bus_*` preferred; `handoff_to_hermes` is Hermes-only fallback |
+| MCP `user-hermes` | Uninstalled on the desk host 2026-09-24. Do not rebuild `hermes-mcp-bridge.mjs`. Agent Bus supersedes that bridge |

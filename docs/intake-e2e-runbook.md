@@ -126,7 +126,7 @@ The implementer respects `ownership.yaml`. If a path is owned by another seat, s
 
 ### Lane B — `agent_bus_*` (no secrets)
 
-`docs/github-sot-orchestration.md` still records the older Hermes surfaces as blocked on the desk host: `user-hermes-agent` needs auth, and `user-hermes` stdio is missing `hermes-mcp-bridge.mjs`. `skills/trackplan-dispatch` names `handoff_to_hermes` as design intent whose schema was not live-verified. Those statements stand. Do not paper over them with SSH or chat paste.
+`user-hermes-agent` is the live Lane B MCP (HTTP, connected). Preferred tools are `agent_bus_*`. `handoff_to_hermes` is Hermes-only fallback. Local stdio `user-hermes` was intentionally uninstalled on the desk host on 2026-09-24. Agent Bus on `user-hermes-agent` supersedes `hermes-mcp-bridge.mjs`. Do not rebuild that bridge and do not reinstall the stdio server. A failed `agent_bus_*` call stops the lane. Do not paper over it with SSH or chat paste.
 
 Separately, Hermes MCP exposes these tools (descriptors read while authoring this runbook; **none of them were called** for `ut-tltyh4-ebc71dbb`):
 
@@ -239,7 +239,7 @@ Record the failure in `<TRACKER_GAPS>` (when the miss is a tracker row) and in t
 |---|---|---|---|
 | **TRACKER_GAPS** | Kickoff did not return a Notion or Linear URL for a Task, Issue, or Sub-Issue. | Sibling `<TRACKER_GAPS>` with `nodeId` and `step`. Receipt lists the same pairs. Dispatch may proceed only for rows that have URLs; say which nodes were withheld. | Placeholder links (`https://…`, `SPE-…` with no real id). Dropping the rest of the node after the first error. Creating a second issue set “to fill the holes.” |
 | **Auth (Notion / Linear)** | Create or fetch returns unauthorized / needs auth. | Blocker: which surface, which call, no token text. Rows that were not created go to `TRACKER_GAPS`. | Pasting connector tokens into the runbook, PR, or receipt. Inventing URLs from memory. |
-| **Auth (Lane B)** | `agent_bus_*` missing, unauthorized, or erroring. Older `user-hermes-agent` / `user-hermes` gap from `docs/github-sot-orchestration.md`. | Stop. `runtime` stays unlaunched. `agent_id` null. Blocker names the tool and the error class, not `BUS_TOKEN`. | SSH coding handoff. Chat-paste as the durable record. Claiming the Hermes job started. |
+| **Auth (Lane B)** | `agent_bus_*` missing, unauthorized, or erroring. | Stop. `runtime` stays unlaunched. `agent_id` null. Blocker names the tool and the error class, not `BUS_TOKEN`. | SSH coding handoff. Rebuilding `hermes-mcp-bridge.mjs` or reinstalling stdio `user-hermes`. Chat-paste as the durable record. Claiming the Hermes job started. |
 | **Auth (Greptile)** | `get_me` or `trigger_code_review` needs auth. | `unverified`: Greptile not run. LEAD escalates. Merge claim stays blocked. | Silent skip. “Greptile clean.” Waiving without a QUALITY-acknowledged waiver receipt (`skills/greptile-merge-gate`). |
 | **Density, too small** | GoT returns fewer than 5 nodes, or a node has fewer than 4 steps, and this was not an explicit fallback. | Reject and regenerate. If the 5-node fallback is used, mark graph source `fallback`. Do not dispatch an XML with fewer than 5 `<ISSUE>` elements unless `<TRACKER_GAPS>` explains a real create failure. | Shipping a 3- or 4-node graph “to save time.” Collapsing steps into one sub-issue. |
 | **Density, too large** | Model returns more than 8 nodes or more than 8 steps. | Clamp nodes to 8 by merging the least load-bearing middle nodes. Keep steps inside 4–8. | Silently keeping 9+ nodes or 9+ steps. |
@@ -300,4 +300,4 @@ Sub-issues (4 per node):
 - `approved_by` on the Lead receipt is `bot-06-quality-security`, set by QUALITY. LEAD did not self-approve. The P2 ownership-scope waive receipt is `.receipts/bot-06-quality-security/greptile-p2-waiver-ownership-scope-pr4.json`.
 - G-1 for `bot-00-programming-lead` on `docs/intake-e2e-runbook.md` passes under the `7fd7248` carve-out. The pre-carve-out FOREIGN result is historical only.
 - PR → Notion/Linear sync was not run. No tracker rows were created or updated by this change.
-- The VPS `claude-ultrathink` constant patch and the stdio `hermes-mcp-bridge` rebuild were not done.
+- The VPS `claude-ultrathink` constant patch was not done. The stdio `hermes-mcp-bridge` was not rebuilt. Desk policy after 2026-09-24 is that `user-hermes` stays uninstalled; do not rebuild the bridge.

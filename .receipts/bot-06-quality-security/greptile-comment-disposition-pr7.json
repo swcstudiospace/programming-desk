@@ -2,70 +2,70 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-comment-disposition-pr7",
   "receipt_kind": "greptile_comment_disposition",
-  "recorded_at": "2026-09-24T23:02:03+10:00",
+  "recorded_at": "2026-09-25T00:32:48+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
   "pr_number": 7,
-  "head_commit_sha": "78f6bf73c49f482d8283c9b7f3cbeb49f93b5d3c",
+  "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
   "latest_review": {
-    "id": "26494661",
+    "id": "26515901",
     "status": "COMPLETED",
-    "commit": "78f6bf73c49f482d8283c9b7f3cbeb49f93b5d3c",
-    "confidence": "0/5",
-    "completed_at": "2026-09-24T13:00:40.416Z",
-    "greptile_says": "not ready to merge: prompt instructions conflict on reporting behavior; receipt and ownership fail required gates"
+    "commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "confidence": "4/5",
+    "completed_at": "2026-09-24T14:30:18.106Z",
+    "greptile_says": "follow-up addressed prior prompt conflicts; receipt still lacks independent approval"
   },
-  "api_note": "18 Greptile comments with addressed=false (9 from review 26494661 + historical pending from 26494284/26494234). Confidence 0/5 blocks merge-claim. QUALITY does not stamp approved_by.",
+  "api_note": "21 Greptile comments still addressed=false in API. Latest review 26515901 on bc45975 only cites P1 empty approved_by. QUALITY dispositions older policy findings FIXED_IN_FOLLOWUP after verifying audience strip, poll/widget/direct_from_ove, channel table, awaiting-review label, and required dispatch note at this head.",
   "dispositions": [
     {
       "id": "278402750",
       "commentId": "PRRC_kwDOUgQ0os70A5gv",
       "title": "Specialist rules reach LEAD",
       "severity": "P1",
-      "action": "BLOCK",
-      "owner": "bot-06-quality-security",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid. PD-7 specialist-facing absolute rules are prepended into assembled LEAD.xml and conflict with LEAD reporting to Ove 1:1. Scope specialist rules to the six seats (or carve LEAD exception) before merge. QUALITY owns core-directives; will not rewrite product/prompt logic in this gate turn \u2014 returns to LEAD/QUALITY fix loop."
+      "note": "audience=lead|quality|build-seats + assemble-prompts.sh strip; assembled LEAD.xml has no build-seat Desk-absolute rules."
     },
     {
       "id": "278402754",
       "commentId": "PRRC_kwDOUgQ0os70A5g4",
       "title": "Held handoffs may stall work",
       "severity": "P1",
-      "action": "BLOCK",
-      "owner": "bot-00-programming-lead",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid operational gap. commentId corrected to GitHub review comment 4093876280 (PRRC_kwDOUgQ0os70A5g4). The previous value was the widget thread. priority-false is intentional for Ove-visibility; LEAD must poll held handoffs."
+      "note": "LEAD held_handoff_poll absolute + core audience=lead poll rule; LEAD is Desk member."
     },
     {
       "id": "278402751",
       "commentId": "PRRC_kwDOUgQ0os70A5hE",
       "title": "Direct-request priorities conflict",
       "severity": "P1",
-      "action": "BLOCK",
-      "owner": "bot-01-systems-backend",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/bot-01-systems-backend.xml",
-      "note": "Verified: desk_membership requires priority false; intake_protocol still says copy LEAD (priority true). Contradicts new policy. Likely same pattern on other specialist seats \u2014 LEAD should audit bot-02..06 intake steps."
+      "note": "intake_protocol and direct_from_ove use priority false; wait for LEAD plan before edit. Same pattern bot-02..06."
     },
     {
       "id": "278402755",
       "commentId": "PRRC_kwDOUgQ0os70A5hL",
       "title": "LEAD loses the pre-edit plan",
       "severity": "P1",
-      "action": "BLOCK",
-      "owner": "bot-06-quality-security",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid sequencing risk for cross-seat work. direct_from_ove should require plan/handoff before edit when scope may cross ownership, or LEAD must accept fire-and-report-after as explicit policy."
+      "note": "direct_from_ove: held handoff then wait then edit; do not work first."
     },
     {
       "id": "278402749",
       "commentId": "PRRC_kwDOUgQ0os70A5hU",
       "title": "Widget selections lack return routing",
       "severity": "P1",
-      "action": "BLOCK",
-      "owner": "bot-06-quality-security",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid. commentId corrected to GitHub review comment 4093876308 (PRRC_kwDOUgQ0os70A5hU). It previously duplicated the receipt-approval thread. True-widget path must return the selection to the Desk and to the asking seat."
+      "note": "LEAD true-widget return: show in 1:1, Desk echo, SendToAgent seat priority true."
     },
     {
       "id": "278402752",
@@ -75,7 +75,7 @@
       "action": "BLOCK",
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-      "note": "Correct that G-2 fails closed while empty. QUALITY deliberately does NOT stamp approved_by while Greptile confidence is 0/5 and substantive P1 policy conflicts remain. Chicken-egg stamp only after CLEAR/CLEAR_WITH_WAIVERS."
+      "note": "Still empty by design. QUALITY withholds stamp because Greptile confidence is 4/5 (<5/5). Chicken-egg remains the sole live Greptile finding on this head."
     },
     {
       "id": "278402756",
@@ -85,27 +85,54 @@
       "action": "KEEP_WAIVER",
       "waiver_receipt": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Acknowledged intentional one-merge policy: foreign QUALITY/seat paths included with expects_failure on Lead receipt. Ownership.yaml untouched. Same pattern as task G-1 note from CA. Does not alone clear other P1s."
+      "note": "One-merge expects_failure; ownership.yaml intentional dual-domain edits reviewed by QUALITY this gate."
     },
     {
       "id": "278402757",
       "commentId": "PRRC_kwDOUgQ0os70A5hx",
       "title": "Completion posts lack review status",
       "severity": "P2",
-      "action": "BLOCK",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid clarity gap. Desk completion posts should be labeled awaiting QUALITY/LEAD clearance so Ove does not treat them as merge-cleared."
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Explicit label awaiting-review / pending QUALITY in PD-7, desk_membership, operating model."
     },
     {
       "id": "278402753",
       "commentId": "PRRC_kwDOUgQ0os70A5h_",
       "title": "Dispatch note remains optional elsewhere",
       "severity": "P2",
-      "action": "BLOCK",
-      "owner": "bot-00-programming-lead",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "prompts/bot-00-programming-lead.xml",
-      "note": "Valid internal inconsistency in LEAD prompt. Align Dispatch workflow with required Desk dispatch note."
+      "note": "Dispatch note required, not optional (responsibility + Dispatch phase step)."
+    },
+    {
+      "id": "278408080",
+      "commentId": "PRRC_kwDOUgQ0os70BIgD",
+      "title": "Review threads misidentified",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "path": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
+      "note": "bc45975 disposition corrected held/widget/receipt commentIds; this re-gate rewrites disposition again."
+    },
+    {
+      "id": "278408051",
+      "commentId": "pending-26496204-0",
+      "title": "Waiver receipts are missing",
+      "severity": "P2-historical",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
+      "note": "Waiver + disposition receipts exist on branch since a45d779; still present at bc45975."
+    },
+    {
+      "id": "278407336",
+      "commentId": "pending-26496111-0",
+      "title": "Merge-claim receipt is unusable",
+      "severity": "P2-historical",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
+      "note": "Placeholder replaced; this commit supersedes with re-gate BLOCKED claim."
     },
     {
       "id": "278399958",
@@ -114,25 +141,26 @@
       "severity": "P1-historical",
       "action": "KEEP_WAIVER",
       "waiver_receipt": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
-      "note": "Duplicate of 278402756 ownership finding from prior review cycle."
+      "note": "Duplicate of 278402756."
     },
     {
       "id": "278399959",
       "commentId": "pending-26494284-3",
       "title": "Channel table remains outdated",
       "severity": "P2-historical",
-      "action": "BLOCK",
-      "owner": "bot-00-programming-lead",
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
       "path": "docs/desk-operating-model.md",
-      "note": "Verified: Channel rules table still says specialists use Desk for 'Status only' while new Channel discipline section expands to questions/options/blockers/completion. LEAD must align the table."
+      "note": "Channel table now lists full human-visible traffic for build seats."
     },
     {
       "id": "278399956",
       "commentId": "pending-26494284-0",
       "title": "Conflicting handoff priorities",
       "severity": "P1-historical",
-      "action": "BLOCK",
-      "note": "Duplicate of 278402751 priority conflict."
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Duplicate of 278402751; fixed."
     },
     {
       "id": "278399957",
@@ -140,7 +168,7 @@
       "title": "Receipt lacks approval",
       "severity": "P1-historical",
       "action": "BLOCK",
-      "note": "Duplicate of 278402752; no stamp while BLOCKED."
+      "note": "Duplicate of 278402752; stamp withheld at 4/5."
     },
     {
       "id": "278399495",
@@ -148,15 +176,16 @@
       "title": "Receipt lacks independent approval",
       "severity": "P1-historical",
       "action": "BLOCK",
-      "note": "Duplicate of 278402752."
+      "note": "Duplicate of 278402752; stamp withheld at 4/5."
     },
     {
       "id": "278399496",
       "commentId": "pending-26494234-4",
       "title": "Specialist rules also reach LEAD",
       "severity": "P1-historical",
-      "action": "BLOCK",
-      "note": "Duplicate of 278402750."
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Duplicate of 278402750; fixed."
     },
     {
       "id": "278399494",
@@ -165,15 +194,16 @@
       "severity": "P2-historical",
       "action": "KEEP_WAIVER",
       "waiver_receipt": ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
-      "note": "Known Cloud Agent branch prefix (cursor/\u2026) vs gates.yml bot-0N- derivation. Documented in Lead receipt unverified. Not a messaging-policy defect; workflow file intentionally not edited in this PR."
+      "note": "CA cursor/ branch prefix; gates.yml not edited."
     },
     {
       "id": "278399492",
       "commentId": "pending-26494234-0",
       "title": "Held handoffs may stall LEAD",
       "severity": "P1-historical",
-      "action": "BLOCK",
-      "note": "Duplicate of 278402754."
+      "action": "FIXED_IN_FOLLOWUP",
+      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "note": "Duplicate of 278402754; fixed."
     },
     {
       "id": "278399493",

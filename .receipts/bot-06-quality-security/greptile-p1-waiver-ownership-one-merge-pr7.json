@@ -3,20 +3,21 @@
   "task_id": "greptile-p1-waiver-ownership-one-merge-pr7",
   "receipt_kind": "greptile_comment_waiver",
   "status": "ACTIVE",
-  "recorded_at": "2026-09-24T23:02:03+10:00",
+  "recorded_at": "2026-09-25T00:32:48+10:00",
+  "refreshed_from": "2026-09-24T23:02:03+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr": {
     "number": 7,
     "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
     "merge_request_id": "68670553",
-    "head_commit_sha": "78f6bf73c49f482d8283c9b7f3cbeb49f93b5d3c"
+    "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
   },
   "waiver": {
     "who_waived": "bot-06-quality-security",
-    "authorized_by": "LEAD/CA G-1 note + QUALITY task brief: expects_failure on foreign seat/QUALITY paths included for one-merge policy coherence",
-    "why": "Messaging policy and the folded roster/dual-domain manifest must land as one coherent merge across shared core (QUALITY), assembled prompts (QUALITY), seat sources (bot-01..06), ownership.yaml (QUALITY), and LEAD paths. Lead receipt records G-1 FAIL with expects_failure=true on that foreign set. QUALITY reviews ownership.yaml and the assembled prompts before any stamp. This waiver covers the mixed-owner one-merge only; it does not clear policy conflicts and it does not set approved_by.",
+    "authorized_by": "LEAD/CA G-1 note + QUALITY re-gate: expects_failure on foreign seat/QUALITY paths included for one-merge policy + dual-domain roster coherence",
+    "why": "Messaging + dual-domain roster land as one coherent merge across shared core (QUALITY), assembled prompts (QUALITY), seat sources (bot-01..06), LEAD paths, and ownership.yaml dual-domain expansions. Lead receipt records G-1 FAIL with expects_failure=true on the mixed-owner set. QUALITY spot-checked ownership.yaml proto last-match and dual-domain paths this gate. This waiver covers Greptile ownership findings only.",
     "decision": "KEEP_ONE_MERGE_FOREIGN_PATHS",
-    "quality_ack": "bot-06-quality-security acknowledges intentional foreign-path inclusion for PR #7 one-merge coherence."
+    "quality_ack": "bot-06-quality-security refreshes waiver on head bc45975; does not alone authorize CLEAR at 4/5."
   },
   "comments_waived": [
     {

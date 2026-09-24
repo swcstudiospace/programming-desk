@@ -1,1 +1,142 @@
-PLACEHOLDER
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-merge-claim-pr7",
+  "receipt_kind": "greptile_merge_claim",
+  "recorded_at": "2026-09-25T02:24:35+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+  "pr_number": 7,
+  "branch": "cursor/desk-human-visible-surface-101e",
+  "head_commit_sha": "c5c8b5ee68b31c960af90415497b5147527964cc",
+  "supersedes": {
+    "prior_verdict": "BLOCKED",
+    "prior_honesty_withdraw_head": "c5c8b5ee68b31c960af90415497b5147527964cc",
+    "prior_dishonest_clear_head": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+    "prior_policy_head": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "note": "Re-gate after honesty-fix push. Greptile terminal status on this head is SKIPPED (26545196), not COMPLETED."
+  },
+  "greptile": {
+    "latest_review_id": "26545196",
+    "status": "SKIPPED",
+    "commit_sha": "c5c8b5ee68b31c960af90415497b5147527964cc",
+    "confidence": null,
+    "completed_at": "2026-09-24T16:16:49.385Z",
+    "summary": "Greptile SKIPPED honesty-fix head after multiple QUALITY trigger_code_review calls (MCP success). No analysis body. Last COMPLETED review on a related head is 26518097 (4/5) on b2eef4a.",
+    "triggers_observed": [
+      {
+        "when": "this wake",
+        "tool": "greptile_mcp_call/trigger_code_review",
+        "result": "success x3+",
+        "reviews_created_for_head": [
+          "26545196 SKIPPED"
+        ]
+      }
+    ],
+    "prior_completed_on_other_heads": [
+      {
+        "id": "26518097",
+        "commit": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+        "confidence": "4/5"
+      },
+      {
+        "id": "26515901",
+        "commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+        "confidence": "4/5"
+      }
+    ]
+  },
+  "verdict": "BLOCKED",
+  "merge_claim": {
+    "allowed": false,
+    "note": "Greptile merge-gate skill: SKIPPED must not be treated as pass. QUALITY does not stamp approved_by and does not merge. Honesty fix correctly withdrew the forged CLEAR; gate remains closed until Greptile COMPLETED on this head."
+  },
+  "gates_reminder": "G-1..G-6 still required. Greptile does not replace desk gates.",
+  "approved_lead_artifact": {
+    "paths": [
+      ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      ".receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json"
+    ],
+    "approved_by": "",
+    "stamp_deferred": true,
+    "reason": "Never forge approved_by before Greptile COMPLETED on the honesty-fixed head. Terminal status on c5c8b5e is SKIPPED."
+  },
+  "comment_disposition": {
+    "receipt": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
+    "fixed_in_followup_honesty": [
+      "278501192",
+      "278501193"
+    ],
+    "still_blocking": [
+      "278402752 empty approved_by until COMPLETED+CLEAR"
+    ]
+  },
+  "waivers": [
+    ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
+    ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
+    ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json"
+  ],
+  "blockers": [
+    "Greptile review 26545196 SKIPPED on honesty head c5c8b5e \u2014 gate requires COMPLETED before CLEAR/stamp",
+    "Live approved_by empty on both LEAD receipts (intentional; G-2 fails closed)",
+    "LEAD escalate: force Greptile COMPLETED on c5c8b5e (custom context / support / non-receipt-only nudge). QUALITY stays armed and will re-gate on next COMPLETED."
+  ],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --root . --files <35 PR paths>",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-3 PASS \u2014 35 file(s) scanned, no secrets detected\n"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 90 rules\n"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "duration_s": null,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md\n"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 1,
+      "duration_s": null,
+      "output_tail": "systems-backend.xml  (owned by bot-01-systems-backend)\n  FOREIGN  prompts/bot-02-web-edge.xml  (owned by bot-02-web-edge)\n  FOREIGN  prompts/bot-03-android.xml  (owned by bot-03-android)\n  FOREIGN  prompts/bot-04-ios.xml  (owned by bot-04-ios)\n  FOREIGN  prompts/bot-05-infrastructure.xml  (owned by bot-05-infrastructure)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.\n"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "G-3 PASS \u2014 no secrets in 35 PR files at honesty head",
+      "command_index": 0
+    },
+    {
+      "claim": "ownership.yaml manifest validates (7 bots / 90 rules)",
+      "command_index": 1
+    },
+    {
+      "claim": "G-2 fails closed on LEAD receipt while approved_by empty (expected until COMPLETED+CLEAR)",
+      "command_index": 2
+    },
+    {
+      "claim": "G-1 mixed-owner FOREIGN set remains expects_failure / one-merge waiver territory for this PR",
+      "command_index": 3
+    }
+  ],
+  "unverified": [
+    "Greptile did not COMPLETE analysis on c5c8b5e (SKIPPED only); confidence and fresh findings for this head are unavailable",
+    "Did not obtain Greptile COMPLETED after three MCP trigger_code_review successes",
+    "Did not exercise live SendToAgent to LEAD from this automation subagent (WakeParent handoff)",
+    "Did not re-run full pytest gate suite; spot-ran G-1/G-2/G-3 scripts only"
+  ],
+  "g1_g6_notes": {
+    "G-1": "FAIL for single-bot scope as expected on mixed PR; ownership one-merge waiver retained. manifest OK. exit bot-06=1",
+    "G-2": "FAIL closed on LEAD receipt (empty approved_by). QUALITY merge-claim includes commands/claims. Lead receipt check exit=1",
+    "G-3": "PASS exit=0",
+    "G-4": "contract_changes empty; **/*.proto last-match after web3/** and chains/** restated in ownership.yaml",
+    "G-5": "not a deploy",
+    "G-6": "no destructive ops"
+  },
+  "explicit": "QUALITY did not merge or undraft PR #7; approved_by not stamped; routine stays armed"
+}

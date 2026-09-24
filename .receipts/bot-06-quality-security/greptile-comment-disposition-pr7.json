@@ -2,236 +2,74 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-comment-disposition-pr7",
   "receipt_kind": "greptile_comment_disposition",
-  "recorded_at": "2026-09-25T00:33:04+10:00",
+  "recorded_at": "2026-09-25T02:24:35+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
   "pr_number": 7,
-  "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+  "head_commit_sha": "c5c8b5ee68b31c960af90415497b5147527964cc",
   "latest_review": {
-    "id": "26515901",
-    "status": "COMPLETED",
-    "commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-    "confidence": "4/5",
-    "completed_at": "2026-09-24T14:30:18.106Z",
-    "greptile_says": "not ready solely because human-visible-surface receipt lacked independent approval; prior prompt conflicts addressed"
+    "id": "26545196",
+    "status": "SKIPPED",
+    "commit": "c5c8b5ee68b31c960af90415497b5147527964cc",
+    "confidence": null,
+    "completed_at": "2026-09-24T16:16:49.385Z",
+    "body": null,
+    "note": "Greptile SKIPPED the honesty-fix head after QUALITY trigger_code_review. No COMPLETED review exists for this SHA. Prior COMPLETED 26518097 covered b2eef4a only."
   },
-  "api_note": "Greptile API still shows addressed=false on historical comments. Latest COMPLETED review 26515901 on bc45975 lists only the empty approved_by P1. Disposition covers stale flags + waivers.",
+  "prior_completed_reviews": [
+    {
+      "id": "26518097",
+      "status": "COMPLETED",
+      "commit": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T14:38:30.580Z"
+    },
+    {
+      "id": "26515901",
+      "status": "COMPLETED",
+      "commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T14:30:18.106Z"
+    }
+  ],
+  "api_note": "Greptile API still shows addressed=false on historical comments. Disposition for 26518097 P1/P2 is FIXED_IN_FOLLOWUP on honesty head c5c8b5e. Gate still requires COMPLETED on this head before CLEAR.",
   "dispositions": [
     {
-      "id": "278402750",
-      "title": "Specialist rules reach LEAD",
+      "id": "278501192",
+      "github_discussion_id": "4094854457",
+      "title": "Clearance cites an earlier head",
       "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "audience=build-seats / lead / quality plus assemble-prompts.sh strip; LEAD assembled no longer contains build-seat Desk-only absolute."
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "honesty-fix-CA",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "c5c8b5ee68b31c960af90415497b5147527964cc",
+      "note": "Honesty fix withdrew CLEAR_WITH_WAIVERS to BLOCKED; merge_claim.allowed=false; live approved_by emptied on LEAD receipts. Finding from review 26518097 on b2eef4a."
     },
     {
-      "id": "278399496",
-      "title": "Specialist rules also reach LEAD",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "Same audience filter as 278402750."
-    },
-    {
-      "id": "278402754",
-      "title": "Held handoffs may stall work",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-00-programming-lead",
-      "path": "prompts/bot-00-programming-lead.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "LEAD held_handoff_poll + PD-7 audience=lead poll rules; LEAD is in Desk."
-    },
-    {
-      "id": "278399492",
-      "title": "Held handoffs may stall LEAD",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-00-programming-lead",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "Same as 278402754."
-    },
-    {
-      "id": "278402751",
-      "title": "Direct-request priorities conflict",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-01-systems-backend",
-      "path": "prompts/bot-01-systems-backend.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "intake_protocol now priority false wait-for-LEAD-plan; same pattern on bot-02..06."
-    },
-    {
-      "id": "278399956",
-      "title": "Conflicting handoff priorities",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-01-systems-backend",
-      "path": "prompts/bot-01-systems-backend.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "Same as 278402751."
-    },
-    {
-      "id": "278402755",
-      "title": "LEAD loses the pre-edit plan",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "direct_from_ove: held handoff then wait before edit."
-    },
-    {
-      "id": "278402749",
-      "title": "Widget selections lack return routing",
-      "severity": "P1",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-00-programming-lead",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "LEAD true-widget return: Desk post + SendToAgent asking seat priority true."
+      "id": "278501193",
+      "github_discussion_id": "4094854475",
+      "title": "Approval blocker remains stale",
+      "severity": "P2",
+      "action": "FIXED_IN_FOLLOWUP",
+      "owner": "honesty-fix-CA",
+      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
+      "fixed_at": "c5c8b5ee68b31c960af90415497b5147527964cc",
+      "note": "blockers now match empty live approved_by; prior stamp moved to prior_quality_stamp. Finding from review 26518097 on b2eef4a."
     },
     {
       "id": "278402752",
       "title": "Receipt lacks required approval",
       "severity": "P1",
-      "action": "WAIVE",
+      "action": "KEEP_BLOCKING_UNTIL_COMPLETED_ON_HEAD",
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Chicken-egg: QUALITY stamps approved_by this turn after Greptile 4/5 with only this finding remaining."
-    },
-    {
-      "id": "278399957",
-      "title": "Receipt lacks approval",
-      "severity": "P1",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Covered by chicken-egg stamp waiver."
-    },
-    {
-      "id": "278399495",
-      "title": "Receipt lacks independent approval",
-      "severity": "P1",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Covered by chicken-egg stamp waiver."
-    },
-    {
-      "id": "278402757",
-      "title": "Completion posts lack review status",
-      "severity": "P2",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "awaiting-review / pending QUALITY label in PD-7, desk_membership, operating model."
-    },
-    {
-      "id": "278402753",
-      "title": "Dispatch note remains optional elsewhere",
-      "severity": "P2",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-00-programming-lead",
-      "path": "prompts/bot-00-programming-lead.xml",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "Dispatch phase Desk note is required."
-    },
-    {
-      "id": "278399959",
-      "title": "Channel table remains outdated",
-      "severity": "P2",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-00-programming-lead",
-      "path": "docs/desk-operating-model.md",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "Channel table updated for full human-visible traffic."
-    },
-    {
-      "id": "278408080",
-      "title": "Review threads misidentified",
-      "severity": "P2",
-      "action": "FIXED_IN_CODE",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
-      "fixed_at": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "note": "bc45975 corrected disposition commentId mapping; this receipt supersedes."
-    },
-    {
-      "id": "278402756",
-      "title": "Changed paths fail ownership",
-      "severity": "P1",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
-      "note": "One-merge coherence waive; QUALITY reviewed ownership.yaml + assembled prompts."
-    },
-    {
-      "id": "278399958",
-      "title": "Mixed ownership blocks G-1",
-      "severity": "P1",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
-      "note": "Covered by ownership one-merge waiver."
-    },
-    {
-      "id": "278399493",
-      "title": "Cross-bot edits fail ownership",
-      "severity": "P1",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": "prompts/_shared/core-directives.xml",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
-      "note": "Covered by ownership one-merge waiver."
-    },
-    {
-      "id": "278399494",
-      "title": "Branch name blocks gates",
-      "severity": "P2",
-      "action": "WAIVE",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
-      "waiver": ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
-      "note": "Cloud Agent cursor/ branch prefix; gates.yml not rewritten."
-    },
-    {
-      "id": "278407336",
-      "title": "Merge-claim receipt is unusable",
-      "severity": "P2",
-      "action": "FIXED_IN_FOLLOWUP",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
-      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
-      "note": "Placeholder was replaced at a45d779. The later CLEAR_WITH_WAIVERS text at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf does not cover its own head and is withdrawn pending re-review."
-    },
-    {
-      "id": "278408051",
-      "title": "Waiver receipts are missing",
-      "severity": "P2",
-      "action": "FIXED_IN_FOLLOWUP",
-      "owner": "bot-06-quality-security",
-      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
-      "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
-      "note": "Waiver + disposition files present on branch."
+      "note": "Live approved_by intentionally empty until Greptile COMPLETED on honesty head. QUALITY will not forge stamp while review is SKIPPED."
     }
   ],
   "counts": {
-    "fixed_in_code": 11,
-    "waive": 8,
-    "fixed_in_followup": 2
+    "fixed_in_followup_honesty": 2,
+    "blocking_pending_greptile_completed": 1,
+    "historical_waivers_unchanged": 3
   },
-  "coverage_note": "latest_review describes Greptile 26515901 on bc459751192b80d5950b2d2b3349e7b2981c18a6. File bytes committed at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf and later are not that review. The merge-claim is BLOCKED. This note is not a new Greptile score."
+  "coverage_note": "Historical FIXED_IN_CODE dispositions from policy head bc45975 remain valid for prompt conflicts; this receipt focuses on honesty-head findings and SKIPPED gate state."
 }

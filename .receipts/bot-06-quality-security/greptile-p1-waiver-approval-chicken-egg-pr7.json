@@ -2,7 +2,7 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-p1-waiver-approval-chicken-egg-pr7",
   "receipt_kind": "greptile_comment_waiver",
-  "status": "ACTIVE",
+  "status": "DOES_NOT_COVER_CURRENT_HEAD",
   "recorded_at": "2026-09-25T00:33:04+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr": {
@@ -32,5 +32,7 @@
       "greptile_comment_id": "278399495",
       "title": "Receipt lacks independent approval"
     }
-  ]
+  ],
+  "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD",
+  "coverage_note": "The stamp described in this waiver was for bc459751192b80d5950b2d2b3349e7b2981c18a6 (review 26515901, confidence 4/5). It does not authorize merge of a later head. Live approved_by on both LEAD receipts is empty until QUALITY re-stamps after Greptile COMPLETED on the post-fix head. This note does not change the recorded 4/5 score and does not add a stamp."
 }

@@ -215,7 +215,7 @@
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
       "fixed_at": "a45d779be1df48c0401b74b004a876583bb8db9c",
-      "note": "Placeholder replaced; this CLEAR_WITH_WAIVERS receipt supersedes."
+      "note": "Placeholder was replaced at a45d779. The later CLEAR_WITH_WAIVERS text at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf does not cover its own head and is withdrawn pending re-review."
     },
     {
       "id": "278408051",
@@ -232,5 +232,6 @@
     "fixed_in_code": 11,
     "waive": 8,
     "fixed_in_followup": 2
-  }
+  },
+  "coverage_note": "latest_review describes Greptile 26515901 on bc459751192b80d5950b2d2b3349e7b2981c18a6. File bytes committed at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf and later are not that review. The merge-claim is BLOCKED. This note is not a new Greptile score."
 }

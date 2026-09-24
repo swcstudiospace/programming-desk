@@ -13,7 +13,7 @@
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
   "pr_number": 7,
-  "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+  "head_commit_sha": null,
   "greptile": {
     "latest_review_id": "26515901",
     "status": "COMPLETED",
@@ -26,10 +26,11 @@
       "26515913"
     ]
   },
-  "verdict": "CLEAR_WITH_WAIVERS",
+  "verdict": "BLOCKED",
   "merge_claim": {
-    "allowed": true,
-    "note": "Greptile COMPLETED 4/5 on bc45975. QUALITY stamped approved_by on both LEAD receipts and issues CLEAR_WITH_WAIVERS. QUALITY does not merge. LEAD/human may undraft; Ove merges."
+    "allowed": false,
+    "status": "pending re-review of receipt head",
+    "note": "Merge is not allowed. Greptile 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. The CLEAR_WITH_WAIVERS text lived on b2eef4a3a5a5517d905c19aceeb0d422e835bbbf, which is not that commit. Live LEAD approved_by is empty until QUALITY re-stamps after Greptile COMPLETED on the post-fix head."
   },
   "gates_reminder": "G-1..G-6 still required. Greptile does not replace desk gates.",
   "approved_lead_artifact": {
@@ -37,10 +38,14 @@
       ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
       ".receipts/bot-00-programming-lead/desk-roster-dual-domains-2026-09-24.json"
     ],
-    "approved_by": "bot-06-quality-security",
-    "approved_at": "2026-09-24T14:33:53Z",
-    "head_commit_reviewed": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-    "g2_check_receipt": "PASS on both LEAD receipts after stamp"
+    "approved_by": "",
+    "prior_stamp": {
+      "approved_by": "bot-06-quality-security",
+      "approved_at": "2026-09-24T14:33:53Z",
+      "covered_commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+      "status": "historical only; removed from the live approved_by field because it does not cover later receipt heads"
+    },
+    "g2_check_receipt": "FAIL closed while live approved_by is empty. An earlier PASS described the stamped bytes, which were not the Greptile-reviewed tree."
   },
   "comment_disposition": {
     "receipt": ".receipts/bot-06-quality-security/greptile-comment-disposition-pr7.json",
@@ -103,7 +108,7 @@
   ],
   "g1_g6_notes": {
     "G-1": "LEAD-owned paths PASS; mixed-owner full set FAIL with expects_failure \u2014 waived for one-merge coherence",
-    "G-2": "PASS after QUALITY stamp of approved_by on both LEAD receipts",
+    "G-2": "FAIL closed. Live approved_by on both LEAD receipts is empty until QUALITY re-stamps after Greptile COMPLETED on the post-fix head. The earlier PASS does not cover this head.",
     "G-3": "Lead receipt secret scan PASS; no secrets in QUALITY review of stamped artifacts",
     "G-4": "contract_changes empty",
     "G-5": "not a deploy",
@@ -113,8 +118,30 @@
     "Greptile API addressed flags not flipped; disposition receipt covers that lag",
     "Did not re-run full G-1..G-6 suite beyond assemble smoke + check_receipt on stamped LEAD artifacts",
     "Did not exercise live SendToAgent priority-false wake / LEAD poll behavior",
-    "SKIPPED reviews 26515647/26515913 on same head superseded by COMPLETED 26515901"
+    "SKIPPED reviews 26515647/26515913 on same head superseded by COMPLETED 26515901",
+    "This edit does not call Greptile and does not invent a confidence score. 4/5 remains the result of review 26515901 on bc45975 only."
   ],
-  "explicit": "QUALITY did not merge PR #7; draft left as-is. Ove may merge after LEAD undrafts.",
-  "policy_head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6"
+  "explicit": "QUALITY did not merge PR #7. This file is BLOCKED pending re-review. Do not undraft or merge from this head. PR #8 stays superseded.",
+  "policy_head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+  "honesty_correction": {
+    "corrected_at": "2026-09-24T16:09:03Z",
+    "corrected_by_role": "receipt honesty fix on PR #7; not a new Greptile review and not a new approved_by stamp",
+    "prior_verdict_on_file": "CLEAR_WITH_WAIVERS",
+    "prior_merge_claim_allowed": true,
+    "prior_file_head": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+    "why_withdrawn": "Greptile review 26515901 COMPLETED at confidence 4/5 covers bc459751192b80d5950b2d2b3349e7b2981c18a6 only. That score is the recorded review result and is not a new score. Receipt commits after that SHA, including the CLEAR_WITH_WAIVERS text at b2eef4a3a5a5517d905c19aceeb0d422e835bbbf, changed the receipts and the clearance decision and were not in that review. This correction does not authorize merge. QUALITY re-stamps only after Greptile COMPLETED on the head that contains this correction."
+  },
+  "sha_coverage": {
+    "greptile_completed_commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "greptile_review_id": "26515901",
+    "greptile_confidence": "4/5",
+    "greptile_status": "COMPLETED",
+    "false_clear_commit": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
+    "this_receipt_names_its_own_git_sha": false,
+    "merge_allowed_for_current_head": false
+  },
+  "blockers": [
+    "Greptile has not COMPLETED on the head that contains this BLOCKED correction.",
+    "Live approved_by on both LEAD receipts is empty. The bc45975 stamp is historical and is not a clearance of this head."
+  ]
 }

@@ -45,6 +45,12 @@
       "exit_code": 1,
       "duration_s": 0.03,
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.04,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
     }
   ],
   "claims": [
@@ -73,18 +79,23 @@
       "claim": "G-2 fails closed while approved_by is empty. That empty field is intentional until QUALITY stamps it. It is not a completed approval.",
       "evidence_command_index": 5,
       "expects_failure": true
+    },
+    {
+      "claim": "After the live bc45975 stamp was removed from approved_by, G-2 fails closed on this receipt. That failure is expected until QUALITY re-stamps after Greptile COMPLETED on this head.",
+      "evidence_command_index": 6,
+      "expects_failure": true
     }
   ],
   "unverified": [
     "G-1 on the mixed-owner set fails for bot-00-programming-lead. ownership.yaml, prompts/_shared/core-directives.xml, prompts-assembled/*.xml, prompts/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.xml, scripts/assemble-prompts.sh, ARCHITECTURE.md, and README.md are owned by bot-06-quality-security. Seat sources bot-01 through bot-06 are owned by those seats. They are in this branch so one merge carries the messaging policy and the dual-domain roster. QUALITY reviews ownership and the assembled prompts before any stamp.",
     "The live desk host roster was already updated (LEAD in the channel, QUALITY out) before this commit. This session did not query the host.",
-    "Greptile was not re-triggered. Merge was not requested. PR #8 is superseded by this pull request and was not merged.",
     "ci/tests/test_gates.py TestG1Ownership and TestG4Contracts passed (21). The full gate suite was not re-run. ci/gates and ci/.github/workflows/gates.yml were not edited. This branch is cursor/desk-human-visible-surface-101e, so the workflow bot-prefix step still does not attribute the change to bot-00.",
-    "QUALITY stamped approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for head bc45975 (Greptile review 26515901 COMPLETED 4/5). G-2 chicken-egg closed by this stamp; QUALITY does not merge."
+    "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction.",
+    "PR #8 stays superseded and was not merged. This correction does not undraft or merge PR #7."
   ],
   "blockers": [
-    "QUALITY has not stamped approved_by.",
-    "Greptile has not been re-run on this head."
+    "Live approved_by is empty. QUALITY's 2026-09-24T14:33:04Z stamp covered bc459751192b80d5950b2d2b3349e7b2981c18a6 only and is not the live field. G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on this head.",
+    "Greptile review 26515901 (4/5) covers bc459751192b80d5950b2d2b3349e7b2981c18a6 only. This receipt head is pending re-review. Merge is not allowed."
   ],
   "files_changed": [
     ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
@@ -122,15 +133,16 @@
   ],
   "contract_changes": [],
   "rollback_plan": null,
-  "approvals": [
-    {
-      "approved_by": "bot-06-quality-security",
-      "approved_at": "2026-09-24T14:33:04Z",
-      "head_commit_reviewed": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-      "greptile_review_id": "26515901",
-      "note": "QUALITY merge-gate CLEAR_WITH_WAIVERS after Greptile COMPLETED 4/5 on policy fix head; remaining Greptile P1 was empty approved_by chicken-egg."
-    }
-  ],
-  "approved_by": "bot-06-quality-security",
-  "approved_at": "2026-09-24T14:33:04Z"
+  "approvals": [],
+  "approved_by": "",
+  "prior_quality_stamp": {
+    "approved_by": "bot-06-quality-security",
+    "approved_at": "2026-09-24T14:33:04Z",
+    "covered_commit": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
+    "greptile_review_id": "26515901",
+    "greptile_confidence": "4/5",
+    "status": "not the live approved_by",
+    "note": "Historical stamp only. QUALITY set approved_by=bot-06-quality-security at 2026-09-24T14:33:04Z for Greptile review 26515901 COMPLETED 4/5 on bc459751192b80d5950b2d2b3349e7b2981c18a6. That stamp was written onto later receipt commits and does not cover them. Live approved_by is empty so G-2 fails closed until QUALITY re-stamps after Greptile COMPLETED on the head that contains this correction."
+  },
+  "receipt_honesty_corrected_at": "2026-09-24T16:09:03Z"
 }

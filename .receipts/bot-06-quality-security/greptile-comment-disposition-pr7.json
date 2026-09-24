@@ -29,13 +29,13 @@
     },
     {
       "id": "278402754",
-      "commentId": "PRRC_kwDOUgQ0os70A5hU",
+      "commentId": "PRRC_kwDOUgQ0os70A5g4",
       "title": "Held handoffs may stall work",
       "severity": "P1",
       "action": "BLOCK",
       "owner": "bot-00-programming-lead",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid operational gap. priority-false is intentional for Ove-visibility, but LEAD prompt/workflow must define how held handoffs are noticed (poll, inbox skill, or non-narrative wake). Incomplete without that path."
+      "note": "Valid operational gap. commentId corrected to GitHub review comment 4093876280 (PRRC_kwDOUgQ0os70A5g4). The previous value was the widget thread. priority-false is intentional for Ove-visibility; LEAD must poll held handoffs."
     },
     {
       "id": "278402751",
@@ -59,13 +59,13 @@
     },
     {
       "id": "278402749",
-      "commentId": "PRRC_kwDOUgQ0os70A5he",
+      "commentId": "PRRC_kwDOUgQ0os70A5hU",
       "title": "Widget selections lack return routing",
       "severity": "P1",
       "action": "BLOCK",
       "owner": "bot-06-quality-security",
       "path": "prompts/_shared/core-directives.xml",
-      "note": "Valid. True-widget path (LEAD\u2194Ove 1:1) has no instruction to return the selection to the waiting specialist / Desk. Policy incomplete."
+      "note": "Valid. commentId corrected to GitHub review comment 4093876308 (PRRC_kwDOUgQ0os70A5hU). It previously duplicated the receipt-approval thread. True-widget path must return the selection to the Desk and to the asking seat."
     },
     {
       "id": "278402752",

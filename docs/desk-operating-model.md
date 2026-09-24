@@ -1,17 +1,23 @@
 # Desk Operating Model — Seven-Seat Programming Desk
 
-Programming Lead sits **outside** the Programming Desk channel and orchestrates. Six specialists
-sit in the channel (platform max 6 members). Lead + six = seven-seat desk.
+Programming Lead sits **in** the Programming Desk channel and orchestrates. The six members are
+LEAD, SYSTEMS, WEB, ANDROID, IOS, and INFRA. QUALITY is off-channel for post-build merge-gate
+(platform max 6). Lead + six specialists = seven-seat desk.
 
 ```
-Ove ──▶ LEAD (outside channel) ──SendToAgent──▶ specialists (1:1)
-              │                                      │
-              │         optional status ping         │
-              └──────────▶ Desk channel ◀────────────┘
+Ove ──1:1──▶ LEAD (in channel; reports to Ove 1:1)
               │
-              └──▶ QUALITY review ◀── receipts
+              ├──SendToAgent 1:1──▶ build seats (SYSTEMS WEB ANDROID IOS INFRA)
+              │                         │
+              │                         ├── human-visible traffic ──▶ Desk channel
+              │                         └── held handoff (priority false) ──▶ LEAD polls
               │
-              └──▶ report to Ove
+              ├── required dispatch note ──▶ Desk channel
+              │
+              ├──SendToAgent 1:1──▶ QUALITY (off-channel)
+              │                         └── status priority false ──▶ LEAD relays into Desk
+              │
+              └── report to Ove (1:1)
 ```
 
 ## Flow
@@ -26,9 +32,9 @@ For a real build, fix, research, or change, intake is the dense GoTxCoT path in
 5. **Second uplift** — the same XML, extended with `<ISSUES>` and live Notion/Linear URLs.
 6. **Dispatch** — `skills/trackplan-dispatch` to Cursor Cloud Agent (default) or Hermes. Lane C specialist tickets (below) still carry the relevant issue/sub-issue URLs.
 7. **Implement** — Specialist executes only assigned work in owned paths; writes a receipt. Specialists do not re-run uplift.
-8. **Receipt** — Specialist reports to LEAD with receipt path + summary.
-9. **QUALITY** — LEAD requests review when a completion claim needs an independent check, including the Greptile merge gate on the PR.
-10. **Consolidate / report** — LEAD reports to Ove. Specialists do not invent work from desk-channel vibes.
+8. **Receipt** — The build seat posts the summary into the Desk with the explicit label `awaiting-review / pending QUALITY`, and sends LEAD a held handoff (priority false) with the receipt path. LEAD checks held messages at the start of every turn and after Desk activity.
+9. **QUALITY** — LEAD requests review 1:1 when a completion claim needs an independent check, including the Greptile merge gate on the PR. QUALITY replies to LEAD priority false. LEAD relays that status into the Desk.
+10. **Consolidate / report** — LEAD reports to Ove 1:1. A Desk completion that still says `awaiting-review / pending QUALITY` is not clearance. Build seats do not invent work from desk-channel vibes.
 
 A small, already-scoped ask may skip straight to a Lane C ticket when LEAD records why a full graph is not warranted (trivial ack, single-file question already answered). Real build tasks do not skip the 5-node minimum.
 
@@ -38,8 +44,8 @@ A small, already-scoped ask may skip straight to a Lane C ticket when LEAD recor
 2. **Ticket** — LEAD writes one concrete ticket per owning seat (see format below).
 3. **Dispatch** — LEAD `SendToAgent` to each seat 1:1 (never vague "please help").
 4. **Implement** — Specialist executes only assigned work in owned paths; writes a receipt.
-5. **Receipt** — Specialist reports to LEAD with receipt path + summary.
-6. **QUALITY** — LEAD requests review when a completion claim needs an independent check.
+5. **Receipt** — Build seat posts into the Desk labeled `awaiting-review / pending QUALITY` and sends LEAD a priority-false handoff. LEAD polls held messages; they do not wake LEAD by themselves.
+6. **QUALITY** — LEAD requests review 1:1. QUALITY is off-channel and returns status priority false. LEAD relays it into the Desk.
 7. **Consolidate** — LEAD consolidates specialist receipts + QUALITY verdict.
 8. **Report** — LEAD reports to Ove. Specialists do not invent work from desk-channel vibes.
 
@@ -76,14 +82,18 @@ consolidates — not the implementer.
 
 ## Channel rules
 
-| Actor | Channel | Assignment |
-|---|---|---|
-| LEAD | Outside (not a member) | Writes tickets; optional status after assign |
-| Specialists | Members | Status only; tickets come via SendToAgent |
-| Ove | Messages LEAD | Primary operator interface |
+Full human-visible traffic belongs in the Desk for build seats: status, progress, blockers,
+questions, numbered options, and labeled completions. The channel is not the assignment bus.
 
-If a specialist is woken by a desk-channel ping with **no LEAD ticket**: acknowledge to LEAD; do
-not invent work.
+| Actor | Channel | What they post | How work arrives |
+|---|---|---|---|
+| LEAD | Member | Required dispatch note after every assignment; QUALITY status relay; widget-selection echo. Reports to Ove in the LEAD↔Ove 1:1. | Ove messages LEAD 1:1. LEAD polls held seat→LEAD messages at the start of every turn and after Desk activity. |
+| SYSTEMS, WEB, ANDROID, IOS, INFRA | Members | Full human-visible traffic: status, progress, blockers, questions, numbered options, and completion posts labeled `awaiting-review / pending QUALITY`. | Tickets via SendToAgent 1:1. Structured handoffs to LEAD are priority false. |
+| QUALITY | Off-channel | Does not post into the Desk. Sends review status to LEAD priority false. | LEAD tickets 1:1 after the build. |
+| Ove | Messages LEAD 1:1 | Primary operator interface. Sees a true widget only in the LEAD↔Ove chat. | — |
+
+If a build seat is woken by a desk-channel ping with **no LEAD ticket**: say so in the Desk and
+SendToAgent LEAD priority false. Do not invent work.
 
 ## Verification
 
@@ -91,11 +101,34 @@ LEAD never fabricates specialist receipts. "Done" to Ove requires consolidated s
 receipts and QUALITY approval when review was requested. Honest `unverified` lists are success;
 silent incompleteness is not (PD-1, PD-6).
 
+## Channel roster
+
+Members (6): LEAD, SYSTEMS (Systems & Design), WEB (Web & Desktop), ANDROID (Android & Play Release), IOS (iOS & App Store), INFRA (Infra & WEB3).
+
+Off-channel: QUALITY (Quality & Security) — Greptile merge-gate, security review, and `approved_by` via LEAD 1:1 after the build. LEAD relays human-visible QUALITY status into the Desk.
+
+Live host membership for this policy is already LEAD in and QUALITY out. This document matches that roster.
+
 ## Channel discipline (human-visible surface)
 
-Ove messages **LEAD** 1:1. The six specialists post **only** into the Programming Desk channel (`4d78b294-5b65-46a9-bec9-86cdbc54aa3e`) for anything Ove should see: status, progress, blockers, completion summaries, questions, and selectable options.
+Ove messages **LEAD** 1:1. LEAD reports to Ove in that 1:1 and may post audit notes into the Desk.
 
-Platform limit: widgets/cards do **not** render in group rooms. Selectable options are numbered text choices in the Desk. If a true option card is required, LEAD surfaces it in the LEAD↔Ove 1:1.
+The five build seats post **only** into Programming Desk (`4d78b294-5b65-46a9-bec9-86cdbc54aa3e`) for anything Ove should see: status, progress, blockers, completion summaries, questions, and selectable options. A completion post contains the explicit label `awaiting-review / pending QUALITY`. That label is not clearance.
 
-Assignment remains LEAD → seat via 1:1 `SendToAgent` (LEAD is outside the six-member channel). Structured handoffs seat → LEAD use `priority: false` so they do not flood LEAD's chat (which Ove sees for priority agent messages).
+QUALITY does not post into the Desk. QUALITY sends status to LEAD priority false, and LEAD relays it.
+
+Platform limit: widgets/cards do **not** render in group rooms. Numbered choices are plain text in the Desk. When a true widget is required, the build seat asks LEAD (priority false). LEAD shows the widget in the LEAD↔Ove 1:1. LEAD then posts the selection into the Desk **and** SendToAgent the asking seat priority true. The seat continues from that message.
+
+Assignment remains LEAD → seat via 1:1 `SendToAgent`. LEAD is in the channel; the Desk is still not the assignment bus. The dispatch note in the Desk is required after every assignment.
+
+Structured handoffs seat → LEAD use `priority: false` (held; Ove does not see them). LEAD must check those held messages at the start of every turn and after Desk activity. A priority-false message does not wake LEAD by itself.
+
+If Ove messages a build seat directly, that seat sends LEAD a held plan and waits for LEAD's plan **before editing**. It does not do the work first.
+
+## Direct-from-Ove and widgets
+
+1. Seat → LEAD, priority false, plan only. Stop.
+2. LEAD polls the held message and answers with a plan.
+3. Seat edits, then posts the Desk result labeled `awaiting-review / pending QUALITY`, and sends the receipt priority false.
+4. For a true widget: seat asks LEAD priority false → LEAD shows it to Ove 1:1 → LEAD posts the selection into the Desk and SendToAgent the seat priority true → seat continues.
 

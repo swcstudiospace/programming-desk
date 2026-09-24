@@ -13,7 +13,7 @@
 
 | Rule | Value |
 |---|---|
-| Seats | Seven. **LEAD (bot-00) sits outside** the Programming Desk channel. SYSTEMS, WEB, ANDROID, IOS, INFRA, QUALITY are the six channel members. |
+| Seats | Seven. **LEAD sits in** the Programming Desk channel with SYSTEMS, WEB, ANDROID, IOS, and INFRA. **QUALITY is off-channel** (post-build merge-gate). Platform max is 6. |
 | GoT nodes | **5–8** per real build task. Never fewer than 5. Clamp maximum **8**. |
 | CoT steps | **4–8 discrete steps per node** (plural; more than one). Each step is one Linear **sub-issue** and one Notion **Sub-Issue**. |
 | CoT fill | **Sequential by default** (one node at a time) because of API rate limits. Parallel fill is allowed only when the runtime can do it safely. |

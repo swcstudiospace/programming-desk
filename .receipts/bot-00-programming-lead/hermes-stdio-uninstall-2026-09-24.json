@@ -1,0 +1,145 @@
+{
+  "task_id": "hermes-stdio-uninstall-2026-09-24",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-09-24T00:46:00Z",
+  "completed_at": "2026-09-24T01:12:00Z",
+  "runtime": "cursor-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "commands": [
+    {
+      "cmd": "python3 -c 'from pathlib import Path; files=[\"docs/github-sot-orchestration.md\",\"skills/trackplan-dispatch/SKILL.md\",\"skills/trackplan-dispatch/prompt-template.md\",\"docs/intake-e2e-runbook.md\"]; text={p:Path(p).read_text() for p in files}; needles=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"handoff_to_hermes\",\"2026-09-24\",\"hermes-mcp-bridge.mjs\",\"uninstalled\"]; pt=[\"user-hermes-agent\",\"agent_bus_start_job\",\"handoff_to_hermes\",\"hermes-mcp-bridge.mjs\",\"Hermes-only fallback\"]; problems=[];\nexec(\"for p,t in text.items():\\n low=t.lower()\\n req=pt if p.endswith(\\\"prompt-template.md\\\") else needles\\n if not p.endswith(\\\"prompt-template.md\\\") and \\\"do not rebuild\\\" not in low and \\\"not rebuild\\\" not in low: problems.append(\\\"rebuild \\\"+p)\\n for n in req:\\n  if n not in t and n.lower() not in low: problems.append(\\\"missing \\\"+n+\\\" in \\\"+p)\\nforbidden=[\\\"Lane B cannot be dispatched\\\",\\\"Lane B still blocked\\\",\\\"Lane B blocked until\\\",\\\"stdio bridge missing\\\",\\\"missing bridge script\\\",\\\"(blocked today)\\\",\\\"once auth + bridge\\\",\\\"Those statements stand\\\",\\\"not usable until OAuth\\\",\\\"**needsAuth**\\\",\\\"needs auth, and\\\"]\\nfor p,t in text.items():\\n for f in forbidden:\\n  if f in t: problems.append(\\\"stale \\\"+f+\\\" in \\\"+p)\\n if p!=\\\"docs/github-sot-orchestration.md\\\" and \\\"needsAuth\\\" in t: problems.append(\\\"needsAuth in \\\"+p)\\nfor line in text[\\\"docs/github-sot-orchestration.md\\\"].splitlines():\\n if \\\"needsAuth\\\" in line and \\\"user-hermes\\\" in line: problems.append(line)\\nprint(problems or \\\"ok\\\")\\nraise SystemExit(0 if not problems else 1)\")'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c 'import subprocess; from pathlib import Path; names=[\"docs/vps-agent-bus.md\",\"skills/agent-bus/SKILL.md\"]; tree=subprocess.check_output([\"git\",\"ls-tree\",\"-r\",\"--name-only\",\"HEAD\"], text=True).splitlines(); in_tree=[n for n in tree if n in names or n.startswith(\"skills/agent-bus/\")]; bridge=[str(p) for p in Path(\".\").rglob(\"hermes-mcp-bridge.mjs\") if \".git\" not in p.parts]; present=[p for p in names if Path(p).exists()]; print({\"bridge_files\":bridge,\"working_tree\":present,\"in_HEAD\":in_tree}); raise SystemExit(0 if not bridge and not present and not in_tree else 1)'",
+      "exit_code": 0,
+      "output_tail": "{'bridge_files': [], 'working_tree': [], 'in_HEAD': []}"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/github-sot-orchestration.md skills/trackplan-dispatch/SKILL.md skills/trackplan-dispatch/prompt-template.md docs/intake-e2e-runbook.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/github-sot-orchestration.md skills/trackplan-dispatch/SKILL.md skills/trackplan-dispatch/prompt-template.md docs/intake-e2e-runbook.md",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files docs/github-sot-orchestration.md skills/trackplan-dispatch/SKILL.md skills/trackplan-dispatch/prompt-template.md docs/intake-e2e-runbook.md .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/github-sot-orchestration.md skills/trackplan-dispatch/SKILL.md skills/trackplan-dispatch/prompt-template.md docs/intake-e2e-runbook.md .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL — approved_by is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); start=t.index(\"<stage id=\\\"7\\\"\"); end=t.index(\"</stage>\", start); stage=t[start:end]; need=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\",\"handoff_to_hermes\",\"Do not SSH the packet as a code handoff\",\"Record a Lane B blocker only when\",\"does not require local stdio\",\"Do not rebuild hermes-mcp-bridge.mjs\"]; bad=[\"needsAuth\",\"bridge is missing\",\"If Hermes is needsAuth\"]; problems=[n for n in need if n not in stage]+[b for b in bad if b in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"skills/trackplan-dispatch/SKILL.md\").read_text(); need=[\"array of objects\",\"free-form object\",\"role/content\",\"default `normal`\",\"get_task\",\"Do not fire multiple handoffs in parallel for one goal\",\"Do not re-submit\",\"idempotency_key\",\"tenant_id\"]; problems=[n for n in need if n not in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml skills/trackplan-dispatch/SKILL.md .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files prompts/bot-00-programming-lead.xml skills/trackplan-dispatch/SKILL.md",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; old=\"If Hermes is needsAuth or the bridge is missing\"; src=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); lead=Path(\"prompts/LEAD.xml\").read_text(); asm=Path(\"prompts-assembled/LEAD.xml\").read_text(); problems=[]; problems += [\"stale stop still in bot-00\"] if old in src else []; problems += [\"assembled LEAD.xml missing old sentence\"] if old not in lead else []; problems += [\"prompts-assembled/LEAD.xml missing old sentence\"] if old not in asm else []; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json --bot bot-00-programming-lead",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — hermes-stdio-uninstall-2026-09-24: 13 command(s), 12 substantiated claim(s), 5 unverified item(s)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "LEAD docs record user-hermes uninstalled on 2026-09-24, connected user-hermes-agent agent_bus_* as Lane B, and handoff_to_hermes as Hermes-only fallback, without the old blocked/needsAuth bridge claims",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "No hermes-mcp-bridge.mjs was created, and docs/vps-agent-bus.md plus skills/agent-bus/ are absent from the working tree and HEAD",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the four edited LEAD paths",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Secret scan of the four edited docs reports no committed secret",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the edited paths plus this receipt",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Secret scan of the edited docs plus this receipt reports no committed secret",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-2 PASS after approved_by is stamped by bot-06-quality-security",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "Stage 7 of prompts/bot-00-programming-lead.xml prefers user-hermes-agent agent_bus_* and does not treat a missing stdio bridge or needsAuth as a stop",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "trackplan-dispatch documents handoff_to_hermes messages as an array of free-form objects and says to poll get_task without a parallel re-submit",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the LEAD prompt, the dispatch skill, and this receipt",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "Secret scan of the LEAD prompt and the dispatch skill reports no committed secret",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "When LEAD checked, the Greptile P1 stop sentence was gone from bot-00 source and still present in QUALITY-owned prompts/LEAD.xml and prompts-assembled/LEAD.xml",
+      "evidence_command_index": 11
+    }
+  ],
+  "unverified": [
+    "prompts/LEAD.xml and prompts-assembled/LEAD.xml are regenerated from prompts/bot-00-programming-lead.xml on this commit, so the stop sentence from the earlier LEAD snapshot is no longer in those assembled copies. Greptile has not re-reviewed this assembled head.",
+    "agent_bus_health returned status ok with runtimes hermes, muse, grok-build, omp, claude-code in this session. commands[] does not re-invoke that MCP tool, so a later re-run of this receipt does not re-check live bus health.",
+    "agent_bus_start_job was not called. No Hermes job id and no Hermes draft PR exist for this cleanup.",
+    "Greptile was not triggered and merge was not requested.",
+    "docs/vps-agent-bus.md and skills/agent-bus/** are not on origin/main, so there was no stdio-bridge instruction in those paths to rewrite."
+  ],
+  "blockers": [],
+  "files_changed": [
+    "docs/github-sot-orchestration.md",
+    "docs/intake-e2e-runbook.md",
+    "skills/trackplan-dispatch/SKILL.md",
+    "skills/trackplan-dispatch/prompt-template.md",
+    "prompts/bot-00-programming-lead.xml"
+  ],
+  "contract_changes": [],
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6",
+  "approved_by": "bot-06-quality-security",
+  "approved_at": "2026-09-24T01:16:49Z"
+}

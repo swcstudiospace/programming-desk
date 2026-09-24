@@ -11,7 +11,7 @@ description: Use when the second-uplift XML already contains live Notion and Lin
 
 **Prerequisite skill:** `skills/gotxcot-uplift` (first uplift → GoT → per-node CoT → kickoff → **second uplift**). This skill consumes the second uplift. It does not create it.
 
-**Status:** Skill written for the desk pack. E2E launch → PR → Greptile → QUALITY **not verified**. Lane B blocked until Hermes MCP auth/bridge work.
+**Status:** Skill written for the desk pack. E2E launch → PR → Greptile → QUALITY **not verified**. Lane B preferred path is connected `user-hermes-agent` (HTTP) via `agent_bus_*`. Local stdio `user-hermes` was intentionally uninstalled on the desk host on 2026-09-24; do not rebuild `hermes-mcp-bridge.mjs`. `handoff_to_hermes` is Hermes-only fallback.
 
 ---
 
@@ -72,7 +72,7 @@ Matches `docs/github-sot-orchestration.md`:
 | `runtime` | Lane | Action |
 |---|---|---|
 | `cursor-cloud` / `cloud` / omitted | **A — Cursor Cloud Agent** | Default. Notion `Agent` = `cursor-cloud`. |
-| `hermes` | **B — VPS Hermes** | Prefer Hermes MCP. **Never** invent an SSH coding handoff. |
+| `hermes` | **B — VPS Hermes** | Prefer connected `user-hermes-agent` `agent_bus_*`. Do not reinstall stdio `user-hermes`. **Never** invent an SSH coding handoff. |
 | Clear path ownership only | **C — Specialist** | Out of scope here → `SendToAgent`. The ticket still cites the second-uplift `<ISSUES>` URLs for the nodes that seat owns. |
 
 Lanes may compose (A/B for a node, C for a path slice). Lane B does **not** bypass G-1…G-6.
@@ -144,41 +144,49 @@ Use the Cursor Cloud Agent launch surface available to LEAD:
 
 ## Lane B — VPS Hermes
 
-### Prefer MCP; stop on auth/bridge gap
+### Prefer connected HTTP MCP
 
 | MCP server | Observed state (desk host, 2026-09-24) | Use |
 |---|---|---|
-| `user-hermes-agent` | **needsAuth** — tools not usable until auth completes | Preferred Lane B control once connected |
-| `user-hermes` (stdio) | **Broken** — missing bridge script on the desk host | Do not pretend it works |
+| `user-hermes-agent` | **Connected** (HTTP). `agent_bus_health` returned `status: ok` | Preferred Lane B control. Call `agent_bus_*` |
+| `user-hermes` (stdio) | **Uninstalled** — removed on purpose. Do not rebuild | Superseded by Agent Bus on `user-hermes-agent`. Missing `hermes-mcp-bridge.mjs` is not a cue to recreate the script |
 
-**If the Hermes surface you need is unauthenticated, missing, or broken: STOP.** Record the blocker. Do **not**:
+**If `agent_bus_*` is missing, unauthorized, or returns an error: STOP.** Record the blocker. Do **not**:
 
+- Rebuild `/workspace/hermes-mcp-bridge.mjs` or reinstall stdio `user-hermes`.
 - Invent an SSH coding handoff (unless the operator explicitly routes INFRA for ops).
 - Paste the packet only into chat as the durable record.
 - Claim Hermes picked up the job without a tool result or a GitHub draft PR.
+- Call `handoff_to_hermes` for a goal that already has an Agent Bus job.
 
-### Intended tool (schema not live-verified)
+### Live tools
 
-**`handoff_to_hermes`**
+Preferred path on `user-hermes-agent`:
 
-Design-intent arguments (confirm against the live schema after auth):
+| Tool | Role | Arguments |
+|---|---|---|
+| `agent_bus_health` | Loopback health of local vps-agent-bus. Returns status and available runtimes | none |
+| `agent_bus_start_job` | Start a job (`POST /v1/jobs`). Returns `jobId`, status, and `wsUrl`. MCP does not open the WebSocket | required `runtime`, `goal`; optional `provider`, `idempotency_key` |
+| `agent_bus_get_job` | One job snapshot (`GET /v1/jobs/{id}`) | required `job_id` |
+| `agent_bus_wait_job` | Poll until `completed`, `failed`, `error`, or timeout | required `job_id`; timeout default 180s (max 600) |
 
-```json
-{
-  "tool": "handoff_to_hermes",
-  "arguments": {
-    "goal": "<from work packet>",
-    "repo": "https://github.com/…",
-    "branch": "bot-0N-…/<task_id>",
-    "graph_id": "ut-…",
-    "linear_ids": ["SPE-…"],
-    "notion_urls": ["…"],
-    "runtime": "hermes",
-    "work_packet_markdown": "<full packet>",
-    "prompt": "<second-uplift XML including ISSUES>"
-  }
-}
-```
+Put the GitHub work packet and the second-uplift XML in `goal` (and keep the same text in the draft PR). `agent_bus_start_job` can note that a public `wss` URL needs `BUS_TOKEN`. The token is not part of the tool result. Do not write it into the prompt, the PR, or a receipt.
+
+**`handoff_to_hermes`** is the Hermes-only durable EXECUTE fallback. Prefer `agent_bus_*` for live multi-runtime jobs. Use this tool only for one durable Hermes EXECUTE. Do not fire multiple handoffs in parallel for one goal. Poll `get_task`. Do not re-submit.
+
+Live schema:
+
+| Field | Required | Shape |
+|---|---|---|
+| `goal` | yes | string |
+| `messages` | yes | array of objects. Each message is a free-form object, typically role/content conversation turns compacted for Hermes |
+| `title` | no | string or null |
+| `priority` | no | string, default `normal` |
+| `labels` | no | array of strings, or null |
+| `tenant_id` | no | string or null |
+| `idempotency_key` | no | string or null |
+
+The older design-intent shape (`repo`, `branch`, `graph_id`, `work_packet_markdown`, `prompt` as separate arguments) is not the live schema. Fold those fields into `goal` and into `messages` only when this fallback is the call you are making.
 
 Hermes durable output is the same as Lane A: **branch + draft PR on GitHub** + `.receipts/`. The VPS is a computer, not a source of truth.
 
@@ -216,7 +224,7 @@ Write `.receipts/bot-00-programming-lead/<task_id>.json`.
   "linear_ids": ["SPE-…"],
   "notion_urls": ["…"],
   "commands": [
-    { "cmd": "CloudAgent action=launch … | handoff_to_hermes … | STOP blocker", "exit_code": 0, "output_tail": "agent id / blocker" }
+    { "cmd": "CloudAgent action=launch … | agent_bus_start_job … | STOP blocker", "exit_code": 0, "output_tail": "agent id / job id / blocker" }
   ],
   "claims": [
     { "claim": "Dispatched Lane A/B for graphId (or reported blocker)", "evidence_command_index": 0 }
@@ -226,7 +234,7 @@ Write `.receipts/bot-00-programming-lead/<task_id>.json`.
   "unverified": [
     "E2E PR open not confirmed at dispatch time",
     "Greptile not run (QUALITY)",
-    "Hermes schema not live-verified (if Lane B blocked)"
+    "Lane B job result absent when this dispatch did not call agent_bus_start_job"
   ],
   "blockers": []
 }
@@ -241,8 +249,9 @@ Honest `unverified` / `blockers` are success. Do not fabricate PR URLs, Greptile
 | Gap | Impact |
 |---|---|
 | E2E not verified | Intake → second uplift → launch → PR → Greptile → QUALITY → sync is **not** proven |
-| Hermes auth / bridge | Lane B cannot dispatch from the desk host |
-| `handoff_to_hermes` schema | Name from connector docs; parameters not confirmed live |
+| Lane B E2E | `user-hermes-agent` is connected and `agent_bus_*` is the live path. This skill text does not prove a Hermes job id plus a draft PR |
+| `user-hermes` stdio | Uninstalled on the desk host 2026-09-24. Do not rebuild `hermes-mcp-bridge.mjs`. Agent Bus supersedes that bridge |
+| `handoff_to_hermes` | Hermes-only durable EXECUTE fallback. Required `goal` (string) and `messages` (array of free-form objects, typically role/content turns). Optional `title`, `priority` (default `normal`), `labels`, `tenant_id`, `idempotency_key`. Prefer `agent_bus_*` for live multi-runtime. One handoff per goal; poll `get_task`; do not re-submit |
 | Cloud Agent dry-run | Launch only when the operator intends real work |
 | PR → Notion/Linear sync | Still to build. Do not invent tracker rows |
 | VPS engine constants | May still be MIN_NODES=3 until patched. Desk dispatch still requires 5–8 `<ISSUE>` nodes in the XML |

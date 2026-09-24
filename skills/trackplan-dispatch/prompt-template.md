@@ -70,4 +70,4 @@ When `runtime=hermes`, prepend:
 You are Hermes on the VPS lane. Durable output is still a GitHub branch + draft PR + `.receipts/`. Do not leave results only on the VPS. The second-uplift XML is the spec, same as Lane A.
 ```
 
-Pass the same markdown as `work_packet_markdown` / `prompt` to `handoff_to_hermes` once MCP is authenticated. If Hermes is unauthenticated, do not send this prompt through SSH as a substitute.
+Pass this markdown as the `goal` of `agent_bus_start_job` on connected `user-hermes-agent` (`runtime` set for the Hermes job). `handoff_to_hermes` is Hermes-only fallback (`goal` and `messages`). Do not reinstall stdio `user-hermes` and do not recreate `hermes-mcp-bridge.mjs`. If `agent_bus_*` errors, do not send this prompt through SSH as a substitute.

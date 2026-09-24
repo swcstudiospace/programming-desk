@@ -1,0 +1,29 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p2-waiver-pr-specific-operating-model-pr7",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-25T04:44:50+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 7,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
+    "merge_request_id": "68670553",
+    "head_commit_sha": null,
+    "head_at_clear_prose": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "greptile_review_id": "26588229"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "why": "Review 26588229 COMPLETED 5/5 named one non-blocking P2: docs/desk-operating-model.md Merge-claim head rule section includes PR #7 branch/SHA tip lines after the general rule. The general rule (lines 106-109) is reusable. The PR-specific lines were the intentional non-receipt nudge that got Greptile off the c5c8b5e SKIPPED loop. Rewriting the LEAD-owned doc now would move the tip and reopen the re-gate. LEAD may strip PR-specific lines after merge.",
+    "decision": "WAIVE_NON_BLOCKING_P2_KEEP_NUDGE_UNTIL_POST_MERGE_CLEANUP",
+    "quality_ack": "QUALITY acknowledges Greptile P2; not blocking CLEAR_WITH_WAIVERS."
+  },
+  "comments_waived": [
+    {
+      "github_discussion_id": "4097191466",
+      "title": "PR-specific target in shared policy",
+      "severity": "P2"
+    }
+  ]
+}

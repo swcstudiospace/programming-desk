@@ -2,41 +2,72 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-comment-disposition-pr7",
   "receipt_kind": "greptile_comment_disposition",
-  "recorded_at": "2026-09-24T18:33:51Z",
+  "recorded_at": "2026-09-25T04:44:50+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/7",
   "pr_number": 7,
   "head_commit_sha": null,
-  "head_commit_rule": "null because this file cannot store the SHA of the commit that adds it. Pending Greptile target is the tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule. Parent at authoring was ddc113bcd20e6b59e30060db1f863ea39d25a8ca. Do not request review of c5c8b5ee68b31c960af90415497b5147527964cc.",
-  "editor_note": "LEAD-side correction of a QUALITY-owned receipt so the audit trail matches the ddc113b review. Not a QUALITY stamp. Does not invent Greptile scores or review ids.",
+  "head_commit_rule": "null on purpose. Writing this commit's own SHA into the tree would change the SHA and recreate the stale-head bug. Greptile COMPLETED review 26588229 (5/5) covered tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 before this QUALITY receipt push. Last COMPLETED-on-tip before receipt push: 5c2332b990d7eb07c09329ce1dd436e1615fb780.",
+  "editor_note": "QUALITY re-gate after Greptile COMPLETED on tip 5c2332b. Stamps CLEAR_WITH_WAIVERS. Does not invent Greptile scores.",
   "latest_review": {
-    "commit": "ddc113bcd20e6b59e30060db1f863ea39d25a8ca",
+    "id": "26588229",
     "status": "COMPLETED",
-    "confidence": "4/5",
-    "review_id": null,
-    "source": "LEAD task summary for this pass. Confidence is recorded only for ddc113b. It is not a score for the tip.",
-    "github_review_submissions_on_that_commit": [
-      "5307250274",
-      "5307298338",
-      "5307299931"
-    ]
+    "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "confidence": "5/5",
+    "completed_at": "2026-09-24T18:43:14.574Z",
+    "source": "greptile_get_code_review via QUALITY this wake",
+    "note": "Last reviewed commit matches live PR tip 5c2332b before this receipt-only QUALITY push."
   },
   "prior_reviews": [
+    {
+      "id": "26588065",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:39:25.177Z",
+      "note": "Earlier tip attempt SKIPPED; superseded by COMPLETED 26588229."
+    },
+    {
+      "id": "26587970",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:47.956Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26587823",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:32.410Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26587564",
+      "status": "SKIPPED",
+      "commit": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "completed_at": "2026-09-24T18:38:02.130Z",
+      "note": "Tip SKIPPED; not a pass."
+    },
+    {
+      "id": "26585514",
+      "status": "COMPLETED",
+      "commit": "ddc113bcd20e6b59e30060db1f863ea39d25a8ca",
+      "confidence": "4/5",
+      "completed_at": "2026-09-24T18:33:34.455Z",
+      "note": "COMPLETED on parent only; does not cover tip."
+    },
     {
       "id": "26545196",
       "status": "SKIPPED",
       "commit": "c5c8b5ee68b31c960af90415497b5147527964cc",
-      "confidence": null,
       "completed_at": "2026-09-24T16:16:49.385Z",
-      "note": "Not the pending target."
+      "note": "Not the target."
     },
     {
       "id": "26518097",
       "status": "COMPLETED",
       "commit": "b2eef4a3a5a5517d905c19aceeb0d422e835bbbf",
       "confidence": "4/5",
-      "completed_at": "2026-09-24T14:38:30.580Z",
-      "source": "recorded by QUALITY on ddc113b"
+      "completed_at": "2026-09-24T14:38:30.580Z"
     },
     {
       "id": "26515901",
@@ -46,7 +77,7 @@
       "completed_at": "2026-09-24T14:30:18.106Z"
     }
   ],
-  "api_note": "Historical outcomes below are the c5c8b5e trail. Chicken-egg rows keep historical_action WAIVE and current action DOES_NOT_COVER_CURRENT_HEAD. Current-tip rows use GitHub comment ids because this edit does not invent Greptile comment ids.",
+  "api_note": "Greptile API may still show addressed=false on historical comments. QUALITY dispositions below cover review 26588229 COMPLETED on tip 5c2332b and the prior trail.",
   "dispositions": [
     {
       "id": "278402750",
@@ -137,41 +168,41 @@
       "id": "278402752",
       "title": "Receipt lacks required approval",
       "severity": "P1",
-      "action": "DOES_NOT_COVER_CURRENT_HEAD",
+      "action": "WAIVE",
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
       "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Chicken-egg: QUALITY stamps approved_by this turn after Greptile 4/5 with only this finding remaining. Historical action was WAIVE for the bc459751192b80d5950b2d2b3349e7b2981c18a6 stamp only. The waiver file status is DOES_NOT_COVER_CURRENT_HEAD and live_stamp_status is WITHDRAWN_FROM_CURRENT_HEAD. Do not count it as an active waiver or as an unchanged historical waiver. Live approved_by is empty.",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
       "github_discussion_id": "4093876318",
       "historical_action": "WAIVE",
-      "waiver_file_status": "DOES_NOT_COVER_CURRENT_HEAD",
-      "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD"
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
     },
     {
       "id": "278399957",
       "title": "Receipt lacks approval",
       "severity": "P1",
-      "action": "DOES_NOT_COVER_CURRENT_HEAD",
+      "action": "WAIVE",
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
       "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Covered by chicken-egg stamp waiver. Historical action was WAIVE for the bc459751192b80d5950b2d2b3349e7b2981c18a6 stamp only. The waiver file status is DOES_NOT_COVER_CURRENT_HEAD and live_stamp_status is WITHDRAWN_FROM_CURRENT_HEAD. Do not count it as an active waiver or as an unchanged historical waiver. Live approved_by is empty.",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
       "historical_action": "WAIVE",
-      "waiver_file_status": "DOES_NOT_COVER_CURRENT_HEAD",
-      "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD"
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
     },
     {
       "id": "278399495",
       "title": "Receipt lacks independent approval",
       "severity": "P1",
-      "action": "DOES_NOT_COVER_CURRENT_HEAD",
+      "action": "WAIVE",
       "owner": "bot-06-quality-security",
       "path": ".receipts/bot-00-programming-lead/desk-human-visible-surface-2026-09-24.json",
       "waiver": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-      "note": "Covered by chicken-egg stamp waiver. Historical action was WAIVE for the bc459751192b80d5950b2d2b3349e7b2981c18a6 stamp only. The waiver file status is DOES_NOT_COVER_CURRENT_HEAD and live_stamp_status is WITHDRAWN_FROM_CURRENT_HEAD. Do not count it as an active waiver or as an unchanged historical waiver. Live approved_by is empty.",
+      "note": "Chicken-egg: empty approved_by until Greptile COMPLETED on tip. Review 26588229 COMPLETED 5/5 on 5c2332b. QUALITY stamps approved_by=bot-06-quality-security this turn. Historical WAIVE on bc45975 was withdrawn; this row is re-activated for the tip COMPLETED stamp only.",
       "historical_action": "WAIVE",
-      "waiver_file_status": "DOES_NOT_COVER_CURRENT_HEAD",
-      "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD"
+      "waiver_file_status": "ACTIVE",
+      "live_stamp_status": "STAMPED_ON_COMPLETED_TIP"
     },
     {
       "id": "278402757",
@@ -364,6 +395,32 @@
       "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
       "fixed_at": "tip of cursor/desk-human-visible-surface-101e that contains docs/desk-operating-model.md section Merge-claim head rule",
       "note": "head_commit_sha is null because this file cannot embed the SHA of the commit that contains it. Pending review is the tip. Do not request COMPLETED on c5c8b5e."
+    },
+    {
+      "id": "4097109791",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4097109791",
+      "title": "Secret scan uses placeholder paths",
+      "severity": "P2",
+      "action": "FIXED_IN_CODE",
+      "owner": "bot-06-quality-security",
+      "path": ".receipts/bot-06-quality-security/greptile-merge-claim-pr7.json",
+      "fixed_at": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+      "note": "Tip merge-claim lists six real paths in the correction command; QUALITY re-gate secret-scan command lists all 35 real PR paths. No <35 PR paths> placeholder."
+    },
+    {
+      "id": "4097191466",
+      "id_kind": "github_pull_comment",
+      "github_discussion_id": "4097191466",
+      "title": "PR-specific target in shared policy",
+      "severity": "P2",
+      "action": "WAIVE",
+      "owner": "bot-00-programming-lead",
+      "path": "docs/desk-operating-model.md",
+      "waiver": ".receipts/bot-06-quality-security/greptile-p2-waiver-pr-specific-operating-model-pr7.json",
+      "waiver_file_status": "ACTIVE",
+      "note": "Greptile marks non-blocking. General merge-claim head rule remains in lines 106-109. PR-specific tip lines 111-115 were the intentional non-receipt nudge that broke the c5c8b5e/SKIPPED loop for this PR. LEAD may generalize those lines after merge. Not a P1; does not block CLEAR_WITH_WAIVERS.",
+      "from_review": "26588229"
     }
   ],
   "counts": {
@@ -371,22 +428,20 @@
     "historical_fixed_in_followup": 2,
     "honesty_head_fixed_in_followup": 2,
     "active_waivers": 4,
-    "withdrawn_does_not_cover_current_head": 3,
-    "current_tip_fixed_in_code": 5,
-    "note": "Counts are of disposition rows. active_waivers is the four rows whose waiver file status is ACTIVE (three ownership comments, one cursor/ branch-prefix comment). The three chicken-egg rows are withdrawn_does_not_cover_current_head, not unchanged historical waivers. The previous count historical_waivers_unchanged=3 treated the withdrawn approval waiver as if it were still active."
+    "chicken_egg_waive_on_completed_tip": 3,
+    "current_tip_fixed_in_code": 6,
+    "tip_completed_waive_p2": 1,
+    "note": "active_waivers = ownership (3) + cursor-branch (1). chicken_egg_waive_on_completed_tip = 3 rows re-activated after tip COMPLETED. tip_completed_waive_p2 = PR-specific operating-model P2. current_tip_fixed_in_code includes the five honesty/schema fixes plus secret-scan path fix."
   },
   "waiver_accounting": {
     "active": [
       ".receipts/bot-06-quality-security/greptile-p1-waiver-ownership-one-merge-pr7.json",
-      ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json"
+      ".receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json",
+      ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
+      ".receipts/bot-06-quality-security/greptile-p2-waiver-pr-specific-operating-model-pr7.json"
     ],
-    "does_not_cover_current_head": [
-      {
-        "path": ".receipts/bot-06-quality-security/greptile-p1-waiver-approval-chicken-egg-pr7.json",
-        "status": "DOES_NOT_COVER_CURRENT_HEAD",
-        "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD"
-      }
-    ]
+    "does_not_cover_current_head": [],
+    "note": "Chicken-egg waiver re-activated after Greptile COMPLETED on tip; covers stamp only."
   },
-  "coverage_note": "Restored individual outcomes are historical. They do not assert that ddc113b or the tip is CLEAR. Merge stays BLOCKED until Greptile COMPLETED on the tip and QUALITY stamps approved_by."
+  "coverage_note": "Gate cleared CLEAR_WITH_WAIVERS after Greptile COMPLETED 5/5 on 5c2332b990d7eb07c09329ce1dd436e1615fb780. No open P1s. One new P2 waived (PR-specific operating-model lines)."
 }

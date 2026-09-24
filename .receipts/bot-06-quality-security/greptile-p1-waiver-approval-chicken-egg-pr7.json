@@ -2,21 +2,23 @@
   "bot": "bot-06-quality-security",
   "task_id": "greptile-p1-waiver-approval-chicken-egg-pr7",
   "receipt_kind": "greptile_comment_waiver",
-  "status": "DOES_NOT_COVER_CURRENT_HEAD",
-  "recorded_at": "2026-09-25T00:33:04+10:00",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-25T04:44:50+10:00",
   "repo": "swcstudiospace/programming-desk",
   "pr": {
     "number": 7,
     "url": "https://github.com/swcstudiospace/programming-desk/pull/7",
     "merge_request_id": "68670553",
-    "head_commit_sha": "bc459751192b80d5950b2d2b3349e7b2981c18a6",
-    "greptile_review_id": "26515901"
+    "head_commit_sha": null,
+    "head_at_clear_prose": "5c2332b990d7eb07c09329ce1dd436e1615fb780",
+    "greptile_review_id": "26588229",
+    "greptile_confidence": "5/5"
   },
   "waiver": {
     "who_waived": "bot-06-quality-security",
-    "why": "Greptile COMPLETED review 26515901 on bc45975 at confidence 4/5 with the sole remaining finding that approved_by was empty. QUALITY withholds approved_by while BLOCKED and stamps only on CLEAR/CLEAR_WITH_WAIVERS, so an empty field is required until this gate turn. QUALITY reviewed the policy fix head, confirmed prior P1 prompt conflicts are fixed in code (audience-scoped assemble, LEAD poll/widget return, intake priority-false, awaiting-review labels), and now stamps both LEAD receipts. This waiver covers the chicken-egg empty-approved_by P1 only.",
+    "why": "Greptile COMPLETED review 26588229 on tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 at confidence 5/5 with no open P1s. The sole chicken-egg issue is that approved_by must stay empty until COMPLETED+CLEAR; QUALITY now stamps approved_by=bot-06-quality-security on both LEAD receipts and the merge-claim. Prior bc45975 stamp was withdrawn from later heads; this reactivation covers the tip COMPLETED stamp only.",
     "decision": "STAMP_AND_WAIVE_CHICKEN_EGG_EMPTY_APPROVED_BY",
-    "quality_ack": "bot-06-quality-security stamps approved_by on both LEAD receipts at this CLEAR_WITH_WAIVERS turn.",
+    "quality_ack": "bot-06-quality-security stamps approved_by on both LEAD receipts and the merge-claim at this CLEAR_WITH_WAIVERS turn after tip COMPLETED.",
     "scope": "Greptile P1 empty approved_by on desk-human-visible-surface and desk-roster-dual-domains receipts; does not waive other defects"
   },
   "comments_waived": [
@@ -33,6 +35,7 @@
       "title": "Receipt lacks independent approval"
     }
   ],
-  "live_stamp_status": "WITHDRAWN_FROM_CURRENT_HEAD",
-  "coverage_note": "The stamp described in this waiver was for bc459751192b80d5950b2d2b3349e7b2981c18a6 (review 26515901, confidence 4/5). It does not authorize merge of a later head. Live approved_by on both LEAD receipts is empty until QUALITY re-stamps after Greptile COMPLETED on the post-fix head. This note does not change the recorded 4/5 score and does not add a stamp. Do not count this waiver as an unchanged historical waiver. status is DOES_NOT_COVER_CURRENT_HEAD and live_stamp_status is WITHDRAWN_FROM_CURRENT_HEAD. The active waivers on PR #7 are the ownership one-merge waiver and the cursor/ branch-prefix waiver."
+  "live_stamp_status": "STAMPED_ON_COMPLETED_TIP",
+  "prior_status": "DOES_NOT_COVER_CURRENT_HEAD",
+  "coverage_note": "Re-activated for tip 5c2332b990d7eb07c09329ce1dd436e1615fb780 after review 26588229 COMPLETED 5/5. Does not authorize merge of a later non-receipt tip without re-gate."
 }

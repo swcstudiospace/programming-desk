@@ -1,0 +1,44 @@
+# Broker ↔ MCP boundary for the Tier-1 spike.
+# This file is NOT the desk contract surface. contracts/** is owned by
+# bot-06-quality-security and was not edited. Promoting this description into
+# contracts/ is a contract-first follow-up (G-4) and is a blocker for calling
+# the cross-seat interface merged.
+change_id: unified-lsp-tier1-spike-boundary
+version: 0.1.0-spike
+breaking: false
+status: spike-local
+proposed_by: bot-05-infrastructure
+consumers:
+  - bot-02-web-edge
+transport:
+  primary_agent_surface: mcp-stdio
+  broker_rpc: unix-socket-newline-json
+  optional_share_plane: websocket-loopback-only
+  rejected:
+    - network-primary-mcp
+    - websocket-as-primary-agent-surface
+    - non-loopback-websocket
+request:
+  shape: "{id, method, params}"
+methods:
+  - health
+  - install
+  - plan
+  - diagnostics
+  - probe
+  - shutdown
+error_codes:
+  - workspace_unbound
+  - broker_not_running
+  - language_not_tier1
+  - language_server_missing
+  - language_server_failed
+  - install_not_executed
+  - diagnostics_timeout
+  - workspace_escape
+  - file_not_found
+  - ws_host_forbidden
+  - invalid_arguments
+  - unknown_method
+states: [cold, ready, serving, degraded, stopped]
+tier1: [tsjs, python, go]

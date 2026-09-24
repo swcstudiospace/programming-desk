@@ -2,7 +2,7 @@
   "task_id": "hermes-stdio-uninstall-2026-09-24",
   "bot": "bot-00-programming-lead",
   "started_at": "2026-09-24T00:46:00Z",
-  "completed_at": "2026-09-24T00:53:30Z",
+  "completed_at": "2026-09-24T01:07:01Z",
   "runtime": "cursor-cloud",
   "lane": "A",
   "repo": "https://github.com/swcstudiospace/programming-desk",
@@ -41,6 +41,26 @@
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json --bot bot-00-programming-lead",
       "exit_code": 1,
       "output_tail": "G-2 FAIL — approved_by is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"prompts/bot-00-programming-lead.xml\").read_text(); start=t.index(\"<stage id=\\\"7\\\"\"); end=t.index(\"</stage>\", start); stage=t[start:end]; need=[\"user-hermes-agent\",\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\",\"handoff_to_hermes\",\"Do not SSH the packet as a code handoff\",\"not a stop condition\",\"Do not rebuild the stdio bridge\",\"Agent Bus supersedes it\"]; bad=[\"needsAuth\",\"bridge is missing\",\"If Hermes is needsAuth\"]; problems=[n for n in need if n not in stage]+[b for b in bad if b in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 -c 'from pathlib import Path; t=Path(\"skills/trackplan-dispatch/SKILL.md\").read_text(); need=[\"array of objects\",\"free-form object\",\"role/content\",\"default `normal`\",\"get_task\",\"Do not fire multiple handoffs in parallel for one goal\",\"Do not re-submit\",\"idempotency_key\",\"tenant_id\"]; problems=[n for n in need if n not in t]; print(problems or \"ok\"); raise SystemExit(0 if not problems else 1)'",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files prompts/bot-00-programming-lead.xml skills/trackplan-dispatch/SKILL.md .receipts/bot-00-programming-lead/hermes-stdio-uninstall-2026-09-24.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files prompts/bot-00-programming-lead.xml skills/trackplan-dispatch/SKILL.md",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
     }
   ],
   "claims": [
@@ -72,10 +92,26 @@
       "claim": "G-2 fails closed while approved_by is unset, so this receipt is not self-approved",
       "evidence_command_index": 6,
       "expects_failure": true
+    },
+    {
+      "claim": "Stage 7 of prompts/bot-00-programming-lead.xml prefers user-hermes-agent agent_bus_* and does not treat a missing stdio bridge or needsAuth as a stop",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "trackplan-dispatch documents handoff_to_hermes messages as an array of free-form objects and says to poll get_task without a parallel re-submit",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on the LEAD prompt, the dispatch skill, and this receipt",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "Secret scan of the LEAD prompt and the dispatch skill reports no committed secret",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [
-    "prompts/bot-00-programming-lead.xml still tells dispatch to stop if Hermes is needsAuth or the bridge is missing. prompts/LEAD.xml and prompts-assembled/LEAD.xml repeat that sentence and are QUALITY-owned, so this change left all three prompt files untouched.",
+    "prompts/LEAD.xml and prompts-assembled/** still contain the old stage 7 sentence. They are QUALITY-owned and were not edited. QUALITY assembles after this LEAD source change.",
     "agent_bus_health returned status ok with runtimes hermes, muse, grok-build, omp, claude-code in this session. commands[] does not re-invoke that MCP tool, so a later re-run of this receipt does not re-check live bus health.",
     "agent_bus_start_job was not called. No Hermes job id and no Hermes draft PR exist for this cleanup.",
     "Greptile was not triggered and merge was not requested.",
@@ -86,7 +122,8 @@
     "docs/github-sot-orchestration.md",
     "docs/intake-e2e-runbook.md",
     "skills/trackplan-dispatch/SKILL.md",
-    "skills/trackplan-dispatch/prompt-template.md"
+    "skills/trackplan-dispatch/prompt-template.md",
+    "prompts/bot-00-programming-lead.xml"
   ],
   "contract_changes": [],
   "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/6"

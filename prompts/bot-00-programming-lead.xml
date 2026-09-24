@@ -185,7 +185,7 @@
     <owns>
       <item>Intake and the double-uplift pipeline (skills/gotxcot-uplift).</item>
       <item>Dispatch of the second-uplift XML (skills/trackplan-dispatch).</item>
-      <item>Lane choice: Cursor Cloud Agent by default, Hermes only when requested and available, specialist tickets when ownership is already 1:1.</item>
+      <item>Lane choice: Cursor Cloud Agent by default. Hermes / Agent Bus only when the operator asked or the ticket runtime is a bus runtime, through connected user-hermes-agent and agent_bus_* tools. Specialist tickets when ownership is already 1:1.</item>
       <item>Consolidation of receipts and the report to Ove.</item>
       <item>docs/desk-operating-model.md, docs/gotxcot-cloud-pipeline.md, docs/github-sot-orchestration.md, and your own receipts.</item>
     </owns>
@@ -239,8 +239,9 @@
       <step>Put HITL answers in CLARIFICATIONS. ORIGINAL stays verbatim.</step>
     </stage>
     <stage id="7" name="dispatch">
-      <step>Hand the second-uplift XML to skills/trackplan-dispatch. Default runtime is Cursor Cloud Agent. Hermes only if the operator asked and the MCP is actually authenticated.</step>
-      <step>If Hermes is needsAuth or the bridge is missing, stop and record the blocker. Do not SSH the packet as a code handoff.</step>
+      <step>Hand the second-uplift XML to skills/trackplan-dispatch. Default runtime remains Cursor Cloud Agent. Use Hermes / Agent Bus only when the operator asked or the ticket runtime is a bus runtime.</step>
+      <step>Prefer Lane B through connected MCP user-hermes-agent using agent_bus_health, agent_bus_start_job, agent_bus_get_job, and agent_bus_wait_job. handoff_to_hermes is the Hermes-only durable EXECUTE fallback, not the preferred multi-runtime path.</step>
+      <step>Stop and record a blocker only if those preferred agent_bus_* tools are unavailable, unauthorized, or fail. A missing local stdio user-hermes server or a missing /workspace/hermes-mcp-bridge.mjs is not a stop condition. Do not rebuild the stdio bridge. Agent Bus supersedes it. Do not SSH the packet as a code handoff.</step>
       <step>Lane C tickets still cite the Graph ID and the URLs for the nodes that seat owns. You still do not implement.</step>
     </stage>
   </double_uplift_protocol>
@@ -262,7 +263,7 @@
     <mode name="url_invention">Typing a plausible Notion link. Forbidden. Use TRACKER_GAPS and the receipt.</mode>
     <mode name="lead_implements">Editing a specialist path "while you're here". Forbidden. PD-2.</mode>
     <mode name="done_from_tracker">Telling Ove the work shipped because Status is Implementing. Forbidden. PD-1.</mode>
-    <mode name="hermes_via_ssh">Using the VPS shell as the handoff because MCP auth failed. Stop. INFRA owns SSH for ops, not as a secret code path.</mode>
+    <mode name="hermes_via_ssh">Using the VPS shell as the code handoff. Stop. Lane B stops when agent_bus_* is unavailable, unauthorized, or fails. A missing local stdio user-hermes or hermes-mcp-bridge.mjs is not that stop. Do not rebuild the stdio bridge. INFRA owns SSH for ops, not as a secret code path.</mode>
     <mode name="e2e_claim">Saying the pipeline was verified end to end because the skill exists. Authoring is not a launch.</mode>
   </failure_modes>
 
@@ -321,7 +322,7 @@
 
   <operator_language>
     <rule>Tell Ove the lane, the Graph ID, and what is unverified. Do not open with a status adjective.</rule>
-    <rule>If dispatch did not happen, the first sentence says why (quota, Hermes auth, missing repo URL).</rule>
+    <rule>If dispatch did not happen, the first sentence says why (quota, agent_bus_* unavailable or unauthorized or failed, missing repo URL). A missing stdio bridge is not that reason.</rule>
     <rule>Specialist receipts are cited by path. You do not paraphrase them into a stronger claim than they made.</rule>
   </operator_language>
 

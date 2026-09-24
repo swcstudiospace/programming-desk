@@ -172,7 +172,21 @@ Preferred path on `user-hermes-agent`:
 
 Put the GitHub work packet and the second-uplift XML in `goal` (and keep the same text in the draft PR). `agent_bus_start_job` can note that a public `wss` URL needs `BUS_TOKEN`. The token is not part of the tool result. Do not write it into the prompt, the PR, or a receipt.
 
-**`handoff_to_hermes`** is Hermes-only fallback. Live required fields are `goal` and `messages` (optional `title`, `priority`, `labels`, `tenant_id`, `idempotency_key`). It submits one durable EXECUTE job to local Hermes. Prefer `agent_bus_*` for Lane B. The older design-intent shape (`repo`, `branch`, `graph_id`, `work_packet_markdown`, `prompt` as separate arguments) is not the live schema; fold those fields into `goal` / `messages` only when the fallback is the call you are making.
+**`handoff_to_hermes`** is the Hermes-only durable EXECUTE fallback. Prefer `agent_bus_*` for live multi-runtime jobs. Use this tool only for one durable Hermes EXECUTE. Do not fire multiple handoffs in parallel for one goal. Poll `get_task`. Do not re-submit.
+
+Live schema:
+
+| Field | Required | Shape |
+|---|---|---|
+| `goal` | yes | string |
+| `messages` | yes | array of objects. Each message is a free-form object, typically role/content conversation turns compacted for Hermes |
+| `title` | no | string or null |
+| `priority` | no | string, default `normal` |
+| `labels` | no | array of strings, or null |
+| `tenant_id` | no | string or null |
+| `idempotency_key` | no | string or null |
+
+The older design-intent shape (`repo`, `branch`, `graph_id`, `work_packet_markdown`, `prompt` as separate arguments) is not the live schema. Fold those fields into `goal` and into `messages` only when this fallback is the call you are making.
 
 Hermes durable output is the same as Lane A: **branch + draft PR on GitHub** + `.receipts/`. The VPS is a computer, not a source of truth.
 
@@ -237,7 +251,7 @@ Honest `unverified` / `blockers` are success. Do not fabricate PR URLs, Greptile
 | E2E not verified | Intake → second uplift → launch → PR → Greptile → QUALITY → sync is **not** proven |
 | Lane B E2E | `user-hermes-agent` is connected and `agent_bus_*` is the live path. This skill text does not prove a Hermes job id plus a draft PR |
 | `user-hermes` stdio | Uninstalled on the desk host 2026-09-24. Do not rebuild `hermes-mcp-bridge.mjs`. Agent Bus supersedes that bridge |
-| `handoff_to_hermes` | Hermes-only fallback. Live required fields are `goal` and `messages`. Prefer `agent_bus_*` |
+| `handoff_to_hermes` | Hermes-only durable EXECUTE fallback. Required `goal` (string) and `messages` (array of free-form objects, typically role/content turns). Optional `title`, `priority` (default `normal`), `labels`, `tenant_id`, `idempotency_key`. Prefer `agent_bus_*` for live multi-runtime. One handoff per goal; poll `get_task`; do not re-submit |
 | Cloud Agent dry-run | Launch only when the operator intends real work |
 | PR → Notion/Linear sync | Still to build. Do not invent tracker rows |
 | VPS engine constants | May still be MIN_NODES=3 until patched. Desk dispatch still requires 5–8 `<ISSUE>` nodes in the XML |

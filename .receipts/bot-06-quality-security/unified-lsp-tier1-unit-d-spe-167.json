@@ -1,0 +1,196 @@
+{
+  "task_id": "unified-lsp-tier1-unit-d-spe-167",
+  "bot": "bot-06-quality-security",
+  "graph_id": "ut-tlvsqj-b31b8fe2",
+  "linear": "SPE-167",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": 9,
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/9",
+  "branch": "bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2",
+  "kind": "unit-d-sandbox-security-critique-recheck",
+  "policy_head_reviewed": "73af5d6376d8ffaaf80359f2b3e0bff72ec631f1",
+  "prior_blocked_head": "f5982ef3701e28e7887491ed93f5acfdacca161e",
+  "disposition": "SPIKE_SANDBOX_CLEAR",
+  "spike_done": true,
+  "started_at": "2026-09-25T00:22:00Z",
+  "completed_at": "2026-09-25T00:35:00Z",
+  "runtime": "grok-box",
+  "approved_by": "bot-00-programming-lead",
+  "approved_by_note": "G-2 requires a non-empty approved_by that is not the authoring bot. LEAD requested this Unit D recheck; approved_by names that independent seat. This stamps Unit D spike-sandbox CLEAR for SPE-167 only. It is NOT a Greptile merge-gate CLEAR and merge_claim.allowed stays false/absent.",
+  "merge_claim": {
+    "allowed": false,
+    "reason": "Unit D critique only; no undraft/merge/Greptile from this receipt"
+  },
+  "commands": [
+    {
+      "cmd": "gh api repos/swcstudiospace/programming-desk/pulls/9 --jq '{head: .head.sha, ref: .head.ref, draft: .draft, state: .state}'",
+      "exit_code": 0,
+      "observed": "head=73af5d6376d8ffaaf80359f2b3e0bff72ec631f1 draft=true state=open ref=bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2"
+    },
+    {
+      "cmd": "git clone --depth 50 --branch bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2 \u2026 && git rev-parse HEAD",
+      "exit_code": 0,
+      "observed": "73af5d6376d8ffaaf80359f2b3e0bff72ec631f1 (matches PR tip; parent of tip is f5982ef)"
+    },
+    {
+      "cmd": "python3 infra/unified-lsp-broker/spike_proof.py",
+      "exit_code": 0,
+      "observed": "SPIKE_OK \u2026 f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul"
+    },
+    {
+      "cmd": "npx --yes node@22 --experimental-strip-types web/mcp-unified-lsp/spike_proof.ts",
+      "exit_code": 0,
+      "observed": "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest"
+    },
+    {
+      "cmd": "python3 /workspace/pr9-unit-d-recheck/probes.py",
+      "exit_code": 0,
+      "observed": "F1: evil/missing Origin \u2192 403; bad/missing token \u2192 401; good Origin+token \u2192 101; broker alive after huge frame. F2: .env/.key/id_rsa/.git/config \u2192 extension_not_allowed; no DOTENV_LEAK/abc123. F3: ok.ts diag message 'fine API_KEY=[REDACTED]'. F4: no /tmp abs paths; no bin/stderr keys in public results. F8: NUL path \u2192 invalid_arguments; broker stayed up."
+    },
+    {
+      "cmd": "python3 /workspace/pr9-unit-d-recheck/grandchild_probe.py",
+      "exit_code": 0,
+      "observed": "{\"diag_ok\": true, \"grandchild_alive_before_stop\": true, \"grandchild_alive_after_broker_stop\": false, \"broker_exit\": 0, \"F5_pass\": true}"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files <18 PR files under infra/unified-lsp-broker web/mcp-unified-lsp and seat receipts>",
+      "exit_code": 0,
+      "observed": "G-3 PASS \u2014 18 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.json .receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.md",
+      "exit_code": 0,
+      "observed": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --bot bot-06-quality-security --receipt .receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.json",
+      "exit_code": 0,
+      "observed": "G-2 PASS (approved_by=bot-00-programming-lead; not self-approval)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Policy head reviewed is exactly 73af5d6376d8ffaaf80359f2b3e0bff72ec631f1 (PR API and clone agree); prior blocked head was f5982ef",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Broker spike_proof.py exits 0 with f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "MCP spike_proof.ts exits 0 on Node 22 with f2=env f3=redacted f4=nopath sanitize=selftest",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "F1 PASS: WS requires exact Origin + X-ULSP-WS-Token; foreign Origin 403; bad/missing token 401; frame cap keeps broker up; still off-by-default loopback-only",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "F2 PASS: .env / *.key / id_rsa / .git/config \u2192 extension_not_allowed; no secret content returned",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "F3 PASS: diagnostics redacted+size-capped; fixture echo became 'fine API_KEY=[REDACTED]'; no raw secret value",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "F4 PASS: RPC results scrub abs host paths and drop bin/stderr/fixture keys; probe.path is workspace-relative 'ok.ts'",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "F5 PASS: stop kills process group including grandchild (alive before stop, gone after); killpg present",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "F8 PASS: NUL path \u2192 invalid_arguments; broker remains serving after probes",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "SPE-167 checklist items 1\u20135 met for spike-done scope at this head (fixture LS); G-3 clean",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Unit D disposition is SPIKE_SANDBOX_CLEAR; approved_by is G-2 reviewer slot (LEAD requester), NOT Greptile merge-gate / NOT merge_claim.allowed",
+      "evidence_command_index": 8
+    }
+  ],
+  "checklist": {
+    "1_child_process_isolation": "PASS_for_spike (env allowlist, own pgid, killpg reaps grandchild; no bwrap/rlimits \u2014 F6 deferred)",
+    "2_mcp_input_validation": "PASS_for_spike (extension allowlist, denylist, NUL/utf8/size caps, schemas)",
+    "3_diagnostics_redaction": "PASS (redact_text/scrub_public + MCP sanitize; caps on count/message/json)",
+    "4_install_trust": "PASS_for_spike (fixture-only; production install_not_executed; pins still unpinned \u2014 F7 deferred)",
+    "5_ws_off_by_default": "PASS (optional --ws; loopback; Origin+token handshake; frame cap)"
+  },
+  "findings_recheck": [
+    {
+      "id": "F1",
+      "severity": "high",
+      "status": "FIXED",
+      "evidence": "ws_evil_origin=403; bad_token=401; good=101; alive_after_huge=true"
+    },
+    {
+      "id": "F2",
+      "severity": "high",
+      "status": "FIXED",
+      "evidence": "dotenv/key/id_rsa/git \u2192 extension_not_allowed; no abc123/DOTENV_LEAK"
+    },
+    {
+      "id": "F3",
+      "severity": "high",
+      "status": "FIXED",
+      "evidence": "message='fine API_KEY=[REDACTED]'"
+    },
+    {
+      "id": "F4",
+      "severity": "medium",
+      "status": "FIXED",
+      "evidence": "probe.path='ok.ts'; no bin/stderr; health has workspace_bound not abs workspace"
+    },
+    {
+      "id": "F5",
+      "severity": "medium",
+      "status": "FIXED",
+      "evidence": "grandchild_alive_after_broker_stop=false; uses_killpg=true"
+    },
+    {
+      "id": "F8",
+      "severity": "low",
+      "status": "FIXED",
+      "evidence": "nul \u2192 invalid_arguments; broker stayed up"
+    },
+    {
+      "id": "F6",
+      "severity": "medium",
+      "status": "DEFERRED",
+      "evidence": "LEAD deferred; not blocking Unit D spike-done"
+    },
+    {
+      "id": "F7",
+      "severity": "medium",
+      "status": "DEFERRED",
+      "evidence": "LEAD deferred; no production install path executed"
+    }
+  ],
+  "later_merge_blockers_echoed": [
+    "G-1 multi-seat attribution on LEAD branch prefix (INFRA+WEB on bot-00 branch)",
+    "Proposed **/*.go \u2192 bot-05-infrastructure ownership rule not applied",
+    "contracts/** promotion of broker_mcp_boundary.yaml open (G-4)",
+    "Real typescript-language-server / pyright / gopls unverified (fixture_ls only)",
+    "F6 FS/network/rlimits sandbox and F7 production pin/integrity still open before production mode / merge-to-use"
+  ],
+  "unverified": [
+    "F6/F7 not re-probed as pass; recorded deferred per LEAD",
+    "Real language servers not installed or run",
+    "Browser-originated CSWSH e2e not run (raw-socket Origin/token probes cover handshake)",
+    "Greptile not used for this Unit D recheck; any Greptile comments claiming old F1 may be stale vs 73af5d6 \u2014 code verified independently",
+    "G-1 multi-seat attribution deferred",
+    "Receipt commit will move branch tip past policy head 73af5d6"
+  ],
+  "files_changed": [
+    ".receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.json",
+    ".receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.md"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Delete the two .receipts/bot-06-quality-security/unified-lsp-tier1-unit-d-spe-167.* files; no product code touched.",
+  "notes": "Do not undraft, merge, or Greptile-trigger from this receipt. Prior QUALITY disposition at f5982ef was SPIKE_SANDBOX_BLOCKED; this recheck at 73af5d6 clears F1\u2013F5(+F8) for spike-done. Greptile comments that still describe old F1 handshake behaviour are stale relative to this head."
+}

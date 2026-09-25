@@ -4,7 +4,7 @@ WEB-owned MCP stdio adapter (`bot-02-web-edge`). Package name `mcp-unified-lsp` 
 
 The adapter speaks newline-delimited JSON-RPC on stdin/stdout and forwards tools to the INFRA broker CLI. It does not listen on a port. Optional WebSocket, when enabled, stays inside the broker and is loopback-only.
 
-An oversized `Content-Length` frame is rejected. Body discard starts after the header blank line (`\r\n\r\n` or `\n\n`), so extra header lines are not counted as body bytes, including when the blank line and body arrive in a later chunk. A non-finite length (`NaN`, `Infinity`, or a digit string that becomes `Infinity`) drops the bytes already buffered with that header and does not parse later body bytes as newline JSON. Parsing resumes at the next finite `Content-Length` frame, so a tools/call inside the rejected body does not run and a later framed request does. A finite oversized body is discarded for its declared length. Bytes after that finite length still parse.
+An oversized `Content-Length` frame is rejected. Body discard starts after the header blank line (`\r\n\r\n` or `\n\n`), so extra header lines are not counted as body bytes, including when the blank line and body arrive in a later chunk. A non-finite length (`NaN`, `Infinity`, or a digit string that becomes `Infinity`) drops one tainted newline message, including a `tools/call` that arrives after the header. The following newline-delimited request is handled again, and a finite `Content-Length` request still is too. A finite oversized body is discarded for its declared length. Bytes after that finite length still parse.
 
 Run the adapter proof from the repo root (Node with type stripping):
 

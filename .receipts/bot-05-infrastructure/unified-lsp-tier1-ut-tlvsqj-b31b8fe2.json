@@ -3,14 +3,14 @@
   "bot": "bot-05-infrastructure",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:40:00Z",
-  "completed_at": "2026-09-25T05:10:00Z",
+  "completed_at": "2026-09-25T05:20:00Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "commands": [
     {
       "cmd": "python3 infra/unified-lsp-broker/spike_proof.py",
       "exit_code": 0,
-      "duration_s": 4.4,
+      "duration_s": 4.3,
       "output_tail": "SPIKE_OK plans=tsjs:typescript-language-server,python:pyright-langserver,go:gopls diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served ws=127.0.0.1 optional state_after_stop=stopped f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan"
     },
     {

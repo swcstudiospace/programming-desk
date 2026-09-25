@@ -335,7 +335,7 @@ async function main(): Promise<void> {
       });
       child.stdin.write(`${buriedCall}\n`);
       await new Promise((resolve) => setTimeout(resolve, 40));
-      child.stdin.write(framedPing(nextId));
+      child.stdin.write(`${ping(nextId)}\n`);
       const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
       expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
       child.kill();
@@ -393,7 +393,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-split\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-ndjson\n",
   );
 }
 

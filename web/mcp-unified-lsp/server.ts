@@ -341,7 +341,7 @@ function handle(message: RpcRequest): void {
 
 let buffer = Buffer.alloc(0);
 let skipBytes = 0;
-let resync = false;
+let discardLine = false;
 
 function discardDeclaredBody(bodyStart: number, length: number): void {
   const available = Math.max(0, buffer.length - bodyStart);
@@ -351,10 +351,16 @@ function discardDeclaredBody(bodyStart: number, length: number): void {
   skipBytes = length - drop;
 }
 
-function rejectUnsizedBody(): Parsed {
-  buffer = Buffer.alloc(0);
+function rejectUnsizedBody(bodyStart: number): Parsed {
   skipBytes = 0;
-  resync = true;
+  const newline = buffer.indexOf(0x0a, bodyStart);
+  if (newline >= 0) {
+    takeRest(newline + 1);
+    discardLine = false;
+  } else {
+    buffer = Buffer.alloc(0);
+    discardLine = true;
+  }
   return frameTooBig();
 }
 
@@ -363,10 +369,31 @@ function takeRest(start: number): void {
   buffer = rest.length === 0 ? Buffer.alloc(0) : Buffer.from(rest);
 }
 
-function looksLikeContentLength(buf: Buffer): boolean {
+function discardTaintedLine(): Parsed {
   const prefix = "content-length:";
-  const head = buf.subarray(0, Math.min(buf.length, prefix.length)).toString("latin1").toLowerCase();
-  return prefix.startsWith(head) || head.startsWith(prefix);
+  const head = buffer.subarray(0, Math.min(buffer.length, prefix.length)).toString("latin1").toLowerCase();
+  const newline = buffer.indexOf(0x0a);
+  if (newline < 0 && prefix.startsWith(head) && !head.startsWith(prefix)) {
+    if (buffer.length > MAX_MCP_FRAME) {
+      buffer = Buffer.alloc(0);
+      discardLine = false;
+    }
+    return { kind: "need-more" };
+  }
+  if (head.startsWith(prefix)) {
+    discardLine = false;
+    return tryParse();
+  }
+  if (newline < 0) {
+    if (buffer.length > MAX_MCP_FRAME) {
+      buffer = Buffer.alloc(0);
+      discardLine = false;
+    }
+    return { kind: "need-more" };
+  }
+  takeRest(newline + 1);
+  discardLine = false;
+  return { kind: "drop" };
 }
 
 function applySkip(): boolean {
@@ -418,39 +445,9 @@ function findHeaderEnd(buf: Buffer): { index: number; length: number } | null {
   return { index: crlf, length: 4 };
 }
 
-function resyncParse(): Parsed {
-  if (!looksLikeContentLength(buffer)) {
-    const newline = buffer.indexOf(0x0a);
-    if (newline < 0) {
-      if (buffer.length > MAX_MCP_FRAME) {
-        buffer = Buffer.alloc(0);
-      }
-      return { kind: "need-more" };
-    }
-    takeRest(newline + 1);
-    return { kind: "drop" };
-  }
-  const headerEnd = findHeaderEnd(buffer);
-  if (headerEnd === null) {
-    if (buffer.length > MAX_MCP_FRAME) {
-      buffer = Buffer.alloc(0);
-    }
-    return { kind: "need-more" };
-  }
-  const header = buffer.subarray(0, headerEnd.index).toString("utf-8");
-  const match = header.match(/content-length:\s*(\S+)/i);
-  const length = match ? Number(match[1]) : NaN;
-  if (!Number.isFinite(length) || length < 0) {
-    takeRest(headerEnd.index + headerEnd.length);
-    return { kind: "drop" };
-  }
-  resync = false;
-  return tryParse();
-}
-
 function tryParse(): Parsed {
-  if (resync) {
-    return resyncParse();
+  if (discardLine) {
+    return discardTaintedLine();
   }
   const textStart = buffer.toString("utf-8");
   if (textStart.startsWith("Content-Length:") || textStart.startsWith("content-length:")) {
@@ -468,7 +465,7 @@ function tryParse(): Parsed {
     const match = header.match(/content-length:\s*(\S+)/i);
     const length = match ? Number(match[1]) : NaN;
     if (!Number.isFinite(length) || length < 0) {
-      return rejectUnsizedBody();
+      return rejectUnsizedBody(sep + sepLen);
     }
     if (length > MAX_MCP_FRAME) {
       discardDeclaredBody(sep + sepLen, length);

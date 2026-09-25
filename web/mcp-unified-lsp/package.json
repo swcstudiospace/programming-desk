@@ -1,0 +1,7 @@
+{
+  "name": "mcp-unified-lsp",
+  "private": true,
+  "version": "0.0.1-spike",
+  "type": "module",
+  "description": "Spike MCP stdio adapter for the box-local unified LSP broker. Not published."
+}

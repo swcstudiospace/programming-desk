@@ -298,6 +298,32 @@ async function main(): Promise<void> {
     expect(afterEarly.id === 75 && afterEarly.result !== undefined, JSON.stringify(afterEarly));
     guard.kill();
 
+    const expectUnsizedDropped = async (headerValue: string, buriedId: number): Promise<void> => {
+      const child = spawn(process.execPath, ["--experimental-strip-types", server], {
+        env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
+        stdio: ["pipe", "pipe", "pipe"],
+      }) as ChildProcessWithoutNullStreams;
+      child.stderr.resume();
+      const next = lineReader(child, 400);
+      child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n${ping(buriedId)}\n`);
+      const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
+      expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
+      child.stdin.write(`${ping(buriedId)}\n`);
+      let leaked = false;
+      try {
+        const second = JSON.parse(await next()) as { id?: number };
+        leaked = second.id === buriedId;
+      } catch (err) {
+        expect(String(err).includes("timeout"), String(err));
+      }
+      expect(!leaked, `Content-Length ${headerValue.slice(0, 24)} executed id ${buriedId}`);
+      child.kill();
+    };
+    const infiniteLength = "9".repeat(400);
+    expect(!Number.isFinite(Number(infiniteLength)), "digit string should be Infinity");
+    await expectUnsizedDropped(infiniteLength, 96);
+    await expectUnsizedDropped("NaN", 97);
+
     const fat = path.join(frameDir, "fat_broker.py");
     writeFileSync(fat, "import sys\nsys.stdout.write('x' * 4000)\n");
     const limited = spawn(process.execPath, ["--experimental-strip-types", server], {
@@ -344,7 +370,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-hdr\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-inf\n",
   );
 }
 

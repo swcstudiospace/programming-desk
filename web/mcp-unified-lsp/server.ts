@@ -341,6 +341,7 @@ function handle(message: RpcRequest): void {
 
 let buffer = Buffer.alloc(0);
 let skipBytes = 0;
+let drainInput = false;
 
 function discardDeclaredBody(bodyStart: number, length: number): void {
   const available = Math.max(0, buffer.length - bodyStart);
@@ -350,7 +351,18 @@ function discardDeclaredBody(bodyStart: number, length: number): void {
   skipBytes = length - drop;
 }
 
+function rejectUnsizedBody(): Parsed {
+  buffer = Buffer.alloc(0);
+  skipBytes = 0;
+  drainInput = true;
+  return frameTooBig();
+}
+
 function applySkip(): boolean {
+  if (drainInput) {
+    buffer = Buffer.alloc(0);
+    return true;
+  }
   if (skipBytes <= 0) {
     return false;
   }
@@ -412,19 +424,18 @@ function tryParse(): Parsed {
     const sep = headerEnd.index;
     const sepLen = headerEnd.length;
     const header = buffer.subarray(0, sep).toString("utf-8");
-    const match = header.match(/content-length:\s*(\d+)/i);
+    const match = header.match(/content-length:\s*(\S+)/i);
     const length = match ? Number(match[1]) : NaN;
-    if (Number.isFinite(length) && length > MAX_MCP_FRAME) {
+    if (!Number.isFinite(length) || length < 0) {
+      return rejectUnsizedBody();
+    }
+    if (length > MAX_MCP_FRAME) {
       discardDeclaredBody(sep + sepLen, length);
       return frameTooBig();
     }
     if (sep > MAX_MCP_FRAME) {
       buffer = Buffer.alloc(0);
       return frameTooBig();
-    }
-    if (!match || !Number.isFinite(length)) {
-      buffer = buffer.subarray(sep + sepLen);
-      return { kind: "bad", message: "content-length header is missing" };
     }
     const start = sep + sepLen;
     if (buffer.length < start + length) {

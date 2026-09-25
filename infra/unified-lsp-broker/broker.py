@@ -1039,11 +1039,12 @@ class Broker:
 
     def _client(self, conn: socket.socket) -> None:
         try:
-            conn.settimeout(self.client_idle_s)
+            # One deadline for the whole line. A byte every few milliseconds must not refresh it.
+            deadline = time.monotonic() + self.client_idle_s
             data = b""
             while b"\n" not in data:
                 try:
-                    chunk = conn.recv(65536)
+                    chunk = recv_within(conn, deadline, 65536)
                 except socket.timeout:
                     if data:
                         self._reject_line(conn, "request is not a single JSON line")
@@ -1071,6 +1072,7 @@ class Broker:
             if not isinstance(request, dict):
                 self._reject_line(conn, "request must be a JSON object")
                 return
+            conn.settimeout(None)
             response = self.handle(request)
             conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
             if request.get("method") == "shutdown" and response.get("ok"):
@@ -1110,14 +1112,17 @@ class Broker:
 
     def _ws_client(self, conn: socket.socket) -> None:
         try:
-            conn.settimeout(self.client_idle_s)
+            # The slot is taken before the token is checked. The deadline covers that
+            # handshake and the first frame, and it is not refreshed by trickle bytes.
+            deadline = time.monotonic() + self.client_idle_s
             host = (self.ws_addr or {}).get("host", "127.0.0.1")
             port = int((self.ws_addr or {}).get("port") or 0)
-            if not ws_handshake(conn, expected_origin(str(host), port), self.ws_share or ""):
+            if not ws_handshake(conn, expected_origin(str(host), port), self.ws_share or "", deadline):
                 return
-            opcode, payload = read_ws_frame(conn)
+            opcode, payload = read_ws_frame(conn, deadline)
             if opcode != 0x1:
                 return
+            conn.settimeout(None)
             request = json.loads(payload.decode("utf-8"))
             response = self.handle(request)
             write_ws_frame(conn, json.dumps(response).encode("utf-8"))
@@ -1196,10 +1201,22 @@ def ws_reject(conn: socket.socket, status: int, reason: str) -> bool:
     return False
 
 
-def ws_handshake(conn: socket.socket, origin_required: str, share: str) -> bool:
+def recv_within(conn: socket.socket, deadline: float, nbytes: int) -> bytes:
+    """Read once, using only the time left until deadline. Each call does not restart it."""
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise socket.timeout("admission deadline")
+    conn.settimeout(remaining)
+    return conn.recv(nbytes)
+
+
+def ws_handshake(conn: socket.socket, origin_required: str, share: str, deadline: float) -> bool:
     data = b""
     while b"\r\n\r\n" not in data:
-        chunk = conn.recv(4096)
+        try:
+            chunk = recv_within(conn, deadline, 4096)
+        except socket.timeout:
+            return False
         if not chunk:
             return False
         data += chunk
@@ -1233,29 +1250,32 @@ def ws_handshake(conn: socket.socket, origin_required: str, share: str) -> bool:
     return True
 
 
-def recvn(conn: socket.socket, n: int) -> bytes:
+def recvn(conn: socket.socket, n: int, deadline: float) -> bytes:
     buf = bytearray()
     while len(buf) < n:
-        chunk = conn.recv(n - len(buf))
+        try:
+            chunk = recv_within(conn, deadline, n - len(buf))
+        except socket.timeout as exc:
+            raise ValueError("admission deadline") from exc
         if not chunk:
             raise ValueError("socket closed")
         buf.extend(chunk)
     return bytes(buf)
 
 
-def read_ws_frame(conn: socket.socket) -> tuple[int, bytes]:
-    header = recvn(conn, 2)
+def read_ws_frame(conn: socket.socket, deadline: float) -> tuple[int, bytes]:
+    header = recvn(conn, 2, deadline)
     opcode = header[0] & 0x0F
     masked = header[1] & 0x80
     length = header[1] & 0x7F
     if length == 126:
-        length = int.from_bytes(recvn(conn, 2), "big")
+        length = int.from_bytes(recvn(conn, 2, deadline), "big")
     elif length == 127:
-        length = int.from_bytes(recvn(conn, 8), "big")
+        length = int.from_bytes(recvn(conn, 8, deadline), "big")
     if length > MAX_WS_FRAME:
         raise ValueError("websocket frame exceeds cap")
-    mask = recvn(conn, 4) if masked else b""
-    payload = recvn(conn, length)
+    mask = recvn(conn, 4, deadline) if masked else b""
+    payload = recvn(conn, length, deadline)
     if masked:
         payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
     return opcode, payload
@@ -1374,10 +1394,16 @@ def cmd_stop(args: argparse.Namespace) -> int:
     recorded = read_state(state_dir) or {}
     pid = recorded.get("pid")
     code = forward(args, "shutdown", {})
-    for _ in range(50):
+    # Shutdown waits for an in-flight diagnostics call, which may hold the
+    # language lock for the whole request budget. A five-second poll reports
+    # failure for a stop that then exits cleanly.
+    deadline = time.monotonic() + REQUEST_BUDGET_S + 4.0
+    while time.monotonic() < deadline:
         if not pid_alive(pid):
             return code
-        time.sleep(0.1)
+        time.sleep(0.05)
+    if not pid_alive(pid):
+        return code
     sys.stderr.write("broker did not exit after shutdown\n")
     return 1
 

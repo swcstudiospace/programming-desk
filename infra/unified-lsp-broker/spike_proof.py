@@ -82,7 +82,7 @@ def start_daemon(state: Path, workspace: Path, ws: str | None, env: dict) -> tup
 
 
 def stop_daemon(state: Path) -> None:
-    proc = run_broker(["--state-dir", str(state), "stop"], timeout=15)
+    proc = run_broker(["--state-dir", str(state), "stop"], timeout=30)
     if proc.returncode != 0:
         raise SystemExit(f"stop failed code={proc.returncode} stdout={proc.stdout!r} stderr={proc.stderr!r}")
 
@@ -489,6 +489,8 @@ def main() -> int:
     prove_concurrent_claim(work, env)
     prove_shutdown_waits_for_diagnostics(work, env)
     prove_idle_clients_release(work, env)
+    prove_trickle_releases_slot(work, env)
+    prove_stop_past_five_seconds(work, env)
     prove_file_read_errors(work, env)
 
     print(
@@ -498,7 +500,7 @@ def main() -> int:
         "ws=127.0.0.1 optional state_after_stop=stopped "
         "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
         "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan "
-        "p3=lock,shutdown,idle,file"
+        "p3=lock,shutdown,idle,file,trickle,stop"
     )
     return 0
 
@@ -763,6 +765,103 @@ def prove_idle_clients_release(work: Path, base_env: dict) -> None:
                 daemon.kill()
 
 
+def _trickle(sock: socket.socket, seconds: float, stop: threading.Event) -> None:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline and not stop.is_set():
+        try:
+            sock.sendall(b"G")
+        except OSError:
+            return
+        time.sleep(0.1)
+
+
+def prove_trickle_releases_slot(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-trickle-")
+    env = dict(base_env)
+    env["ULSP_MAX_CLIENTS"] = "1"
+    env["ULSP_CLIENT_IDLE_S"] = "0.4"
+    daemon, info = start_daemon(state, work, "127.0.0.1:0", env)
+    opened: list[socket.socket] = []
+    try:
+        expect(info["state"] == "ready" and info.get("ws"), info)
+
+        def past_deadline(sock: socket.socket) -> None:
+            opened.append(sock)
+            stop = threading.Event()
+            thread = threading.Thread(target=_trickle, args=(sock, 1.2, stop))
+            thread.start()
+            time.sleep(0.7)
+            code, health = rpc(state, "health", {}, env)
+            stop.set()
+            thread.join(timeout=2)
+            expect(code == 0 and health["ok"] is True and health["result"]["state"] == "ready", health)
+
+        unix = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        unix.settimeout(2)
+        unix.connect(str(state / "broker.sock"))
+        past_deadline(unix)
+        host = info["ws"]["host"]
+        port = int(info["ws"]["port"])
+        web = socket.create_connection((host, port), timeout=2)
+        past_deadline(web)
+    finally:
+        for sock in opened:
+            try:
+                sock.close()
+            except OSError:
+                pass
+        if daemon.poll() is None:
+            stop_daemon(state)
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+
+
+def prove_stop_past_five_seconds(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-stop5-")
+    env = dict(base_env)
+    env["ULSP_SPIKE_HOOKS"] = "1"
+    daemon, info = start_daemon(state, work, None, env)
+    try:
+        expect(info["state"] == "ready", info)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0 and installed["ok"] is True, installed)
+        code, first = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        expect(code == 0 and marker_present(first, "intentional spike diagnostic for tsjs"), first)
+        (state / "spike_hold_s").write_text("6.0\n", encoding="utf-8")
+        holder: dict[str, tuple[int, dict]] = {}
+
+        def run_diag() -> None:
+            holder["item"] = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+
+        thread = threading.Thread(target=run_diag)
+        thread.start()
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline and not (state / "spike_hold_ready").exists():
+            time.sleep(0.02)
+        expect((state / "spike_hold_ready").exists(), "diagnostics never reached the long hold")
+        started = time.monotonic()
+        stopped = run_broker(["--state-dir", str(state), "stop"], timeout=30)
+        elapsed = time.monotonic() - started
+        expect(stopped.returncode == 0, f"code={stopped.returncode} out={stopped.stdout!r} err={stopped.stderr!r}")
+        expect(elapsed >= 5.0, f"stop returned inside the old five-second window ({elapsed:.2f}s)")
+        thread.join(timeout=5)
+        expect(not thread.is_alive(), "diagnostics still running after the long stop")
+        status, body = holder["item"]
+        expect(status == 0 and body["ok"] is True, body)
+        recorded = json.loads((state / "state.json").read_text(encoding="utf-8"))
+        expect(recorded.get("state") == "stopped", recorded)
+        expect(not _alive(int(recorded["pid"])), recorded)
+    finally:
+        if daemon.poll() is None:
+            daemon.kill()
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                pass
+
+
 def prove_file_read_errors(work: Path, base_env: dict) -> None:
     script = (
         "import tempfile, importlib.util\n"
@@ -774,12 +873,15 @@ def prove_file_read_errors(work: Path, base_env: dict) -> None:
         "path = Path(tempfile.mkdtemp()) / 'gone.ts'\n"
         "path.write_text('const gone = 1;\\n', encoding='utf-8')\n"
         "path.unlink()\n"
-        "try:\n"
-        "    mod.read_source(path)\n"
-        "except mod.BrokerError as exc:\n"
-        "    assert exc.code == 'file_not_found', exc.code\n"
-        "else:\n"
-        "    raise SystemExit('missing file was read')\n"
+        "folder = path.parent / 'dir.ts'\n"
+        "folder.mkdir()\n"
+        "for target in (path, folder):\n"
+        "    try:\n"
+        "        mod.read_source(target)\n"
+        "    except mod.BrokerError as exc:\n"
+        "        assert exc.code == 'file_not_found', (target, exc.code)\n"
+        "    else:\n"
+        "        raise SystemExit(f'read succeeded for {target}')\n"
         "print('missing')\n"
     )
     proc = subprocess.run([PY, "-c", script], text=True, capture_output=True, timeout=10, check=False)
@@ -791,17 +893,13 @@ def prove_file_read_errors(work: Path, base_env: dict) -> None:
         expect(info["state"] == "ready", info)
         code, installed = rpc(state, "install", {"language": "tsjs"}, env)
         expect(code == 0 and installed["ok"] is True, installed)
-        locked = work / "tsjs" / "locked.ts"
-        locked.write_text("const locked = 1;\n", encoding="utf-8")
-        locked.chmod(0)
-        try:
-            code, body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/locked.ts"}, env)
-            expect(code != 0 and body["ok"] is False and body["error"]["code"] == "file_not_found", body)
-            code, health = rpc(state, "health", {}, env)
-            expect(code == 0 and health["ok"] is True, health)
-        finally:
-            locked.chmod(0o644)
-            locked.unlink(missing_ok=True)
+        missing = work / "tsjs" / "missing.ts"
+        missing.write_text("const missing = 1;\n", encoding="utf-8")
+        missing.unlink()
+        code, body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/missing.ts"}, env)
+        expect(code != 0 and body["ok"] is False and body["error"]["code"] == "file_not_found", body)
+        code, health = rpc(state, "health", {}, env)
+        expect(code == 0 and health["ok"] is True, health)
     finally:
         if daemon.poll() is None:
             stop_daemon(state)

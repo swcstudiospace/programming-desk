@@ -1,0 +1,72 @@
+# Broker ↔ MCP boundary for the Tier-1 spike.
+# This file is NOT the desk contract surface. contracts/** is owned by
+# bot-06-quality-security and was not edited. Promoting this description into
+# contracts/ is a contract-first follow-up (G-4) and is a blocker for calling
+# the cross-seat interface merged.
+change_id: unified-lsp-tier1-spike-boundary
+version: 0.1.0-spike
+breaking: false
+status: spike-local
+proposed_by: bot-05-infrastructure
+consumers:
+  - bot-02-web-edge
+transport:
+  primary_agent_surface: mcp-stdio
+  broker_rpc: unix-socket-newline-json
+  optional_share_plane: websocket-loopback-only
+  rejected:
+    - network-primary-mcp
+    - websocket-as-primary-agent-surface
+    - non-loopback-websocket
+request:
+  shape: "{id, method, params}"
+methods:
+  - health
+  - install
+  - plan
+  - diagnostics
+  - probe
+  - shutdown
+  - arm_crash
+mcp_tools:
+  lsp_status: health
+  lsp_install: install
+  lsp_diagnostics: diagnostics
+  lsp_hover: probe
+  lsp_definition: probe
+error_codes:
+  - workspace_unbound
+  - broker_not_running
+  - broker_already_running
+  - language_not_tier1
+  - language_server_missing
+  - language_server_failed
+  - install_not_executed
+  - diagnostics_timeout
+  - workspace_escape
+  - file_not_found
+  - ws_host_forbidden
+  - invalid_arguments
+  - unknown_method
+  - spike_hooks_disabled
+  - extension_not_allowed
+  - file_too_large
+  - broker_not_configured
+  - broker_protocol
+  - unknown_tool
+  - response_too_large
+adapter_only_error_codes:
+  - broker_not_configured
+  - broker_protocol
+  - unknown_tool
+  - response_too_large
+websocket_handshake:
+  off_by_default: true
+  bind: loopback-only
+  origin: "exact http://{bound_host}:{port}"
+  token_header: X-ULSP-WS-Token
+  foreign_or_missing_origin: 403
+  bad_or_missing_token: 401
+  note: "403 and 401 are HTTP handshake statuses, not JSON-RPC error codes"
+states: [cold, ready, serving, degraded, stopped]
+tier1: [tsjs, python, go]

@@ -341,6 +341,7 @@ function handle(message: RpcRequest): void {
 
 let buffer = Buffer.alloc(0);
 let skipBytes = 0;
+let resync = false;
 
 function discardDeclaredBody(bodyStart: number, length: number): void {
   const available = Math.max(0, buffer.length - bodyStart);
@@ -353,7 +354,19 @@ function discardDeclaredBody(bodyStart: number, length: number): void {
 function rejectUnsizedBody(): Parsed {
   buffer = Buffer.alloc(0);
   skipBytes = 0;
+  resync = true;
   return frameTooBig();
+}
+
+function takeRest(start: number): void {
+  const rest = buffer.subarray(start);
+  buffer = rest.length === 0 ? Buffer.alloc(0) : Buffer.from(rest);
+}
+
+function looksLikeContentLength(buf: Buffer): boolean {
+  const prefix = "content-length:";
+  const head = buf.subarray(0, Math.min(buf.length, prefix.length)).toString("latin1").toLowerCase();
+  return prefix.startsWith(head) || head.startsWith(prefix);
 }
 
 function applySkip(): boolean {
@@ -372,6 +385,7 @@ function applySkip(): boolean {
 
 type Parsed =
   | { kind: "need-more" }
+  | { kind: "drop" }
   | { kind: "bad"; message: string }
   | { kind: "ok"; message: RpcRequest };
 
@@ -404,7 +418,40 @@ function findHeaderEnd(buf: Buffer): { index: number; length: number } | null {
   return { index: crlf, length: 4 };
 }
 
+function resyncParse(): Parsed {
+  if (!looksLikeContentLength(buffer)) {
+    const newline = buffer.indexOf(0x0a);
+    if (newline < 0) {
+      if (buffer.length > MAX_MCP_FRAME) {
+        buffer = Buffer.alloc(0);
+      }
+      return { kind: "need-more" };
+    }
+    takeRest(newline + 1);
+    return { kind: "drop" };
+  }
+  const headerEnd = findHeaderEnd(buffer);
+  if (headerEnd === null) {
+    if (buffer.length > MAX_MCP_FRAME) {
+      buffer = Buffer.alloc(0);
+    }
+    return { kind: "need-more" };
+  }
+  const header = buffer.subarray(0, headerEnd.index).toString("utf-8");
+  const match = header.match(/content-length:\s*(\S+)/i);
+  const length = match ? Number(match[1]) : NaN;
+  if (!Number.isFinite(length) || length < 0) {
+    takeRest(headerEnd.index + headerEnd.length);
+    return { kind: "drop" };
+  }
+  resync = false;
+  return tryParse();
+}
+
 function tryParse(): Parsed {
+  if (resync) {
+    return resyncParse();
+  }
   const textStart = buffer.toString("utf-8");
   if (textStart.startsWith("Content-Length:") || textStart.startsWith("content-length:")) {
     const headerEnd = findHeaderEnd(buffer);
@@ -492,6 +539,12 @@ function onData(chunk: Buffer): void {
     }
     if (parsed.kind === "need-more") {
       return;
+    }
+    if (parsed.kind === "drop") {
+      if (buffer.length >= before) {
+        return;
+      }
+      continue;
     }
     if (parsed.kind === "bad") {
       const consumed = buffer.length < before;

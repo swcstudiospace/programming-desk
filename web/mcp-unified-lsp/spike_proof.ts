@@ -298,6 +298,10 @@ async function main(): Promise<void> {
     expect(afterEarly.id === 75 && afterEarly.result !== undefined, JSON.stringify(afterEarly));
     guard.kill();
 
+    const framedPing = (id: number): string => {
+      const body = ping(id);
+      return `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
+    };
     const expectUnsizedDropped = async (headerValue: string, buriedId: number, nextId: number): Promise<void> => {
       const child = spawn(process.execPath, ["--experimental-strip-types", server], {
         env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
@@ -308,7 +312,30 @@ async function main(): Promise<void> {
       child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n${ping(buriedId)}\n`);
       const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
       expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
-      child.stdin.write(`${ping(nextId)}\n`);
+      child.stdin.write(framedPing(nextId));
+      const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
+      expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
+      child.kill();
+    };
+    const expectSplitDropped = async (headerValue: string, buriedId: number, nextId: number): Promise<void> => {
+      const child = spawn(process.execPath, ["--experimental-strip-types", server], {
+        env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
+        stdio: ["pipe", "pipe", "pipe"],
+      }) as ChildProcessWithoutNullStreams;
+      child.stderr.resume();
+      const next = lineReader(child, 2000);
+      child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n`);
+      const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
+      expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
+      const buriedCall = JSON.stringify({
+        jsonrpc: "2.0",
+        id: buriedId,
+        method: "tools/call",
+        params: { name: "lsp_status", arguments: {} },
+      });
+      child.stdin.write(`${buriedCall}\n`);
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      child.stdin.write(framedPing(nextId));
       const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
       expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
       child.kill();
@@ -317,6 +344,8 @@ async function main(): Promise<void> {
     expect(!Number.isFinite(Number(infiniteLength)), "digit string should be Infinity");
     await expectUnsizedDropped(infiniteLength, 96, 86);
     await expectUnsizedDropped("NaN", 97, 87);
+    await expectSplitDropped(infiniteLength, 94, 84);
+    await expectSplitDropped("NaN", 93, 83);
 
     const fat = path.join(frameDir, "fat_broker.py");
     writeFileSync(fat, "import sys\nsys.stdout.write('x' * 4000)\n");
@@ -364,7 +393,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-resume\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-split\n",
   );
 }
 

@@ -3,14 +3,14 @@
   "bot": "bot-02-web-edge",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:40:00Z",
-  "completed_at": "2026-09-25T08:51:36Z",
+  "completed_at": "2026-09-25T09:03:41Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "commands": [
     {
       "cmd": "node --experimental-strip-types web/mcp-unified-lsp/spike_proof.ts",
       "exit_code": 0,
-      "duration_s": 1.7,
+      "duration_s": 1.8,
       "output_tail": "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-ndjson,status,chunk"
     },
     {

@@ -483,6 +483,7 @@ def main() -> int:
     expect(not lingering, f"language server pids still alive: {lingering}")
     expect(grandchild != 0 and not _alive(grandchild), f"grandchild survived stop: {grandchild}")
     prove_timeout_clamp()
+    prove_budget_rejects_nonfinite()
     prove_timeout_recovers(work, env)
     prove_queue_timeout_keeps_session(work, env)
 
@@ -492,7 +493,7 @@ def main() -> int:
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
         "ws=127.0.0.1 optional state_after_stop=stopped "
         "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
-        "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total"
+        "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan"
     )
     return 0
 
@@ -515,6 +516,23 @@ def prove_timeout_clamp() -> None:
     phase_s, budget_s, client_s = (float(line) for line in proc.stdout.strip().splitlines())
     expect(phase_s * 2 <= budget_s <= client_s, proc.stdout)
     expect(phase_s < 30, proc.stdout)
+
+
+def prove_budget_rejects_nonfinite() -> None:
+    script = (
+        "import math, os, importlib.util\n"
+        "spec = importlib.util.spec_from_file_location('ulsp_broker', 'infra/unified-lsp-broker/broker.py')\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "assert spec.loader is not None\n"
+        "spec.loader.exec_module(mod)\n"
+        "for raw in ('NaN', 'nan', 'inf', '-inf', 'Infinity'):\n"
+        "    os.environ['ULSP_REQUEST_BUDGET_S'] = raw\n"
+        "    budget = mod.request_budget()\n"
+        "    assert math.isfinite(budget) and budget == mod.REQUEST_BUDGET_S, (raw, budget)\n"
+        "print('finite')\n"
+    )
+    proc = subprocess.run([PY, "-c", script], text=True, capture_output=True, timeout=10, check=False)
+    expect(proc.returncode == 0 and proc.stdout.strip() == "finite", proc.stderr or proc.stdout)
 
 
 def prove_queue_timeout_keeps_session(work: Path, base_env: dict) -> None:

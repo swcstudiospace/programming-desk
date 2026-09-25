@@ -18,6 +18,7 @@ import base64
 import hashlib
 import hmac
 import json
+import math
 import os
 import re
 import secrets
@@ -223,7 +224,7 @@ def request_budget() -> float:
         value = float(raw)
     except ValueError:
         return REQUEST_BUDGET_S
-    if value <= 0 or value > REQUEST_BUDGET_S:
+    if not math.isfinite(value) or value <= 0 or value > REQUEST_BUDGET_S:
         return REQUEST_BUDGET_S
     return value
 

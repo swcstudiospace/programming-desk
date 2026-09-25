@@ -266,7 +266,7 @@ async function main(): Promise<void> {
     const buried = `${ping(99)}\n`;
     const pad = "z".repeat(declared - Buffer.byteLength(buried));
     expect(Buffer.byteLength(buried + pad) === declared, "rejected body length");
-    guard.stdin.write(`Content-Length: ${declared}\n${buried}${pad}${ping(72)}\n`);
+    guard.stdin.write(`Content-Length: ${declared}\r\n\r\n${buried}${pad}${ping(72)}\n`);
     const bigHeader = JSON.parse(await nextGuard()) as { id?: number; error?: { data?: { code?: string } } };
     expect(bigHeader.id !== 99 && bigHeader.error?.data?.code === "invalid_arguments", JSON.stringify(bigHeader));
     const afterHeader = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
@@ -278,6 +278,24 @@ async function main(): Promise<void> {
     guard.stdin.write(`${pad}${ping(73)}\n`);
     const afterChunk = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
     expect(afterChunk.id === 73 && afterChunk.result !== undefined, JSON.stringify(afterChunk));
+    const head = `${ping(98)}\n`;
+    const tail = `${ping(99)}\n`;
+    const mid = "q".repeat(declared - Buffer.byteLength(head + tail));
+    const multilineBody = head + mid + tail;
+    expect(Buffer.byteLength(multilineBody) === declared, "multiline body length");
+    const extra = "Content-Type: application/vscode-jsonrpc; charset=utf-8\r\n";
+    guard.stdin.write(`Content-Length: ${declared}\r\n${extra}\r\n${multilineBody}${ping(74)}\n`);
+    const multi = JSON.parse(await nextGuard()) as { id?: number; error?: { data?: { code?: string } } };
+    expect(multi.id !== 98 && multi.id !== 99 && multi.error?.data?.code === "invalid_arguments", JSON.stringify(multi));
+    const afterMulti = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(afterMulti.id === 74 && afterMulti.result !== undefined, JSON.stringify(afterMulti));
+    guard.stdin.write(`Content-Length: ${declared}\r\n${extra}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    guard.stdin.write(`\r\n${multilineBody}${ping(75)}\n`);
+    const early = JSON.parse(await nextGuard()) as { id?: number; error?: { data?: { code?: string } } };
+    expect(early.id !== 98 && early.id !== 99 && early.error?.data?.code === "invalid_arguments", JSON.stringify(early));
+    const afterEarly = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(afterEarly.id === 75 && afterEarly.result !== undefined, JSON.stringify(afterEarly));
     guard.kill();
 
     const fat = path.join(frameDir, "fat_broker.py");
@@ -326,7 +344,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-body\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-hdr\n",
   );
 }
 

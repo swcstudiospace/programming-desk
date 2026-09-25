@@ -114,7 +114,7 @@ Dispatch order followed: A/B/E plus LEAD notes. Unit D (SPE-167) has not signed 
 - `**/*.go` ownership. The proposal above is not applied. `ownership.yaml` stays QUALITY-owned.
 - Promoting `broker_mcp_boundary.yaml` into `contracts/**`. That surface stays QUALITY-owned and was not edited.
 - Real `typescript-language-server`, `pyright-langserver`, and `gopls` install. The spike still runs `fixture_ls.py`.
-- Greptile confidence on draft PR #9. Addressable findings through tip `284861a` are in the broker and adapter, including newline frame limits, Content-Length header consumption, the LSP request budget under the 20s client deadline, and `diagnostics_total` after the JSON size cap. A later pass discards the declared body of a rejected Content-Length frame and returns a queued diagnostics timeout without killing a healthy language-server session. G-1 and `contracts/**` promotion stay deferred. This note does not claim a Greptile sign-off.
+- Greptile confidence on draft PR #9. Addressable findings through tip `ba6f72d` are in the broker and adapter. A later pass discards a rejected Content-Length body only after the header blank line, so extra header lines are not left as JSON-RPC, and a non-finite `ULSP_REQUEST_BUDGET_S` falls back to the finite 18s budget. G-1 and `contracts/**` promotion stay deferred. This note does not claim a Greptile sign-off.
 
 ## Ownership blocker (G-1 on this branch)
 

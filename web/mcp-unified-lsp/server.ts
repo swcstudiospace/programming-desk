@@ -386,52 +386,47 @@ function frameTooBig(): Parsed {
   return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
 }
 
+function findHeaderEnd(buf: Buffer): { index: number; length: number } | null {
+  const crlf = buf.indexOf("\r\n\r\n");
+  const lf = buf.indexOf("\n\n");
+  if (crlf < 0 && lf < 0) {
+    return null;
+  }
+  if (lf >= 0 && (crlf < 0 || lf < crlf)) {
+    return { index: lf, length: 2 };
+  }
+  return { index: crlf, length: 4 };
+}
+
 function tryParse(): Parsed {
   const textStart = buffer.toString("utf-8");
   if (textStart.startsWith("Content-Length:") || textStart.startsWith("content-length:")) {
-    const sep = buffer.indexOf("\r\n\r\n");
-    if (sep < 0) {
-      const newline = buffer.indexOf(0x0a);
-      if (newline < 0) {
-        if (buffer.length > MAX_MCP_FRAME) {
-          buffer = Buffer.alloc(0);
-          return frameTooBig();
-        }
-        return { kind: "need-more" };
-      }
-      const headerLine = buffer.subarray(0, newline).toString("utf-8");
-      const early = headerLine.match(/content-length:\s*(\d+)/i);
-      const earlyLength = early ? Number(early[1]) : NaN;
-      if (Number.isFinite(earlyLength) && earlyLength > MAX_MCP_FRAME) {
-        discardDeclaredBody(newline + 1, earlyLength);
-        return frameTooBig();
-      }
-      if (newline > MAX_MCP_FRAME) {
-        buffer = buffer.subarray(newline + 1);
-        return frameTooBig();
-      }
+    const headerEnd = findHeaderEnd(buffer);
+    if (headerEnd === null) {
       if (buffer.length > MAX_MCP_FRAME) {
         buffer = Buffer.alloc(0);
         return frameTooBig();
       }
       return { kind: "need-more" };
     }
+    const sep = headerEnd.index;
+    const sepLen = headerEnd.length;
     const header = buffer.subarray(0, sep).toString("utf-8");
     const match = header.match(/content-length:\s*(\d+)/i);
     const length = match ? Number(match[1]) : NaN;
     if (Number.isFinite(length) && length > MAX_MCP_FRAME) {
-      discardDeclaredBody(sep + 4, length);
+      discardDeclaredBody(sep + sepLen, length);
       return frameTooBig();
     }
     if (sep > MAX_MCP_FRAME) {
       buffer = Buffer.alloc(0);
       return frameTooBig();
     }
-    if (!match) {
-      buffer = buffer.subarray(sep + 4);
+    if (!match || !Number.isFinite(length)) {
+      buffer = buffer.subarray(sep + sepLen);
       return { kind: "bad", message: "content-length header is missing" };
     }
-    const start = sep + 4;
+    const start = sep + sepLen;
     if (buffer.length < start + length) {
       if (buffer.length > MAX_MCP_FRAME) {
         buffer = Buffer.alloc(0);

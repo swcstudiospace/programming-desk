@@ -21,6 +21,8 @@ interface RpcRequest {
 }
 
 const TIER1 = ["tsjs", "python", "go"];
+const MAX_MCP_FRAME = 1_048_576;
+const DEFAULT_BROKER_STDOUT = 8 * 1024 * 1024;
 
 const TOOLS = [
   {
@@ -139,6 +141,28 @@ function configured(): { python: string; broker: string; stateDir: string } | { 
   return { python: process.env.ULSP_PYTHON || "python3", broker, stateDir };
 }
 
+function brokerStdoutCap(): number {
+  const raw = Number(process.env.ULSP_BROKER_MAX_STDOUT || DEFAULT_BROKER_STDOUT);
+  if (!Number.isFinite(raw) || raw < 1) {
+    return DEFAULT_BROKER_STDOUT;
+  }
+  return raw;
+}
+
+function spawnFailureCode(error: Error & { code?: string }): string {
+  if (error.name === "TimeoutError") {
+    return "diagnostics_timeout";
+  }
+  if (
+    error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+    || error.code === "ENOBUFS"
+    || /maxBuffer/i.test(error.message)
+  ) {
+    return "response_too_large";
+  }
+  return "broker_protocol";
+}
+
 function brokerRpc(method: string, params: { [key: string]: Json }): Json {
   const cfg = configured();
   if ("error" in cfg) {
@@ -151,11 +175,16 @@ function brokerRpc(method: string, params: { [key: string]: Json }): Json {
       input: `${JSON.stringify({ id: "mcp", method, params })}\n`,
       encoding: "utf-8",
       timeout: 20000,
+      maxBuffer: brokerStdoutCap(),
     },
   );
   if (child.error) {
-    const code = child.error.name === "TimeoutError" ? "diagnostics_timeout" : "broker_protocol";
-    return toolText({ ok: false, code, message: child.error.message }, true);
+    const code = spawnFailureCode(child.error as Error & { code?: string });
+    const limit = brokerStdoutCap();
+    const message = code === "response_too_large"
+      ? `broker stdout exceeded ${limit} bytes`
+      : child.error.message;
+    return toolText({ ok: false, code, message, limit_bytes: limit }, true);
   }
   const line = (child.stdout || "").trim().split("\n").filter(Boolean).at(-1);
   if (!line) {
@@ -312,54 +341,115 @@ function handle(message: RpcRequest): void {
 
 let buffer = Buffer.alloc(0);
 
-function tryParse(): RpcRequest | undefined {
+type Parsed =
+  | { kind: "need-more" }
+  | { kind: "bad"; message: string }
+  | { kind: "ok"; message: RpcRequest };
+
+function rejectFrame(message: string): void {
+  buffer = Buffer.alloc(0);
+  send({
+    jsonrpc: "2.0",
+    id: null,
+    error: {
+      code: -32600,
+      message,
+      data: { code: "invalid_arguments", limit_bytes: MAX_MCP_FRAME },
+    },
+  });
+}
+
+function tryParse(): Parsed {
   const textStart = buffer.toString("utf-8");
   if (textStart.startsWith("Content-Length:") || textStart.startsWith("content-length:")) {
     const sep = buffer.indexOf("\r\n\r\n");
     if (sep < 0) {
-      return undefined;
+      if (buffer.length > MAX_MCP_FRAME) {
+        return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+      }
+      return { kind: "need-more" };
     }
     const header = buffer.subarray(0, sep).toString("utf-8");
     const match = header.match(/content-length:\s*(\d+)/i);
     if (!match) {
       buffer = Buffer.alloc(0);
-      return undefined;
+      return { kind: "bad", message: "content-length header is missing" };
     }
     const length = Number(match[1]);
+    if (length > MAX_MCP_FRAME) {
+      buffer = Buffer.alloc(0);
+      return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+    }
     const start = sep + 4;
     if (buffer.length < start + length) {
-      return undefined;
+      return { kind: "need-more" };
     }
     const body = buffer.subarray(start, start + length).toString("utf-8");
     buffer = buffer.subarray(start + length);
-    return JSON.parse(body) as RpcRequest;
+    return parseRpcBody(body);
   }
   const newline = buffer.indexOf(0x0a);
   if (newline < 0) {
-    return undefined;
+    if (buffer.length > MAX_MCP_FRAME) {
+      return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+    }
+    return { kind: "need-more" };
   }
   const line = buffer.subarray(0, newline).toString("utf-8").trim();
   buffer = buffer.subarray(newline + 1);
   if (!line) {
     return tryParse();
   }
-  return JSON.parse(line) as RpcRequest;
+  return parseRpcBody(line);
+}
+
+function parseRpcBody(body: string): Parsed {
+  try {
+    const parsed = JSON.parse(body) as unknown;
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { kind: "bad", message: "request must be a JSON object" };
+    }
+    return { kind: "ok", message: parsed as RpcRequest };
+  } catch {
+    return { kind: "bad", message: "request is not JSON" };
+  }
 }
 
 function onData(chunk: Buffer): void {
   buffer = Buffer.concat([buffer, chunk]);
+  if (buffer.length > MAX_MCP_FRAME && !buffer.includes(0x0a) && !buffer.includes("\r\n\r\n")) {
+    rejectFrame(`frame exceeds ${MAX_MCP_FRAME} bytes`);
+    return;
+  }
   for (;;) {
     const before = buffer.length;
-    let message: RpcRequest | undefined;
+    let parsed: Parsed;
     try {
-      message = tryParse();
+      parsed = tryParse();
     } catch (err) {
       process.stderr.write(`mcp-unified-lsp parse error: ${String(err)}\n`);
+      rejectFrame("request is not JSON");
       return;
     }
-    if (!message) {
+    if (parsed.kind === "need-more") {
       return;
     }
+    if (parsed.kind === "bad") {
+      send({
+        jsonrpc: "2.0",
+        id: null,
+        error: {
+          code: -32600,
+          message: parsed.message,
+          data: { code: "invalid_arguments", limit_bytes: MAX_MCP_FRAME },
+        },
+      });
+      if (buffer.length === 0) {
+        return;
+      }
+      continue;
+    }
+    const message = parsed.message;
     try {
       handle(message);
     } catch (err) {

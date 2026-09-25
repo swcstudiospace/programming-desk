@@ -37,6 +37,7 @@ mcp_tools:
 error_codes:
   - workspace_unbound
   - broker_not_running
+  - broker_already_running
   - language_not_tier1
   - language_server_missing
   - language_server_failed
@@ -53,10 +54,12 @@ error_codes:
   - broker_not_configured
   - broker_protocol
   - unknown_tool
+  - response_too_large
 adapter_only_error_codes:
   - broker_not_configured
   - broker_protocol
   - unknown_tool
+  - response_too_large
 websocket_handshake:
   off_by_default: true
   bind: loopback-only

@@ -39,7 +39,7 @@ LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 KEEP_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER", "LOGNAME")
 MAX_RPC_BYTES = 65_536
 MAX_WS_FRAME = 65_536
-MAX_FILE_BYTES = 262_144
+MAX_FILE_BYTES = 1_048_576
 MAX_DIAG_MESSAGE = 240
 MAX_DIAGNOSTICS = 32
 MAX_DIAG_JSON = 8_192
@@ -151,8 +151,13 @@ def assert_allowed_source(entry: dict, language: str, rel: str) -> None:
 
 
 def read_source(path: Path) -> str:
-    if path.stat().st_size > MAX_FILE_BYTES:
-        raise BrokerError("file_too_large", "file exceeds the spike read cap")
+    size = path.stat().st_size
+    if size > MAX_FILE_BYTES:
+        raise BrokerError(
+            "file_too_large",
+            f"file is {size} bytes, over the read cap of {MAX_FILE_BYTES} bytes",
+            {"size_bytes": size, "limit_bytes": MAX_FILE_BYTES},
+        )
     data = path.read_bytes()
     if b"\x00" in data:
         raise BrokerError("invalid_arguments", "file contains a NUL byte")
@@ -162,26 +167,54 @@ def read_source(path: Path) -> str:
         raise BrokerError("invalid_arguments", "file is not utf-8 text") from exc
 
 
-def cap_diagnostics(diags: list) -> list:
+def cap_diagnostics(diags: list) -> tuple[list, bool, int]:
+    """Return capped diagnostics, whether anything was dropped or shortened, and the original count."""
     capped: list[dict] = []
-    for item in diags[:MAX_DIAGNOSTICS]:
+    truncated = False
+    total = 0
+    for item in diags:
         if not isinstance(item, dict):
+            continue
+        total += 1
+        if len(capped) >= MAX_DIAGNOSTICS:
+            truncated = True
             continue
         message = scrub_text(str(item.get("message", "")))
         if len(message) > MAX_DIAG_MESSAGE:
             message = message[: MAX_DIAG_MESSAGE - 1] + "…"
-        capped.append(
-            {
-                "message": message,
-                "severity": item.get("severity", 1),
-                "source": scrub_text(str(item.get("source", "")))[:80],
-                "range": item.get("range"),
-            }
-        )
-        if len(json.dumps(capped)) > MAX_DIAG_JSON:
-            capped.pop()
+            truncated = True
+        entry = {
+            "message": message,
+            "severity": item.get("severity", 1),
+            "source": scrub_text(str(item.get("source", "")))[:80],
+            "range": item.get("range"),
+        }
+        if len(json.dumps(capped + [entry])) > MAX_DIAG_JSON:
+            truncated = True
             break
-    return capped
+        capped.append(entry)
+    if total > len(capped):
+        truncated = True
+    return capped, truncated, total
+
+
+def parse_lsp_timeout() -> float:
+    raw = os.environ.get("ULSP_LSP_TIMEOUT_S", "")
+    if not raw:
+        return 5.0
+    try:
+        value = float(raw)
+    except ValueError:
+        return 5.0
+    if value <= 0 or value > 30:
+        return 5.0
+    return value
+
+
+def version_matches(params: dict, version: int) -> bool:
+    if "version" not in params:
+        return True
+    return params.get("version") == version
 
 
 def pid_alive(pid: int | None) -> bool:
@@ -327,16 +360,37 @@ class Broker:
         self.ws_share: str | None = None
         self.ws_sock: socket.socket | None = None
         self.lock = threading.Lock()
+        self.lang_locks: dict[str, threading.Lock] = {}
+        self.lsp_timeout = parse_lsp_timeout()
         self._load_installed()
-        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        sock_path = self.state_dir / "broker.sock"
-        if sock_path.exists():
-            sock_path.unlink()
-        self.sock.bind(str(sock_path))
-        os.chmod(sock_path, 0o600)
+        self._claim_socket()
         if ws_spec:
             host, port = parse_ws(ws_spec)
             self._bind_ws(host, port)
+
+    def _claim_socket(self) -> None:
+        """Bind the unix socket. A live owner keeps its socket; a dead owner is replaced."""
+        sock_path = self.state_dir / "broker.sock"
+        recorded = read_state(self.state_dir)
+        if recorded and recorded.get("state") != "stopped" and pid_alive(recorded.get("pid")):
+            raise BrokerError(
+                "broker_already_running",
+                "another live broker owns this state directory",
+                {"pid": recorded.get("pid")},
+            )
+        if sock_path.exists():
+            sock_path.unlink()
+        self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.sock.bind(str(sock_path))
+        os.chmod(sock_path, 0o600)
+
+    def _lang_lock(self, language: str) -> threading.Lock:
+        with self.lock:
+            lock = self.lang_locks.get(language)
+            if lock is None:
+                lock = threading.Lock()
+                self.lang_locks[language] = lock
+            return lock
 
     def _load_installed(self) -> None:
         path = self.state_dir / "installed.json"
@@ -491,40 +545,70 @@ class Broker:
         text = read_source(path)
         uri = path.as_uri()
         lang_id = language_id_for(entry, path)
-        attempts = 0
-        while True:
-            attempts += 1
-            sess = self.sessions.get(language)
-            if sess is None or sess.proc.poll() is not None:
+        # The language lock covers this server's stdio. The broker lock is not held while waiting.
+        with self._lang_lock(language):
+            attempts = 0
+            while True:
+                attempts += 1
+                with self.lock:
+                    sess = self.sessions.get(language)
+                    if sess is not None and sess.proc.poll() is None:
+                        spawned = False
+                    else:
+                        if sess is not None:
+                            self._kill(sess)
+                            self.sessions.pop(language, None)
+                        sess = self._spawn(language)
+                        spawned = True
+                if spawned:
+                    try:
+                        self._initialize(sess)
+                    except LsDied as exc:
+                        with self.lock:
+                            self._kill(sess)
+                            self._mark_failed(language)
+                        raise BrokerError(
+                            "language_server_failed",
+                            f"{language} language server exited during startup",
+                        ) from exc
+                    except BrokerError:
+                        with self.lock:
+                            self._kill(sess)
+                            self._mark_failed(language)
+                        raise
                 try:
-                    sess = self._spawn(language)
-                except LsDied as exc:
-                    self._mark_failed(language)
-                    raise BrokerError(
-                        "language_server_failed",
-                        f"{language} language server exited during startup",
-                    ) from exc
-            try:
-                diags = self._collect(sess, uri, lang_id, text)
-            except LsDied:
-                self._kill(sess)
-                self.sessions.pop(language, None)
-                if attempts >= 2:
-                    self._mark_failed(language)
-                    raise BrokerError(
-                        "language_server_failed",
-                        f"{language} language server crashed; other languages stay up",
-                    )
-                continue
-            self.failed.discard(language)
-            self._recompute_state()
-            self._persist()
-            return {
-                "language": language,
-                "language_id": lang_id,
-                "path": rel,
-                "diagnostics": cap_diagnostics(diags),
-            }
+                    diags = self._collect(sess, uri, lang_id, text)
+                except BrokerError as exc:
+                    if exc.code == "diagnostics_timeout":
+                        with self.lock:
+                            self._kill(sess)
+                            self._mark_failed(language)
+                    raise
+                except LsDied:
+                    with self.lock:
+                        self._kill(sess)
+                        self.sessions.pop(language, None)
+                    if attempts >= 2:
+                        with self.lock:
+                            self._mark_failed(language)
+                        raise BrokerError(
+                            "language_server_failed",
+                            f"{language} language server crashed; other languages stay up",
+                        )
+                    continue
+                items, truncated, total = cap_diagnostics(diags)
+                with self.lock:
+                    self.failed.discard(language)
+                    self._recompute_state()
+                    self._persist()
+                return {
+                    "language": language,
+                    "language_id": lang_id,
+                    "path": rel,
+                    "diagnostics": items,
+                    "truncated": truncated,
+                    "diagnostics_total": total,
+                }
 
     def _mark_failed(self, language: str) -> None:
         self.sessions.pop(language, None)
@@ -558,14 +642,7 @@ class Broker:
             threading.Thread(
                 target=drain_stderr, args=(proc.stderr, sess.stderr_tail), daemon=True
             ).start()
-        try:
-            self._initialize(sess)
-        except (LsDied, BrokerError):
-            self._kill(sess)
-            raise
         self.sessions[language] = sess
-        self._recompute_state()
-        self._persist()
         return sess
 
     def _initialize(self, sess: Session) -> None:
@@ -591,7 +668,7 @@ class Broker:
                 },
             },
         )
-        self._wait(sess, lambda msg: msg.get("id") == request_id, 5)
+        self._wait(sess, lambda msg: msg.get("id") == request_id, self.lsp_timeout)
         write_lsp(sess, {"jsonrpc": "2.0", "method": "initialized", "params": {}})
 
     def _collect(self, sess: Session, uri: str, language_id: str, text: str) -> list:
@@ -627,9 +704,10 @@ class Broker:
             )
         message = self._wait(
             sess,
-            lambda msg: msg.get("method") == "textDocument/publishDiagnostics"
-            and (msg.get("params") or {}).get("uri") == uri,
-            5,
+            lambda msg, expected=version: msg.get("method") == "textDocument/publishDiagnostics"
+            and (msg.get("params") or {}).get("uri") == uri
+            and version_matches(msg.get("params") or {}, expected),
+            self.lsp_timeout,
         )
         return (message.get("params") or {}).get("diagnostics") or []
 
@@ -712,23 +790,24 @@ class Broker:
         if not isinstance(params, dict):
             return fail(request_id, BrokerError("invalid_arguments", "params must be an object"))
         try:
-            with self.lock:
-                if method == "health":
-                    result = self.health()
-                elif method == "install":
-                    result = self.install(str(params.get("language") or ""))
-                elif method == "plan":
-                    result = self.plan(str(params.get("language") or ""))
-                elif method == "diagnostics":
-                    result = self.diagnostics(str(params.get("language") or ""), str(params.get("path") or ""))
-                elif method == "probe":
-                    result = self.probe(str(params.get("language") or ""), str(params.get("path") or ""))
-                elif method == "arm_crash":
-                    result = self.arm_crash(str(params.get("language") or ""))
-                elif method == "shutdown":
-                    result = {"state": "stopped"}
-                else:
-                    raise BrokerError("unknown_method", f"unknown method {method}")
+            if method == "diagnostics":
+                result = self.diagnostics(str(params.get("language") or ""), str(params.get("path") or ""))
+            else:
+                with self.lock:
+                    if method == "health":
+                        result = self.health()
+                    elif method == "install":
+                        result = self.install(str(params.get("language") or ""))
+                    elif method == "plan":
+                        result = self.plan(str(params.get("language") or ""))
+                    elif method == "probe":
+                        result = self.probe(str(params.get("language") or ""), str(params.get("path") or ""))
+                    elif method == "arm_crash":
+                        result = self.arm_crash(str(params.get("language") or ""))
+                    elif method == "shutdown":
+                        result = {"state": "stopped"}
+                    else:
+                        raise BrokerError("unknown_method", f"unknown method {method}")
         except BrokerError as exc:
             return fail(request_id, exc)
         return ok(request_id, result)

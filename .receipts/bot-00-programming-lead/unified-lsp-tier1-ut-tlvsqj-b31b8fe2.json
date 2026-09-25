@@ -3,7 +3,7 @@
   "bot": "bot-00-programming-lead",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:35:00Z",
-  "completed_at": "2026-09-25T00:21:00Z",
+  "completed_at": "2026-09-25T03:55:00Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "lane": "A",
@@ -12,7 +12,7 @@
   "linear_parents": ["SPE-165", "SPE-166", "SPE-162", "SPE-164", "SPE-163", "SPE-167", "SPE-168"],
   "commands": [
     {
-      "cmd": "python3 -c \"from pathlib import Path; t=Path('.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md').read_text(); need=['greenfield spike that adapts patterns','MCP stdio','127.0.0.1','tsjs','language_server_missing','Unit D','SPE-167','**/*.go','isaacphi/mcp-language-server','t3ta/mcp-language-server','beruang/lsp-mcp','code-yeongyu/lsp-tools-mcp','network-primary','Clean stop kills language-server process groups','SPIKE_SANDBOX_BLOCKED','F6','extension_not_allowed']; miss=[x for x in need if x not in t]; print(miss or 'design-markers-ok'); raise SystemExit(0 if not miss else 1)\"",
+      "cmd": "python3 -c \"from pathlib import Path; t=Path('.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md').read_text(); need=['greenfield spike that adapts patterns','MCP stdio','127.0.0.1','tsjs','language_server_missing','Unit D','SPE-167','**/*.go','isaacphi/mcp-language-server','t3ta/mcp-language-server','beruang/lsp-mcp','code-yeongyu/lsp-tools-mcp','network-primary','Clean stop kills language-server process groups','SPIKE_SANDBOX_BLOCKED','SPIKE_SANDBOX_CLEAR','F6','extension_not_allowed']; miss=[x for x in need if x not in t]; print(miss or 'design-markers-ok'); raise SystemExit(0 if not miss else 1)\"",
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "design-markers-ok"
@@ -50,7 +50,7 @@
   ],
   "claims": [
     {
-      "claim": "LEAD design note records the greenfield fork decision, MCP stdio as primary, loopback WebSocket, Tier-1 ids, structured errors, process-group stop, the F6 deferral, the Go ownership proposal, and the SPIKE_SANDBOX_BLOCKED Unit D verdict",
+      "claim": "LEAD design note records the greenfield fork decision, MCP stdio as primary, loopback WebSocket, Tier-1 ids, structured errors, process-group stop, the F6 deferral, the Go ownership proposal, and both the SPIKE_SANDBOX_BLOCKED and SPIKE_SANDBOX_CLEAR Unit D verdicts",
       "evidence_command_index": 0
     },
     {
@@ -78,8 +78,9 @@
   "unverified": [
     "CI on this branch will attribute G-1 to bot-00-programming-lead and fail; multi-seat attribution is deferred and was not changed",
     "contracts/ was not updated; broker_mcp_boundary.yaml is not the G-4 surface and has no consumer acks",
-    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED. F1-F5 were addressed in this revision. F6, F7, and a QUALITY sign-off were not. approved_by is the G-2 reviewer slot",
-    "Greptile was not run and is not claimed",
+    "QUALITY policy on 73af5d6 is SPIKE_SANDBOX_CLEAR. This Greptile follow-up is not a QUALITY sign-off and not a Greptile sign-off. approved_by is the G-2 reviewer slot",
+    "F6, F7, contracts promotion, real language-server install, and G-1 multi-seat attribution remain deferred",
+    "Greptile was not re-run by this revision and a passing score is not claimed",
     "Real typescript-language-server, pyright-langserver, and gopls diagnostics were not run",
     "No new Linear or Notion rows were created; existing SPE-165..SPE-168 and the 37 sub-issues were left as materialized"
   ],

@@ -76,14 +76,38 @@ def diagnostics_for(text: str, language: str) -> list[dict]:
     return found
 
 
-def publish(stream, uri: str, text: str, language: str) -> None:
+def publish(stream, uri: str, text: str, language: str, version: int | None) -> None:
+    real = diagnostics_for(text, language)
+    if isinstance(version, int):
+        # A late result for an older document version must not be treated as current.
+        write_message(
+            stream,
+            {
+                "jsonrpc": "2.0",
+                "method": "textDocument/publishDiagnostics",
+                "params": {
+                    "uri": uri,
+                    "version": version - 1,
+                    "diagnostics": [
+                        {
+                            "range": {
+                                "start": {"line": 0, "character": 0},
+                                "end": {"line": 0, "character": 1},
+                            },
+                            "severity": 1,
+                            "source": f"ulsp-fixture-{language}",
+                            "message": "STALE",
+                        }
+                    ],
+                },
+            },
+        )
+    params: dict = {"uri": uri, "diagnostics": real}
+    if isinstance(version, int):
+        params["version"] = version
     write_message(
         stream,
-        {
-            "jsonrpc": "2.0",
-            "method": "textDocument/publishDiagnostics",
-            "params": {"uri": uri, "diagnostics": diagnostics_for(text, language)},
-        },
+        {"jsonrpc": "2.0", "method": "textDocument/publishDiagnostics", "params": params},
     )
 
 
@@ -132,10 +156,13 @@ def main(argv: list[str] | None = None) -> int:
                 doc = params.get("textDocument") or {}
                 uri = doc.get("uri", "")
                 text = doc.get("text", "")
+                version = doc.get("version")
             else:
-                uri = params.get("textDocument", {}).get("uri", "")
+                doc = params.get("textDocument") or {}
+                uri = doc.get("uri", "")
                 text = text_from_did_change(params) or ""
-            publish(stdout, uri, text, args.language)
+                version = doc.get("version")
+            publish(stdout, uri, text, args.language, version if isinstance(version, int) else None)
             continue
         if method == "shutdown" and "id" in message:
             write_message(stdout, {"jsonrpc": "2.0", "id": message["id"], "result": None})

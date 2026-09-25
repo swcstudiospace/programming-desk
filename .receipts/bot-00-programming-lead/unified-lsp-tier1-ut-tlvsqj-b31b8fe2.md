@@ -101,7 +101,7 @@ None of the four is network-primary-only. That class of transport is rejected an
 | A | INFRA | Broker, registry, fixture server, spike proof |
 | B | WEB | `mcp-unified-lsp` stdio adapter and its proof |
 | C | LEAD | This note and `.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json` |
-| D | QUALITY | Verdict on head `f5982ef` was **SPIKE_SANDBOX_BLOCKED**. This revision answers F1–F5 (and the cheap F8 / boundary notes). It is not a QUALITY sign-off |
+| D | QUALITY | Verdict on head `f5982ef` was **SPIKE_SANDBOX_BLOCKED**. F1–F5 landed in `73af5d6`. QUALITY rechecked that policy head as **SPIKE_SANDBOX_CLEAR**. That clear is not a Greptile sign-off and not a merge approval |
 | E | recorded here | Greenfield, adapt patterns, reject network-primary transports |
 
 Dispatch order followed: A/B/E plus LEAD notes. Unit D (SPE-167) has not signed this branch.
@@ -113,6 +113,8 @@ Dispatch order followed: A/B/E plus LEAD notes. Unit D (SPE-167) has not signed 
 - G-1 multi-seat attribution on a LEAD-prefixed branch. The gate still fails as bot-00 because INFRA and WEB files are in the diff.
 - `**/*.go` ownership. The proposal above is not applied. `ownership.yaml` stays QUALITY-owned.
 - Promoting `broker_mcp_boundary.yaml` into `contracts/**`. That surface stays QUALITY-owned and was not edited.
+- Real `typescript-language-server`, `pyright-langserver`, and `gopls` install. The spike still runs `fixture_ls.py`.
+- Greptile confidence on draft PR #9. Addressable findings (truncation flag, file-size error with its limit, second-owner refusal, temp cleanup, per-language lock, timeout recovery, MCP frame cap, null-frame parsing, stdout cap, document version match) are in the broker and adapter. This note does not claim a Greptile sign-off.
 
 ## Ownership blocker (G-1 on this branch)
 

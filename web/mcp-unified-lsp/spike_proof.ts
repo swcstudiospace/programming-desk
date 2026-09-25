@@ -4,7 +4,7 @@
  */
 
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,13 +129,18 @@ async function main(): Promise<void> {
     return JSON.parse(line) as Record<string, unknown>;
   };
 
+  const extraDirs: string[] = [];
   try {
-    const init = await mcpCall({
+    const initMessage = {
       jsonrpc: "2.0",
       id: 1,
       method: "initialize",
       params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "spike", version: "0" } },
-    });
+    };
+    mcp.stdin.write(`null\n${JSON.stringify(initMessage)}\n`);
+    const bad = JSON.parse(await nextMcp()) as { error?: { data?: { code?: string } } };
+    expect(bad.error?.data?.code === "invalid_arguments", JSON.stringify(bad));
+    const init = JSON.parse(await nextMcp()) as Record<string, unknown>;
     const initResult = init.result as { serverInfo?: { name?: string } };
     expect(initResult.serverInfo?.name === "mcp-unified-lsp", JSON.stringify(init));
     mcp.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`);
@@ -230,6 +235,54 @@ async function main(): Promise<void> {
     const leakMessages = (leaked.diagnostics as { message: string }[]).map((item) => item.message);
     expect(leakMessages.some((item) => item.includes("[REDACTED]")), JSON.stringify(leaked));
     expect(leakMessages.every((item) => item.length <= 240), JSON.stringify(leakMessages));
+    expect(!JSON.stringify(leaked).includes("STALE"), JSON.stringify(leaked));
+
+    const frameDir = mkdtempSync(path.join(tmpdir(), "ulsp-mcp-frame-"));
+    extraDirs.push(frameDir);
+    const frameServer = spawn(process.execPath, ["--experimental-strip-types", server], {
+      env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
+      stdio: ["pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    frameServer.stderr.resume();
+    const nextFrame = lineReader(frameServer, 5000);
+    frameServer.stdin.write(`${"a".repeat(1_048_577)}`);
+    const framed = JSON.parse(await nextFrame()) as { error?: { data?: { code?: string } } };
+    expect(framed.error?.data?.code === "invalid_arguments", JSON.stringify(framed));
+    frameServer.kill();
+
+    const fat = path.join(frameDir, "fat_broker.py");
+    writeFileSync(fat, "import sys\nsys.stdout.write('x' * 4000)\n");
+    const limited = spawn(process.execPath, ["--experimental-strip-types", server], {
+      env: {
+        ...process.env,
+        ULSP_BROKER: fat,
+        ULSP_STATE_DIR: frameDir,
+        ULSP_PYTHON: "python3",
+        ULSP_BROKER_MAX_STDOUT: "64",
+      },
+      stdio: ["pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    limited.stderr.resume();
+    const nextLimited = lineReader(limited, 5000);
+    const limitedCall = async (message: unknown): Promise<Record<string, unknown>> => {
+      limited.stdin.write(`${JSON.stringify(message)}\n`);
+      return JSON.parse(await nextLimited()) as Record<string, unknown>;
+    };
+    await limitedCall({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "initialize",
+      params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "spike", version: "0" } },
+    });
+    const oversized = toolPayload(await limitedCall({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "lsp_status", arguments: {} },
+    }));
+    expect(oversized.isError === true && oversized.code === "response_too_large", JSON.stringify(oversized));
+    expect(String(oversized.message).includes("64"), JSON.stringify(oversized));
+    limited.kill();
   } finally {
     mcp.stdin.end();
     mcp.kill();
@@ -238,9 +291,12 @@ async function main(): Promise<void> {
     if (brokerProc.exitCode === null) {
       brokerProc.kill();
     }
+    for (const dir of [stateDir, work, ...extraDirs]) {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf\n",
   );
 }
 

@@ -10,6 +10,7 @@ pyright-langserver, or gopls. Production install plans are printed and not execu
 
 from __future__ import annotations
 
+import atexit
 import base64
 import json
 import os
@@ -156,25 +157,87 @@ def marker_present(message: dict, needle: str) -> bool:
     return any(needle in str(item.get("message", "")) for item in diags)
 
 
+_TEMPS: list[Path] = []
+
+
+def scratch(prefix: str) -> Path:
+    path = Path(tempfile.mkdtemp(prefix=prefix))
+    _TEMPS.append(path)
+    return path
+
+
+def _cleanup_temps() -> None:
+    for path in _TEMPS:
+        shutil.rmtree(path, ignore_errors=True)
+
+
+atexit.register(_cleanup_temps)
+
+
+HUNG_LS = """import json, sys
+
+def read_exact(n):
+    buf = b""
+    while len(buf) < n:
+        chunk = sys.stdin.buffer.read(n - len(buf))
+        if not chunk:
+            return None
+        buf += chunk
+    return buf
+
+def read_message():
+    headers = []
+    while True:
+        line = sys.stdin.buffer.readline()
+        if not line:
+            return None
+        if line in (b"\\r\\n", b"\\n"):
+            break
+        headers.append(line)
+    length = None
+    for line in headers:
+        if line.lower().startswith(b"content-length:"):
+            length = int(line.split(b":", 1)[1].strip())
+    if length is None:
+        return None
+    body = read_exact(length)
+    if body is None:
+        return None
+    return json.loads(body.decode("utf-8"))
+
+def write_message(payload):
+    data = json.dumps(payload).encode("utf-8")
+    sys.stdout.buffer.write(f"Content-Length: {len(data)}\\r\\n\\r\\n".encode("ascii") + data)
+    sys.stdout.buffer.flush()
+
+while True:
+    msg = read_message()
+    if msg is None:
+        break
+    if msg.get("method") == "initialize" and "id" in msg:
+        write_message({"jsonrpc": "2.0", "id": msg["id"], "result": {"capabilities": {}}})
+"""
+
+
 def main() -> int:
     env = os.environ.copy()
     env["ULSP_SPIKE_HOOKS"] = "1"
     env["ULSP_SERVER_MODE"] = "spike"
     env["PYTHONUNBUFFERED"] = "1"
 
-    cold = Path(tempfile.mkdtemp(prefix="ulsp-cold-"))
+    cold = scratch("ulsp-cold-")
     cold_proc = run_broker(["--state-dir", str(cold), "health"], env=env)
     cold_body = parse_stdout(cold_proc)
     expect(cold_proc.returncode == 0, f"cold health exit {cold_proc.returncode}")
     expect(cold_body["result"]["state"] == "cold", f"expected cold, got {cold_body}")
 
-    unbound = Path(tempfile.mkdtemp(prefix="ulsp-unbound-"))
+    unbound = scratch("ulsp-unbound-")
     unbound_proc = run_broker(["--state-dir", str(unbound), "start"], env=env)
     unbound_body = parse_stdout(unbound_proc)
     expect(unbound_proc.returncode != 0, "start without workspace should fail")
     expect(unbound_body["error"]["code"] == "workspace_unbound", unbound_body)
 
-    forbidden = Path(tempfile.mkdtemp(prefix="ulsp-ws-forbid-"))
+    forbidden = scratch("ulsp-ws-forbid-")
     forbid_proc = run_broker(
         ["--state-dir", str(forbidden), "start", "--workspace", str(FIXTURES), "--ws", "0.0.0.0:9"],
         env=env,
@@ -202,7 +265,7 @@ def main() -> int:
     expect(rust.returncode != 0, "rust plan should fail")
     expect(rust_body["error"]["code"] == "language_not_tier1", rust_body)
 
-    work = Path(tempfile.mkdtemp(prefix="ulsp-work-"))
+    work = scratch("ulsp-work-")
     shutil.copytree(FIXTURES, work, dirs_exist_ok=True)
     (work / ".env").write_text("API_KEY=abc123\n", encoding="utf-8")
     (work / "tsjs" / "leak.ts").write_text(
@@ -215,7 +278,7 @@ def main() -> int:
     (work / "id_rsa").write_text("not-a-real-key\n", encoding="utf-8")
     (work / "notes.key").write_text("not-opened\n", encoding="utf-8")
 
-    state = Path(tempfile.mkdtemp(prefix="ulsp-broker-"))
+    state = scratch("ulsp-broker-")
     daemon, info = start_daemon(state, work, "127.0.0.1:0", env)
     grandchild = 0
     try:
@@ -266,9 +329,38 @@ def main() -> int:
                 expect(body["result"]["language_id"] == "javascript", body)
             if rel.endswith(".ts"):
                 expect(body["result"]["language_id"] == "typescript", body)
+            expect(body["result"]["truncated"] is False, body)
+            expect("STALE" not in json.dumps(body), body)
             public = json.dumps(body)
             expect("/tmp" not in public and "/workspace" not in public and "/home" not in public, public)
             expect("stderr" not in body["result"], body)
+
+        many = work / "tsjs" / "many.ts"
+        many.write_text("".join(f"ulsp-diag: item {index}\n" for index in range(40)), encoding="utf-8")
+        code, many_body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/many.ts"}, env)
+        expect(code == 0, many_body)
+        expect(many_body["result"]["truncated"] is True, many_body)
+        expect(many_body["result"]["diagnostics_total"] == 40, many_body)
+        expect(len(many_body["result"]["diagnostics"]) == 32, many_body)
+        expect("STALE" not in json.dumps(many_body), many_body)
+
+        big = work / "tsjs" / "big.ts"
+        big.write_bytes(b"const big = 1;\n" + b"x" * 1_048_576)
+        code, big_body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/big.ts"}, env)
+        expect(code != 0 and big_body["error"]["code"] == "file_too_large", big_body)
+        expect(big_body["error"]["details"]["limit_bytes"] == 1_048_576, big_body)
+        expect("1048576" in big_body["error"]["message"], big_body)
+
+        second = run_broker(
+            ["--state-dir", str(state), "start", "--workspace", str(work)],
+            env=env,
+            timeout=8,
+        )
+        second_body = parse_stdout(second)
+        expect(second.returncode != 0, second_body)
+        expect(second_body["error"]["code"] == "broker_already_running", second_body)
+        code, still_up = rpc(state, "health", {}, env)
+        expect(code == 0 and still_up["ok"] is True, still_up)
 
         expect(pidfile.exists(), "grandchild pid was not recorded")
         grandchild = int(pidfile.read_text(encoding="utf-8").strip())
@@ -382,15 +474,59 @@ def main() -> int:
     lingering = [pid for pid in live_pids if _alive(pid)]
     expect(not lingering, f"language server pids still alive: {lingering}")
     expect(grandchild != 0 and not _alive(grandchild), f"grandchild survived stop: {grandchild}")
+    prove_timeout_recovers(work, env)
 
     print(
         "SPIKE_OK "
         f"plans={','.join(f'{k}:{v}' for k, v in plans.items())} "
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
         "ws=127.0.0.1 optional state_after_stop=stopped "
-        "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul"
+        "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
+        "p1=trunc,limit,owner p2=timeout,version"
     )
     return 0
+
+
+def prove_timeout_recovers(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-timeout-")
+    env = dict(base_env)
+    env["ULSP_LSP_TIMEOUT_S"] = "0.4"
+    daemon, info = start_daemon(state, work, None, env)
+    try:
+        expect(info["state"] == "ready", info)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0 and installed["ok"] is True, installed)
+        hung = state / "hung_ls.py"
+        hung.write_text(HUNG_LS, encoding="utf-8")
+        wrapper = state / "bin" / "ulsp-ls-tsjs"
+        wrapper.write_text(
+            "#!/bin/sh\nexec "
+            + shlex.quote(sys.executable)
+            + " "
+            + shlex.quote(str(hung))
+            + "\n",
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        started = time.monotonic()
+        code, timed = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        elapsed = time.monotonic() - started
+        expect(code != 0 and timed["error"]["code"] == "diagnostics_timeout", timed)
+        expect(elapsed < 3, f"timeout waited {elapsed:.2f}s")
+        code, health = rpc(state, "health", {}, env)
+        expect(health["result"]["sessions"]["tsjs"]["status"] == "failed", health)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0, installed)
+        code, recovered = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        expect(code == 0 and marker_present(recovered, "intentional spike diagnostic for tsjs"), recovered)
+        expect("STALE" not in json.dumps(recovered), recovered)
+    finally:
+        if daemon.poll() is None:
+            stop_daemon(state)
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
 
 
 def _alive(pid: int) -> bool:

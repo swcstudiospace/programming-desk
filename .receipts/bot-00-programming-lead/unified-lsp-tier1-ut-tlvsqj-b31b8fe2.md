@@ -23,9 +23,13 @@ MCP stdio is the primary agent surface. The adapter shells out to `broker.py rpc
 
 WebSocket is optional and refuses non-loopback hosts (`ws_host_forbidden` for `0.0.0.0`). If it is absent, stdio MCP still works. The MCP proof starts the broker without `--ws`.
 
-Lifecycle states implemented: `cold`, `ready`, `serving`, `degraded`, `stopped`. Clean stop kills language-server process groups and leaves `state.json` at `stopped`.
+Lifecycle states implemented: `cold`, `ready`, `serving`, `degraded`, `stopped`. Clean stop kills language-server process groups and leaves `state.json` at `stopped`. The INFRA proof plants a `sleep` grandchild in the Go server's session before the first Go diagnostics call and checks that pid is gone after stop. Stop signals that process group, including when the leader has already exited, and does not signal the broker's own group.
 
-Structured errors (broker code, passed through MCP `isError` tool results): `workspace_unbound`, `broker_not_running`, `broker_not_configured`, `language_not_tier1`, `language_server_missing`, `language_server_failed`, `install_not_executed`, `diagnostics_timeout`, `workspace_escape`, `file_not_found`, `ws_host_forbidden`, `invalid_arguments`.
+WebSocket stays off unless `--ws` is set, and the bind stays loopback-only. When it is on, the handshake requires `Origin` equal to `http://{bound_host}:{port}` and header `X-ULSP-WS-Token`. A missing or foreign Origin is HTTP 403 before the token is accepted. A bad token after a matching Origin is HTTP 401. Frames above 65536 bytes are closed without reading the body. The share value is printed once on the broker's listening line and is not copied into health, `state.json`, or this note.
+
+Diagnostics and probe accept a path only when its suffix is on that language's registry extension list. `.env`, `.git`, key names (`id_rsa`, `id_ed25519`, `*.key`, `*.pem`), and similar paths return `extension_not_allowed` and are not opened. Diagnostic text redacts assignment-shaped secrets and caps message size. RPC and MCP results drop `stderr`, `bin`, and `fixture`, and replace absolute host paths. A NUL byte in an RPC line or in a source file returns `invalid_arguments` and leaves the broker running.
+
+Structured errors (broker code, passed through MCP `isError` tool results): `workspace_unbound`, `broker_not_running`, `broker_not_configured`, `broker_protocol`, `unknown_tool`, `language_not_tier1`, `language_server_missing`, `language_server_failed`, `install_not_executed`, `diagnostics_timeout`, `workspace_escape`, `file_not_found`, `extension_not_allowed`, `file_too_large`, `ws_host_forbidden`, `invalid_arguments`, `spike_hooks_disabled`. `arm_crash` is a spike hook. Adapter-only codes are `broker_not_configured`, `broker_protocol`, and `unknown_tool`. The tool map is `lsp_status`→`health`, `lsp_install`→`install`, `lsp_diagnostics`→`diagnostics`, `lsp_hover`→`probe`, `lsp_definition`→`probe`.
 
 Broker ↔ MCP method list lives in `infra/unified-lsp-broker/broker_mcp_boundary.yaml`. That file is **not** `contracts/**`. QUALITY owns the contract surface. Promoting the boundary into `contracts/` with consumer acks is a follow-up and blocks calling the cross-seat interface merged. This spike implements both sides against that local description in one branch because Lane A was dispatched as a single draft PR.
 
@@ -97,10 +101,18 @@ None of the four is network-primary-only. That class of transport is rejected an
 | A | INFRA | Broker, registry, fixture server, spike proof |
 | B | WEB | `mcp-unified-lsp` stdio adapter and its proof |
 | C | LEAD | This note and `.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json` |
-| D | QUALITY | **Not done.** Sandbox review (n6, SPE-167) trails the draft and blocks calling the spike done |
+| D | QUALITY | Verdict on head `f5982ef` was **SPIKE_SANDBOX_BLOCKED**. This revision answers F1–F5 (and the cheap F8 / boundary notes). It is not a QUALITY sign-off |
 | E | recorded here | Greenfield, adapt patterns, reject network-primary transports |
 
-Dispatch order followed: A/B/E plus LEAD notes. D is held.
+Dispatch order followed: A/B/E plus LEAD notes. Unit D (SPE-167) has not signed this branch.
+
+## Deferred (recorded, not fixed)
+
+- F6: filesystem and network sandbox, resource limits, and still passing `HOME` into language-server children. `HOME` stays in the child environment on purpose until that review.
+- F7: version pins, `0700` state dir, hash verification of installed servers.
+- G-1 multi-seat attribution on a LEAD-prefixed branch. The gate still fails as bot-00 because INFRA and WEB files are in the diff.
+- `**/*.go` ownership. The proposal above is not applied. `ownership.yaml` stays QUALITY-owned.
+- Promoting `broker_mcp_boundary.yaml` into `contracts/**`. That surface stays QUALITY-owned and was not edited.
 
 ## Ownership blocker (G-1 on this branch)
 
@@ -110,7 +122,7 @@ Checked the other way: each file passes G-1 when `--bot` is the owner from `owne
 
 ## Hold
 
-- Unit D sandbox: child filesystem/network policy, diagnostics exfiltration, install supply chain, WebSocket expansion. Partial scrub of child env and workspace-relative paths are in the broker and are not a QUALITY sign-off.
+- F6 sandbox remains open: child filesystem and network policy, resource limits, and removing `HOME` from the child environment. Origin checks, extension allowlists, diagnostic redaction, and process-group stop are in this revision and are not a QUALITY sign-off.
 - Real `typescript-language-server`, `pyright-langserver`, and `gopls` diagnostics.
 - Multi-language registry past Tier-1.
 - Publishing `mcp-unified-lsp`.

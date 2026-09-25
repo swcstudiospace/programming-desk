@@ -83,9 +83,40 @@ function send(message: Json): void {
   process.stdout.write(`${JSON.stringify(message)}\n`);
 }
 
+const SECRET_ASSIGN = /(\b(?:api[_-]?key|secret|password|passwd|token|access[_-]?key|client[_-]?secret)\s*[=:]\s*)(\S+)/gi;
+const ABS_PATH = /\/(?:tmp|home|workspace|Users|var|private|opt|usr)\/\S+/g;
+
+function sanitizeText(text: string): string {
+  const cleaned = text.replace(SECRET_ASSIGN, "$1[REDACTED]").replace(ABS_PATH, "[path]");
+  if (cleaned.startsWith("/") && cleaned !== "/") {
+    return "[path]";
+  }
+  return cleaned;
+}
+
+function sanitize(value: Json): Json {
+  if (typeof value === "string") {
+    return sanitizeText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => sanitize(item));
+  }
+  if (value && typeof value === "object") {
+    const cleaned: { [key: string]: Json } = {};
+    for (const [key, item] of Object.entries(value)) {
+      if (key === "stderr" || key === "bin" || key === "fixture") {
+        continue;
+      }
+      cleaned[key] = sanitize(item);
+    }
+    return cleaned;
+  }
+  return value;
+}
+
 function toolText(payload: Json, isError: boolean): Json {
   return {
-    content: [{ type: "text", text: JSON.stringify(payload) }],
+    content: [{ type: "text", text: JSON.stringify(sanitize(payload)) }],
     isError,
   };
 }
@@ -133,7 +164,6 @@ function brokerRpc(method: string, params: { [key: string]: Json }): Json {
         ok: false,
         code: "broker_protocol",
         message: "broker returned no JSON",
-        stderr: (child.stderr || "").slice(-400),
       },
       true,
     );
@@ -345,6 +375,17 @@ function onData(chunk: Buffer): void {
       return;
     }
   }
+}
+
+if (process.env.ULSP_SANITIZE_SELFTEST === "1") {
+  const sample: Json = {
+    path: "/tmp/ulsp/state/broker.sock",
+    home: "/home/ubuntu/desk",
+    message: "API_KEY=abc123",
+    stderr: "tail from /tmp/ulsp/broker",
+  };
+  process.stdout.write(`${JSON.stringify(sanitize(sample))}\n`);
+  process.exit(0);
 }
 
 process.stdin.on("data", onData);

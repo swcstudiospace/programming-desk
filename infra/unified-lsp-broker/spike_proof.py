@@ -13,6 +13,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import shlex
+import shutil
 import socket
 import subprocess
 import sys
@@ -84,33 +86,40 @@ def stop_daemon(state: Path) -> None:
         raise SystemExit(f"stop failed code={proc.returncode} stdout={proc.stdout!r} stderr={proc.stderr!r}")
 
 
-def ws_call(host: str, port: int, payload: dict) -> dict:
+def ws_open(host: str, port: int, origin: str | None, presented: str | None) -> tuple[socket.socket, bytes]:
     sock = socket.create_connection((host, port), timeout=5)
+    sock.settimeout(5)
+    key = base64.b64encode(os.urandom(16)).decode("ascii")
+    extra = ""
+    if origin is not None:
+        extra += f"Origin: {origin}\r\n"
+    if presented is not None:
+        extra += f"X-ULSP-WS-Token: {presented}\r\n"
+    request = (
+        f"GET / HTTP/1.1\r\nHost: {host}:{port}\r\n"
+        "Upgrade: websocket\r\nConnection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n"
+        f"{extra}\r\n"
+    )
+    sock.sendall(request.encode("ascii"))
+    data = b""
+    while b"\r\n\r\n" not in data:
+        chunk = sock.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+    status = data.split(b"\r\n", 1)[0]
+    return sock, status
+
+
+def ws_call(host: str, port: int, payload: dict, origin: str, presented: str) -> dict:
+    sock, status = ws_open(host, port, origin, presented)
     try:
-        key = base64.b64encode(os.urandom(16)).decode("ascii")
-        request = (
-            f"GET / HTTP/1.1\r\nHost: {host}:{port}\r\n"
-            "Upgrade: websocket\r\nConnection: Upgrade\r\n"
-            f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
-        )
-        sock.sendall(request.encode("ascii"))
-        data = b""
-        while b"\r\n\r\n" not in data:
-            chunk = sock.recv(4096)
-            if not chunk:
-                break
-            data += chunk
-        status = data.split(b"\r\n", 1)[0]
         expect(b" 101 " in status, f"websocket handshake failed: {status!r}")
         body = json.dumps(payload).encode("utf-8")
         mask = os.urandom(4)
         masked = bytes(byte ^ mask[index % 4] for index, byte in enumerate(body))
-        header = bytearray([0x81])
-        if len(body) < 126:
-            header.append(0x80 | len(body))
-        else:
-            header.append(0x80 | 126)
-            header.extend(len(body).to_bytes(2, "big"))
+        header = bytearray([0x81, 0x80 | len(body)])
         sock.sendall(bytes(header) + mask + masked)
         hdr = _recvn(sock, 2)
         opcode = hdr[0] & 0x0F
@@ -124,6 +133,12 @@ def ws_call(host: str, port: int, payload: dict) -> dict:
         return json.loads(payload_out.decode("utf-8"))
     finally:
         sock.close()
+
+
+def ws_status(host: str, port: int, origin: str | None, presented: str | None) -> bytes:
+    sock, status = ws_open(host, port, origin, presented)
+    sock.close()
+    return status
 
 
 def _recvn(sock: socket.socket, n: int) -> bytes:
@@ -187,12 +202,29 @@ def main() -> int:
     expect(rust.returncode != 0, "rust plan should fail")
     expect(rust_body["error"]["code"] == "language_not_tier1", rust_body)
 
+    work = Path(tempfile.mkdtemp(prefix="ulsp-work-"))
+    shutil.copytree(FIXTURES, work, dirs_exist_ok=True)
+    (work / ".env").write_text("API_KEY=abc123\n", encoding="utf-8")
+    (work / "tsjs" / "leak.ts").write_text(
+        "const leak = 1;\nulsp-diag: API_KEY=abc123 " + ("p" * 400) + "\n",
+        encoding="utf-8",
+    )
+    (work / "tsjs" / "nul.ts").write_bytes(b"const nul = 1;\n\x00\n")
+    (work / ".git").mkdir()
+    (work / ".git" / "config").write_text("not-opened\n", encoding="utf-8")
+    (work / "id_rsa").write_text("not-a-real-key\n", encoding="utf-8")
+    (work / "notes.key").write_text("not-opened\n", encoding="utf-8")
+
     state = Path(tempfile.mkdtemp(prefix="ulsp-broker-"))
-    daemon, info = start_daemon(state, FIXTURES, "127.0.0.1:0", env)
+    daemon, info = start_daemon(state, work, "127.0.0.1:0", env)
+    grandchild = 0
     try:
         expect(info["state"] == "ready", info)
         expect(info["ws"]["host"] == "127.0.0.1", info)
         expect(info["ws"]["port"] != 0, info)
+        share = str(info.get("share") or "")
+        expect(len(share) > 8, "listening line missing share")
+        origin = f"http://{info['ws']['host']}:{info['ws']['port']}"
 
         code, missing = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
         expect(code != 0 and missing["error"]["code"] == "language_server_missing", missing)
@@ -203,8 +235,22 @@ def main() -> int:
         for language in ("tsjs", "python", "go"):
             code, installed = rpc(state, "install", {"language": language}, env)
             expect(code == 0 and installed["result"]["installed"] is True, installed)
+            expect("bin" not in installed["result"], installed)
+            blob = json.dumps(installed)
+            expect("/tmp" not in blob and "/workspace" not in blob and "/home" not in blob, blob)
             code, again = rpc(state, "install", {"language": language}, env)
             expect(code == 0 and again["result"]["idempotent"] is True, again)
+
+        go_wrapper = state / "bin" / "ulsp-ls-go"
+        exec_line = next(line for line in go_wrapper.read_text(encoding="utf-8").splitlines() if line.startswith("exec "))
+        pidfile = state / "go-grandchild.pid"
+        go_wrapper.write_text(
+            "#!/bin/sh\nsleep 300 &\n"
+            f"echo $! > {shlex.quote(str(pidfile))}\n"
+            f"{exec_line}\n",
+            encoding="utf-8",
+        )
+        go_wrapper.chmod(0o755)
 
         expected = {
             ("tsjs", "tsjs/sample.ts"): "intentional spike diagnostic for tsjs",
@@ -220,6 +266,49 @@ def main() -> int:
                 expect(body["result"]["language_id"] == "javascript", body)
             if rel.endswith(".ts"):
                 expect(body["result"]["language_id"] == "typescript", body)
+            public = json.dumps(body)
+            expect("/tmp" not in public and "/workspace" not in public and "/home" not in public, public)
+            expect("stderr" not in body["result"], body)
+
+        expect(pidfile.exists(), "grandchild pid was not recorded")
+        grandchild = int(pidfile.read_text(encoding="utf-8").strip())
+        expect(_alive(grandchild), f"grandchild {grandchild} was not alive before stop")
+
+        denied = {
+            ".env": "extension_not_allowed",
+            ".git/config": "extension_not_allowed",
+            "id_rsa": "extension_not_allowed",
+            "notes.key": "extension_not_allowed",
+            "tsjs/nul.ts": "invalid_arguments",
+        }
+        for rel, err_code in denied.items():
+            code, body = rpc(state, "diagnostics", {"language": "tsjs", "path": rel}, env)
+            expect(code != 0 and body["error"]["code"] == err_code, body)
+            expect("abc123" not in json.dumps(body), body)
+            code, probed = rpc(state, "probe", {"language": "tsjs", "path": rel}, env)
+            if rel != "tsjs/nul.ts":
+                expect(code != 0 and probed["error"]["code"] == "extension_not_allowed", probed)
+            expect("abc123" not in json.dumps(probed), probed)
+
+        code, leaked = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/leak.ts"}, env)
+        expect(code == 0, leaked)
+        messages = [str(item.get("message", "")) for item in leaked["result"]["diagnostics"]]
+        expect(any("[REDACTED]" in item for item in messages), leaked)
+        expect("abc123" not in json.dumps(leaked), leaked)
+        expect(all(len(item) <= 240 for item in messages), messages)
+
+        raw = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        raw.settimeout(5)
+        raw.connect(str(state / "broker.sock"))
+        raw.sendall(b"\x00\n")
+        raw_buf = b""
+        while b"\n" not in raw_buf:
+            chunk = raw.recv(4096)
+            expect(bool(chunk), "broker dropped the NUL request")
+            raw_buf += chunk
+        raw.close()
+        nul_body = json.loads(raw_buf.split(b"\n", 1)[0].decode("utf-8"))
+        expect(nul_body["ok"] is False and nul_body["error"]["code"] == "invalid_arguments", nul_body)
 
         code, health = rpc(state, "health", {}, env)
         expect(code == 0 and health["result"]["state"] == "serving", health)
@@ -245,9 +334,34 @@ def main() -> int:
         expect(degraded["result"]["state"] == "degraded", degraded)
         expect(degraded["result"]["sessions"]["python"]["status"] == "failed", degraded)
 
-        ws_body = ws_call(info["ws"]["host"], info["ws"]["port"], {"id": "ws", "method": "health", "params": {}})
+        host = info["ws"]["host"]
+        port = info["ws"]["port"]
+        missing_origin = ws_status(host, port, None, share)
+        expect(b" 403 " in missing_origin, missing_origin)
+        foreign = ws_status(host, port, "https://evil.example", share)
+        expect(b" 403 " in foreign, foreign)
+        bad_share = ws_status(host, port, origin, "not-the-share")
+        expect(b" 401 " in bad_share, bad_share)
+        ws_body = ws_call(host, port, {"id": "ws", "method": "health", "params": {}}, origin, share)
         expect(ws_body["ok"] is True and ws_body["result"]["state"] == "degraded", ws_body)
         expect(ws_body["result"]["ws_role"] == "optional-localhost", ws_body)
+        expect("share" not in ws_body["result"], "health leaked the share value")
+        public_health = json.dumps(ws_body)
+        expect("/tmp" not in public_health and "/workspace" not in public_health, public_health)
+
+        oversized, upgraded = ws_open(host, port, origin, share)
+        try:
+            expect(b" 101 " in upgraded, upgraded)
+            oversized.sendall(bytes([0x81, 0x80 | 127]) + (70_000).to_bytes(8, "big"))
+            oversized.settimeout(2)
+            try:
+                oversized.recv(16)
+            except (socket.timeout, OSError):
+                pass
+        finally:
+            oversized.close()
+        code, after_frame = rpc(state, "health", {}, env)
+        expect(code == 0 and after_frame["ok"] is True, after_frame)
     finally:
         if daemon.poll() is None:
             stop_daemon(state)
@@ -267,22 +381,25 @@ def main() -> int:
         time.sleep(0.05)
     lingering = [pid for pid in live_pids if _alive(pid)]
     expect(not lingering, f"language server pids still alive: {lingering}")
+    expect(grandchild != 0 and not _alive(grandchild), f"grandchild survived stop: {grandchild}")
 
     print(
         "SPIKE_OK "
         f"plans={','.join(f'{k}:{v}' for k, v in plans.items())} "
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
-        "ws=127.0.0.1 optional state_after_stop=stopped"
+        "ws=127.0.0.1 optional state_after_stop=stopped "
+        "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul"
     )
     return 0
 
 
 def _alive(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
+    stat = Path(f"/proc/{pid}/stat")
+    if not stat.exists():
         return False
-    return True
+    text = stat.read_text(encoding="utf-8")
+    state = text.rsplit(")", 1)[-1].split()[0]
+    return state != "Z"
 
 
 if __name__ == "__main__":

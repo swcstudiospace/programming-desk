@@ -16,8 +16,11 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import hmac
 import json
 import os
+import re
+import secrets
 import select
 import shlex
 import signal
@@ -34,6 +37,19 @@ FIXTURE_LS = ROOT / "fixture_ls.py"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 KEEP_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "USER", "LOGNAME")
+MAX_RPC_BYTES = 65_536
+MAX_WS_FRAME = 65_536
+MAX_FILE_BYTES = 262_144
+MAX_DIAG_MESSAGE = 240
+MAX_DIAGNOSTICS = 32
+MAX_DIAG_JSON = 8_192
+DENIED_PARTS = {".git", ".hg", ".svn"}
+DENIED_NAMES = {"id_rsa", "id_dsa", "id_ed25519", ".env"}
+DENIED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".kdbx", ".env"}
+SECRET_ASSIGN_RE = re.compile(
+    r"(?i)(\b(?:api[_-]?key|secret|password|passwd|token|access[_-]?key|client[_-]?secret)\s*[=:]\s*)(\S+)"
+)
+ABS_PATH_RE = re.compile(r"/(?:tmp|home|workspace|Users|var|private|opt|usr)/\S+")
 
 
 class BrokerError(Exception):
@@ -57,6 +73,7 @@ class Session:
         self.next_id = 1
         self.buf = bytearray()
         self.stderr_tail: list[bytes] = []
+        self.pgid = 0
 
 
 def load_registry() -> dict:
@@ -68,6 +85,103 @@ def scrub_env(extra: dict[str, str] | None = None) -> dict[str, str]:
     if extra:
         env.update(extra)
     return env
+
+
+def redact_text(text: str) -> str:
+    return SECRET_ASSIGN_RE.sub(lambda match: match.group(1) + "[REDACTED]", text)
+
+
+def scrub_text(text: str) -> str:
+    cleaned = ABS_PATH_RE.sub("[path]", redact_text(text))
+    if cleaned.startswith("/") and cleaned != "/":
+        return "[path]"
+    return cleaned
+
+
+def scrub_public(value):
+    if isinstance(value, str):
+        return scrub_text(value)
+    if isinstance(value, list):
+        return [scrub_public(item) for item in value]
+    if isinstance(value, dict):
+        cleaned = {}
+        for key, item in value.items():
+            if key in {"stderr", "bin", "fixture"}:
+                continue
+            cleaned[key] = scrub_public(item)
+        return cleaned
+    return value
+
+
+def share_matches(presented: str, expected: str) -> bool:
+    if not presented or not expected:
+        return False
+    left = presented.encode("utf-8")
+    right = expected.encode("utf-8")
+    if len(left) != len(right):
+        return False
+    return hmac.compare_digest(left, right)
+
+
+def assert_allowed_source(entry: dict, language: str, rel: str) -> None:
+    if "\x00" in rel:
+        raise BrokerError("invalid_arguments", "path contains a NUL byte")
+    pure = Path(rel)
+    for part in pure.parts:
+        if part in DENIED_PARTS or part == ".env" or part.startswith(".env."):
+            raise BrokerError(
+                "extension_not_allowed",
+                "path is outside the language extension allowlist",
+                {"language": language},
+            )
+    suffix = pure.suffix.lower()
+    if pure.name in DENIED_NAMES or pure.name.startswith(".env") or suffix in DENIED_SUFFIXES:
+        raise BrokerError(
+            "extension_not_allowed",
+            "path is outside the language extension allowlist",
+            {"language": language},
+        )
+    allowed = {item.lower() for item in entry.get("extensions") or []}
+    if suffix not in allowed:
+        raise BrokerError(
+            "extension_not_allowed",
+            "path is outside the language extension allowlist",
+            {"language": language, "allowed": sorted(allowed)},
+        )
+
+
+def read_source(path: Path) -> str:
+    if path.stat().st_size > MAX_FILE_BYTES:
+        raise BrokerError("file_too_large", "file exceeds the spike read cap")
+    data = path.read_bytes()
+    if b"\x00" in data:
+        raise BrokerError("invalid_arguments", "file contains a NUL byte")
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise BrokerError("invalid_arguments", "file is not utf-8 text") from exc
+
+
+def cap_diagnostics(diags: list) -> list:
+    capped: list[dict] = []
+    for item in diags[:MAX_DIAGNOSTICS]:
+        if not isinstance(item, dict):
+            continue
+        message = scrub_text(str(item.get("message", "")))
+        if len(message) > MAX_DIAG_MESSAGE:
+            message = message[: MAX_DIAG_MESSAGE - 1] + "…"
+        capped.append(
+            {
+                "message": message,
+                "severity": item.get("severity", 1),
+                "source": scrub_text(str(item.get("source", "")))[:80],
+                "range": item.get("range"),
+            }
+        )
+        if len(json.dumps(capped)) > MAX_DIAG_JSON:
+            capped.pop()
+            break
+    return capped
 
 
 def pid_alive(pid: int | None) -> bool:
@@ -184,14 +298,14 @@ def drain_stderr(pipe, bucket: list[bytes]) -> None:
 
 
 def ok(request_id, result: dict) -> dict:
-    return {"id": request_id, "ok": True, "result": result}
+    return {"id": request_id, "ok": True, "result": scrub_public(result)}
 
 
 def fail(request_id, exc: BrokerError) -> dict:
     return {
         "id": request_id,
         "ok": False,
-        "error": {"code": exc.code, "message": exc.message, "details": exc.details},
+        "error": scrub_public({"code": exc.code, "message": exc.message, "details": exc.details}),
     }
 
 
@@ -210,6 +324,7 @@ class Broker:
         self.state = "ready"
         self.running = True
         self.ws_addr: dict | None = None
+        self.ws_share: str | None = None
         self.ws_sock: socket.socket | None = None
         self.lock = threading.Lock()
         self._load_installed()
@@ -234,7 +349,7 @@ class Broker:
         )
         payload = {
             "state": self.state,
-            "workspace": str(self.workspace),
+            "workspace_bound": True,
             "pid": os.getpid(),
             "ws": self.ws_addr,
             "installed": sorted(self.installed),
@@ -282,7 +397,7 @@ class Broker:
     def health(self) -> dict:
         return {
             "state": self.state,
-            "workspace": str(self.workspace),
+            "workspace_bound": True,
             "ws": self.ws_addr,
             "installed": sorted(self.installed),
             "sessions": self.session_view(),
@@ -314,18 +429,13 @@ class Broker:
         wrapper.write_text(script, encoding="utf-8")
         wrapper.chmod(0o755)
         idempotent = language in self.installed
-        self.installed[language] = {
-            "mode": "spike",
-            "bin": str(wrapper),
-            "fixture": str(FIXTURE_LS),
-        }
+        self.installed[language] = {"mode": "spike", "wrapper": wrapper.name}
         self._persist()
         return {
             "language": language,
             "installed": True,
             "idempotent": idempotent,
             "mode": "spike",
-            "bin": str(wrapper),
         }
 
     def plan(self, language: str) -> dict:
@@ -333,8 +443,11 @@ class Broker:
         return {"language": language, "production_server": entry["production_server"], "executed": False}
 
     def probe(self, language: str, rel: str) -> dict:
-        self._require_tier1(language)
-        path = resolve_in_workspace(self.workspace, rel)
+        entry = self._require_tier1(language)
+        if "\x00" in rel:
+            raise BrokerError("invalid_arguments", "path contains a NUL byte")
+        resolve_in_workspace(self.workspace, rel)
+        assert_allowed_source(entry, language, rel)
         if language not in self.installed:
             raise BrokerError(
                 "language_server_missing",
@@ -344,7 +457,7 @@ class Broker:
         return {
             "language": language,
             "installed": True,
-            "path": str(path),
+            "path": rel,
             "stub": True,
         }
 
@@ -363,16 +476,19 @@ class Broker:
 
     def diagnostics(self, language: str, rel: str) -> dict:
         entry = self._require_tier1(language)
+        if "\x00" in rel:
+            raise BrokerError("invalid_arguments", "path contains a NUL byte")
+        path = resolve_in_workspace(self.workspace, rel)
+        assert_allowed_source(entry, language, rel)
         if language not in self.installed:
             raise BrokerError(
                 "language_server_missing",
                 f"{language} is not installed",
                 {"language": language, "hint": "install"},
             )
-        path = resolve_in_workspace(self.workspace, rel)
         if not path.is_file():
             raise BrokerError("file_not_found", f"file not in workspace: {rel}")
-        text = path.read_text(encoding="utf-8")
+        text = read_source(path)
         uri = path.as_uri()
         lang_id = language_id_for(entry, path)
         attempts = 0
@@ -407,7 +523,7 @@ class Broker:
                 "language": language,
                 "language_id": lang_id,
                 "path": rel,
-                "diagnostics": diags,
+                "diagnostics": cap_diagnostics(diags),
             }
 
     def _mark_failed(self, language: str) -> None:
@@ -434,6 +550,10 @@ class Broker:
             bufsize=0,
         )
         sess = Session(language, proc)
+        try:
+            sess.pgid = os.getpgid(proc.pid)
+        except (ProcessLookupError, PermissionError, OSError):
+            sess.pgid = proc.pid
         if proc.stderr is not None:
             threading.Thread(
                 target=drain_stderr, args=(proc.stderr, sess.stderr_tail), daemon=True
@@ -536,12 +656,19 @@ class Broker:
 
     def _kill(self, sess: Session) -> None:
         proc = sess.proc
-        if proc.poll() is not None:
-            return
-        try:
-            os.kill(proc.pid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError, OSError):
-            return
+        pgid = sess.pgid or 0
+        # Kill the child's session, including grandchildren, even if the leader already exited.
+        # Never signal the broker's own process group (killpg(0) would do that).
+        if pgid and pgid != os.getpgrp():
+            try:
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+        elif proc.poll() is None:
+            try:
+                os.kill(proc.pid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
         try:
             proc.wait(timeout=2)
         except subprocess.TimeoutExpired:
@@ -611,11 +738,11 @@ class Broker:
         self._persist()
         info = {
             "event": "listening",
-            "socket": str(self.state_dir / "broker.sock"),
             "state": self.state,
             "ws": self.ws_addr,
-            "workspace": str(self.workspace),
         }
+        if self.ws_share:
+            info["share"] = self.ws_share
         sys.stdout.write(json.dumps(info) + "\n")
         sys.stdout.flush()
         while self.running:
@@ -625,22 +752,40 @@ class Broker:
                 break
             threading.Thread(target=self._client, args=(conn,), daemon=True).start()
 
+    def _reject_line(self, conn: socket.socket, message: str) -> None:
+        response = fail(None, BrokerError("invalid_arguments", message))
+        try:
+            conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
+        except OSError:
+            return
+
     def _client(self, conn: socket.socket) -> None:
         try:
             data = b""
             while b"\n" not in data:
                 chunk = conn.recv(65536)
                 if not chunk:
+                    if data:
+                        self._reject_line(conn, "request is not a single JSON line")
                     return
                 data += chunk
-                if len(data) > 1_000_000:
+                if b"\x00" in data:
+                    self._reject_line(conn, "request contains a NUL byte")
+                    return
+                if len(data) > MAX_RPC_BYTES:
+                    self._reject_line(conn, "request exceeds the frame cap")
                     return
             line = data.split(b"\n", 1)[0]
+            if b"\x00" in line:
+                self._reject_line(conn, "request contains a NUL byte")
+                return
             try:
                 request = json.loads(line.decode("utf-8"))
-            except json.JSONDecodeError:
-                response = fail(None, BrokerError("invalid_arguments", "request is not JSON"))
-                conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                self._reject_line(conn, "request is not JSON")
+                return
+            if not isinstance(request, dict):
+                self._reject_line(conn, "request must be a JSON object")
                 return
             response = self.handle(request)
             conn.sendall(json.dumps(response).encode("utf-8") + b"\n")
@@ -666,6 +811,7 @@ class Broker:
             raise BrokerError("ws_host_forbidden", f"refusing non-loopback bind {bound_host}")
         self.ws_sock = sock
         self.ws_addr = {"host": bound_host, "port": bound[1]}
+        self.ws_share = secrets.token_urlsafe(24)
         threading.Thread(target=self._ws_loop, daemon=True).start()
 
     def _ws_loop(self) -> None:
@@ -679,7 +825,9 @@ class Broker:
 
     def _ws_client(self, conn: socket.socket) -> None:
         try:
-            if not ws_handshake(conn):
+            host = (self.ws_addr or {}).get("host", "127.0.0.1")
+            port = int((self.ws_addr or {}).get("port") or 0)
+            if not ws_handshake(conn, expected_origin(str(host), port), self.ws_share or ""):
                 return
             opcode, payload = read_ws_frame(conn)
             if opcode != 0x1:
@@ -717,7 +865,28 @@ def parse_ws(spec: str) -> tuple[str, int]:
     return host, port
 
 
-def ws_handshake(conn: socket.socket) -> bool:
+def expected_origin(host: str, port: int) -> str:
+    if ":" in host:
+        return f"http://[{host}]:{port}"
+    return f"http://{host}:{port}"
+
+
+def ws_reject(conn: socket.socket, status: int, reason: str) -> bool:
+    body = reason.encode("ascii")
+    packet = (
+        f"HTTP/1.1 {status} {reason}\r\n"
+        f"Content-Length: {len(body)}\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+    ).encode("ascii") + body
+    try:
+        conn.sendall(packet)
+    except OSError:
+        return False
+    return False
+
+
+def ws_handshake(conn: socket.socket, origin_required: str, share: str) -> bool:
     data = b""
     while b"\r\n\r\n" not in data:
         chunk = conn.recv(4096)
@@ -726,12 +895,22 @@ def ws_handshake(conn: socket.socket) -> bool:
         data += chunk
         if len(data) > 16384:
             return False
+    headers: dict[str, str] = {}
     key = None
-    for line in data.decode("iso-8859-1").split("\r\n"):
-        if line.lower().startswith("sec-websocket-key:"):
-            key = line.split(":", 1)[1].strip()
+    for line in data.decode("iso-8859-1").split("\r\n")[1:]:
+        if ":" not in line:
+            continue
+        name, value = line.split(":", 1)
+        lowered = name.strip().lower()
+        headers[lowered] = value.strip()
+        if lowered == "sec-websocket-key":
+            key = value.strip()
+    if headers.get("origin", "") != origin_required:
+        return ws_reject(conn, 403, "Forbidden")
+    if not share_matches(headers.get("x-ulsp-ws-token", ""), share):
+        return ws_reject(conn, 401, "Unauthorized")
     if not key:
-        return False
+        return ws_reject(conn, 400, "Bad Request")
     accept = base64.b64encode(hashlib.sha1((key + WS_GUID).encode("ascii")).digest()).decode("ascii")
     response = (
         "HTTP/1.1 101 Switching Protocols\r\n"
@@ -763,6 +942,8 @@ def read_ws_frame(conn: socket.socket) -> tuple[int, bytes]:
         length = int.from_bytes(recvn(conn, 2), "big")
     elif length == 127:
         length = int.from_bytes(recvn(conn, 8), "big")
+    if length > MAX_WS_FRAME:
+        raise ValueError("websocket frame exceeds cap")
     mask = recvn(conn, 4) if masked else b""
     payload = recvn(conn, length)
     if masked:

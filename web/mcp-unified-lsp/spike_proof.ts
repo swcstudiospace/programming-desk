@@ -3,9 +3,8 @@
  * Starts the INFRA broker, then drives the adapter over stdin/stdout only.
  */
 
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { mkdtempSync } from "node:fs";
+import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -61,22 +60,50 @@ function lineReader(child: ChildProcessWithoutNullStreams, timeoutMs: number): (
   };
 }
 
+function assertClean(payload: Record<string, unknown>): void {
+  const text = JSON.stringify(payload);
+  expect(!text.includes("/tmp"), text);
+  expect(!text.includes("/workspace"), text);
+  expect(!text.includes("/home"), text);
+  expect(!text.includes("abc123"), text);
+  expect(!Object.prototype.hasOwnProperty.call(payload, "stderr"), text);
+}
+
 function toolPayload(response: Record<string, unknown>): Record<string, unknown> {
   const result = response.result as { content?: { text: string }[]; isError?: boolean } | undefined;
   expect(!!result?.content?.[0]?.text, `missing tool text: ${JSON.stringify(response)}`);
   const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
   payload.isError = result.isError === true;
+  assertClean(payload);
   return payload;
 }
 
 async function main(): Promise<void> {
   expect(!source.includes("createServer("), "MCP adapter must not open a node server");
   expect(!source.includes(".listen("), "MCP adapter must not listen on a port");
+  expect(!source.includes("child.stderr"), "MCP adapter must not attach a broker stderr tail");
+
+  const self = spawnSync(process.execPath, ["--experimental-strip-types", server], {
+    env: { ...process.env, ULSP_SANITIZE_SELFTEST: "1" },
+    encoding: "utf-8",
+  });
+  expect(self.status === 0, self.stderr || "sanitize self-test failed");
+  const sanitized = JSON.parse(self.stdout.trim().split("\n").at(-1) || "{}") as Record<string, unknown>;
+  expect(String(sanitized.message).includes("[REDACTED]"), JSON.stringify(sanitized));
+  assertClean(sanitized);
+  expect(!("stderr" in sanitized), JSON.stringify(sanitized));
 
   const stateDir = mkdtempSync(path.join(tmpdir(), "ulsp-mcp-"));
+  const work = mkdtempSync(path.join(tmpdir(), "ulsp-mcp-work-"));
+  cpSync(fixtures, work, { recursive: true });
+  writeFileSync(path.join(work, ".env"), "API_KEY=abc123\n");
+  writeFileSync(
+    path.join(work, "tsjs", "leak.ts"),
+    `const leak = 1;\nulsp-diag: API_KEY=abc123 ${"p".repeat(400)}\n`,
+  );
   const brokerProc = spawn(
     "python3",
-    [broker, "--state-dir", stateDir, "start", "--workspace", fixtures],
+    [broker, "--state-dir", stateDir, "start", "--workspace", work],
     { env: { ...process.env, PYTHONUNBUFFERED: "1" }, stdio: ["ignore", "pipe", "pipe"] },
   ) as ChildProcessWithoutNullStreams;
   brokerProc.stderr.resume();
@@ -184,6 +211,25 @@ async function main(): Promise<void> {
     }));
     expect(status.state === "serving", JSON.stringify(status));
     expect(status.primary_surface === "mcp-stdio", JSON.stringify(status));
+
+    const secretFile = toolPayload(await mcpCall({
+      jsonrpc: "2.0",
+      id: 44,
+      method: "tools/call",
+      params: { name: "lsp_diagnostics", arguments: { language: "tsjs", path: ".env" } },
+    }));
+    expect(secretFile.isError === true && secretFile.code === "extension_not_allowed", JSON.stringify(secretFile));
+
+    const leaked = toolPayload(await mcpCall({
+      jsonrpc: "2.0",
+      id: 45,
+      method: "tools/call",
+      params: { name: "lsp_diagnostics", arguments: { language: "tsjs", path: "tsjs/leak.ts" } },
+    }));
+    expect(leaked.ok === true, JSON.stringify(leaked));
+    const leakMessages = (leaked.diagnostics as { message: string }[]).map((item) => item.message);
+    expect(leakMessages.some((item) => item.includes("[REDACTED]")), JSON.stringify(leaked));
+    expect(leakMessages.every((item) => item.length <= 240), JSON.stringify(leakMessages));
   } finally {
     mcp.stdin.end();
     mcp.kill();
@@ -193,7 +239,9 @@ async function main(): Promise<void> {
       brokerProc.kill();
     }
   }
-  process.stdout.write("MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused\n");
+  process.stdout.write(
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest\n",
+  );
 }
 
 main().catch((err) => {

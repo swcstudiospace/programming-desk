@@ -3,7 +3,7 @@
   "bot": "bot-00-programming-lead",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:35:00Z",
-  "completed_at": "2026-09-24T18:50:25Z",
+  "completed_at": "2026-09-25T00:21:00Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "lane": "A",
@@ -12,7 +12,7 @@
   "linear_parents": ["SPE-165", "SPE-166", "SPE-162", "SPE-164", "SPE-163", "SPE-167", "SPE-168"],
   "commands": [
     {
-      "cmd": "python3 -c \"from pathlib import Path; t=Path('.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md').read_text(); need=['greenfield spike that adapts patterns','MCP stdio','127.0.0.1','tsjs','language_server_missing','Unit D','SPE-167','**/*.go','isaacphi/mcp-language-server','t3ta/mcp-language-server','beruang/lsp-mcp','code-yeongyu/lsp-tools-mcp','network-primary']; miss=[x for x in need if x not in t]; print(miss or 'design-markers-ok'); raise SystemExit(0 if not miss else 1)\"",
+      "cmd": "python3 -c \"from pathlib import Path; t=Path('.receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md').read_text(); need=['greenfield spike that adapts patterns','MCP stdio','127.0.0.1','tsjs','language_server_missing','Unit D','SPE-167','**/*.go','isaacphi/mcp-language-server','t3ta/mcp-language-server','beruang/lsp-mcp','code-yeongyu/lsp-tools-mcp','network-primary','Clean stop kills language-server process groups','SPIKE_SANDBOX_BLOCKED','F6','extension_not_allowed']; miss=[x for x in need if x not in t]; print(miss or 'design-markers-ok'); raise SystemExit(0 if not miss else 1)\"",
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "design-markers-ok"
@@ -39,7 +39,7 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files infra/unified-lsp-broker/broker.py infra/unified-lsp-broker/fixture_ls.py infra/unified-lsp-broker/spike_proof.py infra/unified-lsp-broker/registry/tier1.json infra/unified-lsp-broker/broker_mcp_boundary.yaml infra/unified-lsp-broker/SPIKE.md infra/unified-lsp-broker/fixtures/tsjs/sample.ts infra/unified-lsp-broker/fixtures/tsjs/sample.js infra/unified-lsp-broker/fixtures/python/sample.py infra/unified-lsp-broker/fixtures/go/sample.go .receipts/bot-05-infrastructure/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json web/mcp-unified-lsp/package.json web/mcp-unified-lsp/server.ts web/mcp-unified-lsp/spike_proof.ts web/mcp-unified-lsp/SPIKE.md .receipts/bot-02-web-edge/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json .receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md .receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json",
       "exit_code": 1,
       "duration_s": 0.1,
-      "output_tail": "G-1 FAIL — bot-00-programming-lead; FOREIGN infra/unified-lsp-broker/broker.py (bot-05-infrastructure); FOREIGN web/mcp-unified-lsp/server.ts (bot-02-web-edge)"
+      "output_tail": "G-1 FAIL — bot-00-programming-lead\n  FOREIGN  infra/unified-lsp-broker/broker.py  (owned by bot-05-infrastructure)\n  FOREIGN  web/mcp-unified-lsp/server.ts  (owned by bot-02-web-edge)"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.md .receipts/bot-00-programming-lead/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json",
@@ -50,7 +50,7 @@
   ],
   "claims": [
     {
-      "claim": "LEAD design note records the greenfield fork decision, MCP stdio as primary, loopback WebSocket, Tier-1 ids, structured errors, the Go ownership proposal, and Unit D held",
+      "claim": "LEAD design note records the greenfield fork decision, MCP stdio as primary, loopback WebSocket, Tier-1 ids, structured errors, process-group stop, the F6 deferral, the Go ownership proposal, and the SPIKE_SANDBOX_BLOCKED Unit D verdict",
       "evidence_command_index": 0
     },
     {
@@ -76,10 +76,10 @@
     }
   ],
   "unverified": [
-    "CI on this branch will attribute G-1 to bot-00-programming-lead and fail; seat-scoped follow-up or a QUALITY waiver is required before merge",
+    "CI on this branch will attribute G-1 to bot-00-programming-lead and fail; multi-seat attribution is deferred and was not changed",
     "contracts/ was not updated; broker_mcp_boundary.yaml is not the G-4 surface and has no consumer acks",
-    "Unit D QUALITY sandbox (SPE-167 / n6) was not run; approved_by is the G-2 reviewer slot, not a sign-off",
-    "Greptile score was not requested and is not claimed",
+    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED. F1-F5 were addressed in this revision. F6, F7, and a QUALITY sign-off were not. approved_by is the G-2 reviewer slot",
+    "Greptile was not run and is not claimed",
     "Real typescript-language-server, pyright-langserver, and gopls diagnostics were not run",
     "No new Linear or Notion rows were created; existing SPE-165..SPE-168 and the 37 sub-issues were left as materialized"
   ],

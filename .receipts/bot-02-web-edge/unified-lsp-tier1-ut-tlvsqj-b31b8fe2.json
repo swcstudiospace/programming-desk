@@ -3,15 +3,15 @@
   "bot": "bot-02-web-edge",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:40:00Z",
-  "completed_at": "2026-09-24T18:50:25Z",
+  "completed_at": "2026-09-25T00:21:00Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "commands": [
     {
       "cmd": "node --experimental-strip-types web/mcp-unified-lsp/spike_proof.ts",
       "exit_code": 0,
-      "duration_s": 0.9,
-      "output_tail": "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused"
+      "duration_s": 1.0,
+      "output_tail": "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-02-web-edge --files web/mcp-unified-lsp/package.json web/mcp-unified-lsp/server.ts web/mcp-unified-lsp/spike_proof.ts web/mcp-unified-lsp/SPIKE.md .receipts/bot-02-web-edge/unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json",
@@ -24,11 +24,17 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "node --version",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "v22.14.0"
     }
   ],
   "claims": [
     {
-      "claim": "MCP stdio adapter lists lsp_status, lsp_install, lsp_diagnostics, lsp_hover, and lsp_definition; install-on-demand plus diagnostics succeed for TypeScript, JavaScript, Python, and Go; missing server and non-Tier-1 language return structured errors; the adapter process is not started with a listen socket",
+      "claim": "MCP stdio adapter lists lsp_status, lsp_install, lsp_diagnostics, lsp_hover, and lsp_definition; install-on-demand plus diagnostics succeed for TypeScript, JavaScript, Python, and Go; .env is rejected; diagnostic text containing an assignment-shaped secret is redacted; tool payloads omit absolute host paths and stderr; the adapter process is not started with a listen socket",
       "evidence_command_index": 0
     },
     {
@@ -38,13 +44,17 @@
     {
       "claim": "Secret scan of the MCP adapter and this receipt reports no committed secret",
       "evidence_command_index": 2
+    },
+    {
+      "claim": "node --version reports v22.14.0",
+      "evidence_command_index": 3
     }
   ],
   "unverified": [
-    "Adapter proof uses Node 22 --experimental-strip-types; Deno was not available in this environment",
+    "Deno was not available in this environment; the adapter proof used node --experimental-strip-types",
     "Hover and definition tools are stubs and were not checked against textDocument/hover or textDocument/definition",
-    "The MCP proof does not open the optional WebSocket; loopback refusal is covered by the INFRA spike proof",
-    "approved_by names bot-06 as the G-2 reviewer slot; QUALITY has not signed this receipt"
+    "The MCP proof does not open the optional WebSocket; Origin and token checks are covered by the INFRA spike proof",
+    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED; approved_by is the G-2 reviewer slot and is not a sign-off of this revision"
   ],
   "files_changed": [
     "web/mcp-unified-lsp/package.json",

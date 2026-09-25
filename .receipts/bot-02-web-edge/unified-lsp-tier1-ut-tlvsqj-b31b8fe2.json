@@ -3,14 +3,14 @@
   "bot": "bot-02-web-edge",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:40:00Z",
-  "completed_at": "2026-09-25T05:20:00Z",
+  "completed_at": "2026-09-25T08:33:52Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "commands": [
     {
       "cmd": "node --experimental-strip-types web/mcp-unified-lsp/spike_proof.ts",
       "exit_code": 0,
-      "duration_s": 1.7,
+      "duration_s": 1.6,
       "output_tail": "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-ndjson"
     },
     {
@@ -54,7 +54,8 @@
     "Deno was not available in this environment; the adapter proof used node --experimental-strip-types",
     "Hover and definition tools are stubs and were not checked against textDocument/hover or textDocument/definition",
     "The MCP proof does not open the optional WebSocket; Origin and token checks are covered by the INFRA spike proof",
-    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED; approved_by is the G-2 reviewer slot and is not a sign-off of this revision"
+    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED; approved_by is the G-2 reviewer slot and is not a sign-off of this revision",
+    "This branch is the WEB slice of 2f4230c stacked on the INFRA tip; LEAD and QUALITY receipts are not added here, and the QUALITY merge-gate is not claimed"
   ],
   "files_changed": [
     "web/mcp-unified-lsp/package.json",

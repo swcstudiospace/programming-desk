@@ -43,6 +43,11 @@ MAX_FILE_BYTES = 1_048_576
 MAX_DIAG_MESSAGE = 240
 MAX_DIAGNOSTICS = 32
 MAX_DIAG_JSON = 8_192
+# Unix-socket RPC and the MCP adapter both stop waiting at 20s. The broker must
+# finish or return diagnostics_timeout before that, including initialize plus
+# the diagnostics wait and one crash retry.
+CLIENT_RPC_DEADLINE_S = 20.0
+REQUEST_BUDGET_S = 18.0
 DENIED_PARTS = {".git", ".hg", ".svn"}
 DENIED_NAMES = {"id_rsa", "id_dsa", "id_ed25519", ".env"}
 DENIED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".kdbx", ".env"}
@@ -172,7 +177,7 @@ def cap_diagnostics(diags: list) -> tuple[list, bool, int]:
     capped: list[dict] = []
     truncated = False
     total = 0
-    for item in diags:
+    for index, item in enumerate(diags):
         if not isinstance(item, dict):
             continue
         total += 1
@@ -191,6 +196,9 @@ def cap_diagnostics(diags: list) -> tuple[list, bool, int]:
         }
         if len(json.dumps(capped + [entry])) > MAX_DIAG_JSON:
             truncated = True
+            for extra in diags[index + 1 :]:
+                if isinstance(extra, dict):
+                    total += 1
             break
         capped.append(entry)
     if total > len(capped):
@@ -199,6 +207,8 @@ def cap_diagnostics(diags: list) -> tuple[list, bool, int]:
 
 
 def parse_lsp_timeout() -> float:
+    """Per-phase LSP wait. Two phases (initialize and diagnostics) fit in REQUEST_BUDGET_S."""
+    phase_cap = REQUEST_BUDGET_S / 2
     raw = os.environ.get("ULSP_LSP_TIMEOUT_S", "")
     if not raw:
         return 5.0
@@ -206,8 +216,10 @@ def parse_lsp_timeout() -> float:
         value = float(raw)
     except ValueError:
         return 5.0
-    if value <= 0 or value > 30:
+    if value <= 0:
         return 5.0
+    if value > phase_cap:
+        return phase_cap
     return value
 
 
@@ -545,6 +557,8 @@ class Broker:
         text = read_source(path)
         uri = path.as_uri()
         lang_id = language_id_for(entry, path)
+        # One budget for this request, under the 20s RPC and MCP client deadlines.
+        deadline = time.monotonic() + REQUEST_BUDGET_S
         # The language lock covers this server's stdio. The broker lock is not held while waiting.
         with self._lang_lock(language):
             attempts = 0
@@ -562,7 +576,7 @@ class Broker:
                         spawned = True
                 if spawned:
                     try:
-                        self._initialize(sess)
+                        self._initialize(sess, deadline)
                     except LsDied as exc:
                         with self.lock:
                             self._kill(sess)
@@ -577,7 +591,7 @@ class Broker:
                             self._mark_failed(language)
                         raise
                 try:
-                    diags = self._collect(sess, uri, lang_id, text)
+                    diags = self._collect(sess, uri, lang_id, text, deadline)
                 except BrokerError as exc:
                     if exc.code == "diagnostics_timeout":
                         with self.lock:
@@ -645,7 +659,13 @@ class Broker:
         self.sessions[language] = sess
         return sess
 
-    def _initialize(self, sess: Session) -> None:
+    def _phase_timeout(self, deadline: float) -> float:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise BrokerError("diagnostics_timeout", "timed out waiting for the language server")
+        return min(self.lsp_timeout, remaining)
+
+    def _initialize(self, sess: Session, deadline: float) -> None:
         request_id = sess.next_id
         sess.next_id += 1
         root = self.workspace.as_uri()
@@ -668,10 +688,10 @@ class Broker:
                 },
             },
         )
-        self._wait(sess, lambda msg: msg.get("id") == request_id, self.lsp_timeout)
+        self._wait(sess, lambda msg: msg.get("id") == request_id, self._phase_timeout(deadline))
         write_lsp(sess, {"jsonrpc": "2.0", "method": "initialized", "params": {}})
 
-    def _collect(self, sess: Session, uri: str, language_id: str, text: str) -> list:
+    def _collect(self, sess: Session, uri: str, language_id: str, text: str, deadline: float) -> list:
         version = sess.opened.get(uri, 0) + 1
         sess.opened[uri] = version
         if version == 1:
@@ -707,7 +727,7 @@ class Broker:
             lambda msg, expected=version: msg.get("method") == "textDocument/publishDiagnostics"
             and (msg.get("params") or {}).get("uri") == uri
             and version_matches(msg.get("params") or {}, expected),
-            self.lsp_timeout,
+            self._phase_timeout(deadline),
         )
         return (message.get("params") or {}).get("diagnostics") or []
 

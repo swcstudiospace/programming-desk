@@ -250,6 +250,25 @@ async function main(): Promise<void> {
     expect(framed.error?.data?.code === "invalid_arguments", JSON.stringify(framed));
     frameServer.kill();
 
+    const guard = spawn(process.execPath, ["--experimental-strip-types", server], {
+      env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
+      stdio: ["pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    guard.stderr.resume();
+    const nextGuard = lineReader(guard, 5000);
+    const ping = (id: number) => JSON.stringify({ jsonrpc: "2.0", id, method: "ping" });
+    guard.stdin.write(`${"y".repeat(1_048_577)}\n${ping(70)}\n`);
+    const bigLine = JSON.parse(await nextGuard()) as { error?: { data?: { code?: string } } };
+    expect(bigLine.error?.data?.code === "invalid_arguments", JSON.stringify(bigLine));
+    const afterLine = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(afterLine.id === 70 && afterLine.result !== undefined, JSON.stringify(afterLine));
+    guard.stdin.write(`Content-Length: 2000000\n${ping(71)}\n`);
+    const bigHeader = JSON.parse(await nextGuard()) as { error?: { data?: { code?: string } } };
+    expect(bigHeader.error?.data?.code === "invalid_arguments", JSON.stringify(bigHeader));
+    const afterHeader = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(afterHeader.id === 71 && afterHeader.result !== undefined, JSON.stringify(afterHeader));
+    guard.kill();
+
     const fat = path.join(frameDir, "fat_broker.py");
     writeFileSync(fat, "import sys\nsys.stdout.write('x' * 4000)\n");
     const limited = spawn(process.execPath, ["--experimental-strip-types", server], {
@@ -296,7 +315,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen\n",
   );
 }
 

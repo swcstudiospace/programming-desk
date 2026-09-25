@@ -359,29 +359,60 @@ function rejectFrame(message: string): void {
   });
 }
 
+function frameTooBig(): Parsed {
+  return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+}
+
 function tryParse(): Parsed {
   const textStart = buffer.toString("utf-8");
   if (textStart.startsWith("Content-Length:") || textStart.startsWith("content-length:")) {
     const sep = buffer.indexOf("\r\n\r\n");
     if (sep < 0) {
+      const newline = buffer.indexOf(0x0a);
+      if (newline < 0) {
+        if (buffer.length > MAX_MCP_FRAME) {
+          buffer = Buffer.alloc(0);
+          return frameTooBig();
+        }
+        return { kind: "need-more" };
+      }
+      if (newline > MAX_MCP_FRAME) {
+        buffer = buffer.subarray(newline + 1);
+        return frameTooBig();
+      }
+      const headerLine = buffer.subarray(0, newline).toString("utf-8");
+      const early = headerLine.match(/content-length:\s*(\d+)/i);
+      if (early && Number(early[1]) > MAX_MCP_FRAME) {
+        buffer = buffer.subarray(newline + 1);
+        return frameTooBig();
+      }
       if (buffer.length > MAX_MCP_FRAME) {
-        return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+        buffer = Buffer.alloc(0);
+        return frameTooBig();
       }
       return { kind: "need-more" };
+    }
+    if (sep > MAX_MCP_FRAME) {
+      buffer = Buffer.alloc(0);
+      return frameTooBig();
     }
     const header = buffer.subarray(0, sep).toString("utf-8");
     const match = header.match(/content-length:\s*(\d+)/i);
     if (!match) {
-      buffer = Buffer.alloc(0);
+      buffer = buffer.subarray(sep + 4);
       return { kind: "bad", message: "content-length header is missing" };
     }
     const length = Number(match[1]);
     if (length > MAX_MCP_FRAME) {
-      buffer = Buffer.alloc(0);
-      return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+      buffer = buffer.subarray(sep + 4);
+      return frameTooBig();
     }
     const start = sep + 4;
     if (buffer.length < start + length) {
+      if (buffer.length > MAX_MCP_FRAME) {
+        buffer = Buffer.alloc(0);
+        return frameTooBig();
+      }
       return { kind: "need-more" };
     }
     const body = buffer.subarray(start, start + length).toString("utf-8");
@@ -391,9 +422,14 @@ function tryParse(): Parsed {
   const newline = buffer.indexOf(0x0a);
   if (newline < 0) {
     if (buffer.length > MAX_MCP_FRAME) {
-      return { kind: "bad", message: `frame exceeds ${MAX_MCP_FRAME} bytes` };
+      buffer = Buffer.alloc(0);
+      return frameTooBig();
     }
     return { kind: "need-more" };
+  }
+  if (newline > MAX_MCP_FRAME) {
+    buffer = buffer.subarray(newline + 1);
+    return frameTooBig();
   }
   const line = buffer.subarray(0, newline).toString("utf-8").trim();
   buffer = buffer.subarray(newline + 1);
@@ -417,10 +453,6 @@ function parseRpcBody(body: string): Parsed {
 
 function onData(chunk: Buffer): void {
   buffer = Buffer.concat([buffer, chunk]);
-  if (buffer.length > MAX_MCP_FRAME && !buffer.includes(0x0a) && !buffer.includes("\r\n\r\n")) {
-    rejectFrame(`frame exceeds ${MAX_MCP_FRAME} bytes`);
-    return;
-  }
   for (;;) {
     const before = buffer.length;
     let parsed: Parsed;
@@ -435,6 +467,7 @@ function onData(chunk: Buffer): void {
       return;
     }
     if (parsed.kind === "bad") {
+      const consumed = buffer.length < before;
       send({
         jsonrpc: "2.0",
         id: null,
@@ -444,6 +477,10 @@ function onData(chunk: Buffer): void {
           data: { code: "invalid_arguments", limit_bytes: MAX_MCP_FRAME },
         },
       });
+      if (!consumed) {
+        buffer = Buffer.alloc(0);
+        return;
+      }
       if (buffer.length === 0) {
         return;
       }

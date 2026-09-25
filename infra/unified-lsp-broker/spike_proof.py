@@ -344,6 +344,14 @@ def main() -> int:
         expect(len(many_body["result"]["diagnostics"]) == 32, many_body)
         expect("STALE" not in json.dumps(many_body), many_body)
 
+        wide = work / "tsjs" / "wide.ts"
+        wide.write_text("".join(f"ulsp-diag: {'m' * 180}\n" for _ in range(40)), encoding="utf-8")
+        code, wide_body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/wide.ts"}, env)
+        expect(code == 0, wide_body)
+        expect(wide_body["result"]["diagnostics_total"] == 40, wide_body)
+        expect(wide_body["result"]["truncated"] is True, wide_body)
+        expect(len(wide_body["result"]["diagnostics"]) < 40, wide_body)
+
         big = work / "tsjs" / "big.ts"
         big.write_bytes(b"const big = 1;\n" + b"x" * 1_048_576)
         code, big_body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/big.ts"}, env)
@@ -474,6 +482,7 @@ def main() -> int:
     lingering = [pid for pid in live_pids if _alive(pid)]
     expect(not lingering, f"language server pids still alive: {lingering}")
     expect(grandchild != 0 and not _alive(grandchild), f"grandchild survived stop: {grandchild}")
+    prove_timeout_clamp()
     prove_timeout_recovers(work, env)
 
     print(
@@ -482,9 +491,29 @@ def main() -> int:
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
         "ws=127.0.0.1 optional state_after_stop=stopped "
         "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
-        "p1=trunc,limit,owner p2=timeout,version"
+        "p1=trunc,limit,owner,deadline p2=timeout,version,total"
     )
     return 0
+
+
+def prove_timeout_clamp() -> None:
+    script = (
+        "import importlib.util\n"
+        "spec = importlib.util.spec_from_file_location('ulsp_broker', 'infra/unified-lsp-broker/broker.py')\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "assert spec.loader is not None\n"
+        "spec.loader.exec_module(mod)\n"
+        "print(f'{mod.parse_lsp_timeout():.6f}')\n"
+        "print(f'{mod.REQUEST_BUDGET_S:.6f}')\n"
+        "print(f'{mod.CLIENT_RPC_DEADLINE_S:.6f}')\n"
+    )
+    env = os.environ.copy()
+    env["ULSP_LSP_TIMEOUT_S"] = "30"
+    proc = subprocess.run([PY, "-c", script], text=True, capture_output=True, env=env, timeout=10, check=False)
+    expect(proc.returncode == 0, proc.stderr or proc.stdout)
+    phase_s, budget_s, client_s = (float(line) for line in proc.stdout.strip().splitlines())
+    expect(phase_s * 2 <= budget_s <= client_s, proc.stdout)
+    expect(phase_s < 30, proc.stdout)
 
 
 def prove_timeout_recovers(work: Path, base_env: dict) -> None:

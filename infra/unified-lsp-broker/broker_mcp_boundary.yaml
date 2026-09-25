@@ -38,6 +38,7 @@ error_codes:
   - workspace_unbound
   - broker_not_running
   - broker_already_running
+  - broker_stopping
   - language_not_tier1
   - language_server_missing
   - language_server_failed

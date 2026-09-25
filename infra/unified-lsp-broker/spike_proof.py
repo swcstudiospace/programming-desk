@@ -486,6 +486,10 @@ def main() -> int:
     prove_budget_rejects_nonfinite()
     prove_timeout_recovers(work, env)
     prove_queue_timeout_keeps_session(work, env)
+    prove_concurrent_claim(work, env)
+    prove_shutdown_waits_for_diagnostics(work, env)
+    prove_idle_clients_release(work, env)
+    prove_file_read_errors(work, env)
 
     print(
         "SPIKE_OK "
@@ -493,7 +497,8 @@ def main() -> int:
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
         "ws=127.0.0.1 optional state_after_stop=stopped "
         "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
-        "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan"
+        "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan "
+        "p3=lock,shutdown,idle,file"
     )
     return 0
 
@@ -627,6 +632,176 @@ def prove_timeout_recovers(work: Path, base_env: dict) -> None:
         code, recovered = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
         expect(code == 0 and marker_present(recovered, "intentional spike diagnostic for tsjs"), recovered)
         expect("STALE" not in json.dumps(recovered), recovered)
+    finally:
+        if daemon.poll() is None:
+            stop_daemon(state)
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+
+
+def prove_concurrent_claim(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-claim-")
+    env = dict(base_env)
+    env["ULSP_SPIKE_HOOKS"] = "1"
+    env["ULSP_SPIKE_CLAIM_HOLD_S"] = "0.8"
+    cmd = [PY, str(BROKER), "--state-dir", str(state), "start", "--workspace", str(work)]
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+    try:
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline and not (state / "broker.lock").exists():
+            if proc.poll() is not None:
+                err = proc.stderr.read() if proc.stderr is not None else ""
+                raise SystemExit(f"claim holder exited early stderr={err!r}")
+            time.sleep(0.02)
+        expect((state / "broker.lock").exists(), "owner lock was not created")
+        time.sleep(0.05)
+        rival_env = dict(base_env)
+        rival_env.pop("ULSP_SPIKE_CLAIM_HOLD_S", None)
+        rival = run_broker(
+            ["--state-dir", str(state), "start", "--workspace", str(work)],
+            env=rival_env,
+            timeout=8,
+        )
+        body = parse_stdout(rival)
+        expect(rival.returncode != 0 and body["error"]["code"] == "broker_already_running", body)
+        assert proc.stdout is not None
+        line = proc.stdout.readline()
+        info = json.loads(line)
+        expect(info.get("event") == "listening", info)
+        code, health = rpc(state, "health", {}, env)
+        expect(code == 0 and health["ok"] is True and health["result"]["state"] == "ready", health)
+    finally:
+        if proc.poll() is None:
+            stop = run_broker(["--state-dir", str(state), "stop"], timeout=15)
+            if stop.returncode != 0:
+                proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+def prove_shutdown_waits_for_diagnostics(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-stop-")
+    env = dict(base_env)
+    env["ULSP_SPIKE_HOOKS"] = "1"
+    daemon, info = start_daemon(state, work, None, env)
+    try:
+        expect(info["state"] == "ready", info)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0 and installed["ok"] is True, installed)
+        code, first = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        expect(code == 0 and marker_present(first, "intentional spike diagnostic for tsjs"), first)
+        (state / "spike_hold_s").write_text("0.7\n", encoding="utf-8")
+        holder: dict[str, tuple[int, dict]] = {}
+
+        def run_diag() -> None:
+            holder["item"] = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+
+        thread = threading.Thread(target=run_diag)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not (state / "spike_hold_ready").exists():
+            time.sleep(0.02)
+        expect((state / "spike_hold_ready").exists(), "diagnostics never reached the language-lock hold")
+        started = time.monotonic()
+        stop_daemon(state)
+        elapsed = time.monotonic() - started
+        thread.join(timeout=5)
+        expect(not thread.is_alive(), "diagnostics still running after stop")
+        status, body = holder["item"]
+        expect(status == 0 and body["ok"] is True, body)
+        expect(elapsed >= 0.2, f"stop did not wait for in-flight diagnostics ({elapsed:.2f}s)")
+        recorded = json.loads((state / "state.json").read_text(encoding="utf-8"))
+        expect(recorded.get("state") == "stopped", recorded)
+        expect(not _alive(int(recorded["pid"])), recorded)
+    finally:
+        if daemon.poll() is None:
+            try:
+                stop_daemon(state)
+            except SystemExit:
+                daemon.kill()
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+
+
+def prove_idle_clients_release(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-idle-")
+    env = dict(base_env)
+    env["ULSP_MAX_CLIENTS"] = "1"
+    env["ULSP_CLIENT_IDLE_S"] = "0.4"
+    daemon, info = start_daemon(state, work, None, env)
+    idle: socket.socket | None = None
+    try:
+        expect(info["state"] == "ready", info)
+        idle = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        idle.settimeout(2)
+        idle.connect(str(state / "broker.sock"))
+        extra = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        extra.settimeout(2)
+        extra.connect(str(state / "broker.sock"))
+        extra_data = extra.recv(16)
+        extra.close()
+        expect(extra_data == b"", f"over-cap connection stayed open: {extra_data!r}")
+        code, blocked = rpc(state, "health", {}, env)
+        expect(code != 0 and blocked["error"]["code"] == "broker_not_running", blocked)
+        time.sleep(0.7)
+        code, health = rpc(state, "health", {}, env)
+        expect(code == 0 and health["ok"] is True and health["result"]["state"] == "ready", health)
+    finally:
+        if idle is not None:
+            idle.close()
+        if daemon.poll() is None:
+            stop_daemon(state)
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
+
+
+def prove_file_read_errors(work: Path, base_env: dict) -> None:
+    script = (
+        "import tempfile, importlib.util\n"
+        "from pathlib import Path\n"
+        "spec = importlib.util.spec_from_file_location('ulsp_broker', 'infra/unified-lsp-broker/broker.py')\n"
+        "mod = importlib.util.module_from_spec(spec)\n"
+        "assert spec.loader is not None\n"
+        "spec.loader.exec_module(mod)\n"
+        "path = Path(tempfile.mkdtemp()) / 'gone.ts'\n"
+        "path.write_text('const gone = 1;\\n', encoding='utf-8')\n"
+        "path.unlink()\n"
+        "try:\n"
+        "    mod.read_source(path)\n"
+        "except mod.BrokerError as exc:\n"
+        "    assert exc.code == 'file_not_found', exc.code\n"
+        "else:\n"
+        "    raise SystemExit('missing file was read')\n"
+        "print('missing')\n"
+    )
+    proc = subprocess.run([PY, "-c", script], text=True, capture_output=True, timeout=10, check=False)
+    expect(proc.returncode == 0 and proc.stdout.strip() == "missing", proc.stderr or proc.stdout)
+    state = scratch("ulsp-file-")
+    env = dict(base_env)
+    daemon, info = start_daemon(state, work, None, env)
+    try:
+        expect(info["state"] == "ready", info)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0 and installed["ok"] is True, installed)
+        locked = work / "tsjs" / "locked.ts"
+        locked.write_text("const locked = 1;\n", encoding="utf-8")
+        locked.chmod(0)
+        try:
+            code, body = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/locked.ts"}, env)
+            expect(code != 0 and body["ok"] is False and body["error"]["code"] == "file_not_found", body)
+            code, health = rpc(state, "health", {}, env)
+            expect(code == 0 and health["ok"] is True, health)
+        finally:
+            locked.chmod(0o644)
+            locked.unlink(missing_ok=True)
     finally:
         if daemon.poll() is None:
             stop_daemon(state)

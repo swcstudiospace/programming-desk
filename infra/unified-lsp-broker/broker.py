@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import fcntl
 import hashlib
 import hmac
 import json
@@ -49,6 +50,8 @@ MAX_DIAG_JSON = 8_192
 # the diagnostics wait and one crash retry.
 CLIENT_RPC_DEADLINE_S = 20.0
 REQUEST_BUDGET_S = 18.0
+DEFAULT_MAX_CLIENTS = 32
+DEFAULT_CLIENT_IDLE_S = 20.0
 DENIED_PARTS = {".git", ".hg", ".svn"}
 DENIED_NAMES = {"id_rsa", "id_dsa", "id_ed25519", ".env"}
 DENIED_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".kdbx", ".env"}
@@ -165,14 +168,24 @@ def assert_allowed_source(entry: dict, language: str, rel: str) -> None:
 
 
 def read_source(path: Path) -> str:
-    size = path.stat().st_size
+    try:
+        size = path.stat().st_size
+    except FileNotFoundError as exc:
+        raise BrokerError("file_not_found", "file disappeared before it could be read") from exc
+    except OSError as exc:
+        raise BrokerError("file_not_found", "file could not be read") from exc
     if size > MAX_FILE_BYTES:
         raise BrokerError(
             "file_too_large",
             f"file is {size} bytes, over the read cap of {MAX_FILE_BYTES} bytes",
             {"size_bytes": size, "limit_bytes": MAX_FILE_BYTES},
         )
-    data = path.read_bytes()
+    try:
+        data = path.read_bytes()
+    except FileNotFoundError as exc:
+        raise BrokerError("file_not_found", "file disappeared before it could be read") from exc
+    except OSError as exc:
+        raise BrokerError("file_not_found", "file could not be read") from exc
     if b"\x00" in data:
         raise BrokerError("invalid_arguments", "file contains a NUL byte")
     try:
@@ -400,6 +413,12 @@ class Broker:
         self.ws_sock: socket.socket | None = None
         self.lock = threading.Lock()
         self.lang_locks: dict[str, threading.Lock] = {}
+        self.client_threads = 0
+        self.max_clients = parse_max_clients()
+        self.client_idle_s = parse_client_idle()
+        self.stopping = False
+        self.shutdown_started = False
+        self._owner_fd: int | None = None
         self.lsp_timeout = parse_lsp_timeout()
         self._load_installed()
         self._claim_socket()
@@ -408,7 +427,23 @@ class Broker:
             self._bind_ws(host, port)
 
     def _claim_socket(self) -> None:
-        """Bind the unix socket. A live owner keeps its socket; a dead owner is replaced."""
+        """Bind the unix socket. The lock file is held for the process lifetime.
+
+        Two starts can both pass a state.json pid check before either writes it.
+        The exclusive flock is taken first, so the loser never unlinks a live socket.
+        """
+        lock_path = self.state_dir / "broker.lock"
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            os.close(fd)
+            raise BrokerError(
+                "broker_already_running",
+                "another live broker owns this state directory",
+            ) from exc
+        self._owner_fd = fd
+        self._spike_claim_hold()
         sock_path = self.state_dir / "broker.sock"
         recorded = read_state(self.state_dir)
         if recorded and recorded.get("state") != "stopped" and pid_alive(recorded.get("pid")):
@@ -422,6 +457,21 @@ class Broker:
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.sock.bind(str(sock_path))
         os.chmod(sock_path, 0o600)
+
+    def _spike_claim_hold(self) -> None:
+        """Test-only pause after the owner lock is held and before the socket is replaced."""
+        if os.environ.get("ULSP_SPIKE_HOOKS") != "1":
+            return
+        raw = os.environ.get("ULSP_SPIKE_CLAIM_HOLD_S", "")
+        if not raw:
+            return
+        try:
+            seconds = float(raw)
+        except ValueError:
+            return
+        if not math.isfinite(seconds) or seconds <= 0:
+            return
+        time.sleep(min(seconds, 2.0))
 
     def _lang_lock(self, language: str) -> threading.Lock:
         with self.lock:
@@ -437,6 +487,9 @@ class Broker:
             self.installed = json.loads(path.read_text(encoding="utf-8"))
 
     def _persist(self) -> None:
+        # An in-flight diagnostics write must not replace a shutdown's stopped record.
+        if self.stopping and self.state != "stopped":
+            return
         (self.state_dir / "installed.json").write_text(
             json.dumps(self.installed, indent=2) + "\n", encoding="utf-8"
         )
@@ -588,6 +641,9 @@ class Broker:
         deadline = time.monotonic() + request_budget()
         # The language lock covers this server's stdio. The broker lock is not held while waiting.
         with self._lang_lock(language):
+            with self.lock:
+                if self.stopping or not self.running:
+                    raise BrokerError("broker_stopping", "broker is shutting down")
             attempts = 0
             while True:
                 attempts += 1
@@ -708,7 +764,12 @@ class Broker:
             seconds = float(marker.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             return
-        if seconds <= 0:
+        if not math.isfinite(seconds) or seconds <= 0:
+            return
+        ready = self.state_dir / "spike_hold_ready"
+        try:
+            ready.write_text("1\n", encoding="utf-8")
+        except OSError:
             return
         time.sleep(min(seconds, REQUEST_BUDGET_S))
 
@@ -840,28 +901,64 @@ class Broker:
         except Exception:
             os._exit(1)
 
+    def _close_listeners(self) -> None:
+        for sock in (self.sock, self.ws_sock):
+            if sock is None:
+                continue
+            try:
+                sock.close()
+            except OSError:
+                pass
+
+    def _acquire_all_lang_locks(self) -> list[threading.Lock]:
+        """Take every language lock. Never hold self.lock while waiting."""
+        held: list[threading.Lock] = []
+        seen: set[int] = set()
+        while True:
+            with self.lock:
+                pending = [lock for lock in self.lang_locks.values() if id(lock) not in seen]
+                if not pending:
+                    return held
+            for lock in pending:
+                lock.acquire()
+                seen.add(id(lock))
+                held.append(lock)
+
+    def _wait_clients_drained(self) -> None:
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            with self.lock:
+                if self.client_threads <= 0:
+                    return
+            time.sleep(0.01)
+
     def finish_shutdown(self) -> None:
-        for sess in list(self.sessions.values()):
-            self._kill(sess)
-        self.sessions.clear()
-        self.state = "stopped"
-        self.running = False
-        self._persist()
-        sock_path = self.state_dir / "broker.sock"
+        with self.lock:
+            if self.shutdown_started:
+                return
+            self.shutdown_started = True
+            self.stopping = True
+            self.running = False
+        # Stop accepting before waiting, so a new request cannot block on a lock we hold.
+        self._close_listeners()
+        held = self._acquire_all_lang_locks()
         try:
-            self.sock.close()
-        except OSError:
-            pass
-        if sock_path.exists():
-            try:
-                sock_path.unlink()
-            except OSError:
-                pass
-        if self.ws_sock is not None:
-            try:
-                self.ws_sock.close()
-            except OSError:
-                pass
+            with self.lock:
+                for sess in list(self.sessions.values()):
+                    self._kill(sess)
+                self.sessions.clear()
+                self.state = "stopped"
+                self._persist()
+                sock_path = self.state_dir / "broker.sock"
+                if sock_path.exists():
+                    try:
+                        sock_path.unlink()
+                    except OSError:
+                        pass
+        finally:
+            for lock in held:
+                lock.release()
+        self._wait_clients_drained()
         os._exit(0)
 
     def handle(self, request: dict) -> dict:
@@ -910,6 +1007,9 @@ class Broker:
                 conn, _ = self.sock.accept()
             except OSError:
                 break
+            if not self._admit_client():
+                self._close_conn(conn)
+                continue
             threading.Thread(target=self._client, args=(conn,), daemon=True).start()
 
     def _reject_line(self, conn: socket.socket, message: str) -> None:
@@ -919,11 +1019,35 @@ class Broker:
         except OSError:
             return
 
+    def _admit_client(self) -> bool:
+        with self.lock:
+            if self.stopping or self.client_threads >= self.max_clients:
+                return False
+            self.client_threads += 1
+            return True
+
+    def _release_client(self) -> None:
+        with self.lock:
+            if self.client_threads > 0:
+                self.client_threads -= 1
+
+    def _close_conn(self, conn: socket.socket) -> None:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
     def _client(self, conn: socket.socket) -> None:
         try:
+            conn.settimeout(self.client_idle_s)
             data = b""
             while b"\n" not in data:
-                chunk = conn.recv(65536)
+                try:
+                    chunk = conn.recv(65536)
+                except socket.timeout:
+                    if data:
+                        self._reject_line(conn, "request is not a single JSON line")
+                    return
                 if not chunk:
                     if data:
                         self._reject_line(conn, "request is not a single JSON line")
@@ -952,10 +1076,8 @@ class Broker:
             if request.get("method") == "shutdown" and response.get("ok"):
                 threading.Thread(target=self._delayed_shutdown, daemon=True).start()
         finally:
-            try:
-                conn.close()
-            except OSError:
-                pass
+            self._close_conn(conn)
+            self._release_client()
 
     def _bind_ws(self, host: str, port: int) -> None:
         bind_host = "127.0.0.1" if host == "localhost" else host
@@ -981,10 +1103,14 @@ class Broker:
                 conn, _ = self.ws_sock.accept()
             except OSError:
                 return
+            if not self._admit_client():
+                self._close_conn(conn)
+                continue
             threading.Thread(target=self._ws_client, args=(conn,), daemon=True).start()
 
     def _ws_client(self, conn: socket.socket) -> None:
         try:
+            conn.settimeout(self.client_idle_s)
             host = (self.ws_addr or {}).get("host", "127.0.0.1")
             port = int((self.ws_addr or {}).get("port") or 0)
             if not ws_handshake(conn, expected_origin(str(host), port), self.ws_share or ""):
@@ -1000,10 +1126,34 @@ class Broker:
         except (OSError, json.JSONDecodeError, ValueError):
             return
         finally:
-            try:
-                conn.close()
-            except OSError:
-                pass
+            self._close_conn(conn)
+            self._release_client()
+
+
+def parse_max_clients() -> int:
+    raw = os.environ.get("ULSP_MAX_CLIENTS", "")
+    if not raw:
+        return DEFAULT_MAX_CLIENTS
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_MAX_CLIENTS
+    if value < 1:
+        return DEFAULT_MAX_CLIENTS
+    return min(value, 64)
+
+
+def parse_client_idle() -> float:
+    raw = os.environ.get("ULSP_CLIENT_IDLE_S", "")
+    if not raw:
+        return DEFAULT_CLIENT_IDLE_S
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_CLIENT_IDLE_S
+    if not math.isfinite(value) or value <= 0:
+        return DEFAULT_CLIENT_IDLE_S
+    return min(value, DEFAULT_CLIENT_IDLE_S)
 
 
 def parse_ws(spec: str) -> tuple[str, int]:

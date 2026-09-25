@@ -341,7 +341,6 @@ function handle(message: RpcRequest): void {
 
 let buffer = Buffer.alloc(0);
 let skipBytes = 0;
-let drainInput = false;
 
 function discardDeclaredBody(bodyStart: number, length: number): void {
   const available = Math.max(0, buffer.length - bodyStart);
@@ -354,15 +353,10 @@ function discardDeclaredBody(bodyStart: number, length: number): void {
 function rejectUnsizedBody(): Parsed {
   buffer = Buffer.alloc(0);
   skipBytes = 0;
-  drainInput = true;
   return frameTooBig();
 }
 
 function applySkip(): boolean {
-  if (drainInput) {
-    buffer = Buffer.alloc(0);
-    return true;
-  }
   if (skipBytes <= 0) {
     return false;
   }

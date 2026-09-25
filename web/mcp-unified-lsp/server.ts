@@ -340,6 +340,29 @@ function handle(message: RpcRequest): void {
 }
 
 let buffer = Buffer.alloc(0);
+let skipBytes = 0;
+
+function discardDeclaredBody(bodyStart: number, length: number): void {
+  const available = Math.max(0, buffer.length - bodyStart);
+  const drop = Math.min(available, length);
+  const rest = buffer.subarray(bodyStart + drop);
+  buffer = rest.length === 0 ? Buffer.alloc(0) : Buffer.from(rest);
+  skipBytes = length - drop;
+}
+
+function applySkip(): boolean {
+  if (skipBytes <= 0) {
+    return false;
+  }
+  if (buffer.length === 0) {
+    return true;
+  }
+  const drop = Math.min(buffer.length, skipBytes);
+  const rest = buffer.subarray(drop);
+  buffer = rest.length === 0 ? Buffer.alloc(0) : Buffer.from(rest);
+  skipBytes -= drop;
+  return skipBytes > 0;
+}
 
 type Parsed =
   | { kind: "need-more" }
@@ -376,13 +399,14 @@ function tryParse(): Parsed {
         }
         return { kind: "need-more" };
       }
-      if (newline > MAX_MCP_FRAME) {
-        buffer = buffer.subarray(newline + 1);
-        return frameTooBig();
-      }
       const headerLine = buffer.subarray(0, newline).toString("utf-8");
       const early = headerLine.match(/content-length:\s*(\d+)/i);
-      if (early && Number(early[1]) > MAX_MCP_FRAME) {
+      const earlyLength = early ? Number(early[1]) : NaN;
+      if (Number.isFinite(earlyLength) && earlyLength > MAX_MCP_FRAME) {
+        discardDeclaredBody(newline + 1, earlyLength);
+        return frameTooBig();
+      }
+      if (newline > MAX_MCP_FRAME) {
         buffer = buffer.subarray(newline + 1);
         return frameTooBig();
       }
@@ -392,20 +416,20 @@ function tryParse(): Parsed {
       }
       return { kind: "need-more" };
     }
+    const header = buffer.subarray(0, sep).toString("utf-8");
+    const match = header.match(/content-length:\s*(\d+)/i);
+    const length = match ? Number(match[1]) : NaN;
+    if (Number.isFinite(length) && length > MAX_MCP_FRAME) {
+      discardDeclaredBody(sep + 4, length);
+      return frameTooBig();
+    }
     if (sep > MAX_MCP_FRAME) {
       buffer = Buffer.alloc(0);
       return frameTooBig();
     }
-    const header = buffer.subarray(0, sep).toString("utf-8");
-    const match = header.match(/content-length:\s*(\d+)/i);
     if (!match) {
       buffer = buffer.subarray(sep + 4);
       return { kind: "bad", message: "content-length header is missing" };
-    }
-    const length = Number(match[1]);
-    if (length > MAX_MCP_FRAME) {
-      buffer = buffer.subarray(sep + 4);
-      return frameTooBig();
     }
     const start = sep + 4;
     if (buffer.length < start + length) {
@@ -454,6 +478,9 @@ function parseRpcBody(body: string): Parsed {
 function onData(chunk: Buffer): void {
   buffer = Buffer.concat([buffer, chunk]);
   for (;;) {
+    if (applySkip()) {
+      return;
+    }
     const before = buffer.length;
     let parsed: Parsed;
     try {

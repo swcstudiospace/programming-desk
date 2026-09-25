@@ -58,11 +58,19 @@ ABS_PATH_RE = re.compile(r"/(?:tmp|home|workspace|Users|var|private|opt|usr)/\S+
 
 
 class BrokerError(Exception):
-    def __init__(self, code: str, message: str, details: dict | None = None) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        details: dict | None = None,
+        *,
+        kill_session: bool = False,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = details or {}
+        self.kill_session = kill_session
 
 
 class LsDied(Exception):
@@ -206,6 +214,20 @@ def cap_diagnostics(diags: list) -> tuple[list, bool, int]:
     return capped, truncated, total
 
 
+def request_budget() -> float:
+    """Whole-request budget. ULSP_REQUEST_BUDGET_S may shorten it for tests, never past the cap."""
+    raw = os.environ.get("ULSP_REQUEST_BUDGET_S", "")
+    if not raw:
+        return REQUEST_BUDGET_S
+    try:
+        value = float(raw)
+    except ValueError:
+        return REQUEST_BUDGET_S
+    if value <= 0 or value > REQUEST_BUDGET_S:
+        return REQUEST_BUDGET_S
+    return value
+
+
 def parse_lsp_timeout() -> float:
     """Per-phase LSP wait. Two phases (initialize and diagnostics) fit in REQUEST_BUDGET_S."""
     phase_cap = REQUEST_BUDGET_S / 2
@@ -315,7 +337,11 @@ def read_lsp(sess: Session, timeout: float) -> dict:
             return extracted
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise BrokerError("diagnostics_timeout", "timed out waiting for the language server")
+            raise BrokerError(
+                "diagnostics_timeout",
+                "timed out waiting for the language server",
+                kill_session=True,
+            )
         if sess.proc.poll() is not None and not sess.buf:
             raise LsDied()
         ready, _, _ = select.select([sess.proc.stdout], [], [], min(0.2, remaining))
@@ -558,12 +584,14 @@ class Broker:
         uri = path.as_uri()
         lang_id = language_id_for(entry, path)
         # One budget for this request, under the 20s RPC and MCP client deadlines.
-        deadline = time.monotonic() + REQUEST_BUDGET_S
+        deadline = time.monotonic() + request_budget()
         # The language lock covers this server's stdio. The broker lock is not held while waiting.
         with self._lang_lock(language):
             attempts = 0
             while True:
                 attempts += 1
+                # Queue time counts against the budget. Do not touch a healthy session once it is gone.
+                self._reject_if_deadline_passed(deadline)
                 with self.lock:
                     sess = self.sessions.get(language)
                     if sess is not None and sess.proc.poll() is None:
@@ -593,7 +621,7 @@ class Broker:
                 try:
                     diags = self._collect(sess, uri, lang_id, text, deadline)
                 except BrokerError as exc:
-                    if exc.code == "diagnostics_timeout":
+                    if exc.code == "diagnostics_timeout" and exc.kill_session:
                         with self.lock:
                             self._kill(sess)
                             self._mark_failed(language)
@@ -615,6 +643,7 @@ class Broker:
                     self.failed.discard(language)
                     self._recompute_state()
                     self._persist()
+                self._spike_hold_while_locked()
                 return {
                     "language": language,
                     "language_id": lang_id,
@@ -659,10 +688,37 @@ class Broker:
         self.sessions[language] = sess
         return sess
 
+    def _reject_if_deadline_passed(self, deadline: float) -> None:
+        if deadline - time.monotonic() <= 0:
+            raise BrokerError(
+                "diagnostics_timeout",
+                "timed out waiting for the language server",
+                kill_session=False,
+            )
+
+    def _spike_hold_while_locked(self) -> None:
+        """Test-only delay while this request still owns the language lock, after the session work."""
+        if os.environ.get("ULSP_SPIKE_HOOKS") != "1":
+            return
+        marker = self.state_dir / "spike_hold_s"
+        if not marker.is_file():
+            return
+        try:
+            seconds = float(marker.read_text(encoding="utf-8").strip())
+        except (OSError, ValueError):
+            return
+        if seconds <= 0:
+            return
+        time.sleep(min(seconds, REQUEST_BUDGET_S))
+
     def _phase_timeout(self, deadline: float) -> float:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            raise BrokerError("diagnostics_timeout", "timed out waiting for the language server")
+            raise BrokerError(
+                "diagnostics_timeout",
+                "timed out waiting for the language server",
+                kill_session=True,
+            )
         return min(self.lsp_timeout, remaining)
 
     def _initialize(self, sess: Session, deadline: float) -> None:
@@ -736,7 +792,11 @@ class Broker:
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise BrokerError("diagnostics_timeout", "timed out waiting for the language server")
+                raise BrokerError(
+                    "diagnostics_timeout",
+                    "timed out waiting for the language server",
+                    kill_session=True,
+                )
             message = read_lsp(sess, remaining)
             if "id" in message and "method" in message:
                 self._reply_server(sess, message)

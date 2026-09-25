@@ -262,11 +262,22 @@ async function main(): Promise<void> {
     expect(bigLine.error?.data?.code === "invalid_arguments", JSON.stringify(bigLine));
     const afterLine = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
     expect(afterLine.id === 70 && afterLine.result !== undefined, JSON.stringify(afterLine));
-    guard.stdin.write(`Content-Length: 2000000\n${ping(71)}\n`);
-    const bigHeader = JSON.parse(await nextGuard()) as { error?: { data?: { code?: string } } };
-    expect(bigHeader.error?.data?.code === "invalid_arguments", JSON.stringify(bigHeader));
+    const declared = 1_048_577;
+    const buried = `${ping(99)}\n`;
+    const pad = "z".repeat(declared - Buffer.byteLength(buried));
+    expect(Buffer.byteLength(buried + pad) === declared, "rejected body length");
+    guard.stdin.write(`Content-Length: ${declared}\n${buried}${pad}${ping(72)}\n`);
+    const bigHeader = JSON.parse(await nextGuard()) as { id?: number; error?: { data?: { code?: string } } };
+    expect(bigHeader.id !== 99 && bigHeader.error?.data?.code === "invalid_arguments", JSON.stringify(bigHeader));
     const afterHeader = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
-    expect(afterHeader.id === 71 && afterHeader.result !== undefined, JSON.stringify(afterHeader));
+    expect(afterHeader.id === 72 && afterHeader.result !== undefined, JSON.stringify(afterHeader));
+    guard.stdin.write(`Content-Length: ${declared}\r\n\r\n`);
+    const chunked = JSON.parse(await nextGuard()) as { id?: number; error?: { data?: { code?: string } } };
+    expect(chunked.id !== 99 && chunked.error?.data?.code === "invalid_arguments", JSON.stringify(chunked));
+    guard.stdin.write(buried);
+    guard.stdin.write(`${pad}${ping(73)}\n`);
+    const afterChunk = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(afterChunk.id === 73 && afterChunk.result !== undefined, JSON.stringify(afterChunk));
     guard.kill();
 
     const fat = path.join(frameDir, "fat_broker.py");
@@ -315,7 +326,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-body\n",
   );
 }
 

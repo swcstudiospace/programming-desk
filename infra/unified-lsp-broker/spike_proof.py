@@ -484,6 +484,7 @@ def main() -> int:
     expect(grandchild != 0 and not _alive(grandchild), f"grandchild survived stop: {grandchild}")
     prove_timeout_clamp()
     prove_timeout_recovers(work, env)
+    prove_queue_timeout_keeps_session(work, env)
 
     print(
         "SPIKE_OK "
@@ -491,7 +492,7 @@ def main() -> int:
         "diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served "
         "ws=127.0.0.1 optional state_after_stop=stopped "
         "f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul "
-        "p1=trunc,limit,owner,deadline p2=timeout,version,total"
+        "p1=trunc,limit,owner,deadline,queue p2=timeout,version,total"
     )
     return 0
 
@@ -514,6 +515,65 @@ def prove_timeout_clamp() -> None:
     phase_s, budget_s, client_s = (float(line) for line in proc.stdout.strip().splitlines())
     expect(phase_s * 2 <= budget_s <= client_s, proc.stdout)
     expect(phase_s < 30, proc.stdout)
+
+
+def prove_queue_timeout_keeps_session(work: Path, base_env: dict) -> None:
+    state = scratch("ulsp-queue-")
+    env = dict(base_env)
+    env["ULSP_REQUEST_BUDGET_S"] = "0.6"
+    env["ULSP_SPIKE_HOOKS"] = "1"
+    daemon, info = start_daemon(state, work, None, env)
+    try:
+        expect(info["state"] == "ready", info)
+        code, installed = rpc(state, "install", {"language": "tsjs"}, env)
+        expect(code == 0 and installed["ok"] is True, installed)
+        code, first = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        expect(code == 0 and marker_present(first, "intentional spike diagnostic for tsjs"), first)
+        code, health = rpc(state, "health", {}, env)
+        sess = health["result"]["sessions"]["tsjs"]
+        pid = sess["pid"]
+        expect(
+            sess["status"] == "running" and isinstance(pid, int) and _alive(pid),
+            f"fresh session {sess} alive={_alive(pid) if isinstance(pid, int) else None}",
+        )
+        (state / "spike_hold_s").write_text("0.9\n", encoding="utf-8")
+        results: list[tuple[int, dict]] = []
+        gate = threading.Lock()
+
+        def one() -> None:
+            item = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+            with gate:
+                results.append(item)
+
+        threads = [threading.Thread(target=one) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=15)
+        expect(all(not thread.is_alive() for thread in threads), "queued diagnostics still running")
+        expect(len(results) == 2, str(results))
+        timed_out = [
+            body
+            for status, body in results
+            if status != 0 and (body.get("error") or {}).get("code") == "diagnostics_timeout"
+        ]
+        expect(timed_out, str(results))
+        code, health = rpc(state, "health", {}, env)
+        sess = health["result"]["sessions"]["tsjs"]
+        expect(sess["status"] == "running" and sess["pid"] == pid and _alive(pid), health)
+        (state / "spike_hold_s").unlink()
+        code, again = rpc(state, "diagnostics", {"language": "tsjs", "path": "tsjs/sample.ts"}, env)
+        expect(code == 0 and marker_present(again, "intentional spike diagnostic for tsjs"), again)
+        expect("STALE" not in json.dumps(again), again)
+        code, health = rpc(state, "health", {}, env)
+        expect(health["result"]["sessions"]["tsjs"]["pid"] == pid, health)
+    finally:
+        if daemon.poll() is None:
+            stop_daemon(state)
+            try:
+                daemon.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                daemon.kill()
 
 
 def prove_timeout_recovers(work: Path, base_env: dict) -> None:

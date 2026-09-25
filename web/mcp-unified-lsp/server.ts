@@ -163,16 +163,16 @@ function spawnFailureCode(error: Error & { code?: string }): string {
   return "broker_protocol";
 }
 
-function brokerRpc(method: string, params: { [key: string]: Json }): Json {
+function brokerSpawn(args: string[], stdin: string): Json {
   const cfg = configured();
   if ("error" in cfg) {
     return cfg.error;
   }
   const child = spawnSync(
     cfg.python,
-    [cfg.broker, "--state-dir", cfg.stateDir, "rpc"],
+    [cfg.broker, "--state-dir", cfg.stateDir, ...args],
     {
-      input: `${JSON.stringify({ id: "mcp", method, params })}\n`,
+      input: stdin,
       encoding: "utf-8",
       timeout: 20000,
       maxBuffer: brokerStdoutCap(),
@@ -216,6 +216,15 @@ function brokerRpc(method: string, params: { [key: string]: Json }): Json {
   return toolText({ ok: true, ...(parsed.result as object) }, false);
 }
 
+function brokerRpc(method: string, params: { [key: string]: Json }): Json {
+  return brokerSpawn(["rpc"], `${JSON.stringify({ id: "mcp", method, params })}\n`);
+}
+
+function brokerHealth(): Json {
+  // The health subcommand reports cold and stopped without broker_not_running.
+  return brokerSpawn(["health"], "");
+}
+
 function requireLanguage(args: { [key: string]: Json }): string | Json {
   const language = args.language;
   if (typeof language !== "string" || language.length === 0) {
@@ -245,7 +254,7 @@ function requirePath(args: { [key: string]: Json }): string | Json {
 
 function callTool(name: string, args: { [key: string]: Json }): Json {
   if (name === "lsp_status") {
-    return brokerRpc("health", {});
+    return brokerHealth();
   }
   if (name === "lsp_install") {
     const language = requireLanguage(args);
@@ -476,11 +485,9 @@ function tryParse(): Parsed {
       return frameTooBig();
     }
     const start = sep + sepLen;
+    // A finite body at the cap is still valid when the header makes the buffer larger.
+    // Wait for the declared body. Do not clear it and parse the remainder as a new request.
     if (buffer.length < start + length) {
-      if (buffer.length > MAX_MCP_FRAME) {
-        buffer = Buffer.alloc(0);
-        return frameTooBig();
-      }
       return { kind: "need-more" };
     }
     const body = buffer.subarray(start, start + length).toString("utf-8");

@@ -3,7 +3,7 @@
  * Starts the INFRA broker, then drives the adapter over stdin/stdout only.
  */
 
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -130,6 +130,16 @@ async function main(): Promise<void> {
   };
 
   const extraDirs: string[] = [];
+  const aux: ChildProcess[] = [];
+  const launchAdapter = (state: string): ChildProcessWithoutNullStreams => {
+    const child = spawn(process.execPath, ["--experimental-strip-types", server], {
+      env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: state, ULSP_PYTHON: "python3" },
+      stdio: ["pipe", "pipe", "pipe"],
+    }) as ChildProcessWithoutNullStreams;
+    aux.push(child);
+    child.stderr.resume();
+    return child;
+  };
   try {
     const initMessage = {
       jsonrpc: "2.0",
@@ -237,24 +247,52 @@ async function main(): Promise<void> {
     expect(leakMessages.every((item) => item.length <= 240), JSON.stringify(leakMessages));
     expect(!JSON.stringify(leaked).includes("STALE"), JSON.stringify(leaked));
 
+    const coldDir = mkdtempSync(path.join(tmpdir(), "ulsp-mcp-cold-"));
+    extraDirs.push(coldDir);
+    const cold = launchAdapter(coldDir);
+    try {
+      const coldNext = lineReader(cold, 5000);
+      cold.stdin.write(`${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 60,
+        method: "tools/call",
+        params: { name: "lsp_status", arguments: {} },
+      })}\n`);
+      const coldStatus = toolPayload(JSON.parse(await coldNext()) as Record<string, unknown>);
+      expect(coldStatus.isError === false && coldStatus.ok === true && coldStatus.state === "cold", JSON.stringify(coldStatus));
+      writeFileSync(path.join(coldDir, "state.json"), `${JSON.stringify({
+        state: "stopped",
+        workspace_bound: false,
+        pid: 2147483647,
+        ws: null,
+        installed: [],
+        sessions: {},
+      })}\n`);
+      cold.stdin.write(`${JSON.stringify({
+        jsonrpc: "2.0",
+        id: 61,
+        method: "tools/call",
+        params: { name: "lsp_status", arguments: {} },
+      })}\n`);
+      const stoppedStatus = toolPayload(JSON.parse(await coldNext()) as Record<string, unknown>);
+      expect(
+        stoppedStatus.isError === false && stoppedStatus.ok === true && stoppedStatus.state === "stopped",
+        JSON.stringify(stoppedStatus),
+      );
+    } finally {
+      cold.kill();
+    }
+
     const frameDir = mkdtempSync(path.join(tmpdir(), "ulsp-mcp-frame-"));
     extraDirs.push(frameDir);
-    const frameServer = spawn(process.execPath, ["--experimental-strip-types", server], {
-      env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
-      stdio: ["pipe", "pipe", "pipe"],
-    }) as ChildProcessWithoutNullStreams;
-    frameServer.stderr.resume();
+    const frameServer = launchAdapter(frameDir);
     const nextFrame = lineReader(frameServer, 5000);
     frameServer.stdin.write(`${"a".repeat(1_048_577)}`);
     const framed = JSON.parse(await nextFrame()) as { error?: { data?: { code?: string } } };
     expect(framed.error?.data?.code === "invalid_arguments", JSON.stringify(framed));
     frameServer.kill();
 
-    const guard = spawn(process.execPath, ["--experimental-strip-types", server], {
-      env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
-      stdio: ["pipe", "pipe", "pipe"],
-    }) as ChildProcessWithoutNullStreams;
-    guard.stderr.resume();
+    const guard = launchAdapter(frameDir);
     const nextGuard = lineReader(guard, 5000);
     const ping = (id: number) => JSON.stringify({ jsonrpc: "2.0", id, method: "ping" });
     guard.stdin.write(`${"y".repeat(1_048_577)}\n${ping(70)}\n`);
@@ -296,6 +334,28 @@ async function main(): Promise<void> {
     expect(early.id !== 98 && early.id !== 99 && early.error?.data?.code === "invalid_arguments", JSON.stringify(early));
     const afterEarly = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
     expect(afterEarly.id === 75 && afterEarly.result !== undefined, JSON.stringify(afterEarly));
+    const nearId = 81;
+    const nearPrefix = `{"jsonrpc":"2.0","id":${nearId},"method":"ping","params":{"pad":"`;
+    const nearSuffix = `"}}`;
+    const nearPad = 1_048_576 - Buffer.byteLength(nearPrefix + nearSuffix);
+    expect(nearPad > 0, "near-limit pad");
+    const nearBody = nearPrefix + "p".repeat(nearPad) + nearSuffix;
+    expect(Buffer.byteLength(nearBody) === 1_048_576, "near-limit body");
+    const nearHeader = `Content-Length: ${Buffer.byteLength(nearBody)}\r\n\r\n`;
+    const nearFrame = Buffer.concat([Buffer.from(nearHeader), Buffer.from(nearBody)]);
+    expect(nearFrame.length > 1_048_576, "header pushes a valid body over the cap");
+    const nearCut = Buffer.byteLength(nearHeader) + Buffer.byteLength(nearBody) - 64;
+    guard.stdin.write(nearFrame.subarray(0, nearCut));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    guard.stdin.write(nearFrame.subarray(nearCut));
+    const near = JSON.parse(await nextGuard()) as { id?: number; result?: unknown; error?: unknown };
+    expect(near.id === nearId && near.result !== undefined && near.error === undefined, JSON.stringify(near));
+    const splitPing = ping(82);
+    guard.stdin.write(splitPing.slice(0, 12));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    guard.stdin.write(`${splitPing.slice(12)}\n`);
+    const splitLine = JSON.parse(await nextGuard()) as { id?: number; result?: unknown };
+    expect(splitLine.id === 82 && splitLine.result !== undefined, JSON.stringify(splitLine));
     guard.kill();
 
     const framedPing = (id: number): string => {
@@ -303,27 +363,23 @@ async function main(): Promise<void> {
       return `Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`;
     };
     const expectUnsizedDropped = async (headerValue: string, buriedId: number, nextId: number): Promise<void> => {
-      const child = spawn(process.execPath, ["--experimental-strip-types", server], {
-        env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
-        stdio: ["pipe", "pipe", "pipe"],
-      }) as ChildProcessWithoutNullStreams;
-      child.stderr.resume();
-      const next = lineReader(child, 2000);
-      child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n${ping(buriedId)}\n`);
-      const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
-      expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
-      child.stdin.write(framedPing(nextId));
-      const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
-      expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
-      child.kill();
+      const child = launchAdapter(frameDir);
+      try {
+        const next = lineReader(child, 2000);
+        child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n${ping(buriedId)}\n`);
+        const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
+        expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
+        child.stdin.write(framedPing(nextId));
+        const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
+        expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
+      } finally {
+        child.kill();
+      }
     };
     const expectSplitDropped = async (headerValue: string, buriedId: number, nextId: number): Promise<void> => {
-      const child = spawn(process.execPath, ["--experimental-strip-types", server], {
-        env: { ...process.env, ULSP_BROKER: broker, ULSP_STATE_DIR: frameDir, ULSP_PYTHON: "python3" },
-        stdio: ["pipe", "pipe", "pipe"],
-      }) as ChildProcessWithoutNullStreams;
-      child.stderr.resume();
+      const child = launchAdapter(frameDir);
       const next = lineReader(child, 2000);
+      try {
       child.stdin.write(`Content-Length: ${headerValue}\r\n\r\n`);
       const rejected = JSON.parse(await next()) as { id?: number; error?: { data?: { code?: string } } };
       expect(rejected.id !== buriedId && rejected.error?.data?.code === "invalid_arguments", JSON.stringify(rejected));
@@ -338,7 +394,9 @@ async function main(): Promise<void> {
       child.stdin.write(`${ping(nextId)}\n`);
       const followed = JSON.parse(await next()) as { id?: number; result?: unknown };
       expect(followed.id === nextId && followed.result !== undefined, JSON.stringify(followed));
-      child.kill();
+      } finally {
+        child.kill();
+      }
     };
     const infiniteLength = "9".repeat(400);
     expect(!Number.isFinite(Number(infiniteLength)), "digit string should be Infinity");
@@ -359,6 +417,7 @@ async function main(): Promise<void> {
       },
       stdio: ["pipe", "pipe", "pipe"],
     }) as ChildProcessWithoutNullStreams;
+    aux.push(limited);
     limited.stderr.resume();
     const nextLimited = lineReader(limited, 5000);
     const limitedCall = async (message: unknown): Promise<Record<string, unknown>> => {
@@ -381,6 +440,9 @@ async function main(): Promise<void> {
     expect(String(oversized.message).includes("64"), JSON.stringify(oversized));
     limited.kill();
   } finally {
+    for (const child of aux) {
+      child.kill();
+    }
     mcp.stdin.end();
     mcp.kill();
     const stop = spawn("python3", [broker, "--state-dir", stateDir, "stop"], { stdio: "ignore" });
@@ -393,7 +455,7 @@ async function main(): Promise<void> {
     }
   }
   process.stdout.write(
-    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-ndjson\n",
+    "MCP_SPIKE_OK stdio-primary languages=tsjs,javascript,python,go ws=unused f2=env f3=redacted f4=nopath sanitize=selftest p2=frame,null,maxbuf,line,clen-ndjson,status,chunk\n",
   );
 }
 

@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "strategy": "registry-plus-install-on-demand",
+  "tier": 1,
+  "note": "Spike registry. Production install plans name upstream servers and are not executed unless a later change pins them. Default install links the in-repo fixture language server.",
+  "languages": {
+    "tsjs": {
+      "language_ids": ["typescript", "javascript"],
+      "extensions": [".ts", ".tsx", ".js", ".jsx"],
+      "javascript_extensions": [".js", ".jsx"],
+      "production_server": {
+        "command": "typescript-language-server",
+        "args": ["--stdio"],
+        "install": {
+          "runner": "npm",
+          "packages": ["typescript-language-server", "typescript"],
+          "pin": "unpinned — ASSUMPTION; supply-chain review is Unit D / n6 and is not done"
+        }
+      }
+    },
+    "python": {
+      "language_ids": ["python"],
+      "extensions": [".py"],
+      "javascript_extensions": [],
+      "production_server": {
+        "command": "pyright-langserver",
+        "args": ["--stdio"],
+        "install": {
+          "runner": "npm",
+          "packages": ["pyright"],
+          "pin": "unpinned — ASSUMPTION; supply-chain review is Unit D / n6 and is not done"
+        }
+      }
+    },
+    "go": {
+      "language_ids": ["go"],
+      "extensions": [".go"],
+      "javascript_extensions": [],
+      "production_server": {
+        "command": "gopls",
+        "args": ["serve"],
+        "install": {
+          "runner": "go",
+          "package": "golang.org/x/tools/gopls@latest",
+          "pin": "unpinned — ASSUMPTION; supply-chain review is Unit D / n6 and is not done"
+        }
+      }
+    }
+  }
+}

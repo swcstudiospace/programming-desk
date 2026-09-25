@@ -3,14 +3,14 @@
   "bot": "bot-05-infrastructure",
   "approved_by": "bot-06-quality-security",
   "started_at": "2026-09-24T18:40:00Z",
-  "completed_at": "2026-09-25T05:20:00Z",
+  "completed_at": "2026-09-25T08:32:41Z",
   "graph_id": "ut-tlvsqj-b31b8fe2",
   "runtime": "cursor-cloud",
   "commands": [
     {
       "cmd": "python3 infra/unified-lsp-broker/spike_proof.py",
       "exit_code": 0,
-      "duration_s": 4.3,
+      "duration_s": 4.4,
       "output_tail": "SPIKE_OK plans=tsjs:typescript-language-server,python:pyright-langserver,go:gopls diagnostics=ts,js,python,go isolation=python crashed, tsjs+go served ws=127.0.0.1 optional state_after_stop=stopped f1=origin f2=ext f3=redacted f4=nopath f5=grandchild f8=nul p1=trunc,limit,owner,deadline,queue p2=timeout,version,total,nan"
     },
     {
@@ -55,7 +55,8 @@
     "Production install plans are unpinned; F7 version pins, mode 0700 state dir, and hash verification were not done",
     "F6 filesystem and network sandbox, resource limits, and removing HOME from the child environment were not done; HOME is still passed",
     "WebSocket was checked with this spike's own client on 127.0.0.1, not with ::1 and not with a browser client",
-    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED; approved_by is the G-2 reviewer slot and is not a sign-off of this revision"
+    "QUALITY verdict on f5982ef was SPIKE_SANDBOX_BLOCKED; approved_by is the G-2 reviewer slot and is not a sign-off of this revision",
+    "This branch is the INFRA slice of 2f4230c; LEAD and QUALITY receipts are not on it, and the QUALITY merge-gate is not claimed"
   ],
   "files_changed": [
     "infra/unified-lsp-broker/broker.py",

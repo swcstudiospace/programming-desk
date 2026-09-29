@@ -134,8 +134,8 @@ set -euo pipefail          # a failed step must never fall through to rsync --de
 
 STAGE="$(mktemp -d)"
 test -n "$STAGE" && test -d "$STAGE"    # an empty STAGE would make the rsync source "/"
-LOG="$(mktemp)"
-trap 'rm -rf "$STAGE"' EXIT             # $LOG survives: it is the change list you reviewed
+LOG="$(mktemp)"; SET="$(mktemp)"
+trap 'rm -rf "$STAGE"' EXIT             # $LOG/$SET survive: they are the change set you reviewed
 
 git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
 test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must not drive --delete
@@ -144,9 +144,10 @@ test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must
 changes() { grep -E '^(\*deleting|deleting |[<>ch.][fdLDS])' "$1" || true; }
 
 # Dry run. Writes nothing.
-rsync -avni --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ | tee "$LOG"
-echo "--- would replace:"; grep -E '^>f' "$LOG" || echo "(nothing)"
-echo "--- would delete:";  grep -E '^(\*deleting|deleting )' "$LOG" || echo "(nothing)"
+rsync -avni --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ > "$LOG"
+changes "$LOG" > "$SET"
+echo "--- every path this sync would touch ($(wc -l < "$SET")):"; cat "$SET"
+echo "--- of which, deletions:"; grep -E '^(\*deleting|deleting )' "$SET" || echo "(none)"
 
 # Gate. Read BOTH lists above, then write the G-6 approval record (§4.4) with both as its
 # blast_radius. The approval exists BEFORE this answer, not after the run.
@@ -156,7 +157,7 @@ test "$CONFIRM" = sync
 # Revalidate: the pack is shared, and it may have changed while you were reading.
 RECHECK="$(mktemp)"
 rsync -avni --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ > "$RECHECK"
-diff <(changes "$LOG") <(changes "$RECHECK")    # the whole change set must match, not just deletions
+diff "$SET" <(changes "$RECHECK")       # the whole change set must match, not just deletions
 
 rsync -av --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
 ```
@@ -167,11 +168,25 @@ rather than a chance to prevent it. Anything listed for deletion *or replacement
 keep is a local edit: answer anything but `sync`, then take it through §5. `--delete` is not the thing
 to drop.
 
-**Replacements count, not only deletions.** A sync overwrites every pack file that differs from the
-staged tree; that is what it is for, but it is also how a pack-only edit dies quietly — replaced
-rather than deleted, so a deletions-only review never mentions it. `-i` itemises both (`>f` a file
-being sent, `*deleting` one being removed), the gate prints both lists, and §4.4's `blast_radius`
-carries both counts. An approver who saw only the deletions did not see what they authorised.
+**The reviewed set is every path the sync touches — no category filter.** A sync overwrites every
+pack file that differs from the staged tree; that is what it is for, but it is also how a pack-only
+edit dies quietly, replaced rather than deleted. And "differs" is broader than content: rsync
+itemises a permissions-only change as `.f...p.....`, which a `>f` filter (files being *sent*) drops
+silently. On this repo that is not hypothetical — `ci/hooks/pre-commit` and
+`scripts/assemble-prompts.sh` are executables, and a sync that flips or restores a mode bit without
+it appearing in the reviewed list is a change to what runs on the box that nobody approved.
+
+So the gate prints `changes` in full and breaks out deletions as a subset, rather than filtering the
+set into categories. Every per-category pattern is another chance to omit a case, and the omission is
+invisible: the operator sees a shorter list and cannot tell it is short. One list, reviewed whole,
+and the same `$SET` is what the recheck diffs and what `blast_radius` counts — the reviewed set, the
+revalidated set and the approved set are then the same object by construction, not by three patterns
+agreeing.
+
+Reading the codes: position 1 is the update type (`>` received, `.` no transfer, `c` created,
+`*` a message such as `deleting`), position 2 the file type (`f` file, `d` directory), and the rest
+name what differs (`c` checksum, `s` size, `t` time, `p` permissions, `o` owner, `g` group). So
+`>f+++++++++` is a new file, `>f.st......` changed content, `.f...p.....` permissions only.
 
 The deletion pattern accepts `deleting ` as well as `*deleting`: rsync 3.x itemises removals with the
 leading `*`, older builds do not, and a pattern that silently matches nothing on the box's rsync
@@ -186,8 +201,8 @@ before the real rsync — a sync that cannot be reviewed does not happen. If you
 two phases separately, split at the gate and pass an explicit `STAGE` path to the second half, with
 the same guards re-run there; do not drop the review.
 
-`$LOG` outlives the stage deliberately: the deletion list is the evidence that the review happened,
-so keep it with the §4.4 receipt.
+`$LOG` and `$SET` outlive the stage deliberately: the change set is the evidence that the review
+happened, so keep them with the §4.4 receipt.
 
 **The recheck, and exactly what it does not buy.** `rsync` recomputes the whole change set against
 the pack as it is at that moment, not against the list you approved. If someone drops a file into the
@@ -220,7 +235,7 @@ runbook, and every failure mode upstream of it ends with the pack being emptied 
 | `git archive` fails mid-pipe | `tar` still exits 0, so an empty or partial stage becomes the source and `--delete` removes the rest of the pack |
 | Export half-lands | Same, quietly: the pack loses whatever the export missed |
 | Dry run flows into the real run | The change list is printed and acted on at once — a record of what was lost, not a chance to stop |
-| Only deletions are reviewed | Every replaced file is an unreviewed overwrite, and a pack-only edit dies without appearing in any list |
+| The reviewed list is filtered by category | Whatever the patterns miss — an overwrite, a mode-bit change — is applied unreviewed, and the operator cannot tell the list is short |
 
 `set -euo pipefail` plus the two `test` lines turn each of those into a stop before anything is
 written. `test -f "$STAGE/ownership.yaml"` is the cheap sentinel — that file is tracked at the root
@@ -268,7 +283,7 @@ so record the approval while it can still prevent something:
       "operation": "rsync --delete of <PACK_ROOT> from main@<sha>",
       "approved_by": "<the human who approved, not the operator running it>",
       "at": "<ISO-8601 timestamp, before the real rsync>",
-      "blast_radius": "<the reviewed change set: N files replaced, M deleted — $LOG attached>"
+      "blast_radius": "<the reviewed change set: N paths touched, of which M deleted — $SET attached>"
     }
   ]
 }
@@ -282,10 +297,12 @@ currently *passes* G-6 in CI. Verified against the gate: the receipt above passe
 passes with the `approvals` block removed. The approval here is therefore enforced by this runbook
 and by review, not by a script, which is precisely the situation the desk treats as weak
 (`ARCHITECTURE.md`: a rule that lives only in prose is advisory). Widening the pattern list is a
-change to `ci/gates/**` and belongs in QUALITY's own PR, not this docs one — raised, not smuggled in. `blast_radius` is the **whole** change set you read at the
-gate — files replaced as well as files deleted — which is why §4.3 keeps `$LOG`. A pack overwrite
-approved on its deletions alone hides the larger half of what it does; an approval whose blast radius
-was never established is a signature on a blank page.
+change to `ci/gates/**` and belongs in QUALITY's own PR, not this docs one — raised, not smuggled in.
+
+`blast_radius` is the **whole** change set you read at the gate — every path the sync touches, not
+the deletions alone — which is why §4.3 keeps `$SET`. A pack overwrite approved on its removals hides
+the larger half of what it does; an approval whose blast radius was never established is a signature
+on a blank page.
 
 **Pass 2 — after the sync.** Complete the same receipt per
 [`../skills/verification-receipts/SKILL.md`](../skills/verification-receipts/SKILL.md): the commands
@@ -321,7 +338,7 @@ was reviewed. A sync performed before the PR merges loses the edit, so read it o
 |---|---|
 | **G-1** | Pack sync changes no repo paths. A PR *about* sync obeys `ownership.yaml` like any other — `docs/**` and `skills/**` are QUALITY's |
 | **G-2** | The sync claim needs a receipt naming the mirrored SHA (§4.4) |
-| **G-6** | Overwriting a live pack on a shared box, or a running agent's prompt, is destructive: `approvals[]` recorded **before** the real rsync, with the reviewed deletion list as `blast_radius` (§4.4 pass 1). See `skills/platforms/remote-dev-machine/SKILL.md` §3 |
+| **G-6** | Overwriting a live pack on a shared box, or a running agent's prompt, is destructive: `approvals[]` recorded **before** the real rsync, with the reviewed change set as `blast_radius` (§4.4 pass 1). See `skills/platforms/remote-dev-machine/SKILL.md` §3 |
 
 ## 7. Parity with ship-desk
 

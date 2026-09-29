@@ -71,10 +71,11 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
    leaves no diff. Mirroring a broken `main` installs it everywhere at once.
 4. **Mirror tracked content only.** `git archive HEAD` into a staging tree, then
    `rsync --delete --exclude '.git/' --exclude '.receipts/'` from it — dry run first, reading the
-   change list **at a stop, not in passing** — replacements (`>f`) as well as deletions
-   (`*deleting`), since a sync kills a pack-only edit by overwriting it just as surely as by deleting
-   it. The script gates between the dry run and the real run, so that edit can still be rescued (§5)
-   instead of merely reported. Rsyncing the clone
+   change set **whole and at a stop, not in passing** — every path the sync touches, never filtered
+   into categories, since a sync kills a pack-only edit by overwriting it as surely as by deleting
+   it, and a mode-bit change (`.f...p.....`) escapes any content-only filter. The script gates
+   between the dry run and the real run, so that edit can still be rescued (§5) instead of merely
+   reported. Rsyncing the clone
    itself would carry gitignored artefacts (`.venv/`,
    `__pycache__/`, `.pytest_cache/`, the caches step 3 just created) onto a shared box; without
    `--exclude '.receipts/'`, `--delete` erases the box's receipt history — the evidence for every
@@ -83,7 +84,7 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
    `docs/pack-sync.md` §4.3: an empty `STAGE` makes the rsync source `/`, and a failed `git archive`
    still leaves `tar` exiting 0, so either one turns `--delete` into "empty the pack".
 5. **Receipt in two passes, approval first.** `approvals[]` — `operation`, `approved_by`, `at`,
-   `blast_radius` (the deletion list you read at the gate) — is written **before** the real rsync,
+   `blast_radius` (the whole change set you read at the gate) — is written **before** the real rsync,
    because G-6 wants an approval that can still prevent something, not a write-up. The commands,
    exit codes, mirrored SHA and `unverified` are completed after. Both live **outside** the pack
    root: anything inside is overwritten by the next sync.
@@ -131,8 +132,8 @@ the receipt whether you touched it.
       `rsync --delete` can reach it
 - [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
 - [ ] `--exclude '.git/'` present so `--delete` cannot erase the pack's own git history
-- [ ] `rsync` dry run read at the gate — replacements *and* deletions — before the real run was
-      authorised
+- [ ] `rsync` dry run read at the gate as one unfiltered change set — content, metadata and
+      deletions — before the real run was authorised
 - [ ] G-6 `approvals[]` written **before** the real rsync, all four fields, `blast_radius` = that
       whole reviewed change set, not the deletions alone
 - [ ] Pack announced as quiescent — the recheck `diff` is a backstop and does not catch a re-edit of

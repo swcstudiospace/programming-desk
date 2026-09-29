@@ -71,7 +71,9 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
    leaves no diff. Mirroring a broken `main` installs it everywhere at once.
 4. **Mirror tracked content only.** `git archive HEAD` into a staging tree, then
    `rsync --delete --exclude '.git/' --exclude '.receipts/'` from it — dry run first, reading the
-   deletion list. Rsyncing the clone itself would carry gitignored artefacts (`.venv/`,
+   deletion list **at a stop, not in passing** — the script gates between the dry run and the real
+   run, so a pack-only edit can still be rescued (§5) instead of merely reported. Rsyncing the clone
+   itself would carry gitignored artefacts (`.venv/`,
    `__pycache__/`, `.pytest_cache/`, the caches step 3 just created) onto a shared box; without
    `--exclude '.receipts/'`, `--delete` erases the box's receipt history — the evidence for every
    earlier sync; without `--exclude '.git/'` it erases the pack's own git history if the pack is a
@@ -122,7 +124,7 @@ the receipt whether you touched it.
       `rsync --delete` can reach it
 - [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
 - [ ] `--exclude '.git/'` present so `--delete` cannot erase the pack's own git history
-- [ ] `rsync` dry run read, deletion list understood
+- [ ] `rsync` dry run read at the gate, deletion list understood, before the real run was authorised
 - [ ] G-6 approval recorded before overwriting a live pack
 - [ ] Receipt written outside the pack root, names the mirrored SHA; unverified lists what was not
       restarted or checked

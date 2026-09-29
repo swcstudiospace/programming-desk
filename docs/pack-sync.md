@@ -134,17 +134,36 @@ set -euo pipefail          # a failed step must never fall through to rsync --de
 
 STAGE="$(mktemp -d)"
 test -n "$STAGE" && test -d "$STAGE"    # an empty STAGE would make the rsync source "/"
-trap 'rm -rf "$STAGE"' EXIT
+LOG="$(mktemp)"
+trap 'rm -rf "$STAGE"' EXIT             # $LOG survives: it is the deletion list you reviewed
 
 git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
 test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must not drive --delete
 
-rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/   # -n: dry run
-rsync -av  --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
+# Dry run. Writes nothing; the deletions are the part to read.
+rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ | tee "$LOG"
+echo "--- would delete:"; grep '^deleting ' "$LOG" || echo "(nothing)"
+
+# Gate. Read every 'deleting' line above before answering; G-6 approval belongs here too.
+read -r -p "Proceed with the real sync? [type 'sync'] " CONFIRM
+test "$CONFIRM" = sync
+
+rsync -av --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
 ```
 
-Read the dry-run deletion list before the real run. Anything listed for deletion that you wanted to
-keep is a local edit — §5, not a reason to drop `--delete`.
+**The gate is the dry run's whole point.** Without a stop between the two commands, the script prints
+the deletion list and destroys the listed files in the same breath — the operator gets a transcript of
+what was lost rather than a chance to prevent it. Anything listed for deletion that you wanted to keep
+is a local edit: answer anything but `sync`, then take it through §5. `--delete` is not the thing to
+drop.
+
+The gate fails closed. Run non-interactively, `read` gets no input and `set -e` stops the script
+before the real rsync — a sync that cannot be reviewed does not happen. If you prefer to script the
+two phases separately, split at the gate and pass an explicit `STAGE` path to the second half, with
+the same guards re-run there; do not drop the review.
+
+`$LOG` outlives the stage deliberately: the deletion list is the evidence that the review happened,
+so keep it with the §4.4 receipt.
 
 **Why the guards, not just `mktemp`.** `rsync --delete` is the most destructive command in this
 runbook, and every failure mode upstream of it ends with the pack being emptied rather than synced:
@@ -154,6 +173,7 @@ runbook, and every failure mode upstream of it ends with the pack being emptied 
 | `mktemp -d` fails, `STAGE` empty | `"$STAGE"/` expands to `/` — rsync mirrors the filesystem root over the pack |
 | `git archive` fails mid-pipe | `tar` still exits 0, so an empty or partial stage becomes the source and `--delete` removes the rest of the pack |
 | Export half-lands | Same, quietly: the pack loses whatever the export missed |
+| Dry run flows into the real run | The deletion list is printed and acted on at once — a record of what was lost, not a chance to stop |
 
 `set -euo pipefail` plus the two `test` lines turn each of those into a stop before anything is
 written. `test -f "$STAGE/ownership.yaml"` is the cheap sentinel — that file is tracked at the root

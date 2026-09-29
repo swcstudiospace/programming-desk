@@ -23,6 +23,10 @@ permissions:
 
 jobs:
   gates:
+    # Pull requests only. A push to main has no head ref, so the acting bot would resolve
+    # to "main" and fail attribution before any gate ran — every push red, for a question
+    # that is already settled by the time the merge lands.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -42,9 +46,12 @@ jobs:
           # Convention: the branch name is prefixed with the bot id,
           # e.g. bot-03-android/feat-push-notifications
           # or bot-00-programming-lead/desk-model for the orchestrator.
+          #
+          # Anchored at both ends. An unanchored prefix match accepts bot-01-$(...) and
+          # carries it into later steps, where it becomes a shell expansion.
           BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
           BOT="${BRANCH%%/*}"
-          if [[ ! "$BOT" =~ ^bot-0[0-6]- ]]; then
+          if [[ ! "$BOT" =~ ^bot-0[0-6]-[a-z0-9-]+$ ]]; then
             echo "::error::Branch '$BRANCH' does not start with a bot id (bot-0N-name/...)."
             echo "::error::G-1 cannot attribute the change without one."
             exit 1
@@ -56,44 +63,72 @@ jobs:
         run: python3 ci/gates/check_ownership.py --validate-manifest
 
       - name: G-1 — Path ownership
+        env:
+          BOT: ${{ steps.bot.outputs.bot }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           python3 ci/gates/check_ownership.py \
-            --bot "${{ steps.bot.outputs.bot }}" \
-            --base "origin/${{ github.base_ref || 'main' }}"
+            --bot "$BOT" \
+            --base "origin/$BASE_REF"
 
       - name: Locate the verification receipt
         id: receipt
+        env:
+          BOT: ${{ steps.bot.outputs.bot }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          RECEIPT=$(ls -1 ".receipts/${{ steps.bot.outputs.bot }}"/*.json 2>/dev/null | head -n1 || true)
+          # The receipt must be the one THIS change adds, not whichever filename happens
+          # to sort first in the bot's directory. Picking the first filename lets an old
+          # receipt from an unrelated task satisfy G-2 and G-5/G-6 for a change it never
+          # describes — which is the one thing G-2 exists to prevent.
+          RECEIPT=$(git diff --name-only --diff-filter=d \
+            "origin/$BASE_REF...HEAD" -- ".receipts/$BOT" \
+            | grep -E '\.json$' | head -n1 || true)
           if [[ -z "$RECEIPT" ]]; then
-            echo "::error::G-2 — no verification receipt in .receipts/${{ steps.bot.outputs.bot }}/"
-            echo "::error::A completion claim requires a receipt. See skills/verification-receipts/"
+            echo "::error::G-2 — this change adds no verification receipt under .receipts/$BOT/"
+            echo "::error::A completion claim requires a receipt for THIS task, not a previous one."
+            echo "::error::See skills/verification-receipts/"
             exit 1
           fi
+          echo "Receipt for this change: $RECEIPT"
           echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
 
       - name: G-2 — Verification receipt
+        env:
+          RECEIPT: ${{ steps.receipt.outputs.path }}
+          BOT: ${{ steps.bot.outputs.bot }}
         run: |
           python3 ci/gates/check_receipt.py \
-            --receipt "${{ steps.receipt.outputs.path }}" \
-            --bot "${{ steps.bot.outputs.bot }}" \
+            --receipt "$RECEIPT" \
+            --bot "$BOT" \
             --strict
 
       - name: G-3 — Committed secrets
-        run: python3 ci/gates/check_secrets.py --base "origin/${{ github.base_ref || 'main' }}"
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: python3 ci/gates/check_secrets.py --base "origin/$BASE_REF"
 
       - name: G-4 — Contract-first changes
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          CHANGE=$(ls -1 contracts/changes/*.yaml 2>/dev/null | head -n1 || true)
+          # Same rule as the receipt: the change document must be the one THIS change
+          # adds. An older, already-valid document would otherwise clear a breaking
+          # change it never described.
+          CHANGE=$(git diff --name-only --diff-filter=d \
+            "origin/$BASE_REF...HEAD" -- contracts/changes \
+            | grep -E '\.ya?ml$' | head -n1 || true)
           if [[ -n "$CHANGE" ]]; then
             python3 ci/gates/check_contracts.py \
-              --base "origin/${{ github.base_ref || 'main' }}" --change "$CHANGE"
+              --base "origin/$BASE_REF" --change "$CHANGE"
           else
-            python3 ci/gates/check_contracts.py --base "origin/${{ github.base_ref || 'main' }}"
+            python3 ci/gates/check_contracts.py --base "origin/$BASE_REF"
           fi
 
       - name: G-5/G-6 — Rollback and destructive operations
-        run: python3 ci/gates/check_rollback.py --receipt "${{ steps.receipt.outputs.path }}"
+        env:
+          RECEIPT: ${{ steps.receipt.outputs.path }}
+        run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"
 
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.

@@ -6,22 +6,19 @@
 # every repository seeded from it inherits rules this one no longer enforces.
 #
 # Only the leading comment block may differ: each file explains its own role.
+#
+# Runs on every pull request, with no paths filter. A workflow skipped by a paths filter
+# reports nothing at all, so as a required check it would sit pending forever on any pull
+# request that happens not to touch these files — blocking changes it has no opinion on.
+# The job is a checkout and a string comparison; running it always costs seconds.
 
 name: Gates template sync
 
 on:
   pull_request:
     branches: [main]
-    paths:
-      - ".github/workflows/gates.yml"
-      - ".github/workflows/gates-template-sync.yml"
-      - "ci/.github/workflows/gates.yml"
   push:
     branches: [main]
-    paths:
-      - ".github/workflows/gates.yml"
-      - ".github/workflows/gates-template-sync.yml"
-      - "ci/.github/workflows/gates.yml"
 
 permissions:
   contents: read

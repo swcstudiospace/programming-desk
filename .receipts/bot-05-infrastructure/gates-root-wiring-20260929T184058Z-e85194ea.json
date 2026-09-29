@@ -1,0 +1,128 @@
+{
+  "task_id": "gates-root-wiring-20260929T184058Z-e85194ea",
+  "bot": "bot-05-infrastructure",
+  "started_at": "2026-09-29T18:41:00Z",
+  "completed_at": "2026-09-29T19:05:00Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "Wire the Quality Gates workflow at .github/workflows so GitHub Actions can run it and required status checks can attach. The gate definition previously existed only as the distributable template at ci/.github/workflows/gates.yml, which GitHub never reads.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "observed": "G-1 manifest OK — 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml .github/workflows/gates-template-sync.yml",
+      "exit_code": 0,
+      "observed": "G-1 PASS — bot-05-infrastructure: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .github/workflows/gates.yml",
+      "exit_code": 1,
+      "observed": "G-1 FAIL — bot-00-programming-lead / FOREIGN .github/workflows/gates.yml (owned by bot-05-infrastructure). Negative control: .github/workflows/** stays with INFRA and is not silently open to LEAD."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "observed": "90 passed in 5.02s — the gate self-test suite the gate-self-test job runs"
+    },
+    {
+      "cmd": "python3 -c \"import yaml;fs=('.github/workflows/gates.yml','.github/workflows/gates-template-sync.yml','ci/.github/workflows/gates.yml');[print(f,'jobs:',list(yaml.safe_load(open(f))['jobs'])) for f in fs]\"",
+      "exit_code": 0,
+      "observed": "gates.yml jobs: ['gates', 'gate-self-test']; gates-template-sync.yml jobs: ['sync']; ci template jobs: ['gates', 'gate-self-test']"
+    },
+    {
+      "cmd": "python3 -c \"import sys;from pathlib import Path;g=lambda p:(lambda L: ''.join(L[next((i for i,l in enumerate(L) if l.strip() and not l.lstrip().startswith(chr(35))), len(L)):]))(Path(p).read_text().splitlines(True));a=g('.github/workflows/gates.yml');b=g('ci/.github/workflows/gates.yml');print('gate bodies identical:', a==b);sys.exit(0 if a==b else 1)\"",
+      "exit_code": 0,
+      "observed": "gate bodies identical: True — 96 shared lines. Same comparison the gates-template-sync workflow performs."
+    },
+    {
+      "cmd": "python3 -c \"import re,yaml;run=[s for s in yaml.safe_load(open('.github/workflows/gates.yml'))['jobs']['gates']['steps'] if s.get('id')=='bot'][0]['run'];pat=re.search(r'\\^bot-0\\[\\d-\\d\\]-',run).group(0);bots=sorted(yaml.safe_load(open('ownership.yaml'))['bots']);miss=[b for b in bots if not re.match(pat,b)];print('filter',pat,'| declared bots',len(bots),'| unattributable',miss);sys.exit(1) if miss or 'bot-00-programming-lead' not in bots else print('bot-00 (LEAD) included')\"",
+      "exit_code": 0,
+      "observed": "filter ^bot-0[0-6]- | declared bots 7 | unattributable [] | bot-00 (LEAD) included"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "observed": "G-1 PASS — bot-05-infrastructure: 3 file(s) within owned paths. Diff-based run against origin/main, the form CI uses."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-4 PASS — no contract surfaces touched"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The three workflow files are well-formed YAML and declare the expected jobs.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The live workflow at .github/workflows/gates.yml carries the same gate definition as the ci/ template — only the leading comment block differs.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The bot-path filter in the live workflow attributes all seven declared bots, bot-00-programming-lead (LEAD) among them.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The two files added by this change are within paths bot-05-infrastructure owns under ownership.yaml.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": ".github/workflows/** is not open to LEAD — G-1 rejects bot-00 on the live workflow.",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "The ownership manifest still validates with the gate scripts unchanged.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The gate self-test suite the gate-self-test job runs passes against this tree.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1 passes on the real diff against origin/main, not only on a hand-supplied file list.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-3 finds no committed secrets in this diff.",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-4 finds no contract surface touched by this diff.",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "No GitHub Actions run has been observed for either workflow — this receipt records local runs only, and the workflows have never executed on GitHub infrastructure.",
+    "The gates job is expected to FAIL on this pull request at the 'Determine the acting bot' step: the branch is claude/quality-gates-workflow-55tq5x and the filter requires a bot-0N- prefix. This is the known cloud-agent branch-prefix limitation already waived in .receipts/bot-06-quality-security/greptile-p2-waiver-cursor-branch-prefix-pr7.json, not a defect introduced here. It was not fixed because doing so means rewriting the gate definition, which QUALITY owns and has previously declined to rewrite for this reason.",
+    "ci/.github/workflows/gates.yml resolves to no owner under ownership.yaml, so any future edit to the template alone would fail G-1 as UNOWNED. This change does not touch that file and does not add the rule; the rule belongs to bot-06-quality-security.",
+    "Branch protection has not been configured — making these checks required status checks is a repository-settings action outside this diff.",
+    "bot-06-quality-security has not reviewed this change; the pull request is a draft."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    ".github/workflows/gates-template-sync.yml",
+    ".receipts/bot-05-infrastructure/gates-root-wiring-20260929T184058Z-e85194ea.json"
+  ],
+  "contract_changes": [],
+  "deployment": null,
+  "rollback_plan": "Delete .github/workflows/gates.yml and .github/workflows/gates-template-sync.yml, or revert the merge commit: `git revert -m 1 <sha>`. Recovery time is one push, under two minutes, and takes effect on the next workflow dispatch. No data implications: both files are additive, no existing file is modified, no state is written, and ci/.github/workflows/gates.yml is untouched so the distributable template survives the revert. The only effect of a revert is that GitHub stops running the gates again.",
+  "approvals": [
+    {
+      "operation": "wire Quality Gates workflow at .github/workflows (PR-1, Wave 2 retry)",
+      "approved_by": "bot-00-programming-lead",
+      "at": "2026-09-29T18:40:58Z",
+      "blast_radius": "Adds two workflows at the repository root. Once branch protection marks them required, every pull request to main must pass G-1 through G-6 and the template-sync check. No existing file is modified."
+    }
+  ],
+  "approved_by": "bot-00-programming-lead",
+  "notes": "Dispatched by Grok Bot, run 20260929T184058Z-e85194ea. The ci/ copy is kept verbatim as the distributable template; .github/workflows/gates-template-sync.yml fails the build if the two gate definitions drift apart, which is what keeps 'no divergent definitions' true beyond the day of this commit."
+}

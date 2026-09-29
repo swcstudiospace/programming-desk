@@ -1,0 +1,71 @@
+# Keeps the live gate definition and its distributable template identical.
+#
+# ci/.github/workflows/gates.yml is the copy other repositories take. .github/workflows/gates.yml
+# is the copy that actually runs here. Two files holding the same rules drift apart silently, and
+# a gate that has quietly stopped matching its own template is worse than no template at all —
+# every repository seeded from it inherits rules this one no longer enforces.
+#
+# Only the leading comment block may differ: each file explains its own role.
+
+name: Gates template sync
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/gates.yml"
+      - ".github/workflows/gates-template-sync.yml"
+      - "ci/.github/workflows/gates.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/gates.yml"
+      - ".github/workflows/gates-template-sync.yml"
+      - "ci/.github/workflows/gates.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gate definitions must not diverge
+        run: |
+          python3 - <<'PY'
+          import sys
+          from pathlib import Path
+
+          LIVE = Path(".github/workflows/gates.yml")
+          TEMPLATE = Path("ci/.github/workflows/gates.yml")
+
+
+          def body(path):
+              """Everything after the leading comment block — the rules themselves."""
+              if not path.exists():
+                  sys.exit(f"::error::{path} is missing. The live workflow and its template must both exist.")
+              lines = path.read_text().splitlines(keepends=True)
+              i = 0
+              while i < len(lines) and (lines[i].lstrip().startswith("#") or not lines[i].strip()):
+                  i += 1
+              return "".join(lines[i:])
+
+
+          live, template = body(LIVE), body(TEMPLATE)
+          if live != template:
+              import difflib
+
+              diff = difflib.unified_diff(
+                  template.splitlines(), live.splitlines(),
+                  fromfile=str(TEMPLATE), tofile=str(LIVE), lineterm="",
+              )
+              print("\n".join(diff))
+              sys.exit(
+                  f"::error::{LIVE} and {TEMPLATE} define different gates. "
+                  "Change one, then copy the body across so seeded repositories get the same rules."
+              )
+
+          print(f"Gate definitions match — {len(live.splitlines())} lines shared with the template.")
+          PY

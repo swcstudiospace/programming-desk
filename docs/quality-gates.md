@@ -9,6 +9,19 @@ Run them all locally:
 python3 ci/gates/run_all.py --base origin/main --receipt .receipts/<bot-id>/<task-id>.json
 ```
 
+## Scope of this document
+
+G-1…G-6 are **this repository's** gates. They are Python scripts under `ci/gates/`, versioned
+with the change they judge, and they run against a diff and a receipt.
+
+**Greptile is not one of them.** It is an external code-review service in the `swcstudio` org,
+driven over MCP after a draft PR opens. It reviews the pull request; it never executes these
+scripts and cannot satisfy them. A green Greptile review is not a green gate run, and a green
+gate run is not a Greptile review.
+
+Both are required before a merge claim. The rules for keeping them apart are in
+[Greptile is not a gate](#greptile-is-not-a-gate) at the end of this file.
+
 ---
 
 ## G-1 — Path ownership
@@ -173,3 +186,122 @@ understood at approval time. A blanket "yes go ahead" on a Slack thread is not a
 
 `ci/tests/test_gates.py` implements all of these against real fixture repositories, so the tests
 exercise the gates the way CI does rather than mocking them.
+
+---
+
+## Greptile is not a gate
+
+Operators keep asking which review is *the* required one before merge. Both are. They check
+different things, run in different places, and fail for different reasons. Confusing them
+produces the two failures this section exists to stop: merging on a green gate run that no
+human or reviewer ever looked at, and treating a Greptile pass as though it cleared G-1…G-6.
+
+### Side by side
+
+| | **G-1…G-6** | **Greptile** |
+|---|---|---|
+| What it is | Six executable checks owned by this repo | External code-review service (`swcstudio` org) |
+| Lives in | `ci/gates/*.py`, versioned with the change | SaaS, reached over MCP `user-greptile` |
+| Runs | Local pre-flight, `ci/hooks/pre-commit` (G-3 only), and wherever CI invokes `run_all.py` | After a **draft PR is open**, against one PR head commit |
+| Triggered by | `python3 ci/gates/run_all.py --bot … --base … --receipt …` | `trigger_code_review` with the repo tuple + `prNumber` |
+| Answers | Did this bot stay in its lane, produce evidence, leak a secret, break a contract, plan a rollback, get approval for a destructive op? | Is this code wrong? Logic, edge cases, line comments |
+| Verdict shape | Per-gate exit code. Deterministic and re-runnable on any checkout | `COMPLETED` / `FAILED` / `SKIPPED`, plus comments carrying an `addressed` flag |
+| Who records it | Any seat runs them; QUALITY (bot-06) records the result in the merge claim | QUALITY records the verdict; LEAD may fire the trigger |
+| Waivable | **No.** See [Waivers](#waivers) | Only on explicit instruction from Ove, with a waiver receipt |
+| Governed by | This file, `skills/verification-receipts` | `skills/greptile-merge-gate`, `docs/github-sot-orchestration.md` §4 |
+
+No GitHub Actions workflow is committed in this repo, so "CI" here means whatever runtime
+invokes `run_all.py` — today that is the implementing seat's pre-flight plus QUALITY's re-run.
+The gates do not fire on a push by themselves. Run them yourself before you push.
+
+### Order of operations
+
+```
+local edit
+    → G-1…G-6 pre-flight (run_all.py)
+    → commit  (pre-commit hook re-runs G-3 only)
+    → push → draft PR opened
+    → Greptile trigger on the PR head        [only possible once a PR exists]
+    → poll to terminal status
+    → address comments in code, or waive on Ove's instruction
+    → QUALITY records G-1…G-6 + Greptile status in the merge-claim receipt
+    → merge (human, protected branch)
+```
+
+Greptile is not part of dispatch and not part of implementation. It cannot run before the draft
+PR exists, which is why a seat finishing its work has satisfied at most half of what a merge
+claim needs.
+
+A successful trigger means the review was **queued**, not that analysis finished. Poll until the
+status is terminal.
+
+### The merge claim needs both
+
+| G-1…G-6 | Greptile | Merge claim |
+|---|---|---|
+| all pass | `COMPLETED`, no unaddressed comments | Allowed |
+| all pass | `COMPLETED`, comments with `addressed=false` | **Blocked** until each is fixed in code or waived |
+| all pass | `FAILED`, `SKIPPED`, or unavailable | **Blocked.** Record `unverified`; LEAD escalates. `SKIPPED` is not a pass |
+| any fail | any status | **Blocked.** A clean review never clears a failed gate |
+| not run | any status | **Blocked.** No completion claim without a receipt (G-2) |
+
+A Greptile review covers only the commit it ran on. If the branch moves, the verdict does not
+move with it: re-trigger on the new tip. `merge_claim.allowed` stays false, and `approved_by`
+stays empty, until Greptile is `COMPLETED` on the tip being merged — the merge-claim head rule
+in `docs/desk-operating-model.md`.
+
+### Waivers
+
+**G-1…G-6 have no waiver.** A failing gate is fixed, not argued with. The one annotation that
+looks like an exception is not one: a `# pragma: allowlist secret` line on a G-3 false positive
+is a reviewable statement inside the diff, and the gate still runs and still passes on its own
+terms. A disabled scanner, a skipped test, `--no-verify`, `-x test` or `|| true` are rejected
+outright by G-2 (PD-3).
+
+**A Greptile comment may be waived only on an explicit instruction from Ove.** QUALITY does not
+waive on its own judgement, and neither does LEAD or the implementing seat. QUALITY's role is to
+record the waiver, acknowledge it, and keep the scope honest — not to author it. "Cosmetic",
+"pre-existing", "out of scope" and "the author disagrees" are arguments to put to Ove, not
+grounds to waive.
+
+A waiver receipt (under `.receipts/<bot-id>/`, or a PR comment linked from the receipt) records:
+
+| Field | Content |
+|---|---|
+| Instruction | That Ove instructed the waiver, when, and where it was given |
+| Comment ids | Every Greptile comment id the waiver covers — never "all open comments" |
+| Why | The reasoning as stated, not a paraphrase that widens it |
+| QUALITY ack | That bot-06 acknowledged and recorded it |
+| Scope | What the waiver does **not** cover, so a later defect cannot shelter under it |
+| Head | The commit the waived review ran on; a waiver does not follow the branch |
+
+Not a waiver, in any combination: silence on a comment, flipping `addressed=true` with no code
+change, "we'll fix it in a follow-up PR" with no commit, re-triggering until a run comes back
+`SKIPPED`, or a green G-1…G-6 run. Waiving is reviewable. Ignoring Greptile is not.
+
+Receipts under `.receipts/bot-06-quality-security/` written before this rule was recorded show
+QUALITY-authored waivers without an Ove instruction field. They are history, not precedent.
+
+### Quick answers
+
+| Operator question | Answer |
+|---|---|
+| "The gates are green — can I merge?" | No. That is G-1…G-6. Greptile runs separately, on the PR |
+| "Greptile approved — do I still need the gates?" | Yes. Greptile does not check ownership, receipts, secrets, contracts, rollback or destructive-op approval |
+| "Greptile is down / `get_me` says needsAuth." | Blocked. Record `unverified` and escalate to LEAD. Never write "Greptile clean" |
+| "Greptile came back `SKIPPED`." | Not a pass. Re-trigger on the tip; if it stays non-`COMPLETED`, escalate |
+| "It's a trivial nit — can I waive it?" | Only with an explicit instruction from Ove, recorded in a waiver receipt |
+| "Do the gates run automatically on my branch?" | Only G-3, via `ci/hooks/install.sh`. Run `run_all.py` yourself before pushing |
+| "I pushed a fixup after the review passed." | The verdict does not cover the new tip. Re-trigger |
+| "Can I run Greptile before opening the PR?" | No. It reviews a pull request; there is nothing to review yet |
+
+### Where the rest of the rules live
+
+| Concern | File |
+|---|---|
+| Greptile trigger, polling, and the QUALITY checklist | `skills/greptile-merge-gate/SKILL.md` |
+| Receipt shape, claims, `unverified` (the G-2 artefact) | `skills/verification-receipts/SKILL.md` |
+| Greptile gate policy and the PR status pipeline | `docs/github-sot-orchestration.md` §3.4, §4 |
+| Merge-claim head rule (review must cover the tip) | `docs/desk-operating-model.md` |
+| Greptile auth failure handling during intake | `docs/intake-e2e-runbook.md` |
+| Path → owner for every gate and skill file | `ownership.yaml` |

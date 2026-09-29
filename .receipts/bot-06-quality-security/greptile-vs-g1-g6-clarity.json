@@ -1,0 +1,108 @@
+{
+  "task_id": "greptile-vs-g1-g6-clarity",
+  "bot": "bot-06-quality-security",
+  "receipt_kind": "docs_change",
+  "started_at": "2026-09-29T18:41:02Z",
+  "completed_at": "2026-09-29T19:05:00Z",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "branch": "claude/greptile-vs-g1-g6-4smdxw",
+  "runtime": "claude-code-cloud",
+  "grok_run": "20260929T184102Z-79fbb9a3",
+  "paths_changed": [
+    "docs/quality-gates.md",
+    "skills/greptile-merge-gate/SKILL.md",
+    "skills/README.md",
+    ".receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files docs/quality-gates.md skills/greptile-merge-gate/SKILL.md skills/README.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/quality-gates.md skills/greptile-merge-gate/SKILL.md skills/README.md",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -c \"from pathlib import Path\nqg=Path('docs/quality-gates.md').read_text(); sk=Path('skills/greptile-merge-gate/SKILL.md').read_text(); rd=Path('skills/README.md').read_text()\nneed_qg=['## Scope of this document','## Greptile is not a gate','### Side by side','### Order of operations','### The merge claim needs both','### Waivers','### Quick answers','#greptile-is-not-a-gate','skills/greptile-merge-gate/SKILL.md','skills/verification-receipts/SKILL.md','docs/github-sot-orchestration.md','docs/desk-operating-model.md','ownership.yaml','explicit instruction from Ove','G-1…G-6 have no waiver']+['## G-%d —'%i for i in range(1,7)]\nmiss=[n for n in need_qg if n not in qg]+[n for n in ['Waiving requires an explicit instruction from Ove','docs/quality-gates.md'] if n not in sk]+(['skills/README link'] if 'docs/quality-gates.md' not in rd else [])\nprint(miss or 'ok'); raise SystemExit(0 if not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files docs/quality-gates.md skills/greptile-merge-gate/SKILL.md skills/README.md .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/quality-gates.md skills/greptile-merge-gate/SKILL.md skills/README.md .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "docs/quality-gates.md gains a scope note at the top and a 'Greptile is not a gate' section separating (a) G-1…G-6 local/CI, (b) Greptile PR review, (c) waiver rules; all six gate sections are still intact",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The new section cross-links skills/greptile-merge-gate, skills/verification-receipts, docs/github-sot-orchestration.md, docs/desk-operating-model.md and ownership.yaml; skills/greptile-merge-gate/SKILL.md and skills/README.md link back to the new section",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-1 PASS for bot-06-quality-security on all four changed paths",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-3 PASS — no secrets in the changed paths",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-4 PASS — no contract surface touched",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ownership.yaml manifest still validates; this change does not edit the manifest",
+      "evidence_command_index": 1
+    }
+  ],
+  "rollback_plan": {
+    "applicable": false,
+    "why_not": "Documentation-only change. No deployment, no runtime surface, no migration. Reverting the commit is the whole rollback."
+  },
+  "approvals": [],
+  "unverified": [
+    "G-2 fails until an independent seat stamps approved_by. This receipt is authored by bot-06-quality-security and G-2 rejects self-approval, so approved_by is intentionally absent.",
+    "Greptile was not triggered for this branch and no merge was requested. No Greptile status is claimed for this change.",
+    "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; reconciling it is LEAD's change to make.",
+    "Existing waiver receipts under .receipts/bot-06-quality-security/ predate the explicit-Ove-instruction rule and were not rewritten.",
+    "No GitHub Actions workflow exists in this repo, so the 'CI' column in the new table describes run_all.py as the entry point rather than an observed pipeline run. Actions wiring is out of scope for this change.",
+    "ci/tests/test_gates.py was not run; this change touches no gate script.",
+    "G-5/G-6 were exercised against this receipt only; no deployment or destructive operation was performed."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS for bot-06-quality-security on docs/quality-gates.md (docs/**), skills/greptile-merge-gate/** , skills/** and .receipts/bot-06-quality-security/**.",
+    "G-2": "Blocked pending an independent approved_by stamp. Every claim cites a command index.",
+    "G-3": "PASS — 4 paths scanned.",
+    "G-4": "PASS — no contract surfaces touched.",
+    "G-5": "Not applicable — documentation-only, no deployment.",
+    "G-6": "No destructive operations."
+  },
+  "explicit": "Docs-only change. Draft PR opened; not undrafted, not merged. No gate script was modified."
+}

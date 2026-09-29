@@ -7,7 +7,7 @@
 **Density on this graph:** 5 GoT nodes × 4 CoT steps (5 Linear issues + 20 sub-issues). The second-uplift `<ISSUES>` block has no `<TRACKER_GAPS>` child.  
 **Status:** Operator procedure for one docs-only pipeline smoke. A draft PR is the GitHub outcome. This document does not claim Greptile clean, a QUALITY verdict, or merge.
 
-Policy: `docs/gotxcot-cloud-pipeline.md`. GitHub source of truth and lanes: `docs/github-sot-orchestration.md`. Procedure: `skills/gotxcot-uplift`, then `skills/trackplan-dispatch`. Lane B tool names are below. `skills/agent-bus` and `docs/vps-agent-bus.md` are cited by the operator packet and are **not** files on `main` in this checkout (`git ls-tree -r --name-only origin/main` has neither path). Do not invent their contents.
+Policy: `docs/gotxcot-cloud-pipeline.md`. GitHub source of truth and lanes: `docs/github-sot-orchestration.md`. Procedure: `skills/gotxcot-uplift`, then `skills/trackplan-dispatch`. Lane B tool names are below, and the Lane B control plane now has its own pages: [`vps-agent-bus.md`](./vps-agent-bus.md) (tools, stop rules, honest gaps) and `skills/agent-bus` (dispatch procedure). Both are LEAD-owned per `ownership.yaml`. They describe the HTTP Agent Bus on connected `user-hermes-agent` only — stdio `user-hermes` stays uninstalled.
 
 ---
 

@@ -60,13 +60,41 @@
       "exit_code": 0,
       "output_tail": "{'named_in_doc': 6, 'not_matched_by_gate': [], 'approved_by_unconditional': True, 'gate_patterns': 19}",
       "note": "Reads the bypass forms out of the doc rather than hardcoding them. An earlier version of this check listed them literally and G-2 flagged its own command string as six bypasses — the gate cannot tell test data from a real bypass, which is the limitation this PR documents."
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files openapi.yaml",
+      "exit_code": 1,
+      "expects_failure": true,
+      "output_tail": "G-4 FAIL — contract surfaces changed but no change document supplied.",
+      "note": "Reproduces the round-2 P1: a touched contract surface without --change fails G-4 regardless of whether a change document exists on disk."
+    },
+    {
+      "cmd": "python3 -c \"import subprocess, re\nfrom pathlib import Path\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml'],capture_output=True,text=True)\ng4=(r.returncode==1 and 'no change document supplied' in r.stderr)\nvals=set()\nfor p in Path('.receipts/bot-06-quality-security').glob('*.json'): vals |= set(re.findall(r'\\\"approved_by\\\":\\s*\\\"([^\\\"]+)\\\"', p.read_text()))\nlead='bot-00-programming-lead' in vals\nhuman=any(v.startswith('human:') for v in vals)\nqg=Path('docs/quality-gates.md').read_text()\nneed=['add --change <doc> for contract work','contract surfaces changed but no change document supplied','When QUALITY is the author, QUALITY is not the approver','LEAD (bot-00) or a human for QUALITY','human:<name>','contracts/changes/<change-id>.yaml']\nmiss=[n for n in need if n not in qg]\nprint({'g4_fails_without_change':g4,'lead_stamp_precedent':lead,'human_stamp_precedent':human,'missing_doc_text':miss})\nraise SystemExit(0 if g4 and lead and human and not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'g4_fails_without_change': True, 'lead_stamp_precedent': True, 'human_stamp_precedent': True, 'missing_doc_text': []}"
     }
   ],
   "greptile": {
     "pr": 13,
-    "round": 1,
-    "note": "Findings addressed in code on this branch. No waiver requested, and none would be valid here: no instruction from Ove exists for this PR.",
-    "findings": [
+    "rounds_completed": 2,
+    "note": "All findings from both rounds addressed in code on this branch. No waiver requested in either round, and none would be valid here: no instruction from Ove exists for this PR.",
+    "round_2_findings": [
+      {
+        "id": "4137190103",
+        "severity": "P1",
+        "title": "Contract pre-flight cannot pass",
+        "verdict": "VALID — reproduced: ci/gates/check_contracts.py:180 returns 1 with 'contract surfaces changed but no change document supplied' when a surface is touched and --change is absent, whether or not a change document exists on disk",
+        "disposition": "FIXED — the pre-flight G-4 line is annotated, the bare form is scoped to diffs touching no contract surface, and the --change form is shown with the change document's required fields and a pointer to docs/cross-bot-protocol.md and skills/contract-first-changes."
+      },
+      {
+        "id": "4137190114",
+        "severity": "P1",
+        "title": "QUALITY cannot approve itself",
+        "verdict": "VALID — G-2 rejects approved_by equal to the authoring bot, so bot-06 cannot stamp a change to its own files, which is exactly what this PR is",
+        "disposition": "FIXED — the sequence now names the approver per author (QUALITY for a build seat; LEAD or a human for QUALITY's own work, never bot-06 itself), and a paragraph gives the human:<name> and bot-00-programming-lead forms, both already in use under .receipts/bot-06-quality-security/, citing skills/verification-receipts. It also states that approved_by stays absent rather than self-filled until the independent stamp lands."
+      }
+    ],
+    "round_1_findings": [
       {
         "id": "4137131166",
         "severity": "P1",
@@ -122,6 +150,15 @@
     {
       "claim": "After the Greptile round-1 fixes, all new headings, anchors and cross-links are still present and all six G-n sections are intact",
       "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 really does fail on a touched contract surface when --change is omitted, which is what the corrected pre-flight guidance now tells the reader",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "Both approver forms the doc names for QUALITY-authored work — bot-00-programming-lead and human:<name> — already appear in approved_by under .receipts/bot-06-quality-security/, and the round-2 corrections are present in the doc",
+      "evidence_command_index": 10
     }
   ],
   "rollback_plan": {
@@ -130,7 +167,7 @@
   },
   "approvals": [],
   "unverified": [
-    "G-2 fails until an independent seat stamps approved_by. This receipt is authored by bot-06-quality-security and G-2 rejects self-approval, so approved_by is intentionally absent.",
+    "G-2 fails until an independent seat stamps approved_by. This receipt is authored by bot-06-quality-security and G-2 rejects self-approval, so approved_by is intentionally absent. Per the round-2 correction this change now documents, the stamp for QUALITY-authored work comes from bot-00-programming-lead or a human recorded as human:<name> — neither has been obtained for this branch.",
     "Greptile ran on PR 13 and posted three findings (round 1), all addressed in code. No terminal review status is claimed for the fixed tip: a new review must run on it, and this receipt does not assert its outcome. No merge is requested.",
     "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; the divergence is declared in docs/quality-gates.md instead, and reconciling §4.2 is LEAD's change to make.",
     "Existing waiver receipts under .receipts/bot-06-quality-security/ predate the explicit-Ove-instruction rule and were not rewritten.",

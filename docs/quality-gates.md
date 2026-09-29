@@ -224,7 +224,9 @@ local edit
     → Greptile trigger on the PR head        [only possible once a PR exists]
     → poll to terminal status
     → address comments in code, or waive on Ove's instruction
-    → QUALITY reviews, stamps approved_by, and re-runs run_all.py
+    → independent review stamps approved_by, then re-runs run_all.py
+         QUALITY (bot-06) for a build seat's work
+         LEAD (bot-00) or a human for QUALITY's own work — bot-06 never stamps itself
     → full G-1…G-6 green, recorded with the Greptile status in the merge-claim receipt
     → merge (human, protected branch)
 ```
@@ -238,14 +240,36 @@ is expected to fail on the authoring seat's own pre-flight with exactly one prob
 ```bash
 python3 ci/gates/check_ownership.py --bot <bot-id> --files <changed paths>
 python3 ci/gates/check_secrets.py   --files <changed paths>
-python3 ci/gates/check_contracts.py --base origin/main
+python3 ci/gates/check_contracts.py --base origin/main         # add --change <doc> for contract work
 python3 ci/gates/check_rollback.py  --receipt .receipts/<bot-id>/<task-id>.json
 python3 ci/gates/check_receipt.py   --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id>
 ```
 
-The last one is expected to fail on `approved_by` alone. Any *other* G-2 problem is the seat's to
-fix before pushing. `run_all.py` is the full run, and it first comes back green under QUALITY,
-after the stamp — not before the commit.
+**G-4 needs `--change` as soon as the diff touches a contract surface.** Without it,
+`check_contracts.py` fails with *"contract surfaces changed but no change document supplied"* —
+it does not matter that the seat has written a valid change document, only that the gate was
+pointed at it. The bare form above is correct only for a diff that touches no contract surface:
+
+```bash
+python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
+```
+
+The change document declares `change_id`, `proposed_by`, `surface`, `breaking`, `version` and
+`summary`, plus consumer acknowledgements. See `docs/cross-bot-protocol.md` and
+`skills/contract-first-changes`.
+
+The last command is expected to fail on `approved_by` alone. Any *other* G-2 problem is the
+seat's to fix before pushing. `run_all.py` is the full run, and it first comes back green after
+the independent stamp — not before the commit.
+
+**When QUALITY is the author, QUALITY is not the approver.** G-2 rejects `approved_by` equal to
+the authoring bot, so bot-06 cannot stamp a change to its own files — including this document.
+The stamp then comes from LEAD (`bot-00-programming-lead`) or from a human, recorded as
+`human:<name>`; both forms are already in use under `.receipts/bot-06-quality-security/`.
+`skills/verification-receipts` puts it generally: `approved_by` is never your own bot id.
+Until that independent stamp lands, the receipt's `approved_by` stays **absent**, not
+self-filled, and G-2 fails closed — which is the correct state for a QUALITY-authored change
+awaiting review, not a defect to engineer around.
 
 Greptile is not part of dispatch and not part of implementation. It cannot run before the draft
 PR exists, which is why a seat finishing its work has satisfied at most half of what a merge

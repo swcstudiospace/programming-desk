@@ -54,8 +54,42 @@
       "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
       "exit_code": 0,
       "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 -c \"import importlib.util, re\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('cr','ci/gates/check_receipt.py'); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\ndoc=Path('docs/quality-gates.md').read_text()\nseg=doc.split('fixed bypass list')[1].split('and the rest in')[0]\nnamed=re.findall(chr(96)+'([^'+chr(96)+']+)'+chr(96), seg)\nunmatched=[n for n in named if not any(re.search(p,n) for p,_ in m.BYPASS_PATTERNS)]\nuncond='if not approved_by:' in Path('ci/gates/check_receipt.py').read_text()\nprint({'named_in_doc':len(named),'not_matched_by_gate':unmatched,'approved_by_unconditional':uncond,'gate_patterns':len(m.BYPASS_PATTERNS)})\nraise SystemExit(0 if not unmatched and named and uncond else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'named_in_doc': 6, 'not_matched_by_gate': [], 'approved_by_unconditional': True, 'gate_patterns': 19}",
+      "note": "Reads the bypass forms out of the doc rather than hardcoding them. An earlier version of this check listed them literally and G-2 flagged its own command string as six bypasses — the gate cannot tell test data from a real bypass, which is the limitation this PR documents."
     }
   ],
+  "greptile": {
+    "pr": 13,
+    "round": 1,
+    "note": "Findings addressed in code on this branch. No waiver requested, and none would be valid here: no instruction from Ove exists for this PR.",
+    "findings": [
+      {
+        "id": "4137131166",
+        "severity": "P1",
+        "title": "Full pre-flight cannot pass yet",
+        "verdict": "VALID — confirmed against ci/gates/check_receipt.py:101, where approved_by is required unconditionally rather than only under --strict",
+        "disposition": "FIXED — the order-of-operations block no longer tells a seat to pass run_all.py before committing. It now names the per-gate pre-flight commands, states that G-2 is expected to fail on 'approved_by' is missing alone, and puts the first fully green run_all.py under QUALITY after the stamp."
+      },
+      {
+        "id": "4137131194",
+        "severity": "P2",
+        "title": "Scanner guarantee is overstated",
+        "verdict": "VALID — G-2 matches recorded command strings against the fixed BYPASS_PATTERNS list; it does not verify that a scanner was enabled or that a suite ran",
+        "disposition": "FIXED — the waiver section now scopes the assurance to the listed bypass forms when the command is in the receipt, and states that a command left out of the receipt is invisible to G-2, so a green G-2 is evidence about recorded commands rather than proof the right commands ran."
+      },
+      {
+        "id": "4137131185",
+        "severity": "P2",
+        "title": "Waiver policies remain inconsistent",
+        "verdict": "VALID — docs/github-sot-orchestration.md §4.2 describes the waiver without the explicit-Ove-instruction condition",
+        "disposition": "FIXED WITHIN OWNERSHIP — §4.2 is owned by bot-00-programming-lead and G-1 blocks bot-06 from editing it, so the divergence is now declared in docs/quality-gates.md: the new section is named the operative rule until LEAD reconciles §4.2, and a waiver authored against §4.2 alone does not clear a merge claim. Reconciling §4.2 remains LEAD's change."
+      }
+    ]
+  },
   "claims": [
     {
       "claim": "docs/quality-gates.md gains a scope note at the top and a 'Greptile is not a gate' section separating (a) G-1…G-6 local/CI, (b) Greptile PR review, (c) waiver rules; all six gate sections are still intact",
@@ -80,6 +114,14 @@
     {
       "claim": "ownership.yaml manifest still validates; this change does not edit the manifest",
       "evidence_command_index": 1
+    },
+    {
+      "claim": "Every bypass form the waiver section names is really matched by BYPASS_PATTERNS in ci/gates/check_receipt.py, and approved_by is required unconditionally there — the two facts the corrected text now asserts",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "After the Greptile round-1 fixes, all new headings, anchors and cross-links are still present and all six G-n sections are intact",
+      "evidence_command_index": 4
     }
   ],
   "rollback_plan": {
@@ -89,8 +131,8 @@
   "approvals": [],
   "unverified": [
     "G-2 fails until an independent seat stamps approved_by. This receipt is authored by bot-06-quality-security and G-2 rejects self-approval, so approved_by is intentionally absent.",
-    "Greptile was not triggered for this branch and no merge was requested. No Greptile status is claimed for this change.",
-    "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; reconciling it is LEAD's change to make.",
+    "Greptile ran on PR 13 and posted three findings (round 1), all addressed in code. No terminal review status is claimed for the fixed tip: a new review must run on it, and this receipt does not assert its outcome. No merge is requested.",
+    "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; the divergence is declared in docs/quality-gates.md instead, and reconciling §4.2 is LEAD's change to make.",
     "Existing waiver receipts under .receipts/bot-06-quality-security/ predate the explicit-Ove-instruction rule and were not rewritten.",
     "No GitHub Actions workflow exists in this repo, so the 'CI' column in the new table describes run_all.py as the entry point rather than an observed pipeline run. Actions wiring is out of scope for this change.",
     "ci/tests/test_gates.py was not run; this change touches no gate script.",

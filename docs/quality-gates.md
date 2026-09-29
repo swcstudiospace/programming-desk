@@ -218,15 +218,34 @@ The gates do not fire on a push by themselves. Run them yourself before you push
 
 ```
 local edit
-    → G-1…G-6 pre-flight (run_all.py)
+    → seat pre-flight: G-1, G-3, G-4, G-5/G-6 green; G-2 green except approved_by
     → commit  (pre-commit hook re-runs G-3 only)
     → push → draft PR opened
     → Greptile trigger on the PR head        [only possible once a PR exists]
     → poll to terminal status
     → address comments in code, or waive on Ove's instruction
-    → QUALITY records G-1…G-6 + Greptile status in the merge-claim receipt
+    → QUALITY reviews, stamps approved_by, and re-runs run_all.py
+    → full G-1…G-6 green, recorded with the Greptile status in the merge-claim receipt
     → merge (human, protected branch)
 ```
+
+**A seat cannot get a fully green `run_all.py` before it pushes, and should not try.** G-2
+requires `approved_by`, and rejects a bot that approves its own work
+(`ci/gates/check_receipt.py`). That field stays empty until QUALITY reviews the build, so G-2
+is expected to fail on the authoring seat's own pre-flight with exactly one problem:
+`'approved_by' is missing`. Run the other gates individually before pushing:
+
+```bash
+python3 ci/gates/check_ownership.py --bot <bot-id> --files <changed paths>
+python3 ci/gates/check_secrets.py   --files <changed paths>
+python3 ci/gates/check_contracts.py --base origin/main
+python3 ci/gates/check_rollback.py  --receipt .receipts/<bot-id>/<task-id>.json
+python3 ci/gates/check_receipt.py   --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id>
+```
+
+The last one is expected to fail on `approved_by` alone. Any *other* G-2 problem is the seat's to
+fix before pushing. `run_all.py` is the full run, and it first comes back green under QUALITY,
+after the stamp — not before the commit.
 
 Greptile is not part of dispatch and not part of implementation. It cannot run before the draft
 PR exists, which is why a seat finishing its work has satisfied at most half of what a merge
@@ -255,8 +274,16 @@ in `docs/desk-operating-model.md`.
 **G-1…G-6 have no waiver.** A failing gate is fixed, not argued with. The one annotation that
 looks like an exception is not one: a `# pragma: allowlist secret` line on a G-3 false positive
 is a reviewable statement inside the diff, and the gate still runs and still passes on its own
-terms. A disabled scanner, a skipped test, `--no-verify`, `-x test` or `|| true` are rejected
-outright by G-2 (PD-3).
+terms.
+
+G-2 helps here, but only as far as it actually reaches: it matches each command string recorded
+in the receipt against a fixed bypass list — `--no-verify`, `-x test`, `--skip-tests`,
+`-DskipTests`, `|| true`, `--dry-run` and the rest in `BYPASS_PATTERNS`
+(`ci/gates/check_receipt.py`) — and rejects the receipt on a hit. That catches the bypass forms
+on the list *when the command is in the receipt*. It does not, and cannot, tell you that a
+scanner was enabled or that a suite really ran: a command left out of the receipt is invisible to
+it, and an unlisted way to disable a check passes. A green G-2 is evidence about the commands
+recorded, not proof that the right commands were run (PD-3).
 
 **A Greptile comment may be waived only on an explicit instruction from Ove.** QUALITY does not
 waive on its own judgement, and neither does LEAD or the implementing seat. QUALITY's role is to
@@ -281,6 +308,13 @@ change, "we'll fix it in a follow-up PR" with no commit, re-triggering until a r
 
 Receipts under `.receipts/bot-06-quality-security/` written before this rule was recorded show
 QUALITY-authored waivers without an Ove instruction field. They are history, not precedent.
+
+> **Known divergence.** `docs/github-sot-orchestration.md` §4.2 still describes a waiver in terms
+> of who waived, the comment ids, why, and QUALITY's acknowledgement — without the
+> explicit-instruction condition above. That file is owned by `bot-00-programming-lead`; this one
+> is owned by `bot-06-quality-security`, and G-1 stops either seat from editing the other's file.
+> **This section is the operative rule until LEAD reconciles §4.2.** A waiver authored against
+> §4.2 alone, with no instruction from Ove, does not clear a merge claim.
 
 ### Quick answers
 

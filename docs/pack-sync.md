@@ -126,17 +126,38 @@ Mirror **tracked content at the recorded SHA**, not the working directory. Expor
 tree first, then rsync from there, deleting pack-only leftovers so the six-bot residue goes with them.
 Dry-run first, always:
 
-```bash
-STAGE="$(mktemp -d)"
-git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
+Run this **as a script, not pasted line by line** — the guards only stop the rsync while `set -e` is
+in force.
 
-rsync -avn --delete --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/   # -n: dry run, read the deletions
-rsync -av  --delete --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
-rm -rf "$STAGE"
+```bash
+set -euo pipefail          # a failed step must never fall through to rsync --delete
+
+STAGE="$(mktemp -d)"
+test -n "$STAGE" && test -d "$STAGE"    # an empty STAGE would make the rsync source "/"
+trap 'rm -rf "$STAGE"' EXIT
+
+git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
+test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must not drive --delete
+
+rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/   # -n: dry run
+rsync -av  --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
 ```
 
 Read the dry-run deletion list before the real run. Anything listed for deletion that you wanted to
 keep is a local edit — §5, not a reason to drop `--delete`.
+
+**Why the guards, not just `mktemp`.** `rsync --delete` is the most destructive command in this
+runbook, and every failure mode upstream of it ends with the pack being emptied rather than synced:
+
+| Without the guard | What happens |
+|---|---|
+| `mktemp -d` fails, `STAGE` empty | `"$STAGE"/` expands to `/` — rsync mirrors the filesystem root over the pack |
+| `git archive` fails mid-pipe | `tar` still exits 0, so an empty or partial stage becomes the source and `--delete` removes the rest of the pack |
+| Export half-lands | Same, quietly: the pack loses whatever the export missed |
+
+`set -euo pipefail` plus the two `test` lines turn each of those into a stop before anything is
+written. `test -f "$STAGE/ownership.yaml"` is the cheap sentinel — that file is tracked at the root
+of every commit on `main`, so its absence means the export did not land.
 
 Two properties of that command are load-bearing:
 
@@ -146,6 +167,11 @@ Two properties of that command are load-bearing:
   pack would hold files that are in no commit and the mirrored SHA would no longer describe its
   contents. `git archive` emits exactly the tracked tree at that SHA and nothing else, which is what
   "the pack mirrors `main` at `<sha>`" has to mean to be checkable.
+- **`--exclude '.git/'`.** The staging tree is an export, so it has no `.git/` of its own — which
+  means `--delete` would remove the *pack's* `.git/` if the pack on the box is a git checkout rather
+  than a plain directory, taking its history and refs with it. §1 leaves the live pack layout
+  unresolved, so the sync must not bet on it being one or the other. The exclude costs nothing when
+  the pack is a plain directory.
 - **`--exclude '.receipts/'`.** Receipt JSON is gitignored, so a fresh export does not contain the
   box's receipts. Without the exclude, `--delete` would erase the local verification and G-6 approval
   record for every earlier sync — destroying evidence as a side effect of installing docs. Excluding

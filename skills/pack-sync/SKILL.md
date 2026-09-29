@@ -1,6 +1,6 @@
 ---
 name: pack-sync
-description: Refreshing the desk pack on the box from GitHub main. Use after a merge that touches prompts, skills, ownership.yaml, gates or docs, and on first install of the pack on a box. Use before any operation that would copy pack contents back toward GitHub — to stop it.
+description: Refreshing the desk pack on the box from GitHub main. Use after any merge to main — the mirror is whole-tree, so contracts, scripts, hooks and vendor changes need a sync as much as prompts, skills, ownership.yaml, gates and docs do — and on first install of the pack on a box. Use before any operation that would copy pack contents back toward GitHub — to stop it.
 bots: [bot-05-infrastructure, bot-00-programming-lead, all]
 gates: [G-2, G-6]
 ---
@@ -70,10 +70,14 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
 3. **Prove `main` is self-consistent.** Manifest validates, gate tests pass, `assemble-prompts.sh`
    leaves no diff. Mirroring a broken `main` installs it everywhere at once.
 4. **Mirror tracked content only.** `git archive HEAD` into a staging tree, then
-   `rsync --delete --exclude '.receipts/'` from it — dry run first, reading the deletion list.
-   Rsyncing the clone itself would carry gitignored artefacts (`.venv/`, `__pycache__/`,
-   `.pytest_cache/`, the caches step 3 just created) onto a shared box, and without the exclude
-   `--delete` erases the box's receipt history — the evidence for every earlier sync.
+   `rsync --delete --exclude '.git/' --exclude '.receipts/'` from it — dry run first, reading the
+   deletion list. Rsyncing the clone itself would carry gitignored artefacts (`.venv/`,
+   `__pycache__/`, `.pytest_cache/`, the caches step 3 just created) onto a shared box; without
+   `--exclude '.receipts/'`, `--delete` erases the box's receipt history — the evidence for every
+   earlier sync; without `--exclude '.git/'` it erases the pack's own git history if the pack is a
+   checkout. Run it as a script under `set -euo pipefail` with the stage guards from
+   `docs/pack-sync.md` §4.3: an empty `STAGE` makes the rsync source `/`, and a failed `git archive`
+   still leaves `tar` exiting 0, so either one turns `--delete` into "empty the pack".
 5. **Receipt** naming the mirrored SHA, written **outside** the pack root: anything inside is
    overwritten by the next sync.
 
@@ -114,7 +118,10 @@ the receipt whether you touched it.
 - [ ] `pytest ci/tests/` passes on the source tree
 - [ ] `assemble-prompts.sh` leaves no diff on the source tree
 - [ ] Mirroring a `git archive HEAD` export, not the working directory
+- [ ] Running as a script under `set -euo pipefail`; stage guards present, so no failure upstream of
+      `rsync --delete` can reach it
 - [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
+- [ ] `--exclude '.git/'` present so `--delete` cannot erase the pack's own git history
 - [ ] `rsync` dry run read, deletion list understood
 - [ ] G-6 approval recorded before overwriting a live pack
 - [ ] Receipt written outside the pack root, names the mirrored SHA; unverified lists what was not

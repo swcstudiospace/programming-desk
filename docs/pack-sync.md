@@ -135,33 +135,51 @@ set -euo pipefail          # a failed step must never fall through to rsync --de
 STAGE="$(mktemp -d)"
 test -n "$STAGE" && test -d "$STAGE"    # an empty STAGE would make the rsync source "/"
 LOG="$(mktemp)"
-trap 'rm -rf "$STAGE"' EXIT             # $LOG survives: it is the deletion list you reviewed
+trap 'rm -rf "$STAGE"' EXIT             # $LOG survives: it is the change list you reviewed
 
 git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
 test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must not drive --delete
 
-# Dry run. Writes nothing; the deletions are the part to read.
-rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ | tee "$LOG"
-echo "--- would delete:"; grep '^deleting ' "$LOG" || echo "(nothing)"
+# Every path this sync would touch, itemised: replacements as well as deletions.
+changes() { grep -E '^(\*deleting|deleting |[<>ch.][fdLDS])' "$1" || true; }
 
-# Gate. Read every 'deleting' line above, then write the G-6 approval record (§4.4) with that
-# list as its blast_radius. The approval exists BEFORE this answer, not after the run.
-read -r -p "Deletions reviewed and G-6 approval recorded? [type 'sync'] " CONFIRM
+# Dry run. Writes nothing.
+rsync -avni --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ | tee "$LOG"
+echo "--- would replace:"; grep -E '^>f' "$LOG" || echo "(nothing)"
+echo "--- would delete:";  grep -E '^(\*deleting|deleting )' "$LOG" || echo "(nothing)"
+
+# Gate. Read BOTH lists above, then write the G-6 approval record (§4.4) with both as its
+# blast_radius. The approval exists BEFORE this answer, not after the run.
+read -r -p "Replacements and deletions reviewed, G-6 approval recorded? [type 'sync'] " CONFIRM
 test "$CONFIRM" = sync
 
 # Revalidate: the pack is shared, and it may have changed while you were reading.
 RECHECK="$(mktemp)"
-rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ > "$RECHECK"
-diff <(grep '^deleting ' "$LOG" || true) <(grep '^deleting ' "$RECHECK" || true)  # must match
+rsync -avni --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ > "$RECHECK"
+diff <(changes "$LOG") <(changes "$RECHECK")    # the whole change set must match, not just deletions
 
 rsync -av --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
 ```
 
 **The gate is the dry run's whole point.** Without a stop between the two commands, the script prints
-the deletion list and destroys the listed files in the same breath — the operator gets a transcript of
-what was lost rather than a chance to prevent it. Anything listed for deletion that you wanted to keep
-is a local edit: answer anything but `sync`, then take it through §5. `--delete` is not the thing to
-drop.
+the change list and applies it in the same breath — the operator gets a transcript of what was lost
+rather than a chance to prevent it. Anything listed for deletion *or replacement* that you wanted to
+keep is a local edit: answer anything but `sync`, then take it through §5. `--delete` is not the thing
+to drop.
+
+**Replacements count, not only deletions.** A sync overwrites every pack file that differs from the
+staged tree; that is what it is for, but it is also how a pack-only edit dies quietly — replaced
+rather than deleted, so a deletions-only review never mentions it. `-i` itemises both (`>f` a file
+being sent, `*deleting` one being removed), the gate prints both lists, and §4.4's `blast_radius`
+carries both counts. An approver who saw only the deletions did not see what they authorised.
+
+The deletion pattern accepts `deleting ` as well as `*deleting`: rsync 3.x itemises removals with the
+leading `*`, older builds do not, and a pattern that silently matches nothing on the box's rsync
+would hand the operator an empty deletion list and a clean recheck — the failure mode this whole
+section exists to prevent. **Unverified here:** `rsync` is not installed in this environment, so the
+itemise codes are read from rsync's documented output rather than observed. The `grep`/`diff` parsing
+was checked against captured sample output; confirm the real format on the box the first time this
+runs, before trusting the lists.
 
 The gate fails closed. Run non-interactively, `read` gets no input and `set -e` stops the script
 before the real rsync — a sync that cannot be reviewed does not happen. If you prefer to script the
@@ -171,18 +189,27 @@ the same guards re-run there; do not drop the review.
 `$LOG` outlives the stage deliberately: the deletion list is the evidence that the review happened,
 so keep it with the §4.4 receipt.
 
-**The recheck, and what it does not buy.** `--delete` recomputes deletions against the pack as it is
-at that moment, not against the list you approved. If someone drops a file into the pack while you
-are reading, the real run deletes it without it ever having appeared in the reviewed list. The `diff`
-makes the two lists differ in that case, so the script stops instead of deleting something nobody
-approved.
+**The recheck, and exactly what it does not buy.** `rsync` recomputes the whole change set against
+the pack as it is at that moment, not against the list you approved. If someone drops a file into the
+pack while you are reading, the real run deletes it without it ever having appeared in the reviewed
+list; if someone adds a file that the stage also has, it becomes a replacement nobody reviewed. The
+`diff` makes the two change sets differ in both cases, so the script stops.
 
-That narrows the window from "however long the operator took to read and get approval" to the
-milliseconds between recheck and apply. It does not close it, and no in-script check can: only the
-pack being quiescent does. So the sync is announced before it starts and the pack takes no other
-writers until it finishes — a shared-resource rule (`skills/platforms/remote-dev-machine/SKILL.md`
-§4), not a nicety. If the `diff` fires, someone wrote to the pack during the sync: stop, find out
-what and who, and start again from §4.1 rather than re-approving a list you have not re-read.
+Two holes it does **not** close, stated plainly because the alternative is an operator trusting a
+check that does not cover them:
+
+| Case | Does the recheck catch it? |
+|---|---|
+| A path appears in or drops out of the change set | **Yes** — the itemised lists differ and the script stops |
+| A file *already* slated for replacement is edited again mid-review | **No.** It differed from the stage before the edit and differs after, so its itemise line is unchanged. The real run overwrites the newer edit |
+| Anything written in the gap between recheck and apply | **No.** The window is milliseconds rather than minutes, but it is not zero |
+
+No in-script check closes those: only the pack being quiescent does. So the sync is announced before
+it starts and the pack takes no other writers until it finishes — a shared-resource rule
+(`skills/platforms/remote-dev-machine/SKILL.md` §4), and the actual control, with the recheck as a
+backstop rather than a substitute. If the `diff` fires, someone wrote to the pack during the sync:
+stop, find out what and who, and start again from §4.1 rather than re-approving a list you have not
+re-read.
 
 **Why the guards, not just `mktemp`.** `rsync --delete` is the most destructive command in this
 runbook, and every failure mode upstream of it ends with the pack being emptied rather than synced:
@@ -192,7 +219,8 @@ runbook, and every failure mode upstream of it ends with the pack being emptied 
 | `mktemp -d` fails, `STAGE` empty | `"$STAGE"/` expands to `/` — rsync mirrors the filesystem root over the pack |
 | `git archive` fails mid-pipe | `tar` still exits 0, so an empty or partial stage becomes the source and `--delete` removes the rest of the pack |
 | Export half-lands | Same, quietly: the pack loses whatever the export missed |
-| Dry run flows into the real run | The deletion list is printed and acted on at once — a record of what was lost, not a chance to stop |
+| Dry run flows into the real run | The change list is printed and acted on at once — a record of what was lost, not a chance to stop |
+| Only deletions are reviewed | Every replaced file is an unreviewed overwrite, and a pack-only edit dies without appearing in any list |
 
 `set -euo pipefail` plus the two `test` lines turn each of those into a stop before anything is
 written. `test -f "$STAGE/ownership.yaml"` is the cheap sentinel — that file is tracked at the root
@@ -240,7 +268,7 @@ so record the approval while it can still prevent something:
       "operation": "rsync --delete of <PACK_ROOT> from main@<sha>",
       "approved_by": "<the human who approved, not the operator running it>",
       "at": "<ISO-8601 timestamp, before the real rsync>",
-      "blast_radius": "<the reviewed deleting list: N files, named or attached as $LOG>"
+      "blast_radius": "<the reviewed change set: N files replaced, M deleted — $LOG attached>"
     }
   ]
 }
@@ -254,9 +282,10 @@ currently *passes* G-6 in CI. Verified against the gate: the receipt above passe
 passes with the `approvals` block removed. The approval here is therefore enforced by this runbook
 and by review, not by a script, which is precisely the situation the desk treats as weak
 (`ARCHITECTURE.md`: a rule that lives only in prose is advisory). Widening the pattern list is a
-change to `ci/gates/**` and belongs in QUALITY's own PR, not this docs one — raised, not smuggled in. `blast_radius` is the deletion list you actually read at
-the gate, which is why §4.3 keeps `$LOG`: an approval whose blast radius was never established is a
-signature on a blank page.
+change to `ci/gates/**` and belongs in QUALITY's own PR, not this docs one — raised, not smuggled in. `blast_radius` is the **whole** change set you read at the
+gate — files replaced as well as files deleted — which is why §4.3 keeps `$LOG`. A pack overwrite
+approved on its deletions alone hides the larger half of what it does; an approval whose blast radius
+was never established is a signature on a blank page.
 
 **Pass 2 — after the sync.** Complete the same receipt per
 [`../skills/verification-receipts/SKILL.md`](../skills/verification-receipts/SKILL.md): the commands

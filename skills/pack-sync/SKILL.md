@@ -71,8 +71,10 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
    leaves no diff. Mirroring a broken `main` installs it everywhere at once.
 4. **Mirror tracked content only.** `git archive HEAD` into a staging tree, then
    `rsync --delete --exclude '.git/' --exclude '.receipts/'` from it — dry run first, reading the
-   deletion list **at a stop, not in passing** — the script gates between the dry run and the real
-   run, so a pack-only edit can still be rescued (§5) instead of merely reported. Rsyncing the clone
+   change list **at a stop, not in passing** — replacements (`>f`) as well as deletions
+   (`*deleting`), since a sync kills a pack-only edit by overwriting it just as surely as by deleting
+   it. The script gates between the dry run and the real run, so that edit can still be rescued (§5)
+   instead of merely reported. Rsyncing the clone
    itself would carry gitignored artefacts (`.venv/`,
    `__pycache__/`, `.pytest_cache/`, the caches step 3 just created) onto a shared box; without
    `--exclude '.receipts/'`, `--delete` erases the box's receipt history — the evidence for every
@@ -129,10 +131,12 @@ the receipt whether you touched it.
       `rsync --delete` can reach it
 - [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
 - [ ] `--exclude '.git/'` present so `--delete` cannot erase the pack's own git history
-- [ ] `rsync` dry run read at the gate, deletion list understood, before the real run was authorised
+- [ ] `rsync` dry run read at the gate — replacements *and* deletions — before the real run was
+      authorised
 - [ ] G-6 `approvals[]` written **before** the real rsync, all four fields, `blast_radius` = that
-      reviewed deletion list
-- [ ] Pack announced as quiescent; recheck `diff` clean, so nothing unreviewed gets deleted
+      whole reviewed change set, not the deletions alone
+- [ ] Pack announced as quiescent — the recheck `diff` is a backstop and does not catch a re-edit of
+      a file already slated for replacement
 - [ ] Receipt written outside the pack root, names the mirrored SHA; unverified lists what was not
       restarted or checked
 - [ ] Nothing moved pack → GitHub in any form

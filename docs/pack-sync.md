@@ -144,9 +144,15 @@ test -f "$STAGE/ownership.yaml"         # the export landed; a partial tree must
 rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ | tee "$LOG"
 echo "--- would delete:"; grep '^deleting ' "$LOG" || echo "(nothing)"
 
-# Gate. Read every 'deleting' line above before answering; G-6 approval belongs here too.
-read -r -p "Proceed with the real sync? [type 'sync'] " CONFIRM
+# Gate. Read every 'deleting' line above, then write the G-6 approval record (§4.4) with that
+# list as its blast_radius. The approval exists BEFORE this answer, not after the run.
+read -r -p "Deletions reviewed and G-6 approval recorded? [type 'sync'] " CONFIRM
 test "$CONFIRM" = sync
+
+# Revalidate: the pack is shared, and it may have changed while you were reading.
+RECHECK="$(mktemp)"
+rsync -avn --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/ > "$RECHECK"
+diff <(grep '^deleting ' "$LOG" || true) <(grep '^deleting ' "$RECHECK" || true)  # must match
 
 rsync -av --delete --exclude '.git/' --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
 ```
@@ -165,6 +171,19 @@ the same guards re-run there; do not drop the review.
 `$LOG` outlives the stage deliberately: the deletion list is the evidence that the review happened,
 so keep it with the §4.4 receipt.
 
+**The recheck, and what it does not buy.** `--delete` recomputes deletions against the pack as it is
+at that moment, not against the list you approved. If someone drops a file into the pack while you
+are reading, the real run deletes it without it ever having appeared in the reviewed list. The `diff`
+makes the two lists differ in that case, so the script stops instead of deleting something nobody
+approved.
+
+That narrows the window from "however long the operator took to read and get approval" to the
+milliseconds between recheck and apply. It does not close it, and no in-script check can: only the
+pack being quiescent does. So the sync is announced before it starts and the pack takes no other
+writers until it finishes — a shared-resource rule (`skills/platforms/remote-dev-machine/SKILL.md`
+§4), not a nicety. If the `diff` fires, someone wrote to the pack during the sync: stop, find out
+what and who, and start again from §4.1 rather than re-approving a list you have not re-read.
+
 **Why the guards, not just `mktemp`.** `rsync --delete` is the most destructive command in this
 runbook, and every failure mode upstream of it ends with the pack being emptied rather than synced:
 
@@ -179,7 +198,7 @@ runbook, and every failure mode upstream of it ends with the pack being emptied 
 written. `test -f "$STAGE/ownership.yaml"` is the cheap sentinel — that file is tracked at the root
 of every commit on `main`, so its absence means the export did not land.
 
-Two properties of that command are load-bearing:
+Three properties of that command are load-bearing:
 
 - **`git archive HEAD`, not `rsync <CLONE>/`.** A clone passes `status --porcelain` while holding
   gitignored artefacts — `.venv/`, `__pycache__/`, `.pytest_cache/` and `*.pyc` from the §4.2 run,
@@ -205,12 +224,47 @@ Runtime agents load their system prompt from `/home/box/agent-data/agents/<uuid>
 its own approval — a running agent's prompt changing under it is a G-6 destructive operation on a
 shared box.
 
-### 4.4 Record the sync
+### 4.4 Record the sync — approval first, evidence after
 
-Write a receipt at `.receipts/<bot-id>/<task_id>.json` per
+The receipt is written in **two passes, in this order**, because G-6 requires the approval to exist
+*before* the destructive operation, not as part of writing it up afterwards
+([`quality-gates.md`](./quality-gates.md) §G-6; `ci/gates/check_rollback.py` checks `approvals[]`).
+
+**Pass 1 — before you answer the §4.3 gate.** Overwriting a live pack on a shared box is destructive,
+so record the approval while it can still prevent something:
+
+```json
+{
+  "approvals": [
+    {
+      "operation": "rsync --delete of <PACK_ROOT> from main@<sha>",
+      "approved_by": "<the human who approved, not the operator running it>",
+      "at": "<ISO-8601 timestamp, before the real rsync>",
+      "blast_radius": "<the reviewed deleting list: N files, named or attached as $LOG>"
+    }
+  ]
+}
+```
+
+All four fields are required by G-6, and "yes go ahead" in a chat thread is not an approval record.
+
+**Known gap, stated rather than papered over.** `check_rollback.py` detects destructive commands by
+pattern, and its list has no `rsync --delete` entry — so a pack-sync receipt with no `approvals[]`
+currently *passes* G-6 in CI. Verified against the gate: the receipt above passes, and it still
+passes with the `approvals` block removed. The approval here is therefore enforced by this runbook
+and by review, not by a script, which is precisely the situation the desk treats as weak
+(`ARCHITECTURE.md`: a rule that lives only in prose is advisory). Widening the pattern list is a
+change to `ci/gates/**` and belongs in QUALITY's own PR, not this docs one — raised, not smuggled in. `blast_radius` is the deletion list you actually read at
+the gate, which is why §4.3 keeps `$LOG`: an approval whose blast radius was never established is a
+signature on a blank page.
+
+**Pass 2 — after the sync.** Complete the same receipt per
 [`../skills/verification-receipts/SKILL.md`](../skills/verification-receipts/SKILL.md): the commands
 above with their exit codes, the `main` SHA the pack now mirrors, and anything you could not verify
 (a running agent not restarted, a prompt file left untouched) in `unverified`.
+
+Pass 2 never edits pass 1. If the sync turned out worse than the approval anticipated, that is a
+finding to report, not a blast radius to revise after the fact.
 
 **In the clone or another receipts area — never under `<PACK_ROOT>`.** The mirror is overwritten
 wholesale on every run, so a receipt stored inside it is evidence sitting in the blast radius of the
@@ -238,7 +292,7 @@ was reviewed. A sync performed before the PR merges loses the edit, so read it o
 |---|---|
 | **G-1** | Pack sync changes no repo paths. A PR *about* sync obeys `ownership.yaml` like any other — `docs/**` and `skills/**` are QUALITY's |
 | **G-2** | The sync claim needs a receipt naming the mirrored SHA (§4.4) |
-| **G-6** | Overwriting a live pack on a shared box, or a running agent's prompt, is destructive and needs recorded approval. See `skills/platforms/remote-dev-machine/SKILL.md` §3 |
+| **G-6** | Overwriting a live pack on a shared box, or a running agent's prompt, is destructive: `approvals[]` recorded **before** the real rsync, with the reviewed deletion list as `blast_radius` (§4.4 pass 1). See `skills/platforms/remote-dev-machine/SKILL.md` §3 |
 
 ## 7. Parity with ship-desk
 
@@ -265,4 +319,7 @@ and `docs/desk-operating-model.md` govern work in this repo.
 - It does not authorize any write to `<PACK_ROOT>` on its own. §6 G-6 still applies.
 - It does not verify the live pack's contents, layout or path. Those are unresolved placeholders.
 - It does not describe the Agent Bus, CI workflows or the Greptile gate — see their own docs.
+- It does not make G-6 catch a pack sync automatically. `check_rollback.py` has no `rsync --delete`
+  pattern (§4.4), so until QUALITY widens that list, an unapproved sync is caught by review or not
+  at all.
 - It does not make the pack reviewable. The pack is a copy; review happens on `main`.

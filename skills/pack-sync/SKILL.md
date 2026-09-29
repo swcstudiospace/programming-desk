@@ -80,8 +80,11 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
    checkout. Run it as a script under `set -euo pipefail` with the stage guards from
    `docs/pack-sync.md` §4.3: an empty `STAGE` makes the rsync source `/`, and a failed `git archive`
    still leaves `tar` exiting 0, so either one turns `--delete` into "empty the pack".
-5. **Receipt** naming the mirrored SHA, written **outside** the pack root: anything inside is
-   overwritten by the next sync.
+5. **Receipt in two passes, approval first.** `approvals[]` — `operation`, `approved_by`, `at`,
+   `blast_radius` (the deletion list you read at the gate) — is written **before** the real rsync,
+   because G-6 wants an approval that can still prevent something, not a write-up. The commands,
+   exit codes, mirrored SHA and `unverified` are completed after. Both live **outside** the pack
+   root: anything inside is overwritten by the next sync.
 
 The claim a sync receipt supports is **"the pack mirrors `main` at `<sha>`"**. It does not claim the
 pack works, that agents picked the change up, or that anything was restarted — those go in
@@ -104,8 +107,10 @@ merge, then sync. Read it out *before* syncing: §2 step 4 deletes it.
 ### §4 Approval and blast radius
 
 Overwriting a live pack on the shared box changes what every agent on that box loads next. That is a
-destructive operation on shared state — G-6, recorded approval, per
-[`../platforms/remote-dev-machine/SKILL.md`](../platforms/remote-dev-machine/SKILL.md) §3.
+destructive operation on shared state — G-6, recorded approval **before** it runs, per
+[`../platforms/remote-dev-machine/SKILL.md`](../platforms/remote-dev-machine/SKILL.md) §3. Shared
+also means concurrent: the pack takes no other writers between the dry run and the real run, or
+`--delete` removes a file that never appeared in the list anyone approved.
 
 A running agent's `SYSTEM_PROMPT.xml` under `/home/box/agent-data/agents/<uuid>/` is outside the pack
 root and is its own decision with its own approval. Do not fold it into a pack sync silently: say in
@@ -125,7 +130,9 @@ the receipt whether you touched it.
 - [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
 - [ ] `--exclude '.git/'` present so `--delete` cannot erase the pack's own git history
 - [ ] `rsync` dry run read at the gate, deletion list understood, before the real run was authorised
-- [ ] G-6 approval recorded before overwriting a live pack
+- [ ] G-6 `approvals[]` written **before** the real rsync, all four fields, `blast_radius` = that
+      reviewed deletion list
+- [ ] Pack announced as quiescent; recheck `diff` clean, so nothing unreviewed gets deleted
 - [ ] Receipt written outside the pack root, names the mirrored SHA; unverified lists what was not
       restarted or checked
 - [ ] Nothing moved pack → GitHub in any form

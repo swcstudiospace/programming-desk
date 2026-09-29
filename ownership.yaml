@@ -296,6 +296,29 @@ ownership:
     owner: bot-05-infrastructure
   - pattern: "chains/**"
     owner: bot-05-infrastructure
+
+  # --- Desk v2: gateway, contracts, Grok Bot share (docs/upgrade-plan-desk-v2.md) --
+  # Owned before the paths exist so G-1 never meets an unowned file. **/*.proto stays
+  # the last pattern; none of these directories contain .proto files.
+  - pattern: "services/desk-gateway/**"
+    owner: bot-01-systems-backend
+  - pattern: "infra/desk-gateway/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/railway/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/tailscale/**"
+    owner: bot-05-infrastructure
+  - pattern: "contracts/tool-rosters/**"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "contracts/tool-packs/**"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "grokbot/**"
+    owner: bot-00-programming-lead
+  - pattern: "skills/desk-bootstrap/**"
+    owner: bot-00-programming-lead
+
   # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY
   # contract_surface. Do not duplicate this pattern; validate-manifest rejects duplicates.
   - pattern: "**/*.proto"
@@ -318,6 +341,18 @@ contract_consumers:
     - bot-02-web-edge
     - bot-05-infrastructure
   "openapi.yaml":
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios
+  "contracts/tool-rosters/**":
+    - bot-00-programming-lead
+    - bot-01-systems-backend
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios
+    - bot-05-infrastructure
+    - bot-06-quality-security
+  "contracts/tool-packs/**":
     - bot-02-web-edge
     - bot-03-android
     - bot-04-ios

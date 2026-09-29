@@ -58,11 +58,22 @@ Sync **after** a merge lands, never in anticipation of one.
 
 | Trigger | Sync |
 |---|---|
-| A PR merged to `main` touching `prompts/**`, `skills/**`, `ownership.yaml`, `ci/gates/**` or `docs/**` | Yes — after the merge commit exists on `origin/main` |
+| **Any** PR merged to `main` | Yes — after the merge commit exists on `origin/main` |
 | First install of the pack on a new box or a new agent workspace | Yes — clean clone, no mirror step needed beyond §4 |
 | An open draft PR you expect to merge | **No.** Unmerged work is not source of truth |
 | The pack "looks wrong" mid-task | **No.** Finish or stop the task, then sync from a merge |
 | A failing gate on the box | **No.** Fix the gate in a PR against `main`, then sync |
+
+**Any merge, not a path list.** §4.3 mirrors the whole tracked tree, so every merged change is
+pack-relevant — including `contracts/**`, `ci/hooks/**`, `scripts/**` and `vendor/**`, which a
+prompts-and-skills-shaped trigger list would silently strand. A contract merged on `main` and never
+mirrored leaves the box running against the old one, and the pack's SHA no longer tells you what it
+holds. The only paths a sync does not carry are the ones §4.3 excludes by construction: `.git/`,
+untracked and gitignored artefacts, and box-local `.receipts/`.
+
+Merges touching `prompts/**`, `ownership.yaml`, `ci/gates/**` or `skills/**` are the urgent ones —
+they change how agents behave or what CI enforces — but urgency orders the queue, it does not decide
+whether to sync.
 
 Do not put this on a cron. A scheduled sync races open PRs and re-installs the pack mid-job for
 whatever is running on the box.
@@ -78,11 +89,23 @@ git -C <CLONE> fetch origin main
 git -C <CLONE> checkout main
 git -C <CLONE> merge --ff-only origin/main   # fails loudly rather than creating a merge commit
 git -C <CLONE> status --porcelain            # must be empty; a dirty clone is not a mirror source
+
+# HEAD must *equal* origin/main, not merely descend from it:
+test "$(git -C <CLONE> rev-parse HEAD)" = "$(git -C <CLONE> rev-parse origin/main)" \
+  || { echo "local main is ahead of origin/main — do not mirror"; exit 1; }
+
 git -C <CLONE> rev-parse HEAD                # record this SHA — it is what the pack is at
 ```
 
 A non-empty `status --porcelain` or a failed `--ff-only` means the clone carries local state. Stop and
 resolve that first; mirroring from it copies unreviewed edits onto the box.
+
+**The equality check is not redundant.** If local `main` carries a committed but unpushed change,
+`merge --ff-only origin/main` reports "Already up to date" and exits 0, and `status --porcelain` is
+empty — the clone looks pristine while sitting on a commit no one has reviewed. Mirroring then
+installs that commit on the box and §4.4 records its SHA as though GitHub had it, which is exactly
+the pack→GitHub inversion §2 forbids, arriving by the back door. `rev-parse` on both sides is the
+only check that catches it. Push the commit as a PR (§5) or reset the clone; do not mirror it.
 
 ### 4.2 Verify the source before mirroring
 
@@ -99,16 +122,37 @@ pack.
 
 ### 4.3 Mirror into the pack
 
-Copy `main`'s tree into `<PACK_ROOT>`, deleting pack-only leftovers so the six-bot residue goes with
-them. Dry-run first, always:
+Mirror **tracked content at the recorded SHA**, not the working directory. Export it to a staging
+tree first, then rsync from there, deleting pack-only leftovers so the six-bot residue goes with them.
+Dry-run first, always:
 
 ```bash
-rsync -avn --delete --exclude '.git/' <CLONE>/ <PACK_ROOT>/   # -n: dry run, read the deletions
-rsync -av  --delete --exclude '.git/' <CLONE>/ <PACK_ROOT>/
+STAGE="$(mktemp -d)"
+git -C <CLONE> archive --format=tar HEAD | tar -x -C "$STAGE"   # tracked files at HEAD, nothing else
+
+rsync -avn --delete --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/   # -n: dry run, read the deletions
+rsync -av  --delete --exclude '.receipts/' "$STAGE"/ <PACK_ROOT>/
+rm -rf "$STAGE"
 ```
 
 Read the dry-run deletion list before the real run. Anything listed for deletion that you wanted to
 keep is a local edit — §5, not a reason to drop `--delete`.
+
+Two properties of that command are load-bearing:
+
+- **`git archive HEAD`, not `rsync <CLONE>/`.** A clone passes `status --porcelain` while holding
+  gitignored artefacts — `.venv/`, `__pycache__/`, `.pytest_cache/` and `*.pyc` from the §4.2 run,
+  `.receipts/**/*.json`. Rsyncing the working directory copies all of it onto a shared box, so the
+  pack would hold files that are in no commit and the mirrored SHA would no longer describe its
+  contents. `git archive` emits exactly the tracked tree at that SHA and nothing else, which is what
+  "the pack mirrors `main` at `<sha>`" has to mean to be checkable.
+- **`--exclude '.receipts/'`.** Receipt JSON is gitignored, so a fresh export does not contain the
+  box's receipts. Without the exclude, `--delete` would erase the local verification and G-6 approval
+  record for every earlier sync — destroying evidence as a side effect of installing docs. Excluding
+  the directory leaves box-local receipt history intact, and receipts that *are* tracked on `main`
+  stay readable there. Receipts are evidence, not runtime input: the pack does not need them. The
+  exclude also means a first install leaves no `.receipts/` skeleton on the box — create it there
+  once; from then on that tree is box-owned and no sync touches it.
 
 Runtime agents load their system prompt from `/home/box/agent-data/agents/<uuid>/SYSTEM_PROMPT.xml`
 (`ARCHITECTURE.md` §7), which is outside `<PACK_ROOT>`. Refreshing that file is a separate step with
@@ -117,10 +161,15 @@ shared box.
 
 ### 4.4 Record the sync
 
-Write a receipt under `.receipts/<bot-id>/<task_id>.json` per
+Write a receipt at `.receipts/<bot-id>/<task_id>.json` per
 [`../skills/verification-receipts/SKILL.md`](../skills/verification-receipts/SKILL.md): the commands
 above with their exit codes, the `main` SHA the pack now mirrors, and anything you could not verify
 (a running agent not restarted, a prompt file left untouched) in `unverified`.
+
+**In the clone or another receipts area — never under `<PACK_ROOT>`.** The mirror is overwritten
+wholesale on every run, so a receipt stored inside it is evidence sitting in the blast radius of the
+next sync. §4.3's `--exclude '.receipts/'` protects a pack-local receipts directory from `--delete`,
+but a receipt that lives outside the mirror needs no protecting.
 
 The claim the receipt backs is **"the pack mirrors `main` at `<sha>`"** — not "the pack is correct".
 

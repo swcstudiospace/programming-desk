@@ -32,8 +32,9 @@ About to touch the pack or the repo because the two differ?
     ├─ NO ──▶ Not yet. Unmerged work is not source of truth. §1
     └─ YES
         │
-        Is your clone clean and fast-forwarded to origin/main?
-        ├─ NO ──▶ Resolve that first. A dirty clone is not a mirror source. §2
+        Is your clone clean AND is HEAD equal to origin/main?
+        ├─ NO ──▶ Resolve that first. A dirty clone — or one carrying an
+        │         unpushed commit — is not a mirror source. §2
         └─ YES ──▶ Verify, then mirror, then write the receipt. §2, §4
                    Overwriting a live pack is G-6 — approval first. §4
 ```
@@ -51,7 +52,7 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
 
 | Trigger | Run |
 |---|---|
-| Merge to `main` touching `prompts/**`, `skills/**`, `ownership.yaml`, `ci/gates/**`, `docs/**` | Yes, after the merge commit is on `origin/main` |
+| **Any** merge to `main` | Yes, after the merge commit is on `origin/main`. The mirror is whole-tree, so a path-shaped trigger list strands `contracts/**`, `ci/hooks/**`, `scripts/**` and `vendor/**` |
 | First install of the pack on a new box or agent workspace | Yes |
 | Open draft PR you expect to merge | No — sync after it merges |
 | Pack "looks wrong" mid-task, or a gate fails on the box | No — fix it in a PR against `main`, then sync |
@@ -62,12 +63,19 @@ Full procedure with commands: [`../../docs/pack-sync.md`](../../docs/pack-sync.m
 `docs/pack-sync.md` §4 carries the commands. The shape:
 
 1. **Pull.** `fetch origin main`, `checkout main`, `merge --ff-only`. Record the SHA.
-2. **Prove the clone is clean.** `git status --porcelain` empty. Otherwise you are about to mirror
-   someone's local edits onto a shared box.
+2. **Prove the clone is clean *and level*.** `git status --porcelain` empty, and `rev-parse HEAD`
+   equal to `rev-parse origin/main`. `--ff-only` says "Already up to date" and exits 0 when local
+   `main` is *ahead*, so a clean status alone would ship an unpushed, unreviewed commit to the box
+   and record its SHA as if GitHub had it.
 3. **Prove `main` is self-consistent.** Manifest validates, gate tests pass, `assemble-prompts.sh`
    leaves no diff. Mirroring a broken `main` installs it everywhere at once.
-4. **Mirror** with `rsync --delete`, dry run first, reading the deletion list.
-5. **Receipt** naming the mirrored SHA.
+4. **Mirror tracked content only.** `git archive HEAD` into a staging tree, then
+   `rsync --delete --exclude '.receipts/'` from it — dry run first, reading the deletion list.
+   Rsyncing the clone itself would carry gitignored artefacts (`.venv/`, `__pycache__/`,
+   `.pytest_cache/`, the caches step 3 just created) onto a shared box, and without the exclude
+   `--delete` erases the box's receipt history — the evidence for every earlier sync.
+5. **Receipt** naming the mirrored SHA, written **outside** the pack root: anything inside is
+   overwritten by the next sync.
 
 The claim a sync receipt supports is **"the pack mirrors `main` at `<sha>`"**. It does not claim the
 pack works, that agents picked the change up, or that anything was restarted — those go in
@@ -101,12 +109,16 @@ the receipt whether you touched it.
 
 - [ ] The change is merged to `origin/main` — not an open PR
 - [ ] Syncing from a clean clone, not from the pack directory
+- [ ] `rev-parse HEAD` == `rev-parse origin/main` — no unpushed commit riding along
 - [ ] `check_ownership.py --validate-manifest` passes on the source tree
 - [ ] `pytest ci/tests/` passes on the source tree
 - [ ] `assemble-prompts.sh` leaves no diff on the source tree
+- [ ] Mirroring a `git archive HEAD` export, not the working directory
+- [ ] `--exclude '.receipts/'` present so `--delete` cannot erase receipt history
 - [ ] `rsync` dry run read, deletion list understood
 - [ ] G-6 approval recorded before overwriting a live pack
-- [ ] Receipt names the mirrored SHA; unverified lists what was not restarted or checked
+- [ ] Receipt written outside the pack root, names the mirrored SHA; unverified lists what was not
+      restarted or checked
 - [ ] Nothing moved pack → GitHub in any form
 
 ## What this skill does not do

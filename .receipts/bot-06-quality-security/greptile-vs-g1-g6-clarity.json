@@ -93,16 +93,32 @@
       "note": "Confirms the human-approval-for-gate-changes rule against this repo's own prompts and skill, and records that the knowledge-base document Greptile cited is not a file in this repo."
     },
     {
-      "cmd": "python3 -c \"import json, shlex, subprocess, sys\nd=json.load(open('.receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json'))\nbase=subprocess.run(['git','merge-base','origin/main','HEAD'],capture_output=True,text=True).stdout.strip()\nchanged={l.strip() for l in subprocess.run(['git','diff','--name-only',base,'HEAD'],capture_output=True,text=True).stdout.splitlines() if l.strip()}\nchanged|={l[3:].strip() for l in subprocess.run(['git','status','--porcelain'],capture_output=True,text=True).stdout.splitlines() if l[3:].strip()}\ndef covered(p):\n    o=set()\n    for c in d['commands']:\n        t=c['cmd']\n        if t.startswith(p) and '--files' in t and c['exit_code']==0:\n            k=shlex.split(t); o|=set(k[k.index('--files')+1:])\n    return o\ngaps={n:sorted(changed-covered(p)) for n,p in (('G-1','python3 ci/gates/check_ownership.py'),('G-3','python3 ci/gates/check_secrets.py')) if sorted(changed-covered(p))}\nmis=[]\nfor i,c in enumerate(d['commands']):\n    t=c['cmd']\n    if not t.startswith('python3 ci/gates/'): continue\n    r=subprocess.run(shlex.split(t),capture_output=True,text=True)\n    if not (r.returncode==c['exit_code'] and c['output_tail'].split(' \\u2014 ')[0].strip() in (r.stdout+r.stderr)): mis.append(i)\nprint({'changed_paths':len(changed),'uncovered':gaps,'rerun_mismatches':mis})\nsys.exit(1 if gaps or mis else 0)\"",
+      "cmd": "python3 -c \"import json, shlex, subprocess, sys\nR='.receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json'\nBASE=sys.argv[1] if len(sys.argv)>1 else 'origin/main'\nd=json.load(open(R))\ndef sh(a):\n    r=subprocess.run(a,capture_output=True,text=True)\n    if r.returncode!=0: sys.exit(\\\"audit: '%s' failed rc=%d: %s\\\" % (' '.join(a),r.returncode,r.stderr.strip().splitlines()[0][:120]))\n    return r.stdout\nbase=sh(['git','merge-base',BASE,'HEAD']).strip()\nif not base: sys.exit('audit: merge-base returned no commit')\nchanged={l.strip() for l in sh(['git','diff','--name-only',base,'HEAD']).splitlines() if l.strip()}\nfor l in sh(['git','status','--porcelain']).splitlines():\n    if not l or l[:2]=='??': continue\n    p=l[3:].strip()\n    if '->' in p: p=p.split('->')[-1].strip()\n    if p: changed.add(p)\ndef covered(p):\n    o=set()\n    for c in d['commands']:\n        t=c['cmd']\n        if t.startswith(p) and '--files' in t and c['exit_code']==0:\n            k=shlex.split(t); o|=set(k[k.index('--files')+1:])\n    return o\ngaps={n:sorted(changed-covered(p)) for n,p in (('G-1','python3 ci/gates/check_ownership.py'),('G-3','python3 ci/gates/check_secrets.py')) if sorted(changed-covered(p))}\nmis=[]\nfor i,c in enumerate(d['commands']):\n    t=c['cmd']\n    if not t.startswith('python3 ci/gates/'): continue\n    r=subprocess.run(shlex.split(t),capture_output=True,text=True)\n    if not (r.returncode==c['exit_code'] and c['output_tail'].split(' \\u2014 ')[0].strip() in (r.stdout+r.stderr)): mis.append(i)\nprint({'changed_paths':len(changed),'uncovered':gaps,'rerun_mismatches':mis})\nsys.exit(1 if gaps or mis else 0)\"",
       "exit_code": 0,
       "output_tail": "{'changed_paths': 5, 'uncovered': {}, 'rerun_mismatches': []}",
-      "note": "Self-audit, rewritten in round 5. The round-4 version only re-ran the recorded commands as written, so a path added to the change but never added to a --files list still passed on the shorter list and the audit reported no mismatch — it could not detect the drift it was added to prevent. This version derives the changed set from git (merge-base diff plus working tree) and fails when any changed path is absent from the union of the recorded G-1 and G-3 --files lists, in addition to re-running every recorded gate command. Negative-tested: editing a sixth file without adding it to the lists produces uncovered={'G-1': ['docs/handoff-contracts.md'], 'G-3': [...]} and exit 1; reverting returns it to exit 0."
+      "note": "Self-audit. Round 4 added it, round 5 made it derive the changed set from git rather than from the receipt, round 6 made it survive being re-run somewhere other than this working copy. It fails when any changed path is missing from the union of the recorded G-1 and G-3 --files lists, and re-runs every recorded gate command. Every git call is now checked: a failed merge-base or diff aborts with a message instead of yielding an empty changed set and a silent all-clear. The changed set is committed diff plus tracked staged/unstaged edits; '??' untracked entries are excluded because they are not part of the branch's change until staged, and because git reports an untracked directory as a bare directory path that no --files list would ever name. Base ref is argv[1], default origin/main, for checkouts that name it differently."
     }
   ],
   "greptile": {
     "pr": 13,
-    "rounds_completed": 5,
-    "note": "All findings from all five rounds addressed in code on this branch. No waiver requested in any round, and none would be valid here: no instruction from Ove exists for this PR. Rounds 4 and 5 found defects in this receipt itself rather than in the documentation; round 5 found that the round-4 fix did not do what its note claimed.",
+    "rounds_completed": 6,
+    "note": "All findings from all six rounds addressed in code on this branch. No waiver requested in any round, and none would be valid here: no instruction from Ove exists for this PR. Rounds 4, 5 and 6 found defects in this receipt rather than in the documentation, each one in the previous round's fix to it.",
+    "round_6_findings": [
+      {
+        "id": "4137425448",
+        "severity": "P2",
+        "title": "Missing base yields false coverage",
+        "verdict": "VALID, and the more serious of the two — a false pass. The round-5 audit ignored the exit status of git merge-base and git diff. Reproduced: 'git merge-base origin/nonexistent HEAD' exits 128, base became empty, the diff yielded nothing, and on a clean tree the audit printed {'changed_paths': 0, 'uncovered': {}, 'rerun_mismatches': []} and exited 0 — reporting full G-1/G-3 coverage having checked no path at all. Third instance on this branch of a check asserting more than it verifies, after the round-1 scanner guarantee and the round-5 audit.",
+        "disposition": "FIXED — every git call goes through a helper that aborts with the failing command, its exit code and its first stderr line. Negative-tested: the new audit with a bad base exits 1 with \"audit: 'git merge-base origin/nonexistent HEAD' failed rc=128\", where the round-5 audit exited 0 on the same input."
+      },
+      {
+        "id": "4137425459",
+        "severity": "P2",
+        "title": "Untracked directories fail audit",
+        "verdict": "VALID — a false failure. Reproduced: with an unrelated untracked directory present, 'git status --porcelain' emits the bare directory entry '?? scratchprobe/', which the round-5 audit added to the changed set. No --files list names a directory, so it was reported uncovered and the audit failed at exit 1 even though every PR path had been checked.",
+        "disposition": "FIXED — '??' entries are excluded from the changed set. They are untracked, so they are not part of the branch's change until staged, and git reports an untracked directory as a bare directory path that no --files list would ever name. The changed set is now the committed diff against merge-base plus tracked staged and unstaged edits, with rename arrows resolved to the new path. Negative-tested with the same untracked directory present: the new audit exits 0 where the round-5 audit exited 1. The round-5 drift detection is retained and re-tested — an uncovered sixth file still yields uncovered={'G-1': ['docs/handoff-contracts.md'], 'G-3': [...]} and exit 1."
+      }
+    ],
     "round_5_findings": [
       {
         "id": "4137366660",
@@ -239,7 +255,7 @@
       "evidence_command_index": 13
     },
     {
-      "claim": "Every path changed on this branch, derived from git rather than from the receipt, appears in the union of the recorded G-1 and G-3 --files lists, and every recorded gate command re-runs to its recorded exit code and output. Negative-tested: an added path that is absent from those lists makes this check fail",
+      "claim": "Every path changed on this branch — committed diff against merge-base plus tracked staged and unstaged edits, derived from git rather than from the receipt — appears in the union of the recorded G-1 and G-3 --files lists, and every recorded gate command re-runs to its recorded exit code and output. Negative-tested in three directions: an uncovered path fails it, an unreachable base ref aborts it rather than passing it, and an unrelated untracked directory does not fail it",
       "evidence_command_index": 14
     }
   ],

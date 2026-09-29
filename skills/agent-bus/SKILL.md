@@ -69,12 +69,23 @@ If any hit, confirm with the operator before a second launch. If you cannot chec
 not assume none exist. Two jobs on one goal produce two branches and a merge race that a human has to untangle.
 
 Pass `idempotency_key` on `agent_bus_start_job` whenever re-entry is plausible; key it on `graphId` plus the
-node subset so a retry collapses into the original job instead of duplicating it.
+node subset. **Do not treat it as retry protection.** Whether the bus deduplicates on that field is
+unverified — `docs/intake-e2e-runbook.md` states the desk does not claim the server dedupes on it — so
+assuming it does is how an operator retries an ambiguous start and gets two jobs. The check above plus the
+recorded `jobId` in step 3 are the actual protection; the key is a hint to the server, not a guarantee.
 
 ### 3. Start the job
 
 `agent_bus_start_job` — required `runtime` and `goal`; optional `provider`, `idempotency_key`. Returns
 `jobId`, status, and `wsUrl`.
+
+**Write the `jobId` to the receipt the moment the start call returns — before you wait on it.** The step-2
+idempotency check reads `jobId`s out of `.receipts/bot-00-programming-lead/`, so a `jobId` that lives only in
+this session's tool output is invisible to the next dispatcher. If the run stops between the start call and
+the end of step 6 — timeout, lost connection, operator interrupt — the job keeps running with no durable
+record, the next dispatcher's check finds no receipt, no PR and no Notion agent id, and it launches the same
+work a second time. A receipt stub holding `agent_id`, the runtime and the `graphId` is enough; the remaining
+fields are filled in at step 6.
 
 `goal` carries the **full** GitHub work packet and the second-uplift XML, and the same text goes in the draft
 PR body. A paraphrased `goal` means the runtime implements something the PR cannot be reviewed against.
@@ -92,8 +103,8 @@ for the token.
 
 ### 4. Wait, then read
 
-`agent_bus_wait_job` — required `job_id`; timeout default 180s, max 600. Terminal states are `completed`,
-`failed`, `error`, or timeout.
+`agent_bus_wait_job` — required `job_id`; `timeout_sec` default 180 (max 600), `poll_sec` default 2. Terminal
+states are `completed`, `failed`, `error`, or timeout.
 
 **Timeout is not failure.** On timeout call `agent_bus_get_job` (required `job_id`) for the snapshot and, if
 the job is still running, wait again on the same `job_id`. Starting a second job because the first timed out
@@ -109,10 +120,11 @@ report. If there is no PR, that is the finding: report the job id and the absent
 
 ### 6. Receipt
 
-Write `.receipts/bot-00-programming-lead/<task_id>.json` per `skills/verification-receipts/SKILL.md` (G-2), with
-`lane: "B"`, the runtime used, `agent_id` set to the `jobId` or `null`, each `agent_bus_*` call under `commands`
-with its `output_tail`, and `pr_url` only when a PR was actually observed. Honest `unverified` and `blockers`
-entries are success.
+Complete the stub started in step 3: `.receipts/bot-00-programming-lead/<task_id>.json` per
+`skills/verification-receipts/SKILL.md` (G-2), with `lane: "B"`, the runtime used, `agent_id` already holding
+the `jobId` (or `null` when no job was started), each `agent_bus_*` call under `commands` with its
+`output_tail`, and `pr_url` only when a PR was actually observed. Honest `unverified` and `blockers` entries
+are success.
 
 ---
 
@@ -138,6 +150,8 @@ Bus job** — two runtimes on one goal produce two branches.
 | `agent_bus_wait_job` times out | `agent_bus_get_job`, then wait again on the same `job_id` | Start a second job |
 | Job `completed`, no PR on GitHub | Report the job id and the missing PR as the outcome | Report "done", or write a `pr_url` that was not observed |
 | Runtime absent from `agent_bus_health` | Blocker, or pick a listed runtime the operator approves | Start the job anyway and announce a launch |
+| Run stopped somewhere after the start call | Nothing is lost if step 3 wrote the stub: the next dispatcher finds the `jobId` and resumes with `agent_bus_get_job` | Leave the `jobId` only in session output — the next dispatcher sees no receipt, no PR, no agent id, and relaunches a job that is still running |
+| A retry might have started a second job | `agent_bus_get_job` on the recorded `jobId`, and ask the operator before starting anything | Assume `idempotency_key` collapsed them — server-side dedup is unverified |
 | Bus edited paths across seats | Blocker per G-1; contract-first per G-4 | Accept the diff because "the bus did it" |
 
 ## Worked examples
@@ -145,13 +159,18 @@ Bus job** — two runtimes on one goal produce two branches.
 **Good.** `agent_bus_health` → `status: ok`, `hermes` listed. No prior `jobId` for `ut-abc123-…` in receipts,
 no open PR citing it. `agent_bus_start_job` with `runtime: hermes`, full work packet plus second-uplift XML in
 `goal`, `idempotency_key` keyed on the graph id. Returns `jobId` and a `wsUrl` — socket not opened, noted as
-unused. `agent_bus_wait_job` times out at 180s → `agent_bus_get_job` shows `running` → wait again → `completed`.
-Draft PR confirmed on GitHub. Receipt lists all five calls, `agent_id` = `jobId`, `pr_url` set,
-`unverified: ["Greptile not run (QUALITY)"]`.
+unused. **`jobId` written to the receipt stub immediately, before waiting.** `agent_bus_wait_job` times out at
+180s → `agent_bus_get_job` shows `running` → wait again → `completed`. Draft PR confirmed on GitHub. Receipt
+completed: all five calls, `agent_id` = `jobId`, `pr_url` set, `unverified: ["Greptile not run (QUALITY)"]`.
 
 **Bad.** `agent_bus_health` returns unauthorized. LEAD SSHes the VPS, clones the repo, commits from the host,
 and reports the work landed. Three failures in one turn: the blocker was hidden, GitHub stopped being the
 source of truth, and no gate ran on the diff. The correct turn ends with a blocker and no code.
+
+**Also bad.** `agent_bus_start_job` returns `jobId` `j-7f21`; the session ends before the receipt is written.
+An hour later a dispatcher re-reads the ticket, finds no receipt, no PR and no Notion agent id, and starts a
+second job — while `j-7f21` is still running and about to open its own branch. The start call was fine; not
+persisting its one durable output is what caused the duplicate.
 
 ---
 

@@ -47,7 +47,7 @@ table, the live schema wins and this document is the thing to fix.
 | `agent_bus_health` | loopback health | `status` and the available runtimes | none |
 | `agent_bus_start_job` | `POST /v1/jobs` | `jobId`, status, `wsUrl` | required `runtime`, `goal`; optional `provider`, `idempotency_key` |
 | `agent_bus_get_job` | `GET /v1/jobs/{id}` | one job snapshot | required `job_id` |
-| `agent_bus_wait_job` | polls the snapshot | terminal state or timeout | required `job_id`; timeout default 180s, max 600 |
+| `agent_bus_wait_job` | polls the snapshot | terminal state or timeout | required `job_id`; `timeout_sec` default 180 (max 600), `poll_sec` default 2 |
 
 Terminal states from `agent_bus_wait_job`: `completed`, `failed`, `error`, or timeout. **Timeout is not
 failure** — the job may still be running, so re-check with `agent_bus_get_job` rather than starting a
@@ -89,6 +89,9 @@ Second-uplift XML (live Notion + Linear URLs) + runtime=hermes/bus runtime
 ├─▶ idempotency check         → existing job or open PR for this graphId? → confirm with operator first
 │
 ├─▶ agent_bus_start_job       → jobId  (runtime + goal; idempotency_key when re-entry is plausible)
+│        │
+│        └─▶ record jobId in the receipt NOW, before waiting. It is the job's only durable
+│            handle, and the next dispatcher's idempotency check reads it from there.
 │
 ├─▶ agent_bus_wait_job        → completed | failed | error | timeout
 │        └─ timeout ──▶ agent_bus_get_job. Do NOT start a second job.
@@ -125,6 +128,14 @@ Lane B dispatch writes `.receipts/bot-00-programming-lead/<task_id>.json` per
 `runtime: "hermes"` (or the bus runtime used), `agent_id` set to the `jobId` or `null`, and the
 `agent_bus_*` calls listed under `commands` with their `output_tail`.
 
+`agent_id` is written as soon as `agent_bus_start_job` returns, not at the end of the dispatch. A `jobId`
+held only in session output dies with the session, and the next dispatcher's idempotency check reads
+`jobId`s out of this directory — so an unrecorded job is an invisible running job, and the next dispatch
+duplicates it. A stub carrying `agent_id`, `runtime` and `graph_id` is enough until the rest is known.
+
+`idempotency_key` is **not** a substitute for that record. Whether the bus deduplicates on it is unverified
+(`docs/intake-e2e-runbook.md` does not claim the server dedupes), so it is a hint, not retry protection.
+
 What belongs in `unverified` rather than in a claim:
 
 - `pr_url` when no draft PR has been observed on GitHub.
@@ -142,6 +153,7 @@ What must never appear anywhere in a receipt: a bus token, a `wss` URL carrying 
 | Lane B E2E | `user-hermes-agent` is connected and `agent_bus_*` is the live path. **No desk job id plus draft PR has been recorded.** This document does not prove one |
 | Health snapshot age | `status: ok` and the runtime list are the 2026-09-24 observation. Re-run `agent_bus_health` before dispatch rather than trusting this table |
 | `wsUrl` streaming | Never exercised from the desk. Token-gated and out of desk scope |
+| `idempotency_key` dedup | Accepted by `agent_bus_start_job`, but the desk has never confirmed the bus collapses a repeat on it. Treat it as a hint; the recorded `jobId` is the real duplicate guard |
 | Bus API surface | Only the endpoints the four MCP tools wrap are documented. Anything else on `vps-agent-bus` is undocumented here on purpose |
 | VPS Hermes repos | Present on the host (`github-sot-orchestration.md` §5.2), not wired as desk runtime |
 

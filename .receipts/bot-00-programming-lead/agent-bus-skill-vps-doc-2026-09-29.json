@@ -45,13 +45,38 @@
       "cmd": "git diff --name-only origin/main",
       "exit_code": 0,
       "duration_s": 0.02,
-      "output_tail": "docs/intake-e2e-runbook.md\ndocs/vps-agent-bus.md\nskills/agent-bus/SKILL.md"
+      "output_tail": ".receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\ndocs/intake-e2e-runbook.md\ndocs/vps-agent-bus.md\nskills/agent-bus/SKILL.md",
+      "note": "Re-run against the complete branch after the receipt was committed. The first run of this command listed only three files because it predated the receipt commit, which made the original four-path claim unsubstantiated — Greptile P1/P2 round, comment 4137143669."
     },
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json --bot bot-00-programming-lead --strict",
       "exit_code": 1,
       "duration_s": 0.03,
       "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c '<content assertions, extended for the Greptile round: jobId persisted before waiting; idempotency_key not presented as a guarantee; timeout_sec/poll_sec arg names aligned with the live descriptor; runbook carries no surviving \"not in the tree\" claim about these two paths>'",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "ok: 4 tools, frontmatter, stdio-uninstalled, jobId-before-wait, idempotency-not-guaranteed, arg names aligned, runbook consistent, no credential literals"
+    },
+    {
+      "cmd": "grep -n 'agent-bus\\|vps-agent-bus' docs/intake-e2e-runbook.md | grep -in 'not in\\|not on\\|not a file\\|until it lands\\|absent\\|does not exist'",
+      "exit_code": 1,
+      "duration_s": 0.02,
+      "output_tail": "NONE — all contradictions resolved (grep exit 1 = no match, which is the wanted result)"
     }
   ],
   "claims": [
@@ -76,13 +101,29 @@
       "evidence_command_index": 4
     },
     {
-      "claim": "The diff against origin/main is limited to skills/agent-bus/SKILL.md, docs/vps-agent-bus.md, and docs/intake-e2e-runbook.md, all owned by bot-00.",
+      "claim": "The diff against origin/main on the complete branch is four paths — skills/agent-bus/SKILL.md, docs/vps-agent-bus.md, docs/intake-e2e-runbook.md, and this receipt — all owned by bot-00. The earlier wording named only the first three because the evidence command had been run before the receipt was committed.",
       "evidence_command_index": 5
     },
     {
       "claim": "G-2 fails closed on this receipt while approved_by is empty. That empty field is intentional — LEAD does not self-approve. It is not a completed approval and not a passing gate.",
       "evidence_command_index": 6,
       "expects_failure": true
+    },
+    {
+      "claim": "Greptile round 1 on PR #14 raised one P1 and four P2. Four were valid and are fixed in this branch: the P1 lost-jobId gap (the skill now writes the jobId to the receipt the moment agent_bus_start_job returns, since the step-2 idempotency check reads jobIds from .receipts/ and a session-only jobId is an invisible running job); the P2 idempotency_key overclaim (both files now state server-side dedup is unverified, matching docs/intake-e2e-runbook.md, which already declined to claim it); the P2 stale changed-file claim in this receipt; and the P2 runbook self-contradiction. G-1 and G-3 still pass on all four paths after the fixes.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "No secret was introduced by the Greptile round. G-3 passes on the complete four-path branch.",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "The extended content assertions pass: the jobId-before-waiting rule is present in both files, neither presents idempotency_key as retry protection, and agent_bus_wait_job now uses the live descriptor's timeout_sec and poll_sec names instead of the looser 'timeout default 180s' phrasing.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "The runbook no longer contradicts itself about these two paths. Greptile cited line 146; four further places said the same thing (the BUS_TOKEN paragraph, both ownership-table rows, and the unverified list) and all five are corrected, so no surviving line tells an operator the skill is absent.",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [
@@ -92,7 +133,8 @@
     "wsUrl streaming was never exercised. The bus token is not held by the desk and was not sought.",
     "Greptile not run — that is QUALITY's gate, not LEAD's.",
     "pr_url is null at the time this receipt was written; the draft PR is opened in the same push.",
-    "skills/README.md still has no agent-bus row in its skill map. That file is owned by bot-06-quality-security, so LEAD did not edit it. QUALITY adds the row, or a follow-up PR does.",
+    "skills/README.md still has no agent-bus row in its skill map. That file is owned by bot-06-quality-security, so LEAD did not edit it — adding the row from this PR would be a G-1 FOREIGN cross-seat edit. Greptile round 1 raised this as a P2 (comment 4137143680) and acknowledged it as follow-up work; it cannot be fixed from this PR. QUALITY adds the row, or a follow-up PR under bot-06 does.",
+    "Server-side deduplication on idempotency_key is unverified. The skill and the doc now say so rather than presenting the field as retry protection. Confirming it needs a live bus experiment the desk has not run.",
     "ci/gates/run_all.py was not run as a suite; the three gates relevant to this docs-only diff (G-1 manifest, G-1 per-file, G-3) were run individually and are recorded above.",
     "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval."
   ],

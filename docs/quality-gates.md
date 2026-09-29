@@ -227,6 +227,7 @@ local edit
     → independent review stamps approved_by, then re-runs run_all.py
          QUALITY (bot-06) for a build seat's work
          LEAD (bot-00) or a human for QUALITY's own work — bot-06 never stamps itself
+         a human, and only a human, for a change to the gates themselves
     → full G-1…G-6 green, recorded with the Greptile status in the merge-claim receipt
     → merge (human, protected branch)
 ```
@@ -254,9 +255,12 @@ pointed at it. The bare form above is correct only for a diff that touches no co
 python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
 ```
 
-The change document declares `change_id`, `proposed_by`, `surface`, `breaking`, `version` and
-`summary`, plus consumer acknowledgements. See `docs/cross-bot-protocol.md` and
-`skills/contract-first-changes`.
+The change document declares `change_id`, `proposed_by`, `surface`, `breaking`, `version`,
+`summary` and `semantic_changes`, plus consumer acknowledgements. `semantic_changes` is
+mandatory **even when empty** — set it to `[]` to confirm there are none. Omitting it fails G-4
+with `missing 'semantic_changes'`, on non-breaking changes too, because no tool can detect a
+field whose meaning changed while its name and type did not. See `docs/cross-bot-protocol.md`
+and `skills/contract-first-changes`.
 
 The last command is expected to fail on `approved_by` alone. Any *other* G-2 problem is the
 seat's to fix before pushing. `run_all.py` is the full run, and it first comes back green after
@@ -270,6 +274,16 @@ The stamp then comes from LEAD (`bot-00-programming-lead`) or from a human, reco
 Until that independent stamp lands, the receipt's `approved_by` stays **absent**, not
 self-filled, and G-2 fails closed — which is the correct state for a QUALITY-authored change
 awaiting review, not a defect to engineer around.
+
+**A change to the gates themselves needs a human, and LEAD's stamp will not do.** For edits
+under `ci/gates/**` and `ci/hooks/**`, `approved_by` must be a person: *"You never approve your
+own gate change. A human does"* (`prompts/QUALITY.xml`), echoed by the QUALITY checklist in
+`skills/greptile-merge-gate`. **G-2 cannot enforce this**, and that is the point of stating it
+here: `check_receipt.py` only compares the approver against the authoring bot, so a LEAD stamp
+on a gate change passes the gate while breaking the rule. The gate that guards the gates is the
+one place the evidence has to come from outside the system, so the reviewer who accepts a gate
+change is accepting it on the record, not on a green check. This is a policy constraint the
+receipt carries; it is not something the tooling will catch for you.
 
 Greptile is not part of dispatch and not part of implementation. It cannot run before the draft
 PR exists, which is why a seat finishing its work has satisfied at most half of what a merge

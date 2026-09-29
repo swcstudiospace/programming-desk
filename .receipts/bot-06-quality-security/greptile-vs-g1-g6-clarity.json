@@ -10,6 +10,7 @@
   "grok_run": "20260929T184102Z-79fbb9a3",
   "paths_changed": [
     "docs/quality-gates.md",
+    "docs/cross-bot-protocol.md",
     "skills/greptile-merge-gate/SKILL.md",
     "skills/README.md",
     ".receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json"
@@ -72,12 +73,47 @@
       "cmd": "python3 -c \"import subprocess, re\nfrom pathlib import Path\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml'],capture_output=True,text=True)\ng4=(r.returncode==1 and 'no change document supplied' in r.stderr)\nvals=set()\nfor p in Path('.receipts/bot-06-quality-security').glob('*.json'): vals |= set(re.findall(r'\\\"approved_by\\\":\\s*\\\"([^\\\"]+)\\\"', p.read_text()))\nlead='bot-00-programming-lead' in vals\nhuman=any(v.startswith('human:') for v in vals)\nqg=Path('docs/quality-gates.md').read_text()\nneed=['add --change <doc> for contract work','contract surfaces changed but no change document supplied','When QUALITY is the author, QUALITY is not the approver','LEAD (bot-00) or a human for QUALITY','human:<name>','contracts/changes/<change-id>.yaml']\nmiss=[n for n in need if n not in qg]\nprint({'g4_fails_without_change':g4,'lead_stamp_precedent':lead,'human_stamp_precedent':human,'missing_doc_text':miss})\nraise SystemExit(0 if g4 and lead and human and not miss else 1)\"",
       "exit_code": 0,
       "output_tail": "{'g4_fails_without_change': True, 'lead_stamp_precedent': True, 'human_stamp_precedent': True, 'missing_doc_text': []}"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files openapi.yaml --change <change doc built from the pre-fix docs/cross-bot-protocol.md example>",
+      "exit_code": 1,
+      "expects_failure": true,
+      "output_tail": "G-4 FAIL — missing 'semantic_changes' — declare any field whose MEANING changed without its name or type changing, or set it to [] to confirm there are none.",
+      "note": "Reproduces the round-3 P1: the repo's own documented change-document example failed the gate it documents, and the failure message cited that same file."
+    },
+    {
+      "cmd": "python3 -c \"import subprocess, yaml\nfrom pathlib import Path\ntxt=Path('docs/cross-bot-protocol.md').read_text()\nblk=txt.split('A contract change states:')[1].split(chr(96)*3+'yaml')[1].split(chr(96)*3)[0]\ndoc=yaml.safe_load(blk); Path('/tmp/fixed.yaml').write_text(blk)\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml','--change','/tmp/fixed.yaml'],capture_output=True,text=True)\nqg=Path('docs/quality-gates.md').read_text()\nneed=['and '+chr(96)+'semantic_changes'+chr(96),'mandatory **even when empty**','a human, and only a human, for a change to the gates themselves','G-2 cannot enforce this']\nmiss=[n for n in need if n not in qg]\nprint({'example_has_semantic_changes':'semantic_changes' in doc,'example_g4_rc':r.returncode,'missing_doc_text':miss})\nraise SystemExit(0 if 'semantic_changes' in doc and r.returncode==0 and not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'example_has_semantic_changes': True, 'example_g4_rc': 0, 'missing_doc_text': []}",
+      "note": "Extracts the change-document example straight out of docs/cross-bot-protocol.md and feeds it to G-4, so the doc is verified against the gate rather than by inspection."
+    },
+    {
+      "cmd": "python3 -c \"import re\nfrom pathlib import Path\nq=Path('prompts/QUALITY.xml').read_text()\nhits=[l.strip() for l in q.splitlines() if 'own gate' in l or 'gates themselves' in l]\nsk='No self-approval of QUALITY' in Path('skills/greptile-merge-gate/SKILL.md').read_text()\nprint({'quality_prompt_human_gate_rules':len(hits),'skill_checklist_rule':sk,'greptile_kb_doc_in_repo':Path('docs/quality-enforcement.md').exists()})\nraise SystemExit(0 if hits and sk else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'quality_prompt_human_gate_rules': 5, 'skill_checklist_rule': True, 'greptile_kb_doc_in_repo': False}",
+      "note": "Confirms the human-approval-for-gate-changes rule against this repo's own prompts and skill, and records that the knowledge-base document Greptile cited is not a file in this repo."
     }
   ],
   "greptile": {
     "pr": 13,
-    "rounds_completed": 2,
-    "note": "All findings from both rounds addressed in code on this branch. No waiver requested in either round, and none would be valid here: no instruction from Ove exists for this PR.",
+    "rounds_completed": 3,
+    "note": "All findings from all three rounds addressed in code on this branch. No waiver requested in any round, and none would be valid here: no instruction from Ove exists for this PR.",
+    "round_3_findings": [
+      {
+        "id": "4137248806",
+        "severity": "P1",
+        "title": "Required contract field omitted",
+        "verdict": "VALID — check_contracts.py:150 requires semantic_changes outside REQUIRED_CHANGE_FIELDS, unconditionally, so it applies to non-breaking changes too; docs/handoff-contracts.md:76 states the same rule",
+        "disposition": "FIXED — the field list in docs/quality-gates.md now includes semantic_changes, says it is mandatory even when empty, gives the [] form and names the failure text. Greptile also noted the linked example omitted it: docs/cross-bot-protocol.md:84 was a working change document that failed the gate it documents, and whose failure message points back at that same file. Reproduced, then fixed with the key and a comment explaining why it is mandatory. The example extracted from the doc now passes G-4."
+      },
+      {
+        "id": "4137248789",
+        "severity": "P1",
+        "title": "Gate changes need human approval",
+        "verdict": "VALID — and corroborated inside this repo, not only in Greptile's knowledge base (docs/quality-enforcement.md is a Greptile KB document and does not exist here). prompts/QUALITY.xml:565, :729, :749 and :782 all require a human on QUALITY's own gate change, and skills/greptile-merge-gate/SKILL.md:49 repeats it. The round-2 text said 'LEAD or a human', which is too permissive for ci/gates/** and ci/hooks/**.",
+        "disposition": "FIXED — the sequence adds a third approver line for gate changes (a human, and only a human), and a paragraph states the rule for ci/gates/** and ci/hooks/**, cites prompts/QUALITY.xml, and says explicitly that G-2 cannot enforce it: check_receipt.py only compares the approver against the authoring bot, so a LEAD stamp on a gate change passes the gate while breaking the rule. Recorded as a policy constraint the receipt carries, not something the tooling catches."
+      }
+    ],
     "round_2_findings": [
       {
         "id": "4137190103",
@@ -159,6 +195,19 @@
     {
       "claim": "Both approver forms the doc names for QUALITY-authored work — bot-00-programming-lead and human:<name> — already appear in approved_by under .receipts/bot-06-quality-security/, and the round-2 corrections are present in the doc",
       "evidence_command_index": 10
+    },
+    {
+      "claim": "The change-document example in docs/cross-bot-protocol.md failed G-4 for a missing semantic_changes key before this change",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "The example extracted from docs/cross-bot-protocol.md now passes G-4, and the round-3 corrections are present in docs/quality-gates.md",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The human-approval-for-gate-changes rule is stated in this repo's own prompts/QUALITY.xml and skills/greptile-merge-gate, independent of the Greptile knowledge-base document that is not a file here",
+      "evidence_command_index": 13
     }
   ],
   "rollback_plan": {
@@ -171,6 +220,8 @@
     "Greptile ran on PR 13 and posted three findings (round 1), all addressed in code. No terminal review status is claimed for the fixed tip: a new review must run on it, and this receipt does not assert its outcome. No merge is requested.",
     "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; the divergence is declared in docs/quality-gates.md instead, and reconciling §4.2 is LEAD's change to make.",
     "Existing waiver receipts under .receipts/bot-06-quality-security/ predate the explicit-Ove-instruction rule and were not rewritten.",
+    "This change touches no gate script, so the human-only approval rule it now documents for ci/gates/** and ci/hooks/** does not bind this PR: a LEAD stamp would be valid here. Neither a LEAD nor a human stamp has been obtained.",
+    "docs/cross-bot-protocol.md was edited beyond the original scope to fix the change-document example Greptile identified. The file is bot-06-owned so G-1 passes, but it was not part of the work order; the example was a live trap that docs/quality-gates.md now links to, and the gate's own failure message cites that file.",
     "No GitHub Actions workflow exists in this repo, so the 'CI' column in the new table describes run_all.py as the entry point rather than an observed pipeline run. Actions wiring is out of scope for this change.",
     "ci/tests/test_gates.py was not run; this change touches no gate script.",
     "G-5/G-6 were exercised against this receipt only; no deployment or destructive operation was performed."

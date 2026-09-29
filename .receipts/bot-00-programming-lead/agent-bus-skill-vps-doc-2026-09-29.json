@@ -15,19 +15,19 @@
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 manifest OK — 7 bots, 90 rules"
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 90 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files skills/agent-bus/SKILL.md docs/vps-agent-bus.md docs/intake-e2e-runbook.md .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --files skills/agent-bus/SKILL.md docs/vps-agent-bus.md docs/intake-e2e-runbook.md",
       "exit_code": 0,
       "duration_s": 0.3,
-      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 -c 'import re; from pathlib import Path; s=Path(\"skills/agent-bus/SKILL.md\").read_text(); d=Path(\"docs/vps-agent-bus.md\").read_text();\nfor t in [\"agent_bus_health\",\"agent_bus_start_job\",\"agent_bus_get_job\",\"agent_bus_wait_job\"]:\n    assert t in s and t in d, t\nassert s.startswith(\"---\\nname: agent-bus\\ndescription: \")\nfor name,txt in ((\"skill\",s),(\"doc\",d)):\n    plain=txt.replace(\"**\",\"\").lower(); assert \"hermes-mcp-bridge.mjs\" in plain, name; assert \"uninstall\" in plain, name; assert \"handoff_to_hermes\" in txt, name; assert \"draft pr\" in plain, name; assert re.search(r\"do not (rebuild|recreate|reinstall)\", plain), name\nassert \"Never in a goal, PR, receipt, commit, or chat\" in s\nassert \"not part of the tool result\" in d\nassert \"/v1/jobs\" in d\nassert not re.search(r\"(?i)(api[_-]?key|BUS_TOKEN\\s*=|Bearer\\s+[A-Za-z0-9])\", s+d)\nprint(\"ok\")'",
@@ -39,44 +39,45 @@
       "cmd": "git diff --stat origin/main -- ownership.yaml",
       "exit_code": 0,
       "duration_s": 0.02,
-      "output_tail": "(empty — ownership.yaml is byte-identical to origin/main)"
+      "output_tail": "(empty \u2014 ownership.yaml is byte-identical to origin/main)"
     },
     {
       "cmd": "git diff --name-only origin/main",
       "exit_code": 0,
       "duration_s": 0.02,
       "output_tail": ".receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\ndocs/intake-e2e-runbook.md\ndocs/vps-agent-bus.md\nskills/agent-bus/SKILL.md",
-      "note": "Re-run against the complete branch after the receipt was committed. The first run of this command listed only three files because it predated the receipt commit, which made the original four-path claim unsubstantiated — Greptile P1/P2 round, comment 4137143669."
+      "note": "Re-run against the complete branch after the receipt was committed. The first run of this command listed only three files because it predated the receipt commit, which made the original four-path claim unsubstantiated \u2014 Greptile P1/P2 round, comment 4137143669."
     },
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json --bot bot-00-programming-lead --strict",
       "exit_code": 1,
       "duration_s": 0.03,
-      "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-00-programming-lead: 4 file(s) within owned paths"
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
       "exit_code": 0,
       "duration_s": 0.4,
-      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS \u2014 4 file(s) scanned, no secrets detected"
     },
     {
-      "cmd": "python3 -c '<content assertions, extended for the Greptile round: jobId persisted before waiting; idempotency_key not presented as a guarantee; timeout_sec/poll_sec arg names aligned with the live descriptor; runbook carries no surviving \"not in the tree\" claim about these two paths>'",
+      "cmd": "python3 -c 'import re; from pathlib import Path; s=Path(\"skills/agent-bus/SKILL.md\").read_text(); d=Path(\"docs/vps-agent-bus.md\").read_text();\nassert \"Write the `jobId` to the receipt the moment the start call returns\" in s;\nassert \"before you wait on it\" in s;\nassert \"`agent_id` is written as soon as `agent_bus_start_job` returns, not at the end of the dispatch.\" in d;\nassert \"record jobId in the receipt NOW, before waiting\" in d;\nassert \"Do not treat it as retry protection.\" in s;\nassert \"the key is a hint to the server, not a guarantee\" in s;\nassert \"is **not** a substitute for that record\" in d;\nassert \"it is a hint, not retry protection\" in d;\nassert \"server-side dedup is unverified\" in s;\nassert \"`timeout_sec` default 180 (max 600), `poll_sec` default 2\" in s;\nassert \"`timeout_sec` default 180 (max 600), `poll_sec` default 2\" in d;\nassert not re.search(r\"timeout default 180s\", s+d);\nassert not re.search(r\"(?i)(api[_-]?key|BUS_TOKEN\\s*=|Bearer\\s+[A-Za-z0-9])\", s+d);\nprint(\"ok: jobId-before-wait in both files; idempotency_key not a guarantee in both; timeout_sec/poll_sec aligned; no stale phrasing; no credential literals\")'",
       "exit_code": 0,
       "duration_s": 0.05,
-      "output_tail": "ok: 4 tools, frontmatter, stdio-uninstalled, jobId-before-wait, idempotency-not-guaranteed, arg names aligned, runbook consistent, no credential literals"
+      "output_tail": "ok: jobId-before-wait in both files; idempotency_key not a guarantee in both; timeout_sec/poll_sec aligned; no stale phrasing; no credential literals",
+      "note": "Verbatim, re-executable. The earlier entry for this index paraphrased the assertions in angle brackets instead of recording the command, which a reviewer could not reproduce and the gate would have accepted on the recorded exit code alone \u2014 Greptile round 2 P1, comment 4137232677."
     },
     {
       "cmd": "grep -n 'agent-bus\\|vps-agent-bus' docs/intake-e2e-runbook.md | grep -in 'not in\\|not on\\|not a file\\|until it lands\\|absent\\|does not exist'",
       "exit_code": 1,
       "duration_s": 0.02,
-      "output_tail": "NONE — all contradictions resolved (grep exit 1 = no match, which is the wanted result)"
+      "output_tail": "NONE \u2014 all contradictions resolved (grep exit 1 = no match, which is the wanted result)"
     }
   ],
   "claims": [
@@ -97,20 +98,24 @@
       "evidence_command_index": 3
     },
     {
-      "claim": "ownership.yaml is unchanged from origin/main — the manifest already matched both new paths, so nothing needed editing there.",
+      "claim": "ownership.yaml is unchanged from origin/main \u2014 the manifest already matched both new paths, so nothing needed editing there.",
       "evidence_command_index": 4
     },
     {
-      "claim": "The diff against origin/main on the complete branch is four paths — skills/agent-bus/SKILL.md, docs/vps-agent-bus.md, docs/intake-e2e-runbook.md, and this receipt — all owned by bot-00. The earlier wording named only the first three because the evidence command had been run before the receipt was committed.",
+      "claim": "The diff against origin/main on the complete branch is four paths \u2014 skills/agent-bus/SKILL.md, docs/vps-agent-bus.md, docs/intake-e2e-runbook.md, and this receipt \u2014 all owned by bot-00. The earlier wording named only the first three because the evidence command had been run before the receipt was committed.",
       "evidence_command_index": 5
     },
     {
-      "claim": "G-2 fails closed on this receipt while approved_by is empty. That empty field is intentional — LEAD does not self-approve. It is not a completed approval and not a passing gate.",
+      "claim": "G-2 fails closed on this receipt while approved_by is empty. That empty field is intentional \u2014 LEAD does not self-approve. It is not a completed approval and not a passing gate.",
       "evidence_command_index": 6,
       "expects_failure": true
     },
     {
-      "claim": "Greptile round 1 on PR #14 raised one P1 and four P2. Four were valid and are fixed in this branch: the P1 lost-jobId gap (the skill now writes the jobId to the receipt the moment agent_bus_start_job returns, since the step-2 idempotency check reads jobIds from .receipts/ and a session-only jobId is an invisible running job); the P2 idempotency_key overclaim (both files now state server-side dedup is unverified, matching docs/intake-e2e-runbook.md, which already declined to claim it); the P2 stale changed-file claim in this receipt; and the P2 runbook self-contradiction. G-1 and G-3 still pass on all four paths after the fixes.",
+      "claim": "Greptile round 1 on PR #14 raised one P1 and four P2. The P1 lost-jobId gap and the P2 idempotency_key overclaim are both fixed in the two files: the skill writes the jobId to the receipt the moment agent_bus_start_job returns (the step-2 idempotency check reads jobIds from .receipts/, so a session-only jobId is an invisible running job), and neither file presents idempotency_key as retry protection. agent_bus_wait_job now carries the live descriptor's timeout_sec and poll_sec names, and the stale 'timeout default 180s' phrasing is gone from both.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-1 still passes for bot-00-programming-lead on the complete four-path branch after the round-1 fixes. No path moved outside bot-00 ownership.",
       "evidence_command_index": 7
     },
     {
@@ -127,16 +132,17 @@
     }
   ],
   "unverified": [
-    "Lane B end to end is NOT verified by this change. No agent_bus_* call was made in this session — the desk MCP server user-hermes-agent was not reachable from this cloud container. The tool names, arguments, endpoints, terminal states, and the 2026-09-24 runtime list are transcribed from docs/github-sot-orchestration.md §5 and skills/trackplan-dispatch/SKILL.md, not from a live call in this session.",
+    "Lane B end to end is NOT verified by this change. No agent_bus_* call was made in this session \u2014 the desk MCP server user-hermes-agent was not reachable from this cloud container. The tool names, arguments, endpoints, terminal states, and the 2026-09-24 runtime list are transcribed from docs/github-sot-orchestration.md \u00a75 and skills/trackplan-dispatch/SKILL.md, not from a live call in this session.",
     "agent_bus_health was not re-run, so 'status: ok' and the runtimes hermes, muse, grok-build, omp, claude-code remain the 2026-09-24 desk-host observation. Both new files instruct the operator to re-run health before dispatch rather than trust the recorded snapshot.",
     "No Hermes or bus job was started, so there is no jobId and no Lane B draft PR to cite.",
     "wsUrl streaming was never exercised. The bus token is not held by the desk and was not sought.",
-    "Greptile not run — that is QUALITY's gate, not LEAD's.",
+    "Greptile not run \u2014 that is QUALITY's gate, not LEAD's.",
     "pr_url is null at the time this receipt was written; the draft PR is opened in the same push.",
-    "skills/README.md still has no agent-bus row in its skill map. That file is owned by bot-06-quality-security, so LEAD did not edit it — adding the row from this PR would be a G-1 FOREIGN cross-seat edit. Greptile round 1 raised this as a P2 (comment 4137143680) and acknowledged it as follow-up work; it cannot be fixed from this PR. QUALITY adds the row, or a follow-up PR under bot-06 does.",
+    "skills/README.md still has no agent-bus row in its skill map. That file is owned by bot-06-quality-security, so LEAD did not edit it \u2014 adding the row from this PR would be a G-1 FOREIGN cross-seat edit. Greptile round 1 raised this as a P2 (comment 4137143680) and acknowledged it as follow-up work; it cannot be fixed from this PR. QUALITY adds the row, or a follow-up PR under bot-06 does.",
     "Server-side deduplication on idempotency_key is unverified. The skill and the doc now say so rather than presenting the field as retry protection. Confirming it needs a live bus experiment the desk has not run.",
     "ci/gates/run_all.py was not run as a suite; the three gates relevant to this docs-only diff (G-1 manifest, G-1 per-file, G-3) were run individually and are recorded above.",
-    "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval."
+    "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval.",
+    "The reproducibility sweep covers the commands recorded in this receipt on this branch. It is not a claim that ci/gates/run_all.py passes as a suite: run_all.py requires --bot and --receipt and was not invoked, and G-2 still fails closed while approved_by is empty."
   ],
   "blockers": [],
   "files_changed": [
@@ -148,5 +154,12 @@
   "contract_changes": [],
   "rollback_plan": null,
   "approvals": [],
-  "approved_by": ""
+  "approved_by": "",
+  "reproducibility_check": {
+    "performed_at": "2026-09-29T19:06:00Z",
+    "method": "Every string in commands[].cmd was extracted from this receipt and re-executed with bash -c from the repo root, comparing each actual exit code against the recorded one.",
+    "result": "All 11 commands re-execute with their recorded exit codes, including the two intentional non-zero entries (index 6, G-2 fails closed while approved_by is empty; index 10, grep finds no match, which is the wanted result).",
+    "not_recorded_as_a_command": "This sweep is deliberately not itself an entry in commands[]: a command that re-executes every command in the receipt would include itself and recurse without terminating.",
+    "prompted_by": "Greptile round 2 P1, comment 4137232677 \u2014 commands[9] had held a prose paraphrase in angle brackets with a recorded exit_code of 0, which a reviewer could not reproduce and which G-2 would have accepted on the recorded exit code alone."
+  }
 }

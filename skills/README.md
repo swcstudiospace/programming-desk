@@ -22,6 +22,7 @@ came from the skill or from its application.
 | `trackplan-dispatch` | LEAD | Dispatch the second-uplift XML to Cursor Cloud Agent (default) or Hermes |
 | `greptile-merge-gate` | QUALITY | Merge-claim Greptile gate. Does not replace G-1…G-6 |
 | `verification-receipts` | all | The G-2 artefact. **Always loaded.** |
+| `pack-sync` | 5, 0, all | Refresh the box pack from GitHub `main`. One direction only — the pack never writes back |
 | `contract-first-changes` | 1, 6 | Breaking-change analysis, consumer impact |
 | `code-review` | 6 | Review order, what to flag, what to let go |
 | `debugging` | all | Reproduce → isolate → fix → verify |

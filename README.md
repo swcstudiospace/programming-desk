@@ -15,6 +15,7 @@ infrastructure — decomposed by platform, with ownership and verification enfor
 | Dense GoTxCoT double uplift (5–8 nodes, 4–8 sub-issues) | `docs/gotxcot-cloud-pipeline.md`, `skills/gotxcot-uplift/` |
 | Dispatch to Cursor Cloud Agent or Hermes | `skills/trackplan-dispatch/` |
 | GitHub source of truth, Greptile, Hermes lanes | `docs/github-sot-orchestration.md` |
+| Refresh the box pack from `main` after a merge | `docs/pack-sync.md`, `skills/pack-sync/` |
 | Know who owns which file | `ownership.yaml` |
 | See the gates and what enforces each | `docs/quality-gates.md` |
 | Build a feature spanning several bots | `docs/cross-bot-protocol.md` |
@@ -180,6 +181,7 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 │   ├── quality-gates.md         G-1..G-6: rule → script → evidence
 │   ├── gotxcot-cloud-pipeline.md  Double uplift, 5–8 nodes, 4–8 sub-issues
 │   ├── github-sot-orchestration.md  GitHub SoT, Cloud/Hermes, Greptile
+│   ├── pack-sync.md             main → box pack. One direction only
 │   ├── cross-bot-protocol.md    Contract-first protocol for multi-bot features
 │   └── handoff-contracts.md     Event envelope and payload schemas
 ├── prompts/
@@ -190,6 +192,7 @@ Make the gates **required status checks**. A gate that can be merged past is a s
 │   ├── gotxcot-uplift/          LEAD: first uplift → second uplift
 │   ├── trackplan-dispatch/      LEAD: Cursor Cloud Agent or Hermes
 │   ├── verification-receipts/   The G-2 artefact. Always loaded
+│   ├── pack-sync/               When to refresh the box pack from main
 │   ├── contract-first-changes/  Breaking-change analysis
 │   ├── code-review/             Review order; what to let go
 │   ├── debugging/               Reproduce → isolate → understand → fix → verify

@@ -3,7 +3,7 @@
   "bot": "bot-06-quality-security",
   "branch": "bot-06-quality-security/spe-5161-ios-roster-companion",
   "started_at": "2026-09-30T16:03:53Z",
-  "completed_at": "2026-09-30T17:44:20Z",
+  "completed_at": "2026-09-30T18:02:50Z",
   "commands": [
     {
       "cmd": "python3 -c \"import yaml; [yaml.safe_load(open(f)) for f in ['contracts/tool-rosters/ios.yaml','contracts/tool-packs/ios-local.yaml','contracts/tool-packs/ios-metavr.yaml','contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml']]\"",
@@ -58,6 +58,18 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "services/desk-gateway/src/desk_gateway/rosters.py:25:    def read_only(self) -> bool:\nservices/desk-gateway/src/desk_gateway/server.py:102:                annotations={\"readOnlyHint\": spec.read_only, \"destructiveHint\": \"g6\" in spec.gates},\nservices/desk-gateway/src/desk_gateway/server.py:140:        if error and spec.read_only and \"results\" not in payload and \"rows\" not in payload:\nservices/desk-gateway/src/desk_gateway/server.py:145:        return _result(redact_value(payload), is_error=bool(error) and not spec.read_only)"
+    },
+    {
+      "cmd": "git show origin/bot-04-ios/spe-5161-ios-tools-metavr:ios/tools/cli.py | grep -A6 \"_add_metavr\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "def _add_metavr(sub, name: str) -> None:\n    parser = sub.add_parser(name)\n    parser.add_argument(\"--serial\", required=True)\n    parser.add_argument(\"--out\", required=True)\n    parser.set_defaults(func=lambda args, cmd=name: metavr_wrap(cmd, args.serial, args.out))"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/ios-metavr.yaml')); yaml.safe_load(open('contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml'))\" && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 14.1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked\n157 passed in 13.93s"
     }
   ],
   "claims": [
@@ -97,6 +109,10 @@
     {
       "claim": "kind: read/write is not cosmetic: server.py's call_tool() sets is_error=bool(error) and not spec.read_only (server.py:145), so a read-kind tool's backend failure (a ModuleNotFoundError today, a real I/O failure once ios.py exists) reports to the MCP caller as a non-error result. ioslocal_snapshot_diff, iosmetavr_device_screenshot and iosmetavr_ui_dump write an out artifact, so they are kind: write in both new packs so their failures surface as real MCP errors; ioslocal_plist_lint, ioslocal_entitlements_scan and ioslocal_xcodebuild_receipt stay kind: read (pure parse, no output artifact).",
       "evidence_command_index": 8
+    },
+    {
+      "claim": "REVERTED (Greptile P1, comment 4147725446 on PR #54, confirmed valid): iosmetavr_ui_tap's required x/y device-point coordinates were checked directly against PR #48's ios/tools/cli.py and found undeliverable by any backend, not merely unimplemented — _add_metavr() gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out arguments only, with no coordinate parameter anywhere in that CLI. Reverted to required: [serial, out], matching the CLI and the tool's original (desk_ios_ui_tap) shape. Re-ran YAML parse, G-7, and the full test suite after the revert; all still pass (command 10). Directed-tap targeting needs an ios/tools/metavr_bridge.py and cli.py change on PR #48 — bot-04-ios's to add, not this seat's.",
+      "evidence_command_index": 9
     }
   ],
   "unverified": [
@@ -104,6 +120,6 @@
     "Runtime behavior of the 8 tools beyond the resolve()-level ModuleNotFoundError above is not exercised end-to-end — this change defines/relocates only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
     "desk_contract_ack acknowledgements from the auto-resolved consumers of contracts/tool-rosters/** (7 bots) and contracts/tool-packs/** (bot-02-web-edge, bot-03-android, bot-04-ios) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
     "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review.",
-    "iosmetavr_ui_tap's x/y device-point coordinate contract (added here so the tool says where to tap) was written from the review finding that the prior schema had no target, not re-derived from the PR #48 CLI's actual ui_tap argument shape — bot-04-ios should confirm x/y matches what the underlying MetaVR ui_tap executable expects before any consumer depends on it."
+    "RESOLVED, no longer open: the x/y coordinate contract noted above as unverified was checked against PR #48's actual ui_tap CLI (command 9) and found undeliverable by any backend, so it was reverted rather than left for bot-04-ios to confirm. Directed-tap targeting stays an open follow-up for bot-04-ios on PR #48 (an ios/** CLI change), not a QUALITY contract gap."
   ]
 }

@@ -48,9 +48,16 @@ summary: >
   (services/desk-gateway/src/desk_gateway/schema.py) supports no anyOf/oneOf combinator, so this
   stays backend-enforced rather than schema-enforced — an earlier draft of this pack added an
   `anyOf` to the input schema, which that validator silently ignores, so it was removed rather
-  than left as a schema clause with no effect. iosmetavr_ui_tap's input now requires `x` and `y`
-  device-point coordinates — the original desk_ios_ui_tap took a serial and an out path but
-  never said where to tap.
+  than left as a schema clause with no effect.
+
+  REVERTED (Greptile P1 on this pack, confirmed valid): iosmetavr_ui_tap briefly required `x`
+  and `y` device-point coordinates. Checked directly against PR #48's ios/tools/cli.py: its
+  `_add_metavr()` gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out
+  arguments only — there is no coordinate parameter anywhere in that CLI for any of the three.
+  A required x/y was therefore a contract promise no backend could ever honor, not merely one
+  not yet implemented; reverted to serial/out only (matching the CLI exactly, as the original
+  desk_ios_ui_tap did). Directed-tap targeting needs a change to ios/tools/metavr_bridge.py and
+  cli.py first — bot-04-ios's to add on PR #48, tracked as a follow-up, not attempted here.
 
   KNOWN GAP (unchanged by this revision, disclosed not resolved, confirmed by reproduction):
   services/desk-gateway has no `ios` backend module (only core, infra, lead, mobile, packs,

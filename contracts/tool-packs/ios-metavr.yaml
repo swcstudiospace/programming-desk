@@ -56,16 +56,18 @@ tools:
     kind: write
     gates: []
     description: >-
-      Send a tap at (x, y) device-point coordinates via a MetaVR `ui_tap` executable found on
-      PATH by that exact name. Skips (no device contacted) when the binary is missing; never
-      claims a tap was delivered when it was not invoked.
+      Send a tap to a device via a MetaVR `ui_tap` executable found on PATH by that exact name.
+      Skips (no device contacted) when the binary is missing; never claims a tap was delivered
+      when it was not invoked. No coordinate/target parameter: PR #48's ios/tools/cli.py gives
+      device_screenshot, ui_dump and ui_tap the identical --serial/--out arguments only (verified
+      directly against that CLI), so a required x/y here would be a contract promise no backend
+      can ever honor without an ios/** change. Directed-tap targeting is bot-04-ios's to add to
+      the underlying CLI first; tracked as a PR #48 follow-up, not attempted from this seat.
     backend: ios.ui_tap
     input:
       type: object
       additionalProperties: false
-      required: [serial, x, y, out]
+      required: [serial, out]
       properties:
         serial: { type: string, minLength: 1, maxLength: 200 }
-        x: { type: number, minimum: 0 }
-        y: { type: number, minimum: 0 }
         out: { type: string, minLength: 1, maxLength: 500 }

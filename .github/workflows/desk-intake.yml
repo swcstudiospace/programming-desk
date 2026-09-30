@@ -34,8 +34,13 @@ jobs:
           # /v1/intake bounds both fields at BOTH ends: title 3..200, ask 10..20000. Either
           # limit crossed is a 400, and the workflow has no fallback comment, so the label
           # is applied and LEAD never sees the request — it looks handled to whoever applied
-          # it. An empty or one-line issue body is ordinary, not adversarial, so pad as well
-          # as truncate and say which happened. jq counts characters, as the gateway does.
+          # it. An empty or one-line issue body is ordinary, not adversarial, so bring both
+          # ends inside the bounds rather than dropping the intake.
+          #
+          # `pad` appends to short text and never replaces it: whatever the requester wrote
+          # is the request, and a three-word body substituted for a placeholder would have
+          # LEAD acting on nothing while the gateway reported success. Only a genuinely
+          # empty field has nothing to preserve. jq counts characters, as the gateway does.
           jq -n \
             --arg title "$ISSUE_TITLE" --arg ask "$ISSUE_BODY" --arg url "$ISSUE_URL" \
             --arg by "$ISSUE_USER" --arg key "$IDEMPOTENCY_KEY" \
@@ -44,12 +49,16 @@ jobs:
               if (. | length) > $limit
               then (.[0:$limit - ($note | length)] + $note)
               else . end;
-            def floor($min; $fallback):
-              if (. | length) < $min then $fallback else . end;
+            def pad($min; $sep; $note):
+              if (. | length) >= $min then .
+              elif (. | length) == 0 then $note
+              else (. + $sep + $note) end;
             {origin: "github",
-             title: ($title | floor(3; "GitHub issue intake") | clip(200; "…")),
+             title: ($title
+                     | pad(3; " "; "(see GitHub issue)")
+                     | clip(200; "…")),
              ask: ($ask
-                   | floor(10; "No description was given on the issue. See the link for context.")
+                   | pad(10; "\n\n"; "No further detail was given on the issue; see the link for context.")
                    | clip(20000; "\n\n[truncated — see the issue for the full text]")),
              links: [$url],
              requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json

@@ -161,7 +161,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # need the base ref's history to compute this PR's changed .py files
+          fetch-depth: 0   # need the base ref's history to build the baseline worktree below
 
       - uses: actions/setup-python@v5
         with:
@@ -170,33 +170,71 @@ jobs:
       - name: Install Bandit
         run: pip install bandit bandit-sarif-formatter
 
-      - name: Bandit — this PR's changed Python files, HIGH severity only
-        # -lll raises the reported severity floor to HIGH, matching "fail on HIGH+" without
-        # drowning every PR in LOW/MEDIUM noise.
+      - name: Bandit baseline — snapshot the base ref's own findings
+        # A whole-repo `bandit -r .` fails every PR on infra/unified-lsp-broker/broker.py's
+        # pre-existing HIGH finding (B324, SHA1 in a WebSocket handshake) — confirmed live on
+        # PR #50. An earlier fix scoped Bandit to this PR's changed .py files via `git diff`
+        # instead, but that has two real problems a reviewer caught: (1) `mapfile < <(git diff
+        # ...)` swallows a git-diff failure silently — bash's `set -e` does not see a process
+        # substitution's exit code, so a broken diff produces an empty file list and a false
+        # "nothing to scan" pass, fail-open on exactly the tool this gate exists to enforce; and
+        # (2) scanning whole changed FILES still re-flags a pre-existing finding if a PR happens
+        # to touch broker.py for an unrelated reason.
         #
-        # Scoped to this PR's own changed .py files, not `bandit -r .` on the whole repo: widening
-        # the scan target (originally done here so Python under infra/ and web/-adjacent trees
-        # wasn't skipped, matching Semgrep's fix for the same gap) surfaced a real, pre-existing
-        # HIGH finding in infra/unified-lsp-broker/broker.py — B324, SHA1 used in a WebSocket
-        # handshake per RFC 6455, not a security-sensitive hash use, but bandit flags the call
-        # site regardless of context. That file is owned by a different bot; a whole-repo bandit
-        # run would fail every future PR on code it doesn't touch, exactly like the unscoped
-        # Semgrep run did (see that job's --baseline-commit). Bandit has no single-flag repo-vs-
-        # diff baseline mode as clean as Semgrep's, so this reproduces the same effect by hand:
-        # compute the PR's own changed .py files and scan only those. Confirmed locally: the full
-        # repo trips B324 (exit 1); this PR's one changed .py file does not (exit 0).
+        # Bandit's own -b/--baseline flag solves both at once: scan the base ref's full tree,
+        # scan the current full tree, and let bandit's own finding-fingerprint diff suppress
+        # what's already on both sides — no git-diff file-selection at all, so failure mode (1)
+        # doesn't exist in this design, and modified-not-new findings in a touched file are
+        # exactly what -b is for. The one restriction: -b only works with json/txt/html/custom
+        # output, not sarif (confirmed: sarif+baseline together errors out), so this step does
+        # the pass/fail decision in JSON and the next step produces the SARIF artifact separately.
+        #
+        # Relative paths must match between the two scans for bandit's fingerprint match to work,
+        # so the baseline scan runs from inside the worktree with `-r .`, not `-r /path/to/worktree`.
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          mapfile -t PY_FILES < <(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- '*.py')
-          if [ "${#PY_FILES[@]}" -eq 0 ]; then
-            echo "No .py files changed by this PR — nothing for Bandit to scan. Skipping."
-            echo '{"runs":[{"tool":{"driver":{"name":"Bandit"}},"results":[]}],"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"}' > bandit.sarif
-            exit 0
+          git worktree add --detach /tmp/bandit-baseline "origin/$BASE_REF"
+          set +e
+          (cd /tmp/bandit-baseline && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
+          baseline_ec=$?
+          set -e
+          git worktree remove --force /tmp/bandit-baseline
+          # 0 = clean, 1 = findings — both are a successful baseline scan. Anything else (bad
+          # args, a crash) means the baseline itself can't be trusted, so fail closed rather
+          # than silently comparing against an empty or missing snapshot.
+          if [ "$baseline_ec" -gt 1 ]; then
+            echo "::error::Bandit baseline scan against origin/$BASE_REF failed (exit $baseline_ec) — refusing to compare against an untrustworthy baseline."
+            exit 1
           fi
-          bandit "${PY_FILES[@]}" \
+          python3 -c "import json; json.load(open('bandit-baseline.json'))"
+
+      - name: Bandit — whole repo, HIGH severity only, new findings vs. the base ref
+        # -lll raises the reported severity floor to HIGH, matching "fail on HIGH+". This is the
+        # step that actually gates the PR: -b suppresses any finding already present on the base
+        # ref's tree (per the previous step), so only genuinely new HIGH findings fail the build,
+        # regardless of which files changed. Confirmed locally both directions: the pre-existing
+        # broker.py finding is suppressed (exit 0); a newly introduced finding in a file that
+        # isn't in the baseline at all is still caught (exit 1).
+        run: |
+          bandit -r . \
+            --ini ci/security/bandit.ini \
+            -b bandit-baseline.json \
+            -lll \
+            -f json -o bandit.json
+
+      - name: Bandit — SARIF artifact (informational, whole repo, unfiltered)
+        # Separate from the gating decision above: -b is incompatible with -f sarif, so this
+        # produces the human/code-scanning-readable report without baselining. It may list the
+        # pre-existing broker.py finding too; that's fine — continue-on-error, not `|| true`, so
+        # the exemption is visible in the YAML rather than hidden inside a shell one-liner. The
+        # previous step already made the pass/fail call; this step exists only for the artifact.
+        if: always()
+        continue-on-error: true
+        run: |
+          bandit -r . \
             --ini ci/security/bandit.ini \
             -lll \
             -f sarif -o bandit.sarif

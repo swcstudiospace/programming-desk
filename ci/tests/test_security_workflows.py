@@ -89,18 +89,35 @@ class TestSemgrepBlocks:
 
 class TestBanditBlocks:
     def test_high_severity_floor(self, workflow):
-        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
+        step = _step(_job(workflow, "bandit"), "Bandit — whole repo, HIGH severity only, new findings")
         assert "-lll" in step["run"]
 
-    def test_scoped_to_pr_changed_files_not_whole_repo(self, workflow):
-        # `bandit -r .` on the whole repo fails every PR on infra/unified-lsp-broker/broker.py's
-        # pre-existing B324 finding (SHA1 in a WebSocket handshake) — confirmed live on PR #50.
-        # Same class of bug as the Semgrep whole-repo scan; the fix here is a computed file list
-        # instead of Semgrep's --baseline-commit, since bandit has no equivalent single flag.
-        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
-        assert "PY_FILES" in step["run"]
-        assert "bandit -r ." not in step["run"]
-        assert "bandit \"${PY_FILES[@]}\"" in step["run"]
+    def test_gating_scan_uses_baseline(self, workflow):
+        # `bandit -r .` with no baseline fails every PR on infra/unified-lsp-broker/broker.py's
+        # pre-existing B324 finding (confirmed live on PR #50). A per-changed-file git-diff list
+        # was tried next, but a reviewer correctly flagged two problems: `mapfile < <(git diff
+        # ...)` silently swallows a git-diff failure (bash's `set -e` doesn't see inside process
+        # substitution) producing a false "nothing to scan" pass, and scanning whole changed
+        # files still re-flags pre-existing findings in a touched file. -b/--baseline against a
+        # snapshot of the base ref fixes both: no git-diff file selection to silently fail, and
+        # findings already on the base ref are suppressed regardless of which files changed.
+        gating_step = _step(_job(workflow, "bandit"), "Bandit — whole repo, HIGH severity only, new findings")
+        assert "-b bandit-baseline.json" in gating_step["run"]
+        assert "-r ." in gating_step["run"]
+
+    def test_baseline_snapshot_fails_closed_on_error(self, workflow):
+        # A crashed/misconfigured baseline scan must not be silently treated as an empty,
+        # always-passing baseline — that would be the same fail-open shape as the git-diff bug.
+        baseline_step = _step(_job(workflow, "bandit"), "Bandit baseline")
+        assert "baseline_ec" in baseline_step["run"]
+        assert "exit 1" in baseline_step["run"]
+
+    def test_informational_sarif_step_does_not_gate(self, workflow):
+        # The gating decision lives entirely in the baseline-compared JSON step; the unfiltered
+        # SARIF step is for artifact/code-scanning visibility only and must not be able to fail
+        # the job (bandit -b is incompatible with -f sarif, so this step can't baseline-filter).
+        sarif_step = _step(_job(workflow, "bandit"), "Bandit — SARIF artifact")
+        assert sarif_step.get("continue-on-error") is True
 
 
 class TestTrivyBlocks:

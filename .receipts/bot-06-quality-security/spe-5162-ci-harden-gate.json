@@ -189,6 +189,56 @@
       "exit_code": 0,
       "duration_s": 10.5,
       "output_tail": "169 passed (168 pre-existing + 1 new: test_scoped_to_pr_changed_files_not_whole_repo)"
+    },
+    {
+      "cmd": "bandit --help | grep -B1 -A3 '\\-b '",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "-b BASELINE, --baseline BASELINE: path of a baseline report to compare against (only JSON-formatted files are accepted) — confirms -b exists and is JSON-only, informing the two-step (JSON-gating + separate SARIF-artifact) design"
+    },
+    {
+      "cmd": "git worktree add --detach /tmp/sectest/base-worktree2 origin/main; cd /tmp/sectest/base-worktree2; bandit -r . --ini <abs-path>/ci/security/bandit.ini -lll -f json -o /tmp/sectest/baseline2.json; cd -; git worktree remove /tmp/sectest/base-worktree2",
+      "exit_code": 1,
+      "duration_s": 3.0,
+      "output_tail": "Baseline generation against origin/main exits 1 (findings exist: the broker.py B324) — this is why the baseline-generation step's own exit code must be checked against >1, not >0, to correctly treat 'baseline has findings' as a successful snapshot rather than a tool failure"
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -b /tmp/sectest/baseline2.json -lll -f json -o /tmp/sectest/head-vs-baseline2.json",
+      "exit_code": 0,
+      "duration_s": 2.8,
+      "output_tail": "0 results — the pre-existing broker.py finding, present in both the base-ref baseline and the current tree, is correctly suppressed by -b. This is the actual gating mechanism the workflow now uses."
+    },
+    {
+      "cmd": "echo 'import hashlib\\ndef bad():\\n    return hashlib.md5(b\"x\").hexdigest()' > ci/tests/_scratch_bandit_check.py && bandit ci/tests/_scratch_bandit_check.py --ini ci/security/bandit.ini -b /tmp/sectest/baseline2.json -lll -f json -o /tmp/sectest/newfinding.json; rm ci/tests/_scratch_bandit_check.py",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "1 result (B324, HIGH) — a genuinely new finding in a file that isn't in the baseline at all is still caught even with -b active, proving this isn't a blanket suppression",
+      "expects_failure": true
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -b bandit-baseline.json -f sarif -o bandit.sarif",
+      "exit_code": 2,
+      "duration_s": 0.2,
+      "output_tail": "WARNING: Baseline must be used with one of the following formats: ['custom', 'html', 'json', 'screen', 'txt'] — confirms -b and -f sarif cannot be combined in one invocation, which is why the gating decision (JSON+baseline) and the SARIF artifact (no baseline) are two separate steps in the workflow",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_security_workflows.py -v",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "14 passed — TestBanditBlocks now asserts the baseline-gated design (test_gating_scan_uses_baseline, test_baseline_snapshot_fails_closed_on_error, test_informational_sarif_step_does_not_gate) in place of the superseded changed-files test"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.7,
+      "output_tail": "171 passed (169 pre-existing + 2 net new: the old changed-files test replaced by three baseline-design tests)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json --bot bot-06-quality-security --strict",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-2 PASS — spe-5162-ci-harden-gate: 29 command(s), 29 substantiated claim(s), 8 unverified item(s) — passes for the first time on this receipt now that approved_by names bot-00-programming-lead (LEAD's commit 9777715, merged into this branch at 86bd54f)"
     }
   ],
   "claims": [
@@ -313,6 +363,41 @@
     {
       "claim": "The full gate suite (169 tests) still passes after this fix, including the new test asserting Bandit stays diff-scoped rather than regressing to a whole-repo scan",
       "evidence_command_index": 28
+    },
+    {
+      "claim": "NOTE ON CLAIMS 26-28: the changed-.py-files design they describe was itself superseded before this PR's CI ran again — a review caught it as fail-open (git-diff failure inside process substitution silently producing an empty, always-passing file list) and unable to distinguish a new finding from a pre-existing one in a touched file. Bandit's own -b/--baseline flag takes JSON, not SARIF, output (confirmed), which is why the final design splits gating (JSON + baseline) from the SARIF artifact (unfiltered) into two steps",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Generating a baseline snapshot of origin/main's findings via a detached worktree, scanning it with the same bandit.ini and severity floor as the real gate, correctly produces the known broker.py finding — and exits 1 (findings present), not 0, which is why the workflow's own check for 'did the baseline scan itself fail' must test exit code >1, not >0",
+      "evidence_command_index": 30,
+      "expects_failure": true
+    },
+    {
+      "claim": "Comparing HEAD's full-tree scan against that baseline with -b suppresses the pre-existing broker.py finding — the actual mechanism the workflow's gating step now relies on",
+      "evidence_command_index": 31
+    },
+    {
+      "claim": "-b does not blanket-suppress everything: a finding in a file that was never part of the baseline at all (a scratch file with a fresh hashlib.md5 call) is still caught and still fails the scan",
+      "evidence_command_index": 32,
+      "expects_failure": true
+    },
+    {
+      "claim": "bandit's -b/--baseline flag cannot be combined with -f sarif in a single invocation (confirmed: it errors with exit 2, not silently ignoring one flag), which is why the workflow's gating decision (JSON+baseline) and its SARIF artifact (unfiltered, informational) are necessarily two separate bandit invocations rather than one",
+      "evidence_command_index": 33,
+      "expects_failure": true
+    },
+    {
+      "claim": "The regression-guard suite's Bandit tests now assert the baseline-gated design (that the gating step uses -b, that the baseline-generation step fails closed on a real tool error rather than treating it as empty, and that the SARIF step is marked continue-on-error so it structurally cannot gate) in place of the superseded changed-files assertions",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "The full gate suite (171 tests) passes with the baseline-gated Bandit design in place",
+      "evidence_command_index": 35
+    },
+    {
+      "claim": "G-2 now passes on this receipt for the first time: approved_by names bot-00-programming-lead per LEAD's own commit (9777715), merged into this branch rather than overwritten, and every other G-2 structural requirement (commands present, claims cite evidence, no bypass patterns, honest unverified section) still holds after this round of edits",
+      "evidence_command_index": 36
     }
   ],
   "unverified": [
@@ -321,9 +406,8 @@
     "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif, now SHA-pinned) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox. Per-job security-events: write (moved off the workflow root this round) was checked by parsing the YAML (command 21), not by observing the permission actually apply in a real run.",
     "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch \u2014 that limitation was reported, not worked around further.",
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
-    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
     "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
-    "This receipt previously accepted the whole-repo Bandit scan as a known-but-unclosed gap ('zero pre-existing findings today'). That was wrong — infra/unified-lsp-broker/broker.py already had a HIGH finding (B324), and PR #50's own CI failed on it immediately, the same run this fix responds to. The gap is now closed by scoping Bandit to this PR's changed .py files (a computed git-diff file list, not bandit's own -b/--baseline JSON-snapshot mechanism, which needs a stored baseline artifact this workflow doesn't have anywhere to keep). What's still genuinely unverified: whether a PR that changes MANY .py files across unrelated areas could hit bandit's argv length limits passing them all as positional args — not exercised here since this PR only ever touched one.",
+    "Bandit's design went through three revisions on this PR, each caught by real CI or real review, not by this sandbox alone: (1) whole-repo `bandit -r .`, which trips a pre-existing HIGH finding in infra/unified-lsp-broker/broker.py (caught by PR #50's own CI); (2) scoping to this PR's changed .py files via `mapfile < <(git diff ...)`, which Greptile correctly identified as fail-open (bash's `set -e` doesn't see a process-substitution failure, so a broken git diff silently produces an empty file list and a false pass) and also unable to distinguish a genuinely new finding from a pre-existing one in a file the PR happens to touch; (3) the current design — bandit's own -b/--baseline flag comparing a full-tree scan of the base ref against a full-tree scan of HEAD, with the baseline-generation step failing closed (exit >1, not just >0) rather than silently treating a broken baseline as empty. Verified locally in both directions: the pre-existing broker.py finding is suppressed (exit 0) and a genuinely new finding in an unbaselined file is still caught (exit 1). What's still genuinely unverified: this baseline mechanism has never run inside actual GitHub Actions (git worktree behavior, disk space for the second checkout, and GITHUB_WORKSPACE path handling were exercised locally, not on the runner).",
     "This receipt's own bandit -r . entry (now corrected) was recorded with the wrong exit code because of `command | tail -N` piping reporting tail's exit status instead of the piped command's — the exact class of evidence error Greptile's review caught elsewhere in an earlier revision of this file. Prompted by finding it, audited every other command in this receipt for the same `| tail` / `| head` pattern: one other command pipes through `| tail -5` (the trivy-action tag listing at index 13), but its exit code was never load-bearing for a pass/fail claim — it's an informational tag listing, not a '0 findings' assertion — so it isn't the same bug. No other instance found."
   ],
   "files_changed": [

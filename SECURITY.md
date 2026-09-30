@@ -219,7 +219,7 @@ human review §1 exists for.
 
 | Workflow | Trigger | What it runs | Blocking? |
 |---|---|---|---|
-| `.github/workflows/security-pr.yml` | Every pull request into `main` | Gitleaks (secrets, scoped to the PR's own commits), Semgrep (SAST, repo rules + registry security/secrets packs, scoped to the PR's own diff via `--baseline-commit`), Bandit (Python SAST, scoped to the PR's own changed `.py` files), pip-audit and Trivy filesystem scan (dependency vulnerabilities) | Yes — fails on HIGH-severity-or-above findings (pip-audit is stricter: it fails on any known vulnerability, since it has no severity filter) |
+| `.github/workflows/security-pr.yml` | Every pull request into `main` | Gitleaks (secrets, scoped to the PR's own commits), Semgrep (SAST, repo rules + registry security/secrets packs, scoped to the PR's own diff via `--baseline-commit`), Bandit (Python SAST, whole repo, gated on new findings vs. a baseline snapshot of the base ref), pip-audit and Trivy filesystem scan (dependency vulnerabilities) | Yes — fails on HIGH-severity-or-above findings (pip-audit is stricter: it fails on any known vulnerability, since it has no severity filter) |
 | `.github/workflows/security-nightly.yml` | Daily schedule, or manual dispatch | OWASP ZAP baseline + Nuclei against `${{ secrets.STAGING_URL }}` | No — informational; skips cleanly when `STAGING_URL` is not configured |
 
 Each PR-gate scanner uploads its SARIF output as a workflow artifact unconditionally, and

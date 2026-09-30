@@ -1,0 +1,1201 @@
+{
+  "task_id": "spe-4794-c3-c4-loop-acks",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/spe-4794-c3-c4-loop-acks",
+  "started_at": "2026-09-30T15:45:54Z",
+  "completed_at": "2026-09-30T16:14:23Z",
+  "commands": [
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.92,
+      "output_tail": "175 passed in 10.92s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k LoopAck -q",
+      "exit_code": 0,
+      "duration_s": 0.7,
+      "output_tail": "18 passed, 157 deselected in 0.70s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.27,
+      "output_tail": "183 passed in 10.27s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k 'exhaustive or CandidateGateTrust' -q",
+      "exit_code": 0,
+      "duration_s": 0.25,
+      "output_tail": "9 passed, 174 deselected in 0.25s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "unshare -r -n -- python3 -c \"import socket; s=socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); s.connect(('8.8.8.8', 53))\"",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "OSError: [Errno 101] Network is unreachable \u2014 confirms the network namespace run_candidate_gate() now wraps candidate execution in actually blocks egress on this host, not merely in theory",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.87,
+      "output_tail": "185 passed in 10.87s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"search_needle_is_not_mistaken_for_missing_target or compound_content_search_is_exhaustive_evidence\" -q",
+      "exit_code": 0,
+      "duration_s": 0.46,
+      "output_tail": "2 passed, 183 deselected in 0.25s"
+    },
+    {
+      "cmd": "PATH=\"/tmp/fake_bin:$PATH\" python3 -m pytest ci/tests/test_gates.py -q  # /tmp/fake_bin/unshare is a stub that always exits 1, shadowing the real unshare so _probe_network_isolation() sees a userns-incapable host without touching any other tool on PATH",
+      "exit_code": 0,
+      "duration_s": 9.77,
+      "output_tail": "161 passed, 24 skipped in 9.77s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 12.38,
+      "output_tail": "193 passed in 12.38s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"compound or absence_claim or InProcess\" -v",
+      "exit_code": 0,
+      "duration_s": 0.22,
+      "output_tail": "9 passed, 184 deselected in 0.22s"
+    },
+    {
+      "cmd": "mkdir -p /tmp/fake_bin && printf '#!/bin/sh\\nexit 1\\n' > /tmp/fake_bin/unshare && chmod +x /tmp/fake_bin/unshare && PATH=\"/tmp/fake_bin:$PATH\" python3 -m pytest ci/tests/test_gates.py -q  # unshare stub shadows the real binary so _probe_network_isolation() sees a userns-incapable host, exactly like the prior round's namespace-degrade simulation",
+      "exit_code": 0,
+      "duration_s": 10.6,
+      "output_tail": "167 passed, 26 skipped in 10.60s"
+    },
+    {
+      "cmd": "PATH=\"/tmp/fake_bin:$PATH\" python3 -m pytest ci/tests/test_gates.py -k InProcess -v",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "6 passed, 187 deselected in 0.07s \u2014 the new TestG2StrictEvidenceInProcess suite (item 1's fix) still runs and passes with zero skips even though 26 other candidate-gate tests skip for lacking a network namespace in the same run"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 1,
+      "duration_s": 13.09,
+      "output_tail": "FAILED test_expects_failure_silent_grep_q_is_exhaustive_evidence, FAILED test_expects_failure_content_removal_claim_rejects_bare_existence_check \u2014 2 failed, 188 passed (run_candidate_gate() archives HEAD via 'git archive', not the working tree, so the two new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix isolation + evidence strict'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-45-hardfix-isolation-evidence c8e36d6] QUALITY: SPE-4794 #45 hard-fix isolation + evidence strict\n 2 files changed, 87 insertions(+), 113 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 13.04,
+      "output_tail": "190 passed in 13.04s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"silent_grep_q or content_removal_claim or absence_claim\" -v",
+      "exit_code": 0,
+      "duration_s": 0.24,
+      "output_tail": "4 passed, 186 deselected in 0.24s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "mkdir -p /tmp/fake_bin && printf '#!/bin/sh\\nexit 1\\n' > /tmp/fake_bin/unshare && chmod +x /tmp/fake_bin/unshare && PATH=\"/tmp/fake_bin:$PATH\" python3 -m pytest ci/tests/test_gates.py -q  # unshare stub shadows the real binary so _probe_network_isolation() sees a userns-incapable host, exactly like prior rounds' namespace-degrade simulation \u2014 confirms removing TestG2StrictEvidenceInProcess did not reintroduce a hard failure on hosts lacking unprivileged netns; candidate-gate tests now skip cleanly instead of ever running PR code unsandboxed",
+      "exit_code": 0,
+      "duration_s": 11.19,
+      "output_tail": "161 passed, 29 skipped in 11.19s"
+    },
+    {
+      "cmd": "grep -n 'InProcess\\|_load_candidate_check_receipt\\|candidate_check_receipt' ci/tests/test_gates.py",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import sys; sys.path.insert(0, 'ci/gates'); import check_receipt as cr; r={'task_id':'t','bot':'b','unverified':[],'commands':[{'cmd': \\\"test -f .env.example && grep -q '=[^=]' .env.example\\\", 'exit_code': 1}],'claims':[{'claim':'every value in .env.example is still empty','evidence_command_index':0,'expects_failure':True}]}; print(cr.check(r, None, strict=True))\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "[\"'approved_by' is missing \u2014 work must be reviewed by someone else\", \"claim[0] 'every value in .env.example is still empty' asserts exhaustiveness via a quiet search chained after an existence check (\\\"test -f .env.example && grep -q '=[^=]' .env.example\\\") with no captured output \u2014 \\u2026 Record a separate command in 'commands' that tests '.env.example' and exits 0, proving the file was actually there when the search ran\"] \u2014 in-process sanity check that a sole `test -f X && grep -q PATTERN X` command, with no separate command proving X existed, is now rejected as exhaustive evidence under --strict, confirming the missing-file short-circuit no longer passes as a quiet no-match"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 11.27,
+      "output_tail": "192 passed in 11.27s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k silent_grep_q -v",
+      "exit_code": 0,
+      "duration_s": 0.18,
+      "output_tail": "test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding PASSED \u2014 3 passed, 189 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 1,
+      "duration_s": 12.3,
+      "output_tail": "FAILED test_expects_failure_silent_grep_q_later_sibling_is_still_padding, FAILED test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration, FAILED test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration \u2014 3 failed, 192 passed (run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 3 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md && git commit -m 'QUALITY: SPE-4794 #45 hard-fix sibling path+order + guide'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/task-fxsvga e63f7d7] QUALITY: SPE-4794 #45 hard-fix sibling path+order + guide\n 3 files changed, 178 insertions(+), 60 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 11.9,
+      "output_tail": "195 passed in 11.90s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k silent_grep_q -v",
+      "exit_code": 0,
+      "duration_s": 0.47,
+      "output_tail": "test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_later_sibling_is_still_padding PASSED, test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration PASSED, test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration PASSED, test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding PASSED \u2014 6 passed, 189 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 1,
+      "duration_s": 2.4,
+      "output_tail": "4 failed, 42 passed, 154 deselected \u2014 FAILED test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration, test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration, test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration, test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration (run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 4 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed; the 5th new test, directory_sibling_wrong_path_is_still_padding, already passed pre-fix since it asserts rejection, which the unfixed gate already did)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix equivalent paths + -d/-r sibling probes'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-c3-c4-round7-hardfix 6e49b9b] QUALITY: SPE-4794 #45 hard-fix equivalent paths + -d/-r sibling probes\n 2 files changed, 146 insertions(+), 15 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 0,
+      "duration_s": 2.36,
+      "output_tail": "46 passed in 2.36s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"dotslash or directory_sibling_probe or readable_sibling_probe or directory_sibling_wrong_path\" -v",
+      "exit_code": 0,
+      "duration_s": 0.31,
+      "output_tail": "test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration PASSED, test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration PASSED, test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration PASSED, test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration PASSED, test_expects_failure_silent_grep_q_directory_sibling_wrong_path_is_still_padding PASSED \u2014 5 passed, 195 deselected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 13.37,
+      "output_tail": "200 passed in 13.37s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 1,
+      "duration_s": 2.62,
+      "output_tail": "2 failed, 48 passed, 154 deselected \u2014 FAILED test_expects_failure_silent_grep_q_trailing_slash_sibling_is_not_corroboration (assert 0 == 1: the unfixed candidate wrongly PASSED a compound gated on 'test -f config.yaml/' corroborated by a bare 'test -f config.yaml' sibling), FAILED test_expects_failure_silent_grep_q_mismatched_flag_sibling_is_not_corroboration (assert 0 == 1: the unfixed candidate wrongly PASSED a compound gated on 'test -f config' corroborated by a 'test -d config' sibling) \u2014 run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 2 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed; the other 2 new tests (same-spelling trailing-slash match, matching -e flag) already passed pre-fix since they assert behaviour the unfixed gate already had right",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix trailing-slash equality + flag-mismatch corroboration'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-c3-c4-round8-hardfix 6a5f5fb] QUALITY: SPE-4794 #45 hard-fix trailing-slash equality + flag-mismatch corroboration\n 2 files changed, 172 insertions(+), 31 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 0,
+      "duration_s": 2.21,
+      "output_tail": "50 passed in 2.21s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 13.04,
+      "output_tail": "204 passed in 13.04s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 1,
+      "duration_s": 3.08,
+      "output_tail": "2 failed, 52 passed, 154 deselected \u2014 FAILED test_expects_failure_silent_grep_q_stricter_f_sibling_corroborates_e_gate (assert 1 == 0: the unfixed candidate wrongly REJECTED a compound gated on 'test -e config.yaml' corroborated by a passing 'test -f config.yaml' sibling), FAILED test_expects_failure_silent_grep_q_directory_probe_trailing_slash_is_corroboration (assert 1 == 0: the unfixed candidate wrongly REJECTED a compound gated on 'test -d config/' corroborated by a passing 'test -d config' sibling) \u2014 run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 2 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed; the other 2 new tests (weaker -e sibling still rejected against an -f gate, -f trailing-slash mismatch still rejected) already passed pre-fix since they assert behaviour that was never broken",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix flag-implication corroboration + -d trailing slash'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-c3-c4-round9-hardfix 613d795] QUALITY: SPE-4794 #45 hard-fix flag-implication corroboration + -d trailing slash\n 2 files changed, 184 insertions(+), 36 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 0,
+      "duration_s": 2.71,
+      "output_tail": "54 passed in 2.71s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 12.74,
+      "output_tail": "208 passed in 12.74s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "cd /tmp/slashtest && touch config.yaml && mkdir -p config && test -f config.yaml; echo f_no_slash=$?; test -f config.yaml/; echo f_slash=$?; test -e config.yaml; echo e_no_slash=$?; test -e config.yaml/; echo e_slash=$?; test -d config; echo d_no_slash=$?; test -d config/; echo d_slash=$?; test -r config.yaml; echo r_no_slash=$?; test -r config.yaml/; echo r_slash=$?",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "f_no_slash=0 f_slash=1 e_no_slash=0 e_slash=1 d_no_slash=0 d_slash=0 r_no_slash=0 r_slash=1 \u2014 empirically confirms the exact assumption this round's fix bakes in: on this container's shell, a trailing slash flips the exit code for -f/-e/-r on a regular file (0 to 1) but NOT for -d on a directory (0 to 0), so collapsing the trailing slash only for -d in _normalize_path() matches this shell's real behaviour rather than resting on an unverified reading of the POSIX spec"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "output_tail": "210 passed in 10.44s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "git worktree add /tmp/scratch-prefix 741e420 --detach && cp ci/tests/test_gates.py /tmp/scratch-prefix/ci/tests/test_gates.py && (cd /tmp/scratch-prefix && python3 -m pytest ci/tests/test_gates.py -k symlink -v)",
+      "exit_code": 1,
+      "output_tail": "FAILED test_expects_failure_symlink_unsafe_dotdot_sibling_is_not_corroboration \u2014 assert 0 == 1: the still-unfixed 741e420 candidate (this round's HEAD before the fix below) wrongly PASSED a compound gated on 'test -e link/../config && grep -q legacy link/../config' corroborated by an unrelated 'test -f config' sibling, because _normalize_path() used posixpath.normpath, which textually collapses 'link/../config' to 'config' \u2014 confirms this round's new regression test actually exercises the pre-fix candidate (via a worktree pinned to 741e420, since run_candidate_gate() archives HEAD, not the working tree) rather than passing vacuously",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git worktree remove /tmp/scratch-prefix",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix symlink-unsafe path collapse'",
+      "exit_code": 0,
+      "output_tail": "[claude/pr45-r10-symlink-trailing-slash a01c451] QUALITY: SPE-4794 #45 hard-fix symlink-unsafe path collapse\n 2 files changed, 64 insertions(+), 5 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "output_tail": "211 passed in 11.38s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"symlink or trailing_slash\" -v",
+      "exit_code": 0,
+      "output_tail": "7 passed, 204 deselected in 0.45s \u2014 the new symlink-unsafe-collapse regression test, plus all six pre-existing trailing-slash tests (including both P1-B directory-sibling cases from the prior round), pass together against this round's fixed candidate"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "git worktree add /tmp/scratch-r10tip2 07744ed --detach && cp ci/tests/test_gates.py /tmp/scratch-r10tip2/ci/tests/test_gates.py && (cd /tmp/scratch-r10tip2 && python3 -m pytest ci/tests/test_gates.py -k ordinary_parent_path -v)",
+      "exit_code": 0,
+      "output_tail": "1 passed in 0.20s \u2014 the new regression test for Greptile's round-11 finding ('Valid parent paths rejected') already passes against the prior tip (07744ed), confirming this round's change is a clarifying docstring + explicit test only, not a behaviour fix: _safe_normpath() already refused to collapse 'dir/../config.yaml' against 'config.yaml' before this round, as an unavoidable side effect of round 10's symlink-safety fix"
+    },
+    {
+      "cmd": "(cd /tmp/scratch-r10tip2 && git checkout -- ci/tests/test_gates.py) && git worktree remove /tmp/scratch-r10tip2",
+      "exit_code": 0,
+      "output_tail": "restores the worktree's modified test file before removal so the cleanup needs no --force (BYPASS_PATTERNS rejects a receipt command matching '--force\\b', and a legitimate worktree cleanup must not tautologically fail its own gate)"
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 round-11 clarify parent-path refusal + test'",
+      "exit_code": 0,
+      "output_tail": "[claude/pr45-r10-symlink-trailing-slash de5ba41] QUALITY: SPE-4794 #45 round-11 clarify parent-path refusal + test\n 2 files changed, 51 insertions(+)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "output_tail": "212 passed in 12.02s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"symlink or parent_path or trailing_slash\" -v",
+      "exit_code": 0,
+      "output_tail": "8 passed, 204 deselected in 0.40s \u2014 the new ordinary-parent-path regression, the round-10 symlink regression, and all six pre-existing trailing-slash regressions (including both P1-B directory-sibling cases) pass together"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
+    }
+  ],
+  "claims": [
+    {
+      "claim": "check_receipt.py and its updated test module compile cleanly",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 175 tests (157 pre-existing + 18 new loop_acks cases), no regression from the C-3/C-4 companion fixes",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "check_receipt.py now rejects loop_acks: null (present-but-null is distinguished from an omitted field, both by code and by a dedicated regression test)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "check_receipt.py now rejects a non-string human_granted_by (bool/int/list/dict), including values that previously dodged both the missing-field check (truthy) and the seat-name regex (did not look like a seat)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The seat-name regex now also rejects documented desk-<seat> OAuth connector names (e.g. desk-lead), not just bot-0N/LEAD/SYSTEMS/etc",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "check_receipt.py now binds an ack's scope to the receipt's own task_id, rejecting a scope naming another ticket or a blanket phrase like 'all turns'",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "A malformed loop_acks list (non-dict entries, non-list top-level) is rejected cleanly with a problem message, not an uncaught exception",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The happy path (omitted field, empty list, and a valid, correctly-scoped ack) still passes",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ownership.yaml manifest is internally valid",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "All files changed by this fix (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt are owned by bot-06-quality-security",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "No secret shapes in the changed files",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "This receipt correctly has no approved_by yet, and self-approval remains blocked by G-2 pending an independent reviewer",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "Full ci/tests gate suite passes with this round's three hard-fixes applied: 183 tests (177 on the prior tip + 6 new: 2 thin-evidence regression tests for check_receipt.py's --strict exhaustiveness check, and 4 for the candidate-gate trust infrastructure in test_gates.py itself), no regressions",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "check_receipt.py --strict now rejects a claim asserting exhaustiveness ('every value is empty') whose expects_failure evidence is a missing-target error ('no such file or directory') or a bare existence check, even when that command is the receipt's only one (previously sufficient on its own); the candidate-gate-trust fail-closed behaviour (missing candidate with .git present, and no network isolation available) and its atexit cleanup registration are also exercised directly",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "check_receipt.py and the updated test_gates.py still compile cleanly after this round's changes",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "All files touched by this hard-fix (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The unprivileged network namespace run_candidate_gate() now wraps candidate execution in genuinely blocks outbound connections on this host \u2014 not merely a resource-limit best-effort \u2014 confirmed by a direct socket connect from inside the same 'unshare -r -n' wrapper failing with ENETUNREACH",
+      "evidence_command_index": 13,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's strict-false-positive and namespace-degrade changes",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 185 tests (183 on the prior tip + 2 new regression tests: the 'not found' search-needle case and the test -f && grep compound-command case), no regressions",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "The two new regression tests pass in isolation: a strict expects_failure claim whose only command is 'grep -c \"not found\" build.log' (the search needle, not a real error) is accepted as exhaustive evidence, and a strict expects_failure claim whose only command is 'test -f .env.example && grep ... .env.example' (a real content search chained after an existence check) is also accepted, where before this fix both were wrongly rejected",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "With the real 'unshare' binary shadowed by a stub that always exits 1 \u2014 reproducing exactly what _probe_network_isolation() would observe on a host whose kernel rejects unprivileged user/network namespaces \u2014 the required gate-self-test suite still exits 0 (161 passed, 24 skipped) instead of failing outright; every test that depends on run_candidate_gate() actually executing the candidate now skips instead of failing the whole suite, while the candidate still never runs unsandboxed (confirmed separately by test_run_candidate_gate_skips_closed_without_network_isolation, included in this same skipped set via monkeypatch when unshare IS available, and for real via this command when it is not)",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 21,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's candidate-cover and content/absence-strict changes",
+      "evidence_command_index": 22
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 193 tests (185 on the prior tip + 8 new: 2 candidate-gate regression tests in TestG2Receipts for the compound-missing-file and absence-claim hard-fixes, plus a 6-case parallel TestG2StrictEvidenceInProcess suite that never skips for lacking a network namespace; test_expects_failure_compound_content_search_is_exhaustive_evidence was updated in place to add captured output_tail evidence, not added as new), no regressions",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "The three new hard-fixes pass individually against the real candidate: a claim asserting exhaustiveness via 'test -f X && grep ... X' with no captured output is now rejected ('no captured output' in the message) instead of silently accepted, the same command WITH a captured grep -c count still passes, and a claim about a path's absence ('every legacy config path has been removed') evidenced by a bare failing 'test -f' now passes instead of being wrongly rejected as thin content evidence",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "With the real 'unshare' binary shadowed by a stub that always exits 1 (same no-userns simulation as the prior round), the required gate-self-test suite still exits 0: 167 passed, 26 skipped \u2014 the 26 skips are exactly the run_candidate_gate()-based tests that legitimately cannot execute the candidate without a network namespace",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "Under that same no-userns simulation, the new TestG2StrictEvidenceInProcess suite \u2014 item 1's fix for 'candidate gate tests skip-open' \u2014 still runs all 6 of its cases and passes with zero skips, proving this PR's own G-2 strict-evidence changes (items 2 and 3) are exercised by the required job on a host that cannot sandbox the candidate at all, closing the gap where gate-self-test could previously go green without ever testing this PR's changes",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 28
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 30,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's isolation-removal and evidence-tightening changes",
+      "evidence_command_index": 31
+    },
+    {
+      "claim": "Greptile's item 1 (Security P1, 'Candidate bypasses runner isolation'): before this round's fix committed, the suite ran with 2 pre-existing candidate-gate tests failing against the still-unfixed HEAD (because run_candidate_gate() archives HEAD via 'git archive', not the working tree) \u2014 confirming those two new regression tests actually exercise the committed candidate rather than passing vacuously",
+      "evidence_command_index": 32,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _load_candidate_check_receipt() (in-process import of PR-controlled gate code into the pytest process) and the TestG2StrictEvidenceInProcess class are removed outright; COMPOUND_EXISTENCE_GATE_RE's output_tail requirement now exempts grep -q/--quiet chains (item 2, 'Silent searches fail validation'); ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous removed/deleted/gone/exists/absent words, while the unambiguous 'no longer exists'/'does not exist'/'not present' phrasings still stand alone (item 3, 'Existence check validates content')",
+      "evidence_command_index": 33
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 190 tests (193 on the prior tip minus 6 removed in-process InProcess tests plus 3 new run_candidate_gate()-based regression tests: silent grep -q acceptance, content-removal-claim rejection on bare existence evidence, and the no-path-noun absence phrasing still passing), no regressions",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "The three new regression tests pass individually against the real candidate via run_candidate_gate() (isolated subprocess, same sandboxing as every other candidate-gate test \u2014 no in-process import anywhere in the suite): a strict expects_failure claim whose only command is 'test -f X && grep -q PATTERN X' with no captured output is accepted as exhaustive evidence (grep -q is silent by design, so empty output is not a short-circuit signal); a content-removal claim ('all deprecated tokens were removed from the codebase') evidenced by a bare 'test -f' on an unrelated single file is rejected with 'only tests whether a path exists'; and an absence claim phrased without a path/file noun ('config/legacy.yml no longer exists') still passes via the unambiguous-phrase branch of the tightened ABSENCE_CLAIM_RE",
+      "evidence_command_index": 35
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 36
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 37
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 38
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 39,
+      "expects_failure": true
+    },
+    {
+      "claim": "With the real 'unshare' binary shadowed by a stub that always exits 1 (same no-userns simulation as prior rounds), the required gate-self-test suite still exits 0: 161 passed, 29 skipped \u2014 every run_candidate_gate()-based test (including this round's 3 new ones) skips cleanly instead of either failing the suite or, as the removed in-process class previously did, running PR-controlled gate code unsandboxed to avoid that skip. The candidate now never executes outside the unshare(2) sandbox under any host condition this suite can produce.",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "grep for the removed in-process identifiers (_load_candidate_check_receipt, TestG2StrictEvidenceInProcess, candidate_check_receipt) in test_gates.py returns zero matches \u2014 nothing of the removed import path remains",
+      "evidence_command_index": 41,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's missing-file/quiet-grep-ambiguity fix",
+      "evidence_command_index": 42
+    },
+    {
+      "claim": "Greptile's remaining technical P1 (tip_match 2/5, 'Missing file passes strict check'): a receipt whose ONLY command is `test -f X && grep -q PATTERN X` exiting 1, with no separate command proving X existed, is now rejected by --strict as exhaustive content evidence \u2014 the missing-file short-circuit and a real quiet no-match produced the identical exit code and empty output before this fix, and COMPOUND_EXISTENCE_GATE_RE's previous exemption for grep -q/--quiet accepted that ambiguity on faith",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 192 tests (190 on the prior tip: test_expects_failure_silent_grep_q_is_exhaustive_evidence, which asserted the now-fixed bug's old behaviour, was replaced in place by 3 new cases covering the missing-file rejection, the sibling-confirmed acceptance, and an unrelated-sibling-is-still-padding regression), no regressions",
+      "evidence_command_index": 44
+    },
+    {
+      "claim": "The three new regression tests pass individually against the real candidate via run_candidate_gate(): the ambiguous sole quiet-grep compound is rejected ('quiet search' in the failure message); the same compound paired with a second, independent `test -f X` command that itself exits 0 is accepted as exhaustive evidence; and pairing it with an existence check on an unrelated path is still treated as padding, not corroboration ('cannot be what makes this claim exhaustive' in the failure message)",
+      "evidence_command_index": 45
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 46
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 47
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 48
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 49,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's sibling-path-exactness and sibling-ordering hard-fix",
+      "evidence_command_index": 50
+    },
+    {
+      "claim": "Greptile's tip_match 0/5 on e3a93b9, technical Security P1 #1 ('Unrelated checks confirm missing files'): before this round's fix committed, the suite ran with 3 new candidate-gate tests failing against the still-unfixed HEAD (because run_candidate_gate() archives HEAD via 'git archive', not the working tree) \u2014 confirming those three new regression tests actually exercise the committed candidate rather than passing vacuously",
+      "evidence_command_index": 51,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _is_positive_existence_check() now matches a sibling's path via FILE_EXISTENCE_PROBE_RE (restricted to test -f/-e and [ -f ]/[ -e ]) and exact equality on the captured path token, rejecting both substring matches (config.yaml.bak no longer corroborates config.yaml) and non-existence flags (test -n no longer counts); _confirmed_by_sibling_existence_check() and the single-command padding computation both now require the sibling's command index to be strictly lower than the quiet-search compound's own index, so a sibling recorded after the compound (Greptile's technical Security P1 #2, 'Later check validates earlier search') is rejected as padding instead of accepted as corroboration",
+      "evidence_command_index": 52
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 195 tests (192 on the prior tip + 3 new: substring false-positive rejection, test -n rejection, and later-sibling rejection; the prior confirmed-existence test was reordered in place, not added, so it is not counted as new), no regressions",
+      "evidence_command_index": 53
+    },
+    {
+      "claim": "All six silent_grep_q tests pass individually against the real candidate via run_candidate_gate(): the missing-file case is still rejected, a sibling existence check preceding the quiet search still corroborates it, a sibling recorded AFTER the quiet search is now rejected as padding, a substring-matching sibling on a different path is now rejected, a test -n sibling on the exact path is now rejected, and an unrelated-path sibling is still rejected \u2014 matching the exact scope of Greptile's two technical P1s and no regression in the already-passing cases",
+      "evidence_command_index": 54
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 55
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 56
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 57
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 approved_by is intentionally left unset per this round's task instructions, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 58,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile review 28212220, tip_match 2/5 on f673f219, technical P1-1 ('Equivalent paths reject valid evidence') and P1-2 ('Valid filesystem probes rejected'): before this round's fix committed, 4 of the 5 new sibling-probe regression tests failed against the still-unfixed HEAD (run_candidate_gate() archives HEAD via 'git archive', not the working tree) \u2014 confirming those tests actually exercise the committed candidate rather than passing vacuously. The 5th (directory_sibling_wrong_path_is_still_padding) already passed pre-fix because it asserts the gate keeps rejecting a wrong-path sibling, which was never broken",
+      "evidence_command_index": 59,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _normalize_path() (posixpath.normpath, falling back to the original string when normalization collapses to '' or '.') is applied to both sides of the sibling-path comparison in _is_positive_existence_check(), so './config.yaml' and 'config.yaml' now match as the same target; FILE_EXISTENCE_PROBE_RE is extended from '-[fe]' to '-[fedr]', so a 'test -d'/'test -r' sibling (or its '[ ... ]' equivalent) now corroborates a quiet search the same way 'test -f'/'-e' already did, matching COMPOUND_EXISTENCE_GATE_RE's existing any-single-letter-flag acceptance on the compound's own gate",
+      "evidence_command_index": 60
+    },
+    {
+      "claim": "Full ci/tests/test_gates.py -k TestG2Receipts suite passes on this tip: 46 tests (41 on the prior tip + 5 new: ./config.yaml vs config.yaml sibling corroboration in both directions, a test -d sibling corroborating a quiet grep -R search, a test -r sibling corroborating a quiet grep search, and a wrong-path test -d sibling still rejected as padding), no regressions",
+      "evidence_command_index": 61
+    },
+    {
+      "claim": "The five new regression tests pass individually against the real candidate via run_candidate_gate(): a './config.yaml' sibling corroborates a compound gated on 'config.yaml' and vice versa, a 'test -d config' sibling corroborates a quiet 'grep -R -q' search gated on 'config', a 'test -r config.yaml' sibling corroborates a quiet grep search gated on the same path, and a 'test -d other-config' sibling does not corroborate a compound gated on the different path 'config' ('cannot be what makes this claim exhaustive' in the failure message)",
+      "evidence_command_index": 62
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 200 tests (195 on the prior tip + 5 new sibling-probe regression tests above), no regressions",
+      "evidence_command_index": 63
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's path-normalization and flag-extension changes",
+      "evidence_command_index": 64
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 65
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py, verification-receipts/SKILL.md, which was updated to document the -d/-r flags and path-normalization now accepted by the sibling probe) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 66
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 67
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 left unset per this round's task instructions ('Do NOT add approved_by. Do NOT stamp.'), and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 68,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile review 28219292, tip_match 0/5 on 1987efa, technical P1 ('Different paths treated as equal', r4149470812) and technical P1 ('Mismatched probes corroborate searches', r4149470822): before this round's fix committed, 2 of the 4 new regression tests failed against the still-unfixed HEAD (run_candidate_gate() archives HEAD via 'git archive', not the working tree) \u2014 confirming those two tests actually exercise the committed candidate rather than passing vacuously. The other 2 new tests (same-spelling trailing-slash match still corroborates, matching -e flag still corroborates) already passed pre-fix since they assert behaviour that was never broken",
+      "evidence_command_index": 69,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _normalize_path() now preserves a trailing slash's significance instead of collapsing it away (posixpath.normpath's own trailing-slash removal is undone by re-appending '/' when the original path had one), so 'config.yaml' and 'config.yaml/' compare as different tokens \u2014 closing the gap where a passing bare 'test -f config.yaml' sibling could wrongly corroborate a compound gated on 'test -f config.yaml/', whose own gate fails for a regular file regardless of existence. Separately, FILE_EXISTENCE_PROBE_RE and COMPOUND_EXISTENCE_GATE_RE now both capture the test flag (not just the path), and _is_positive_existence_check() requires the sibling's flag to exactly match the compound's own gate flag \u2014 closing the gap where a passing 'test -d config' sibling could wrongly corroborate a compound gated on 'test -f config && ...', a different predicate on the same path that the directory check says nothing about",
+      "evidence_command_index": 70
+    },
+    {
+      "claim": "Full ci/tests/test_gates.py -k TestG2Receipts suite passes on this tip: 50 tests (46 on the prior tip + 4 new: trailing-slash mismatch rejected, same-spelling trailing-slash still corroborates, -d/-f flag mismatch rejected, matching -e flag still corroborates), no regressions",
+      "evidence_command_index": 71
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 204 tests (200 on the prior tip + 4 new regression tests above), no regressions",
+      "evidence_command_index": 72
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's trailing-slash and flag-matching changes",
+      "evidence_command_index": 73
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 74
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py, verification-receipts/SKILL.md, updated to document the trailing-slash and flag-matching requirements) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 75
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 76
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 left unset per this round's task instructions ('grantor P1 is LEAD G-2 stamp later \u2014 do NOT write approved_by'), and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 77,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile review 28224030, tip_match 2/5 on d5f9a4e, technical P1 ('Valid probes rejected', ci/gates/check_receipt.py:232) and technical P1 ('Directory probes treated as different', ci/gates/check_receipt.py:142-146): before this round's fix committed, 2 of the 4 new regression tests failed against the still-unfixed HEAD (run_candidate_gate() archives HEAD via 'git archive', not the working tree) \u2014 confirming those two tests actually exercise the committed candidate rather than passing vacuously. The other 2 new tests (weaker -e sibling still rejected against an -f gate; -f trailing-slash mismatch still rejected) already passed pre-fix since they assert behaviour that was never broken",
+      "evidence_command_index": 78,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _FLAG_IMPLIES replaces exact flag equality in _is_positive_existence_check() with a one-way implication lattice (-f/-d/-r each imply -e, since their own stricter test requires existence as a precondition; -e implies only itself) via a new _flag_implies() helper, so a passing 'test -f config.yaml' sibling now corroborates a compound gated on 'test -e config.yaml' while the unsound reverse (-e sibling corroborating an -f gate) and the unrelated-type case (-d vs -f) both remain rejected. Separately, _normalize_path() now takes the command's own flag and collapses a trailing slash ONLY for '-d' \u2014 since a directory check's own predicate already requires the target to resolve as a directory, the slash can never change the answer \u2014 so 'test -d config' and 'test -d config/' now compare equal, while every other flag (where the slash CAN change the outcome, e.g. '-f' on a regular file) keeps it significant exactly as the prior round fixed",
+      "evidence_command_index": 79
+    },
+    {
+      "claim": "Full ci/tests/test_gates.py -k TestG2Receipts suite passes on this tip: 54 tests (50 on the prior tip + 4 new: stricter -f sibling corroborates weaker -e gate, weaker -e sibling still does not corroborate stricter -f gate, -d sibling/gate trailing-slash mismatch now corroborates, -f sibling/gate trailing-slash mismatch still does not corroborate), no regressions",
+      "evidence_command_index": 80
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 208 tests (204 on the prior tip + 4 new regression tests above), no regressions",
+      "evidence_command_index": 81
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's flag-implication and -d-trailing-slash changes",
+      "evidence_command_index": 82
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 83
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py, verification-receipts/SKILL.md, updated to document flag-implication and the -d-only trailing-slash collapse) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 84
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 85
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 left unset per this round's task instructions ('do NOT write approved_by \u2014 grantor G-2 is LEAD later'), and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 86,
+      "expects_failure": true
+    },
+    {
+      "claim": "The -d-only trailing-slash collapse matches this container's actual shell behaviour, not just a reading of the POSIX spec: empirically, a trailing slash flips the exit code for -f/-e/-r on a regular file (0 to 1, i.e. the check now fails) but leaves -d on a directory unchanged (0 to 0, i.e. still passes) \u2014 exactly the asymmetry _TRAILING_SLASH_SAFE_FLAGS = {'d'} relies on",
+      "evidence_command_index": 87
+    },
+    {
+      "claim": "check_receipt.py and test_gates.py compile cleanly after this round's directory-sibling trailing-slash hard-fix",
+      "evidence_command_index": 88
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 210 tests (208 on the prior tip + 2 new regression tests: -d sibling corroborating a trailing-slash -e gate, and the -f-sibling-still-rejected regression guard), no regressions",
+      "evidence_command_index": 89
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 90
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 91
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 92
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending an independent reviewer (not bot-06-quality-security)",
+      "evidence_command_index": 93,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's symlink-unsafe-collapse hard-fix",
+      "evidence_command_index": 94
+    },
+    {
+      "claim": "Greptile review 28228958, round-10 HARD_FIX P1-A (security, 'Symlink paths falsely corroborate searches' \u2014 logged as a known limitation in this receipt's own unverified list after round 9): before this round's fix, a worktree pinned to the prior tip 741e420 fails the new regression test \u2014 an earlier 'test -f config' sibling wrongly corroborates a quiet search gated on 'test -e link/../config && ...' purely because posixpath.normpath collapses the string 'link/../config' to 'config' without resolving whether 'link' is a symlink \u2014 confirming the new test actually exercises the pre-fix candidate rather than passing vacuously",
+      "evidence_command_index": 95,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _normalize_path() now calls a new _safe_normpath() instead of posixpath.normpath(); _safe_normpath() only drops '.' components and empty components from doubled/trailing separators, and never cancels a '..' component against a preceding named component, so 'link/../config' no longer normalizes to the same string as 'config' and can no longer falsely corroborate it",
+      "evidence_command_index": 97
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 211 tests (210 on the prior tip + 1 new: the symlink-unsafe-dotdot-sibling regression test), no regressions",
+      "evidence_command_index": 98
+    },
+    {
+      "claim": "The new symlink regression test passes against the fixed candidate, and P1-B (the prior round's directory-sibling trailing-slash corroboration, 'test -d config' corroborating 'test -e config/ && ...') still holds \u2014 both verified together in the same targeted run, alongside every other trailing-slash regression from prior rounds (same-spelling match, -f/-e/-r still rejecting a slash mismatch, -d-sibling/-f-sibling asymmetry)",
+      "evidence_command_index": 99
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 100
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 101
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 102
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 left unset per this round's task instructions ('Do NOT write approved_by'), and self-approval remains blocked by G-2 pending an independent reviewer",
+      "evidence_command_index": 103,
+      "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's clarifying docstring + regression test",
+      "evidence_command_index": 104
+    },
+    {
+      "claim": "Greptile review 28235784, round-11 HARD_FIX, technical P1 ('Valid parent paths rejected', ci/gates/check_receipt.py:155): the new regression test for this finding already passes against the prior tip (07744ed, before this round's docstring/test-only change), confirming _safe_normpath() already refused to collapse 'dir/../config.yaml' against 'config.yaml' as an unavoidable side effect of round 10's symlink-safety fix \u2014 this round adds no behaviour change, only an explicit test and docstring naming that trade-off as intentional rather than an oversight, per the task's option 1 ('no sound text-only way to distinguish symlink vs ordinary dir \u2014 leave collapse refused, add an explicit regression documenting intentional refusal')",
+      "evidence_command_index": 105
+    },
+    {
+      "claim": "This round's clarifying commit is committed to the seat branch: _safe_normpath()'s docstring now explicitly names the round-11 finding, states the refusal is intentional and permanent (not a gap to close), and records why the two candidate middle paths from the task (matching identical unresolved '../' prefixes; a syntactic 'looks like an ordinary directory' heuristic) are both unsound \u2014 the first never actually helps the reported case since the gate's own path carries no '../' prefix to match against, and the second does not exist since a symlink can be named anything a real directory can",
+      "evidence_command_index": 107
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 212 tests (211 on the prior tip + 1 new: the ordinary-parent-path-sibling-is-intentionally-not-corroboration regression), no regressions",
+      "evidence_command_index": 108
+    },
+    {
+      "claim": "The new parent-path regression test passes alongside the round-10 symlink regression and all six pre-existing trailing-slash regressions (including both P1-B directory-sibling cases) in the same run \u2014 confirming this round's clarification did not disturb either of the two properties round 11's own task explicitly said must not regress",
+      "evidence_command_index": 109
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 110
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 111
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 112
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by \u2014 left unset per this round's task instructions ('No approved_by'), and self-approval remains blocked by G-2 pending an independent reviewer",
+      "evidence_command_index": 113,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "The 'malformed loop_acks TypeError' reported alongside an earlier HARD_FIX on this branch was not reproduced: empirically probing the pre-fix check_receipt.py with null/non-list/non-dict/non-string payloads for loop_acks, condition, human_granted_by and scope raised no exception in any case tried \u2014 Python's 'x or default' pattern and 'A or B' short-circuiting coerced or skipped rather than raising. The defensive type checks and the 18 regression tests were still added as requested; if a distinct crash path exists it was not found by this pass and would need a specific reproducing payload.",
+    "check_rollback.py (G-5/G-6) not exercised \u2014 this change touches only check_receipt.py, the receipt-contract skill doc, and its test module; no destructive/deploy commands or approvals[] entries are introduced",
+    "CI's exact receipt-selection step (.github/workflows/gates.yml) was not run end-to-end on a runner; only the underlying gate scripts and their unit tests were re-run locally",
+    "The two adjacent Greptile threads on this PR ('Missing required PR receipt' and 'Deploy approval guidance is inaccurate') were left untouched \u2014 they were not in the enumerated list of QUALITY-owned items for this HARD_FIX and concern G-5 deploy-approval documentation, not loop_acks",
+    "Filesystem isolation for run_candidate_gate() is still partial: the candidate runs in a throwaway cwd with a stripped environment, but there is no chroot or mount-namespace, so it can read whatever the runner's normal file permissions allow. Closing that gap needs a container or mount-namespace sandbox and is flagged as an infra-owned follow-up in the code comment, not fixed by this round.",
+    "The network-namespace wrapper (unshare -r -n) was verified on this development container, not on the organisation's actual self-hosted VPS runner named in gates.yml; if unprivileged user namespaces are disabled there (kernel.unprivileged_userns_clone=0), run_candidate_gate() will fail closed as designed, but that fail-closed path itself was only exercised by monkeypatching NETWORK_ISOLATION_AVAILABLE in a test, not by disabling user namespaces on a real host",
+    "The no-userns simulation for this round's namespace-degrade fix shadowed the 'unshare' binary on PATH with a stub that always exits 1, which reproduces what _probe_network_isolation() observes when the kernel rejects the unshare(2) call \u2014 it does not cover the separate 'unshare binary entirely absent' branch of that probe (shutil.which returning None), though that branch's code path is unchanged by this round and was already covered by the existing test_network_isolation_probe_is_a_clean_bool test plus manual reading, not by a dedicated absent-binary simulation",
+    "The quoted-text-stripping fix for MISSING_TARGET_RE only strips simple single/double-quoted substrings (a regex, not a real shell tokenizer); a needle passed unquoted, or through nested/escaped quoting a real shell would still parse as one token, could still be misread as error text \u2014 this covers the common `grep \"pattern\" file` / `grep 'pattern' file` shapes named in the Greptile finding, not every possible shell quoting form",
+    "_load_candidate_check_receipt() and TestG2StrictEvidenceInProcess (the prior round's in-process fallback) are removed outright by this round, per HARD_FIX instruction \u2014 the 'required job passes untested' gap they closed on hosts without a network namespace is now accepted as a real coverage gap rather than closed by importing PR-controlled gate code into the pytest process. On such a host, this PR's own G-2 strict-evidence changes (this round's items 2 and 3, plus the prior round's) go untested by the required job \u2014 they only run via run_candidate_gate(), which fails closed to a skip rather than executing unsandboxed. This trade-off (sandboxed-or-skip, never unsandboxed-in-process) is the one the HARD_FIX explicitly asked for.",
+    "COMPOUND_EXISTENCE_GATE_RE's 'no captured output' rule only recognises `test -f/-e X && ...` and `[ -f/-e X ] && ...` lead-ins (matching EXISTENCE_ONLY_RE's own alternation); a content search chained after a `stat`/`ls` existence probe, or chained with `;` instead of `&&`, is not covered by this round's fix and would need a follow-up if that shape turns out to matter in practice",
+    "SILENT_SEARCH_RE recognises `grep -q`/`grep --quiet` specifically (including combined short flags like `-iq`); a different silent-by-design search tool (e.g. a custom script that also prints nothing) chained the same way is not covered by this round's sibling-existence-check requirement at all, so it still falls into the 'no captured output, not silent-search-shaped' rejection branch above it \u2014 this was scoped to the exact tool Greptile's finding used, not every possible silent search command",
+    "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes \u2014 e.g. an absence claim that names neither a path noun nor one of the listed phrases \u2014 would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser",
+    "Superseded twice: first by the sibling-path-exactness/ordering round (restricting the exception to test -f/-e via FILE_EXISTENCE_PROBE_RE, exact path-token equality, sibling strictly earlier than the compound), then by this round, which extends FILE_EXISTENCE_PROBE_RE to -f/-e/-d/-r and normalizes path tokens (./X vs X) before comparing. As of this round: a test -d or test -r sibling now corroborates the same as -f/-e, and an equivalent relative spelling of the same path now matches. What is still NOT covered, and remains fail-closed as padding: any other flag (test -n/-z, ...), a substring/near-match path even after normalization, a non-test-shaped existence probe like `find . -name X`, a path made equivalent only by resolving `..` against a working directory the gate does not know (normpath collapses `./` and doubled separators lexically, it does not consult the filesystem), and a same-path match recorded AFTER the compound. Still intentionally conservative/fail-closed, not an exhaustive parser of every way existence could be proven.",
+    "The ordering requirement added this round (sibling command index < quiet-search command index) is enforced on the receipt's own array order, not on wall-clock timestamps \u2014 no per-command timestamp is recorded anywhere in this schema, so a receipt author who lists commands out of true execution order could still satisfy the check by construction. This trusts array order as a proxy for execution order, the same trust this gate already places in 'commands' elsewhere (e.g. nothing stops a receipt from listing any command in a fabricated sequence); closing that would need per-command timestamps in the schema, which is out of scope for this round's fix.",
+    "Superseded twice more by later rounds (see new commands/claims below for the latest): the round-8 fix first stopped _normalize_path() from collapsing ANY trailing slash \u2014 right for -f/-e/-r, where the slash can flip the answer, but it also (wrongly) made 'test -d config' and 'test -d config/' compare unequal, since a directory check's own predicate already requires the target to resolve as a directory and the slash can never change ITS answer (Greptile P1, 'Directory probes treated as different'). This round's fix makes the collapse flag-aware via _TRAILING_SLASH_SAFE_FLAGS = {'d'}: only -d collapses the slash; -f/-e/-r keep it significant, exactly as round 8 intended for them. _normalize_path() still does not touch case, does not resolve symlinks, and does not consult the filesystem at all, so two paths that are the same file only via a symlink, a case-insensitive filesystem, or a mount bind are still compared as different tokens and would not corroborate each other \u2014 that remains out of scope, a real limitation but not a correctness bug the way the trailing-slash cases were.",
+    "Superseded by this round's fix (see new commands/claims below): the round-8 sibling-flag check required byte-for-byte flag equality between a sibling and the compound's own gate, which was itself flagged as a bug (Greptile P1, 'Valid probes rejected') because it rejected the sound case where a stricter sibling (-f, -d, -r) corroborates a weaker -e gate on the same path \u2014 passing -f proves -e would pass too, since being a regular file requires existing. This round replaces exact equality with the one-way _FLAG_IMPLIES lattice (documented above) that accepts that sound direction while still rejecting the unsound one (-e sibling corroborating an -f gate) and cross-type mismatches (-d vs -f). The lattice only models existence-implication, not any deeper semantic relationship (e.g. it does not know that a file's -r and -f might both be independently provable some other way); a receipt relying on any predicate relationship this lattice doesn't encode is still correctly rejected as a flag mismatch. This was scoped to the exact soundness gap Greptile demonstrated, not to building an exhaustive semantic model of every POSIX test flag relationship.",
+    "The full ci/tests/test_gates.py suite (200 tests, this round) only ran clean locally after installing pyyaml into the isolated uv-managed pytest tool venv (`uv pip install --python <pytest's interpreter> pyyaml`) \u2014 that venv had no pyyaml at all, which is an environment/tooling gap in this development container unrelated to this round's check_receipt.py/test_gates.py changes (confirmed: the same ~60 TestG7DeskIntegrity/TestReceiptDirectoryOwnership tests failed identically with the same 'pyyaml is required' error on a worktree checked out at the prior tip f673f219, before this round's changes). Not fixed as part of this HARD_FIX; flagging in case the organisation's actual CI runner has the same gap in whatever environment runs `ci/tests/`.",
+    "The candidate-gate before/after comparison for this round's two P1s (evidence_command_index 59-61) was captured by running the already-written new tests against the seat branch before committing this round's check_receipt.py fix, then again after \u2014 not by checking out the pre-fix commit into a separate worktree with this round's test file copied in. Both approaches rely on the same underlying mechanism (run_candidate_gate() extracts ci/gates/ from 'git archive HEAD', so an uncommitted working-tree fix is invisible to it until committed), and the observed failure-then-pass transition matches exactly what the mechanism predicts, but this is noted for transparency about the exact reproduction method used.",
+    "_FLAG_IMPLIES (this round) is a hand-written lattice over exactly the four flags FILE_EXISTENCE_PROBE_RE recognises (f/e/d/r); it is not derived from, or checked against, any formal model of POSIX test(1) semantics, so a fifth flag added to that regex in the future would need its implications added to the lattice by hand too \u2014 nothing enforces that the two stay in sync beyond code review. The three-round history on this exact file (exact-path-string round, exact-flag-string round, now an implication-lattice round) suggests this area is worth a property-based or exhaustively-enumerated test over the flag\u00d7flag matrix rather than one example receipt per pair, but that refactor is out of scope for this HARD_FIX, which was limited to the two named P1s.",
+    "The -d-only trailing-slash collapse was verified empirically against this development container's own shell (see the new test/-f/-e/-d/-r probe command and its matching claim above), which confirmed the exact asymmetry the fix relies on. This was one shell on one container, not the organisation's actual receipts CI runner \u2014 if that runner's shell ever disagreed with POSIX pathname resolution here (unlikely, since this is standard behaviour across bash/dash/coreutils, but not independently confirmed on that specific host), the -f/-e/-r trailing-slash-significant behavior would rest on an assumption unverified on that host specifically.",
+    "Superseded by this round's fix (see new commands/claims above): round 9 left open a second Greptile finding on the same commit \u2014 \"Symlink paths falsely corroborate searches\" \u2014 where posixpath.normpath textually collapsed `link/../config` to `config` regardless of whether `link` was a symlink. This round replaces that with _safe_normpath(), which never cancels a `..` component against a preceding named component, so `link/../config` no longer equals `config`. This closes the false-corroboration direction (a sibling can no longer wrongly vouch for a symlink-relative path), but it remains a purely textual comparison: the gate still has no filesystem to resolve symlinks against, since `commands[].cmd` is self-reported text, not something the gate executes. So the opposite gap stays open \u2014 two spellings that really are the same file ONLY because of a symlink (e.g. a sibling on `real/config` and a gate on `link/config` where `link` points at `real`) still compare as different tokens and are rejected as unrelated, rather than corroborating. That is a false negative (stricter than necessary), not a security hole, so it was left as-is rather than making the gate resolve paths against the actual filesystem, which is a materially larger change than this round's scope.",
+    "Direct consequence of this round's fix, raised by Greptile on 9cc728a ('Valid parent paths rejected'): the same conservative choice above also rejects an honest `test -f dir/../config.yaml` sibling as corroboration for a compound gated on plain `config.yaml`, even when `dir` is an ordinary directory with no symlink involved anywhere. This is the identical trade-off from the opposite direction \u2014 the gate cannot tell, from the string `dir/../config.yaml` alone, whether `dir` is ordinary (safe to collapse) or a symlink (unsafe, which is exactly this round's P1). Collapsing `..` only when the named component is provably not a symlink would require resolving it against a real filesystem at check time, which this gate deliberately never does (`commands[].cmd` is self-reported text, evaluated independently of whenever/wherever the commands actually ran). So the fix is binary \u2014 always collapse `..` past a named component (unsound, this round's original P1) or never (sound, but strictly more conservative) \u2014 and this round intentionally takes the sound side. An honest receipt author who wants an `X/../Y`-shaped sibling to corroborate should record the probe using the same spelling as the compound's own gate path instead."
+  ],
+  "loop_acks": [],
+  "summary": "\n\nRound 10 hard-fix (this session, on top of round 9's directory-sibling trailing-slash fix at 9bb2188/741e420): Greptile's review scored 1/5 and raised P1-A, the security finding left open since round 9 \u2014 \"Symlink paths falsely corroborate searches\". _normalize_path() called posixpath.normpath, which textually collapses `link/../config` to `config` with no filesystem access, so an earlier `test -f config` sibling could falsely corroborate a quiet search gated on `test -e link/../config && ...` even when `link` is a symlink pointing somewhere else entirely. Fixed by replacing posixpath.normpath with a new _safe_normpath(): it still drops `.` components and empty components from doubled/trailing separators (safe regardless of symlinks), but it never cancels a `..` component against a preceding named component, so `link/../config` no longer normalizes to the same string as `config` and can no longer falsely corroborate it. Verified the regression test genuinely exercises the pre-fix candidate by running it against a worktree pinned to the prior tip (741e420), where it fails as expected, then against the fixed HEAD, where it passes. P1-B (round 9's directory-sibling trailing-slash fix, `test -d config` corroborating `test -e config/ && ...`) was re-verified and still holds \u2014 not regressed by this round's change. No approved_by written; self-approval remains blocked by G-2 pending an independent reviewer.\n\nRound 11 (this session, on top of round 10's fix at 07744ed): Greptile's tip-match review scored 3/5 and reopened a new technical P1, \"Valid parent paths rejected\" \u2014 an honest `test -f dir/../config.yaml` sibling, where `dir` is an ordinary directory, no longer corroborates a compound gated on plain `config.yaml`, as a direct consequence of round 10's fix. Investigated both candidate middle paths the task offered and found neither sound: matching identical unresolved `../` prefixes on both sides never helps, since the gate's own path here carries no such prefix to match against; and there is no syntactic way to tell an ordinary directory name from a symlink name, so collapsing `X/../Y` only \"when X is provably not a symlink\" would require resolving `X` against a live filesystem, which this gate must not acquire (`commands[].cmd` is self-reported text, checked independently of whenever/wherever the commands actually ran). Per the task's option 1, took the no-narrower-fix path: added an explicit regression test asserting the refusal is intentional, and expanded `_safe_normpath()`'s docstring to name this trade-off directly rather than leaving it only in this receipt's `unverified` list. Confirmed via a worktree pinned to the prior tip that the new test already passed before this round \u2014 this is a clarifying docstring + test commit, not a behaviour change \u2014 and that the round-10 symlink regression and all P1-B trailing-slash regressions still hold alongside it. No approved_by written; self-approval remains blocked by G-2 pending an independent reviewer. Replied on the Greptile thread and left the decision on whether this counts as closed to LEAD, per the task's own instruction.",
+  "approved_by": "bot-00-programming-lead",
+  "approved_at": "2026-09-30T22:28:45Z"
+}

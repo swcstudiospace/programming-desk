@@ -90,9 +90,56 @@ bot may write there, which keeps one bot from editing another's evidence.
   "contract_changes": [],
   "rollback_plan": null,
   "approvals": [],
+  "loop_acks": [],
   "approved_by": "bot-06-quality-security"
 }
 ```
+
+**`approvals` and `loop_acks` are two different things and must not be merged.**
+
+- **`approvals[]`** is G-5/G-6's surface: one entry per **destructive or deploy operation**, each
+  carrying `operation`, `approved_by`, `at` and `blast_radius`. `ci/gates/check_rollback.py`
+  validates every entry once any destructive command is present, and pairs entries to destructive
+  commands **by count**.
+- **`loop_acks[]`** records a **degraded-mode turn acknowledgement** — a human saying "work this
+  ticket even though the memory brief failed". It authorises a *turn*, never an operation. There
+  is no separate loop-skill document to consult: the two conditions it can carry
+  (`brief_degraded`, `brief_no_revision_marker`) and every required field are defined here and
+  enforced by `ci/gates/check_receipt.py`'s `LOOP_ACK_CONDITIONS` — this file is the contract.
+
+Putting a turn ack in `approvals[]` breaks G-6 in both directions: without `at`/`blast_radius` it
+fails a receipt whose destructive op was properly approved, and *with* them it silently satisfies
+the count for a destructive op nobody approved. That is why it has its own field, and why
+`check_rollback.py` must never be taught to read `loop_acks`.
+
+Each `loop_acks` entry:
+
+```json
+{ "condition": "brief_degraded",
+  "operation": "degraded-loop: repo work without a memory brief",
+  "ack_id": "ack-2026-09-30-004",
+  "human_granted_by": "Ove",
+  "relayed_by": "bot-00-programming-lead",
+  "at": "2026-09-30T09:41:11Z",
+  "scope": "one turn, ticket intake-ack-idempotent" }
+```
+
+**`human_granted_by` is a person, and it is required.** The point of a degraded-mode ack is that
+somebody who knows what the brief could not tell the seat said go ahead, so a seat id there
+authorises nothing. A build seat asks LEAD and LEAD asks the human, which makes `relayed_by` the
+LEAD seat and `human_granted_by` the person at the end of that chain; LEAD's own degraded turns are
+acked by the human directly, with `relayed_by` null. G-2 fails an entry whose `human_granted_by` is
+absent, non-string, or looks like a seat (including a `desk-<seat>` connector name) — an entry
+naming a bot is worse than a missing one, because it reads as compliance. A JSON `true` or a bare
+id is not a name: `human_granted_by` must be a string.
+
+**`scope` binds the ack to this turn, not to the desk in general.** G-2 checks that `scope`
+contains the receipt's own `task_id`, so an ack copied from an earlier ticket, or a blanket phrase
+like "all turns", does not silently authorise a turn it was never written for.
+
+The field is **optional**: a receipt for a turn that never went degraded omits it or carries `[]`.
+Setting it to `null` is neither — `loop_acks` must be a list whenever the key is present, so an
+explicit null fails rather than being read as "no field at all".
 
 Note command index 0: **a failing command is valuable evidence.** It proves the bug was real
 before the fix. A receipt that only ever shows green is often a receipt where the reproduction
@@ -101,6 +148,61 @@ step was skipped.
 A claim citing a failing command sets `"expects_failure": true`. The gate then requires that
 command to have a **non-zero** exit — so the flag cannot be used to excuse a claim whose evidence
 actually failed. It asserts "this was supposed to fail", not "ignore the exit code".
+
+Under `--strict`, an `expects_failure` claim worded exhaustively ("every value is still empty") can
+pass — a search that exits non-zero exactly when it finds nothing across its whole target is
+reproduction evidence and total coverage at once — but only when its cited command is the receipt's
+only command, evidence-wise. The moment the receipt records anything else (the fix that follows a
+reproduction, say), that claim is rejected: other commands elsewhere cannot make THIS claim any more
+exhaustive, so their presence is only ever a sign of the original bypass this check exists to catch —
+a narrow, failing command padded by an unrelated one recorded for something else. With nothing else
+in the receipt to borrow from, the cited command's own scope is this claim's entire evidence, left to
+a human reviewer (`approved_by`) to judge, the same as any other evidence-matching question.
+
+**One specific shape of "something else" is not padding: a quiet-search sibling existence check.**
+`test -f X && grep -q PATTERN X` (or `--quiet`) prints nothing whether it matches or finds nothing —
+that silence is indistinguishable from `test -f X` failing and the chain short-circuiting before
+grep ever runs, so on its own this compound cannot back an exhaustive claim at all. To use one, add a
+**second command, recorded earlier in `commands`,** that tests the exact same path with a flag whose
+predicate **implies** the compound's own gate flag, and itself exits 0 — a bare `test -f X`/`-e`/`-d`/
+`-r`, or the `[ ... ]` equivalent, nothing chained after it. That sibling is the one command this gate
+does not count as padding, because it is the only thing that can prove X would have passed the gate's
+own check when the quiet search ran. "Implies" is a one-way relationship, not flag equality: `-f`
+(regular file), `-d` (directory) and `-r` (readable) each require the target to exist as a
+precondition of their own stricter test, so any of them passing on X also proves a weaker `-e` gate on
+X would pass — a `test -f config.yaml` sibling DOES corroborate a compound gated on `test -e
+config.yaml`. It does not run the other way: `-e` implies only itself, and `-f`/`-d`/`-r` do not imply
+each other (a directory existing says nothing about whether `test -f` on that same path would also
+succeed — it wouldn't), so an `-e` sibling must not corroborate an `-f`-gated compound, and `test -d
+config` next to a compound gated on `test -f config` still proves nothing. Get any part wrong and the
+gate still rejects it: a sibling recorded AFTER the quiet search only proves X exists *now*, not that
+it did when the search ran (it could have been created in between); a sibling naming a different path
+— even one that merely contains the target as a substring, like `config.yaml.bak` next to
+`config.yaml` — proves nothing about the target at all. Equivalent relative spellings of the *same*
+path do still match — `test -f ./config.yaml` corroborates a compound gated on `config.yaml` — since
+path tokens are normalized (leading `./`, doubled separators) before comparison. A **trailing slash**
+is normalized away only for `-d`: `test -d config` and `test -d config/` are the same check, because a
+directory check's own predicate already requires the target to resolve as a directory, so the slash
+can never change the answer. Every other flag keeps the slash significant: POSIX `test`/`[` requires a
+trailing-slash path to resolve to a directory, so `test -f config.yaml/` fails for a regular file no
+matter whether it exists, and a bare `test -f config.yaml` sibling must not be read as corroborating
+that different, stricter gate. A `test -n X` sibling doesn't count either: `-n` tests whether a
+*string* is non-empty, not whether a file exists, so it says nothing about the filesystem no matter
+what its operand is.
+
+Being the receipt's only command (or paired only with that one preceding sibling) is necessary but
+not sufficient: the gate also rejects the two shapes of thin evidence that pattern most often. A
+failure that reads back as the target being missing ("no such file or directory", "not found", ...) —
+in `output_tail`, or in the command's own text outside any quoted argument — is not the same fact as
+"the target was searched and found empty"; "file missing" must never stand in for "every value
+empty". A quoted argument is exempted from that command-text check because it is what the command
+searches *for*, not a report of what happened: `grep -c "not found" build.log` exiting 1 means the
+phrase is nowhere in the file, which is exhaustive negative evidence, not a missing-target error. And
+a command that *only* tests whether a path exists (`test -f X`, `[ -e X ]`, `stat X`, a bare `ls X`,
+and nothing chained after it) never inspects content either way, so it cannot back a claim about what
+that content is — but a real content search chained onto one, like `test -f X && grep ... X`, is
+judged on the whole command, not just its existence-checking prefix. Neither check can verify that
+the command's scope truly covers "every"/"all" — that judgment call still belongs to `approved_by`.
 
 ### §3 Matching evidence to claims
 

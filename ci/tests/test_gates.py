@@ -12,10 +12,15 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 
 from __future__ import annotations
 
+import atexit
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -32,7 +37,183 @@ def run_gate(script: str, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def write_receipt(tmp_path: Path, **overrides) -> Path:
+def _has_git() -> bool:
+    return (REPO_ROOT / ".git").exists()
+
+
+def _extract_candidate_gates() -> Path | None:
+    """Materialize ci/gates/ as it exists at HEAD — the tip actually proposed for merge —
+    into its own directory, independent of whatever sits in the working tree.
+
+    gate-self-test overlays the *working tree* copy of ci/gates/ with the base ref's version
+    before this suite runs (Greptile P1 4140823500), so a gate change this PR makes is
+    invisible to run_gate() until the PR has already merged (Greptile P1, PR #45,
+    "CI skips new gate tests"). `git checkout <base> -- ci/gates/` rewrites the working tree
+    and the index; it does not touch HEAD, so HEAD's own commit object still holds the exact
+    candidate this PR proposes. `git archive HEAD` reads that, never the working tree, so it
+    yields the real candidate whether or not an overlay has run.
+
+    Returns None — never raises — when extraction did not produce a candidate, whatever the
+    reason (no .git/, HEAD carries no ci/gates/ at all, a corrupt archive, ...). Callers must
+    NOT treat every None the same way: run_candidate_gate() below tells "no .git/" (a
+    legitimate skip — there is no candidate to distrust) apart from every other cause,
+    because one of those other causes is a PR that deletes or breaks ci/gates/ outright, and
+    a required check must fail on that, not quietly skip it open (Greptile P1, PR #45,
+    "Missing candidate skips gate tests").
+
+    The extracted tree is registered for cleanup at interpreter exit — it is never touched
+    again after test collection, so nothing shorter-lived would run reliably.
+    """
+    try:
+        archive = subprocess.run(
+            ["git", "archive", "--format=tar", "HEAD", "--", "ci/gates"],
+            capture_output=True, cwd=REPO_ROOT,
+        )
+        if archive.returncode != 0 or not archive.stdout:
+            return None
+        dest = Path(tempfile.mkdtemp(prefix="candidate-gates-"))
+        atexit.register(shutil.rmtree, dest, ignore_errors=True)
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+            tar.extractall(dest, filter="data")
+        return dest / "ci" / "gates"
+    except (OSError, subprocess.SubprocessError, tarfile.TarError):
+        return None
+
+
+CANDIDATE_GATES = _extract_candidate_gates()
+
+
+def _candidate_gate_unavailable_reason() -> tuple[str, bool]:
+    """Why run_candidate_gate() can't produce a candidate, and whether that is a skip.
+
+    is_skip is True only when there is no .git/ at all (a bare source export has no
+    candidate to distrust in the first place). Every other extraction failure — including
+    HEAD having no ci/gates/ because this change deleted it — returns is_skip=False: the
+    required check must fail rather than pass by skipping (see _extract_candidate_gates).
+    """
+    if not _has_git():
+        return (
+            "no .git/ present; cannot extract the candidate gate (e.g. a bare source export)",
+            True,
+        )
+    return (
+        "candidate gate extraction from HEAD failed even though .git/ is present (for "
+        "example: this change deletes or breaks ci/gates/) — a required check must not "
+        "silently skip when it cannot prove the candidate gate is safe; see "
+        "_extract_candidate_gates()",
+        False,
+    )
+
+
+def _probe_network_isolation() -> bool:
+    """True if this host can run a child in a fresh, unprivileged network namespace with no
+    route to anywhere. Probed once at collection time; run_candidate_gate() refuses to
+    execute PR-controlled gate code at all when this is False (Greptile P1, PR #45, "PR code
+    runs on shared runner") rather than falling back to running it unisolated — resource
+    limits alone do not stop a malicious gate script from exfiltrating data over the network
+    on a shared self-hosted runner.
+    """
+    if shutil.which("unshare") is None:
+        return False
+    try:
+        probe = subprocess.run(
+            ["unshare", "-r", "-n", "--", "true"],
+            capture_output=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+NETWORK_ISOLATION_AVAILABLE = _probe_network_isolation()
+
+
+def _sandbox_limits() -> None:
+    """preexec_fn for run_candidate_gate(): bound CPU, memory and process count before the
+    candidate script gets control. Runs in the child, after fork and before exec.
+
+    Each limit is best-effort: a host whose existing hard limit already sits below what we
+    ask for would otherwise turn a defense-in-depth measure into a hard crash of the whole
+    job. The cwd/env isolation and network namespace in run_candidate_gate() are the primary
+    controls; these bound a runaway process rather than gate whether the sandbox runs at all.
+    """
+    import resource
+
+    for limit, value in (
+        (resource.RLIMIT_CPU, (20, 20)),
+        (resource.RLIMIT_AS, (1024 * 1024 * 1024,) * 2),
+        (resource.RLIMIT_NPROC, (64, 64)),
+    ):
+        try:
+            resource.setrlimit(limit, value)
+        except (ValueError, OSError):
+            pass
+
+
+def run_candidate_gate(script: str, *args: str) -> subprocess.CompletedProcess:
+    """Run a gate script from the untouched PR-tip candidate — sandboxed, not trusted.
+
+    Unlike run_gate(), this never reads the working tree's (possibly base-overlaid) copy: it
+    runs the exact candidate this PR proposes to merge, so new or changed gate behaviour is
+    exercised for real by this required check instead of silently skipping until after merge.
+
+    Trust model: this still executes attacker-controlled Python on a shared self-hosted
+    runner, so isolation is a precondition, not a best-effort extra. Before anything runs:
+    the candidate is a scratch extraction of HEAD, never the real checkout (a script cannot
+    reach the actual PR working tree or its history); it runs in a throwaway cwd with a
+    stripped environment (no repo secrets, no GITHUB_TOKEN); it is wrapped in a fresh
+    unprivileged network namespace with no route to anywhere, so it cannot exfiltrate
+    anything or reach internal services; and it is bounded by CPU/memory/process-count
+    limits and a hard wall-clock timeout. Filesystem isolation stops at "not the real
+    checkout" — this does not chroot or mount-namespace the child, so it can still read
+    whatever the runner's normal file permissions allow. Closing that gap needs a
+    container or mount-namespace sandbox, which is an infra-owned follow-up; until then,
+    the runner must not keep secrets or credentials in files readable by the job's user.
+
+    Fails (does not skip) when the network namespace can't be created (see
+    _probe_network_isolation) or when candidate extraction failed for any reason other than
+    "no .git/" (see _candidate_gate_unavailable_reason) — a required check must not pass by
+    quietly skipping the one thing it exists to verify.
+    """
+    if CANDIDATE_GATES is None:
+        message, is_skip = _candidate_gate_unavailable_reason()
+        if is_skip:
+            pytest.skip(message)
+        pytest.fail(message)
+
+    if not NETWORK_ISOLATION_AVAILABLE:
+        # Missing kernel support for unprivileged user/network namespaces is a HOST property,
+        # not something a PR's diff can control — unlike a missing candidate (which a
+        # malicious PR could engineer on purpose), no attacker can make a runner's kernel stop
+        # supporting unshare(). So degrading this to a skip does not reopen the "quietly pass
+        # an untrusted candidate" hole _candidate_gate_unavailable_reason() guards against: it
+        # still means "the candidate never ran unsandboxed", it just stops a runner that simply
+        # lacks this kernel feature from permanently red-lining the whole required
+        # gate-self-test suite (Greptile P1, PR #45, "Namespace prerequisite blocks builds").
+        pytest.skip(
+            "cannot create an unprivileged network namespace (unshare -r -n) on this host — "
+            "refusing to run PR-controlled ci/gates/ code from HEAD without it, so this "
+            "candidate-gate check is skipped rather than executed unsandboxed. A self-hosted "
+            "runner is shared infrastructure; resource limits alone do not stop a malicious "
+            "gate script from reaching the network. Enable unprivileged user+network "
+            "namespaces on the runner (kernel.unprivileged_userns_clone=1) to exercise this "
+            "check for real."
+        )
+
+    workdir = Path(tempfile.mkdtemp(prefix="gate-sandbox-"))
+    try:
+        return subprocess.run(
+            ["unshare", "-r", "-n", "--", sys.executable, str(CANDIDATE_GATES / script), *args],
+            capture_output=True, text=True, cwd=workdir,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": str(workdir)},
+            timeout=30,
+            preexec_fn=_sandbox_limits if os.name == "posix" else None,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _receipt_dict(**overrides) -> dict:
     receipt = {
         "task_id": "test-task",
         "bot": "bot-01-systems-backend",
@@ -47,8 +228,12 @@ def write_receipt(tmp_path: Path, **overrides) -> Path:
         "approved_by": "bot-06-quality-security",
     }
     receipt.update(overrides)
+    return receipt
+
+
+def write_receipt(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "receipt.json"
-    path.write_text(json.dumps(receipt))
+    path.write_text(json.dumps(_receipt_dict(**overrides)))
     return path
 
 
@@ -262,6 +447,955 @@ class TestG2Receipts:
         r = run_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "expects_failure but command[0] exited 0" in r.stderr
+
+    def test_expects_failure_cannot_waive_strict_exhaustiveness(self, tmp_path):
+        """A claim's own expects_failure must not borrow OTHER, unrelated commands
+        elsewhere in the receipt to look better-supported than it is. This claim is
+        evidenced by one narrow, failing command (a single test file, not the suite) while
+        the receipt separately records a passing run of the whole suite for something else
+        — that second command cannot be what makes THIS claim exhaustive, so its presence
+        is exactly the original bypass this check exists to catch (Greptile P1, PR #45).
+
+        Runs against the candidate (run_candidate_gate), not the working tree (run_gate):
+        gate-self-test overlays ci/gates/ with the base ref on pull requests (Greptile P1
+        4140823500), and this fix is new in this PR (Greptile P1, PR #45, "New tests fail in
+        CI"). See run_candidate_gate() for how this is kept safe to run pre-merge.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "pytest tests/test_x.py", "exit_code": 1},
+                {"cmd": "pytest tests/", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "confirmed every case fails", "evidence_command_index": 0,
+                 "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "exhaustive" in r.stderr.lower()
+
+    def test_expects_failure_alone_can_satisfy_strict_exhaustiveness(self, tmp_path):
+        """A single expected-failure command CAN be exhaustive evidence when it is the
+        receipt's only command: a search that exits non-zero exactly when it finds nothing
+        across its whole target is reproduction evidence and total coverage at once
+        (Greptile P1, PR #45, "Valid negative evidence rejected" — the prior, unconditional
+        version of this check rejected this receipt regardless of what the command proved).
+        With nothing else in the receipt to borrow from, the command's own scope is left to
+        a human reviewer (approved_by) to judge, same as any other evidence-matching
+        question this gate cannot verify by itself.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "grep -c '=[^=]' .env.example", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_missing_target_is_not_exhaustive_evidence(self, tmp_path):
+        """A "file missing" failure is not "every value is empty" — same claim text as the
+        valid case above, but the command never got to look at content because the target
+        didn't exist. Being the receipt's only command is necessary but not sufficient
+        (Greptile P1, PR #45, "Thin evidence passes strict validation").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "cat .env.example", "exit_code": 1,
+                 "output_tail": "cat: .env.example: No such file or directory"},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "missing" in r.stderr.lower()
+
+    def test_expects_failure_existence_check_is_not_exhaustive_evidence(self, tmp_path):
+        """Testing whether a path exists proves nothing about the content inside it, however
+        confidently the claim is worded (Greptile P1, PR #45, "Thin evidence passes strict
+        validation").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "exist" in r.stderr.lower()
+
+    def test_expects_failure_search_needle_is_not_mistaken_for_missing_target(self, tmp_path):
+        """A grep whose PATTERN happens to be "not found" (or "does not exist") is searching
+        FOR that literal text, not reporting that its own target is missing. Exiting 1 there
+        means the phrase appears nowhere in the file — valid exhaustive negative evidence,
+        not a missing-target error (Greptile P1, PR #45, "Search text mistaken for error").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "grep -c 'not found' build.log", "exit_code": 1,
+                 "output_tail": "0"},
+            ],
+            claims=[
+                {"claim": "every line in build.log is free of 'not found' errors",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_compound_content_search_is_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep ... X` fails when X exists but the grep finds nothing — that is
+        a real content search, not a bare existence check, even though it starts with one
+        (Greptile P1, PR #45, "Compound content searches rejected"). `output_tail: "0"` is
+        what a real `grep -c` prints when it actually ran and matched nothing — that captured
+        output is what distinguishes this from the short-circuited case below.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                 "exit_code": 1, "output_tail": "0"},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_compound_missing_file_is_not_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep ... X` also fails when X does not exist at all — the chain
+        short-circuits on the existence check and the grep clause never runs, leaving the
+        exact same exit code as the case above with none of the evidence. Without captured
+        output showing the search itself ran, this must not pass as exhaustive content
+        evidence (Greptile P1, PR #45, "Missing file passes content claim").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "no captured output" in r.stderr
+
+    def test_expects_failure_absence_claim_accepts_bare_existence_check(self, tmp_path):
+        """A claim that a path is ABSENT — not a claim about its content — is directly
+        evidenced by a failing `test -f`: the exit code itself is the whole claim. This must
+        not be rejected the same way a content claim on a bare existence check is (Greptile
+        P1, PR #45, "Valid absence evidence rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config/legacy.yml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every legacy config path has been removed",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep -q PATTERN X` short-circuits on a missing X before grep ever
+        runs, leaving the exact same exit code (1) and the exact same empty output as X
+        existing and the quiet grep finding nothing — `grep -q` never prints anything
+        either way. Exit code and output_tail alone cannot tell "X was searched and found
+        empty" from "X was never searched because it doesn't exist", so this ambiguous,
+        uncorroborated compound must not pass as exhaustive content evidence (Greptile P1,
+        PR #45, "Missing file passes quiet-grep check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "quiet search" in r.stderr
+
+    def test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence(
+        self, tmp_path
+    ):
+        """The same quiet-grep compound as above, but now preceded by a separate, independent
+        command that proves .env.example actually existed (a bare `test -f` that itself
+        exited 0, recorded BEFORE the quiet search) — that sibling evidence is what a real,
+        fully-executed quiet no-match needs to be trusted, and resolves the ambiguity the
+        previous test blocks on (Greptile P1, PR #45, "Missing file passes quiet-grep
+        check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example", "exit_code": 0},
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_later_sibling_is_still_padding(self, tmp_path):
+        """The same sibling existence check as above, but recorded AFTER the quiet search
+        instead of before it, must NOT corroborate it. A `test -f X` that exits 0 later in
+        the receipt only proves X exists now — X could have been created after the quiet
+        search ran and found nothing, which is exactly the ambiguity the sibling-evidence
+        exception exists to resolve, not launder (Greptile P1, PR #45, "Later check
+        validates earlier search").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+                {"cmd": "test -f .env.example", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling existence check on a DIFFERENT path that merely contains the quiet
+        search's target as a substring (`config.yaml.bak` next to `config.yaml`) must not
+        corroborate it — corroboration requires the exact path token, not a substring match
+        (Greptile P1, PR #45, "Unrelated checks confirm missing files").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml.bak", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q 'legacy_flag' config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration(self, tmp_path):
+        """A sibling `test -n PATH` (string-non-empty test) must not corroborate a quiet
+        search even though it names the exact path — `-n` tests a STRING's emptiness, not
+        whether a file exists, so it is not a real file-existence probe (Greptile P1, PR
+        #45, "Unrelated checks confirm missing files").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -n config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q 'legacy_flag' config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding(self, tmp_path):
+        """A second command that has nothing to do with confirming the cited command's
+        target existed (here: an existence check on a different path) is still padding, not
+        corroboration — the sibling-evidence exception only covers a command that actually
+        proves the SAME path was there (Greptile P1, PR #45, "Missing file passes
+        quiet-grep check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+                {"cmd": "test -f unrelated.txt", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_content_removal_claim_rejects_bare_existence_check(self, tmp_path):
+        """A claim about CONTENT being removed ("the deprecated tokens were removed from the
+        codebase") is not a claim about one path's existence — a bare `test -f` on a single
+        file proves nothing about whether that content search ever happened, so it must not
+        be accepted the way a true absence-of-path claim is (Greptile P1, PR #45, "Existence
+        check validates content").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f secrets.env", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "all deprecated tokens were removed from the codebase",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "only tests whether a path exists" in r.stderr
+
+    def test_expects_failure_absence_claim_without_path_noun_still_recognised(self, tmp_path):
+        """The tightened ABSENCE_CLAIM_RE must still accept the handful of unambiguous
+        existence phrasings ("no longer exists") even when the claim names no file/path/
+        directory noun — only the ambiguous bare words (removed/deleted/gone/exists/absent)
+        now require one.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config/legacy.yml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "config/legacy.yml no longer exists",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration(self, tmp_path):
+        """A sibling existence check spelled `./config.yaml` must corroborate a quiet search
+        gated on `config.yaml` — same file, different but equivalent relative spelling. Exact
+        string comparison treated the two as different targets and rejected valid evidence
+        under `--strict` (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f ./config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration(
+        self, tmp_path
+    ):
+        """The equivalence works the other way round too: a plain sibling `test -f
+        config.yaml` must corroborate a quiet search whose own gate is spelled
+        `./config.yaml` (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f ./config.yaml && grep -q legacy ./config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration(
+        self, tmp_path
+    ):
+        """A `test -d` sibling probe is just as real a filesystem check as `test -f`/`-e`,
+        and must corroborate a quiet `grep -R` search gated on the same directory (Greptile
+        P1, PR #45, "Valid filesystem probes rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -d config && grep -R -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration(
+        self, tmp_path
+    ):
+        """A `test -r` sibling probe (readable file) must corroborate a quiet search gated
+        on the same path, the same way `test -f`/`-e`/`-d` already do (Greptile P1, PR #45,
+        "Valid filesystem probes rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -r config.yaml", "exit_code": 0},
+                {"cmd": "test -r config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_sibling_wrong_path_is_still_padding(
+        self, tmp_path
+    ):
+        """A `test -d` sibling probe on a DIFFERENT directory must not corroborate a quiet
+        search gated on another directory — the flag being accepted now (`-d`) must not
+        loosen the exact-path requirement (Greptile P1, PR #45, "Valid filesystem probes
+        rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d other-config", "exit_code": 0},
+                {"cmd": "test -d config && grep -R -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_trailing_slash_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f config.yaml` (no trailing slash) must NOT corroborate a compound
+        gated on `test -f config.yaml/` (trailing slash) even though the two paths name the
+        same file. POSIX `test`/`[` requires a trailing-slash path to resolve to a directory,
+        so `test -f config.yaml/` fails for a regular file regardless of whether the file
+        exists — the slash changes what the check actually proves, not just its spelling.
+        Treating them as the same normalized path would let a real, passing `-f` sibling
+        corroborate a compound whose own gate can never pass for that same file (Greptile P1,
+        PR #45, "Different paths treated as equal").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_trailing_slash_sibling_still_matches_same_spelling(
+        self, tmp_path
+    ):
+        """The trailing-slash distinction cuts both ways: a sibling spelled with the SAME
+        trailing slash as the compound's own gate must still corroborate it — this is not a
+        blanket rejection of trailing slashes, only of treating a slashed and unslashed
+        spelling as interchangeable (Greptile P1, PR #45, "Different paths treated as
+        equal").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config/", "exit_code": 0},
+                {"cmd": "test -d config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_mismatched_flag_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -d config` (proves config IS a directory) must NOT corroborate a
+        quiet search gated on `test -f config` (a different predicate on the same path) — a
+        directory existing says nothing about whether `test -f` on that same path would also
+        succeed; in fact it would fail, short-circuiting the compound before grep ever runs.
+        Comparing only the path and ignoring which flag each command used let a mismatched
+        pair falsely corroborate a compound that never searched anything (Greptile P1, PR #45,
+        "Mismatched probes corroborate searches").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -f config && grep -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_matching_e_flag_sibling_still_corroborates(
+        self, tmp_path
+    ):
+        """The flag-matching requirement cuts both ways: a sibling using the SAME flag (`-e`)
+        as the compound's own gate must still corroborate it — this is not a blanket rejection
+        of any particular flag, only of pairing a sibling's predicate with a different one on
+        the compound's gate (Greptile P1, PR #45, "Mismatched probes corroborate searches").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -e config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_stricter_f_sibling_corroborates_e_gate(
+        self, tmp_path
+    ):
+        """A `test -f` sibling proves the path is a regular file, which REQUIRES it to exist
+        — so it also proves a weaker `test -e` gate on the same path would have passed. Exact
+        flag equality wrongly rejected this sound implication (Greptile P1, PR #45, "Valid
+        probes rejected"); the flag-implication lattice must accept it.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_weaker_e_sibling_does_not_corroborate_f_gate(
+        self, tmp_path
+    ):
+        """The implication only runs one way: a `test -e` sibling passing does NOT prove a
+        stricter `test -f` gate on the same path would also pass (the target could be a
+        directory) — accepting `-f` as corroboration for `-e` must not be loosened into
+        accepting every flag pairing regardless of direction (Greptile P1, PR #45, "Valid
+        probes rejected", read narrowly).
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -e config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_probe_trailing_slash_is_corroboration(
+        self, tmp_path
+    ):
+        """`test -d config` (no trailing slash) must corroborate a compound gated on `test -d
+        config/` (trailing slash), and vice versa — unlike `-f`/`-e`/`-r`, a directory check's
+        own predicate already requires the target to resolve as a directory, so appending a
+        trailing slash can never change whether `-d` passes (Greptile P1, PR #45, "Directory
+        probes treated as different").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -d config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_file_probe_trailing_slash_still_not_corroboration(
+        self, tmp_path
+    ):
+        """The trailing-slash collapse is specific to `-d`: a `test -f config.yaml` sibling
+        (no trailing slash) must still NOT corroborate a compound gated on `test -f
+        config.yaml/` (trailing slash) — for `-f`, the slash forces directory resolution and
+        changes the answer for a regular file, so this must keep failing even after the `-d`
+        fix (Greptile P1, PR #45, "Different paths treated as equal", regression guard).
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_directory_sibling_corroborates_trailing_slash_exists_gate(
+        self, tmp_path
+    ):
+        """A `test -d config` sibling (no trailing slash) must corroborate a compound gated
+        on `test -e config/ && ...` (trailing slash): once `-d` proves config IS a directory,
+        the gate's own trailing slash can no longer change the outcome either, since `-e` on
+        a confirmed directory always passes regardless of a trailing slash. Normalizing the
+        gate's path under its own flag instead of the sibling's rejected this as two
+        different paths (Greptile P1, PR #45, "Valid directory probe is rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -e config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_file_sibling_still_rejects_trailing_slash_exists_gate(
+        self, tmp_path
+    ):
+        """The sibling-flag collapse is specific to a `-d` sibling: a `test -f config.yaml`
+        sibling (proving config.yaml is a regular file, NOT a directory) must still NOT
+        corroborate a compound gated on `test -e config.yaml/ && ...` — the trailing slash
+        would make that gate fail on a regular file, so this must keep failing even after the
+        `-d` fix above (regression guard for "Valid directory probe is rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_ordinary_parent_path_sibling_is_intentionally_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f dir/../config.yaml` must NOT corroborate a compound gated on
+        plain `config.yaml`, even when `dir` really is an ordinary directory with no symlink
+        anywhere in sight (Greptile P1, PR #45 round 11, "Valid parent paths rejected"). This
+        is the direct, INTENTIONAL cost of round 10's fix, not a separate bug to close: the
+        gate compares `commands[].cmd` as plain text with no filesystem to check `dir`
+        against, so it cannot tell this case apart from the round-10 security case (`test -f
+        config` vs. a compound gated on `test -e link/../config`, where `link` IS a symlink).
+        Any rule that collapsed `X/../Y` only when `X` is provably not a symlink would need to
+        resolve `X` against a live filesystem — which this gate must not do, since
+        `commands[].cmd` is self-reported text, evaluated independently of whenever (and on
+        whatever machine) the commands actually ran. So the choice is binary, not tunable per
+        case, and this gate keeps the sound side for both: `dir/../config.yaml` never equals
+        `config.yaml`, regardless of what `dir` actually is.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f dir/../config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_symlink_unsafe_dotdot_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f config` (no `..`) must NOT corroborate a compound gated on
+        `test -e link/../config && ...` just because `posixpath.normpath` would textually
+        collapse `link/../config` to `config`. That collapse assumes `link` is a plain
+        directory; if `link` is a symlink, `link/..` resolves to the parent of wherever the
+        symlink points, not back to the directory containing `link` — so `link/../config` can
+        name a completely different file than `config` even though the two strings normalize
+        the same way with naive textual `..` collapsing (Greptile P1, PR #45 round 10,
+        "Symlink-unsafe path collapse falsely corroborates searches"). The gate must treat
+        `link/../config` and `config` as distinct targets and refuse to let the sibling
+        corroborate the compound.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config", "exit_code": 0},
+                {"cmd": "test -e link/../config && grep -q legacy link/../config",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+
+# ===========================================================================
+# Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)
+# ===========================================================================
+
+class TestCandidateGateTrust:
+    """The infrastructure these tests use to exercise a PR's own gate changes pre-merge is
+    itself security-sensitive: it runs attacker-controlled Python on a shared self-hosted
+    runner. These tests hold that infrastructure to the same fail-closed standard as the
+    gates it runs (Greptile P1, PR #45, "PR code runs on shared runner" and "Missing
+    candidate skips gate tests").
+    """
+
+    def test_missing_candidate_fails_closed_when_git_present(self):
+        """This repo checkout has .git/, so a missing candidate here can only mean
+        extraction itself failed (e.g. HEAD has no ci/gates/) — that must fail the required
+        check, not skip it open for a PR that deletes ci/gates/.
+
+        This assertion only applies when .git/ is actually present; a bare source export
+        (no .git/ at all) is the legitimate skip case _candidate_gate_unavailable_reason()
+        itself carves out, so this test skips rather than assert-failing on one (Greptile P2,
+        PR #45, "source export without .git").
+        """
+        if not _has_git():
+            pytest.skip("no .git/ present; cannot exercise the git-present fail-closed path "
+                        "(e.g. a bare source export)")
+        message, is_skip = _candidate_gate_unavailable_reason()
+        assert is_skip is False
+        assert "must not" in message
+
+    def test_network_isolation_probe_is_a_clean_bool(self):
+        result = _probe_network_isolation()
+        assert isinstance(result, bool)
+
+    def test_run_candidate_gate_skips_closed_without_network_isolation(self, monkeypatch):
+        """When the host can't provide network isolation, run_candidate_gate() must refuse
+        to execute the candidate at all rather than silently falling back to running it
+        unisolated. It degrades to a skip, not a hard failure, so a runner that simply lacks
+        kernel support for unprivileged user/network namespaces doesn't permanently block the
+        required gate-self-test suite (Greptile P1, PR #45, "Namespace prerequisite blocks
+        builds") — the candidate still never runs unsandboxed either way.
+        """
+        if CANDIDATE_GATES is None:
+            pytest.skip("no candidate extracted in this environment")
+        monkeypatch.setattr(sys.modules[__name__], "NETWORK_ISOLATION_AVAILABLE", False)
+        with pytest.raises(pytest.skip.Exception):
+            run_candidate_gate("check_receipt.py", "--receipt", "/dev/null")
+
+    def test_extract_candidate_gates_registers_cleanup(self, monkeypatch):
+        """The tree _extract_candidate_gates() materializes under a fresh tempdir must not
+        leak — it is registered for cleanup at interpreter exit.
+        """
+        if not _has_git():
+            pytest.skip("no .git/ present; cannot extract the candidate gate")
+        registered = []
+        monkeypatch.setattr(
+            atexit, "register", lambda func, *a, **k: registered.append((func, a, k))
+        )
+        result = _extract_candidate_gates()
+        try:
+            assert result is not None
+            assert any(func is shutil.rmtree for func, *_ in registered)
+        finally:
+            if result is not None:
+                shutil.rmtree(result.parent.parent, ignore_errors=True)
+
+
+# ===========================================================================
+# G-2 — loop_acks (degraded-mode turn acknowledgements)
+# ===========================================================================
+
+def valid_ack(**overrides) -> dict:
+    ack = {
+        "condition": "brief_degraded",
+        "operation": "degraded-loop: repo work without a memory brief",
+        "ack_id": "ack-test-001",
+        "human_granted_by": "Ove",
+        "relayed_by": "bot-00-programming-lead",
+        "at": "2026-09-30T09:41:11Z",
+        "scope": "one turn, ticket test-task",
+    }
+    ack.update(overrides)
+    return ack
+
+
+class TestG2LoopAcks:
+    """loop_acks validation is new in this PR, so every test here runs against the candidate
+    (run_candidate_gate), not the working tree (run_gate): gate-self-test overlays ci/gates/
+    with the base ref on pull requests (Greptile P1 4140823500), and the base ref predates
+    this feature (Greptile P1, PR #45, "CI skips new gate tests"). See run_candidate_gate()
+    for how this is kept safe to run pre-merge.
+    """
+
+    def test_omitted_loop_acks_passes(self, tmp_path):
+        """A receipt for a turn that never went degraded need not carry the field at all."""
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(write_receipt(tmp_path)))
+        assert r.returncode == 0, r.stderr
+
+    def test_empty_loop_acks_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+
+    def test_valid_loop_ack_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack()])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+
+    def test_null_loop_acks_blocked(self, tmp_path):
+        """An explicit null is a different shape from omitting the field and must not be
+        read the same way — it is a malformed field, not 'no ack'."""
+        p = write_receipt(tmp_path, loop_acks=None)
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a list" in r.stderr
+        assert "do not set it to null" in r.stderr
+
+    def test_non_list_loop_acks_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks={"condition": "brief_degraded"})
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a list" in r.stderr
+
+    def test_non_dict_entries_blocked(self, tmp_path):
+        """A list of strings must fail cleanly rather than crash on attribute access."""
+        p = write_receipt(tmp_path, loop_acks=["brief_degraded"])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be an object" in r.stderr
+
+    def test_missing_ack_fields_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[{"condition": "brief_degraded"}])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is missing" in r.stderr
+
+    @pytest.mark.parametrize("granter", [True, 12345, ["Ove"], {"name": "Ove"}])
+    def test_human_granted_by_non_string_blocked(self, tmp_path, granter):
+        """A truthy non-string value must not dodge the missing-field check (it is truthy)
+        and then dodge the seat-name check (it does not look like a seat)."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by=granter)])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a string naming a person" in r.stderr
+
+    def test_human_granted_by_seat_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="bot-01-systems-backend")])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is a seat, not a human" in r.stderr
+
+    def test_human_granted_by_desk_connector_blocked(self, tmp_path):
+        """`desk-<seat>` is a documented OAuth connector name, not a person."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="desk-lead")])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is a seat, not a human" in r.stderr
+
+    def test_invalid_condition_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(condition="not-a-real-condition")])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is not one of" in r.stderr
+
+    def test_scope_non_string_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=["test-task"])])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "scope must be a string" in r.stderr
+
+    @pytest.mark.parametrize("scope", ["one turn, ticket some-other-ticket", "all turns"])
+    def test_scope_unbound_from_task_blocked(self, tmp_path, scope):
+        """A scope naming another ticket, or a blanket scope, must not authorise this turn."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=scope)])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "does not name this receipt's task_id" in r.stderr
+
+    def test_scope_bound_to_task_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope="one turn, ticket test-task")])
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
 
 
 # ===========================================================================

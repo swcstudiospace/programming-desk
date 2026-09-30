@@ -46,6 +46,49 @@
       "exit_code": 1,
       "duration_s": 0.1,
       "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.27,
+      "output_tail": "183 passed in 10.27s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k 'exhaustive or CandidateGateTrust' -q",
+      "exit_code": 0,
+      "duration_s": 0.25,
+      "output_tail": "9 passed, 174 deselected in 0.25s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "unshare -r -n -- python3 -c \"import socket; s=socket.socket(socket.AF_INET, socket.SOCK_STREAM); s.settimeout(2); s.connect(('8.8.8.8', 53))\"",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "OSError: [Errno 101] Network is unreachable — confirms the network namespace run_candidate_gate() now wraps candidate execution in actually blocks egress on this host, not merely in theory",
+      "expects_failure": true
     }
   ],
   "claims": [
@@ -97,13 +140,44 @@
       "claim": "This receipt correctly has no approved_by yet, and self-approval remains blocked by G-2 pending an independent reviewer",
       "evidence_command_index": 6,
       "expects_failure": true
+    },
+    {
+      "claim": "Full ci/tests gate suite passes with this round's three hard-fixes applied: 183 tests (177 on the prior tip + 6 new: 2 thin-evidence regression tests for check_receipt.py's --strict exhaustiveness check, and 4 for the candidate-gate trust infrastructure in test_gates.py itself), no regressions",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "check_receipt.py --strict now rejects a claim asserting exhaustiveness ('every value is empty') whose expects_failure evidence is a missing-target error ('no such file or directory') or a bare existence check, even when that command is the receipt's only one (previously sufficient on its own); the candidate-gate-trust fail-closed behaviour (missing candidate with .git present, and no network isolation available) and its atexit cleanup registration are also exercised directly",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "check_receipt.py and the updated test_gates.py still compile cleanly after this round's changes",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "All files touched by this hard-fix (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The unprivileged network namespace run_candidate_gate() now wraps candidate execution in genuinely blocks outbound connections on this host — not merely a resource-limit best-effort — confirmed by a direct socket connect from inside the same 'unshare -r -n' wrapper failing with ENETUNREACH",
+      "evidence_command_index": 13,
+      "expects_failure": true
     }
   ],
   "unverified": [
-    "The 'malformed loop_acks TypeError' reported alongside this HARD_FIX was not reproduced: empirically probing the pre-fix check_receipt.py with null/non-list/non-dict/non-string payloads for loop_acks, condition, human_granted_by and scope raised no exception in any case tried — Python's 'x or default' pattern and 'A or B' short-circuiting coerced or skipped rather than raising. The defensive type checks and the 18 regression tests were still added as requested; if a distinct crash path exists it was not found by this pass and would need a specific reproducing payload.",
+    "The 'malformed loop_acks TypeError' reported alongside an earlier HARD_FIX on this branch was not reproduced: empirically probing the pre-fix check_receipt.py with null/non-list/non-dict/non-string payloads for loop_acks, condition, human_granted_by and scope raised no exception in any case tried — Python's 'x or default' pattern and 'A or B' short-circuiting coerced or skipped rather than raising. The defensive type checks and the 18 regression tests were still added as requested; if a distinct crash path exists it was not found by this pass and would need a specific reproducing payload.",
     "check_rollback.py (G-5/G-6) not exercised — this change touches only check_receipt.py, the receipt-contract skill doc, and its test module; no destructive/deploy commands or approvals[] entries are introduced",
     "CI's exact receipt-selection step (.github/workflows/gates.yml) was not run end-to-end on a runner; only the underlying gate scripts and their unit tests were re-run locally",
-    "The two adjacent Greptile threads on this PR ('Missing required PR receipt' and 'Deploy approval guidance is inaccurate') were left untouched — they were not in the enumerated list of QUALITY-owned items for this HARD_FIX and concern G-5 deploy-approval documentation, not loop_acks"
+    "The two adjacent Greptile threads on this PR ('Missing required PR receipt' and 'Deploy approval guidance is inaccurate') were left untouched — they were not in the enumerated list of QUALITY-owned items for this HARD_FIX and concern G-5 deploy-approval documentation, not loop_acks",
+    "Filesystem isolation for run_candidate_gate() is still partial: the candidate runs in a throwaway cwd with a stripped environment, but there is no chroot or mount-namespace, so it can read whatever the runner's normal file permissions allow. Closing that gap needs a container or mount-namespace sandbox and is flagged as an infra-owned follow-up in the code comment, not fixed by this round.",
+    "The network-namespace wrapper (unshare -r -n) was verified on this development container, not on the organisation's actual self-hosted VPS runner named in gates.yml; if unprivileged user namespaces are disabled there (kernel.unprivileged_userns_clone=0), run_candidate_gate() will fail closed as designed, but that fail-closed path itself was only exercised by monkeypatching NETWORK_ISOLATION_AVAILABLE in a test, not by disabling user namespaces on a real host"
   ],
   "loop_acks": []
 }

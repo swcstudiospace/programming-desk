@@ -285,7 +285,17 @@ def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     if not _flag_implies(matched_flag, flag):
         return False
     matched_path = match.group("path1") or match.group("path2")
-    return _normalize_path(matched_path, matched_flag) == _normalize_path(path, flag)
+    # Both paths are normalized under the SIBLING's flag, not each side's own flag: once the
+    # sibling has proven the target's type (`-d` passing means it IS a directory), a trailing
+    # slash on the gate's OWN path can no longer change the outcome either, since the gate's
+    # test is already known to land on that same directory. Normalizing the gate's path under
+    # its own `-e`/`-f`/`-r` flag instead treated `test -d config` as unable to corroborate
+    # `test -e config/ && ...`, rejecting a directory that had already been proven to exist
+    # (Greptile P1, PR #45, "Valid directory probe is rejected"). This is sound only because
+    # `_flag_implies` already restricted the pair above: the one case where trailing-slash
+    # significance is genuinely flag-dependent (`-d` vs `-f`/`-e`/`-r` on the same path) can
+    # never reach here, since those flags don't imply each other.
+    return _normalize_path(matched_path, matched_flag) == _normalize_path(path, matched_flag)
 
 
 def _confirmed_by_sibling_existence_check(

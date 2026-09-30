@@ -1103,6 +1103,55 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "cannot be what makes this claim exhaustive" in r.stderr
 
+    def test_expects_failure_directory_sibling_corroborates_trailing_slash_exists_gate(
+        self, tmp_path
+    ):
+        """A `test -d config` sibling (no trailing slash) must corroborate a compound gated
+        on `test -e config/ && ...` (trailing slash): once `-d` proves config IS a directory,
+        the gate's own trailing slash can no longer change the outcome either, since `-e` on
+        a confirmed directory always passes regardless of a trailing slash. Normalizing the
+        gate's path under its own flag instead of the sibling's rejected this as two
+        different paths (Greptile P1, PR #45, "Valid directory probe is rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -e config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_file_sibling_still_rejects_trailing_slash_exists_gate(
+        self, tmp_path
+    ):
+        """The sibling-flag collapse is specific to a `-d` sibling: a `test -f config.yaml`
+        sibling (proving config.yaml is a regular file, NOT a directory) must still NOT
+        corroborate a compound gated on `test -e config.yaml/ && ...` — the trailing slash
+        would make that gate fail on a regular file, so this must keep failing even after the
+        `-d` fix above (regression guard for "Valid directory probe is rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

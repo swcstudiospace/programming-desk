@@ -1,0 +1,48 @@
+change_id: desk-v2-tool-rosters-v1
+proposed_by: bot-06-quality-security
+surface: contracts/tool-rosters/_core.yaml
+
+# Every other contract-surface path this change touches. `surface` plus `surfaces` must cover
+# the whole diff (G-4), which is what binds this document to this change rather than a later
+# one. Listed individually on purpose: `contracts/**` would pass while describing nothing.
+surfaces:
+  - contracts/tool-rosters/lead.yaml
+  - contracts/tool-rosters/systems.yaml
+  - contracts/tool-rosters/web.yaml
+  - contracts/tool-rosters/android.yaml
+  - contracts/tool-rosters/ios.yaml
+  - contracts/tool-rosters/infra.yaml
+  - contracts/tool-rosters/quality.yaml
+  - contracts/tool-packs/clippyos.yaml
+  - contracts/tool-packs/desklanes.yaml
+  - contracts/tool-packs/kanbanos.yaml
+  - contracts/README.md
+
+breaking: false
+version: 1.0.0
+previous_version: null
+
+summary: >
+  Introduces the per-seat tool rosters (contracts/tool-rosters/*.yaml: the core eight plus
+  seat tools, 10-15 per seat) and the application tool packs (contracts/tool-packs/*.yaml,
+  at most five tools each, loadable by WEB/ANDROID/IOS) that services/desk-gateway serves to
+  each Grok Bot seat over its own MCP endpoint. New surface, no prior version: nothing a
+  consumer already depends on changes. Plan: docs/upgrade-plan-desk-v2.md section 7.
+
+consumers_required:
+  - bot-00-programming-lead
+  - bot-01-systems-backend
+  - bot-02-web-edge
+  - bot-03-android
+  - bot-04-ios
+  - bot-05-infrastructure
+  - bot-06-quality-security
+
+acknowledgements: []
+
+semantic_changes: []
+
+migration_note: >
+  None required. Seats gain tools; no existing tool, field or endpoint is renamed or removed.
+  Each seat records its acknowledgement through desk_contract_ack once its gateway endpoint
+  is registered (desk_doctor register), and QUALITY reads them back with desk_contract_ack_status.

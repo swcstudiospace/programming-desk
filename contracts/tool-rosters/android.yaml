@@ -1,0 +1,115 @@
+# ANDROID roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-03-android.
+version: 1.0.0
+seat: bot-03-android
+short: android
+endpoint: /mcp/android
+scope: seat:android
+memory_banks: { own: pd-android, shared: [pd-desk] }
+core: true
+packs_allowed: true
+consumers: [bot-03-android]
+tools:
+  - name: desk_play_track_status
+    kind: read
+    gates: []
+    description: Read the state of a Play Console track (releases, version codes, rollout fraction) for a desk-managed app.
+    backend: mobile.play_track_status
+    input:
+      type: object
+      additionalProperties: false
+      required: [package_name, track]
+      properties:
+        package_name: { type: string, pattern: "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$" }
+        track: { type: string, enum: [internal, alpha, beta, production] }
+
+  - name: desk_play_staged_rollout
+    kind: write
+    gates: [g5, g6]
+    description: >-
+      Start or advance a staged rollout on a track. PD-5 - requires rollback_plan, halt_threshold and
+      approval_id; production at 100 percent is refused unless the approval says so.
+    backend: mobile.play_staged_rollout
+    input:
+      type: object
+      additionalProperties: false
+      required: [package_name, track, version_code, user_fraction, halt_threshold, rollback_plan, approval_id]
+      properties:
+        package_name: { type: string, pattern: "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$" }
+        track: { type: string, enum: [internal, alpha, beta, production] }
+        version_code: { type: integer, minimum: 1 }
+        user_fraction: { type: number, exclusiveMinimum: 0, maximum: 1 }
+        halt_threshold: { type: string, minLength: 10, maxLength: 500 }
+        rollback_plan: { type: string, minLength: 20, maxLength: 4000 }
+        approval_id: { type: string, minLength: 6, maxLength: 120 }
+
+  - name: desk_play_halt_rollout
+    kind: write
+    gates: [g6]
+    description: Halt a staged rollout on a track. Requires approval_id and a reason.
+    backend: mobile.play_halt_rollout
+    input:
+      type: object
+      additionalProperties: false
+      required: [package_name, track, reason, approval_id]
+      properties:
+        package_name: { type: string, pattern: "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)+$" }
+        track: { type: string, enum: [internal, alpha, beta, production] }
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        approval_id: { type: string, minLength: 6, maxLength: 120 }
+
+  - name: desk_artifact_size_delta
+    kind: read
+    gates: []
+    description: Size delta between two APK or AAB files inside the repo checkout or workspace, as evidence for a dependency change.
+    backend: mobile.artifact_size_delta
+    input:
+      type: object
+      additionalProperties: false
+      required: [before_path, after_path]
+      properties:
+        before_path: { type: string, minLength: 1, maxLength: 300 }
+        after_path: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: desk_lint_baseline_diff
+    kind: read
+    gates: []
+    description: Diff a lint baseline file between two refs and report new entries (a baseline must not grow to hide a finding).
+    backend: mobile.lint_baseline_diff
+    input:
+      type: object
+      additionalProperties: false
+      required: [base_ref, head_ref, baseline_path]
+      properties:
+        base_ref: { type: string, minLength: 1, maxLength: 120 }
+        head_ref: { type: string, minLength: 1, maxLength: 120 }
+        baseline_path: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: desk_contract_ack
+    kind: write
+    gates: []
+    description: Acknowledge or reject a contract change as this seat (G-4). A rejection must name the blocker.
+    backend: quality.contract_ack
+    input:
+      type: object
+      additionalProperties: false
+      required: [change_id, ack, note]
+      properties:
+        change_id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{2,80}$" }
+        ack: { type: boolean }
+        note: { type: string, minLength: 5, maxLength: 2000 }
+
+  - name: desk_app_tools_load
+    kind: write
+    gates: []
+    description: >-
+      Load or unload an application tool pack (contracts/tool-packs/<app>.yaml) for the life of one
+      ticket. At most five tools per pack; live tools never exceed 20.
+    backend: packs.app_tools_load
+    input:
+      type: object
+      additionalProperties: false
+      required: [app, task_id]
+      properties:
+        app: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
+        task_id: { type: string, minLength: 3, maxLength: 120 }
+        unload: { type: boolean, default: false }

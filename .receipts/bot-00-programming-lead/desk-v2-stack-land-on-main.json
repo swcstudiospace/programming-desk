@@ -1,0 +1,464 @@
+{
+  "bot": "bot-00-programming-lead",
+  "task_id": "desk-v2-stack-land-on-main",
+  "receipt_kind": "integration_landing",
+  "recorded_at": "2026-09-30T04:00:00+00:00",
+  "repo": "swcstudiospace/programming-desk",
+  "branch": "bot-00-programming-lead/desk-v2-stack-land-on-main",
+  "grok_run": "20260930T031945Z-30f61c15",
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
+  "summary": "Lands the Desk v2 stack tip (e0ad62ad, bot-06-quality-security/desk-v2-assembled-prompts) onto main as one draft PR. The tip was 17 ahead / 39 behind main because PRs #17-#24 were squash-merged into intermediate stack branches only. Rebased those 17 commits onto origin/main rather than merging, so each seat's commit and authorship survives and no already-merged stack parent is rewritten. Two add/add conflicts resolved by hand. One real regression found and fixed: main's #16 tightened G-4 and the tip's change document predated the new rule.",
+  "strategy": {
+    "chosen": "git rebase --onto <main> <merge-base> e0ad62ad",
+    "merge_base": "28c498d",
+    "commits_replayed": 17,
+    "why": "The 17 tip commits are linear and only 2 of them touch a file main also changed, so a rebase resolves conflicts twice rather than collapsing seven seats' work into one merge commit. Rebase replays the tip onto main; it does not rewrite the stack branches, which still point at the original commits.",
+    "rejected": "A merge commit would have preserved the same content but buried the per-seat attribution that G-1 and G-2 read, and would have made the per-commit ownership replay below impossible."
+  },
+  "divergence_resolved": {
+    "overlapping_files": 5,
+    "auto_merged": [
+      "ownership.yaml — main's 23 added rules plus the tip's 3 (scripts/generate-templates.py to LEAD, ci/tests/** and ci/.github/** to QUALITY). Additive on both sides.",
+      "skills/README.md — main's agent-bus row (#14) plus the tip's 7 Desk v2 skill rows.",
+      "ci/.github/workflows/gates.yml — main's hardened template plus the tip's G-7 step."
+    ],
+    "hand_resolved": [
+      {
+        "file": "contracts/README.md",
+        "conflict": "add/add",
+        "resolution": "Kept main's reviewed document (#27) as the spine and folded in the tip's three new sections: tool rosters, tool packs, versioning. Corrected main's claim that contracts/ is committed 'empty-of-product' — true of api/ and events/, no longer true of the directory, now that tool-rosters/ and tool-packs/ hold real contracts. Added both to the Layout block.",
+        "dropped": "nothing"
+      },
+      {
+        "file": ".github/workflows/gates.yml",
+        "conflict": "add/add",
+        "resolution": "Kept main's version entirely and added only the tip's G-7 step. The tip's copy of this file was an OLDER snapshot of the template that predated main's #12-#15 hardening: it carried `--bot \"${{ steps.bot.outputs.bot }}\"` interpolated into run:, `RECEIPT=$(ls -1 \".receipts/${{ ... }}\"/*.json | head -n1)`, an unanchored `^bot-0[0-6]-` regex, and no `if: github.event_name == 'pull_request'`. Taking the tip side would have reintroduced exactly the two shell-injection P1s QUALITY flagged. Built the file as main's comment header plus the template body verbatim, which is what .github/workflows/gates-template-sync.yml requires.",
+        "dropped": "The tip's pre-hardening gate body. Every rule it expressed is present in main's body; only the unsafe interpolation is gone."
+      }
+    ],
+    "main_only_commits_preserved": "All 39. Verified mechanically: zero deletions in the diff origin/main..HEAD, and all 31 files that main changed since the merge base are byte-identical to main on this branch.",
+    "landmarks_verified_present": {
+      "from_main": [
+        "SECURITY.md",
+        ".pre-commit-config.yaml",
+        ".mcp.json",
+        "openapi.yaml",
+        ".github/workflows/gates.yml",
+        ".github/workflows/gates-template-sync.yml",
+        "skills/pack-sync/SKILL.md",
+        "skills/agent-bus/SKILL.md"
+      ],
+      "from_tip": [
+        "services/desk-gateway/",
+        "contracts/tool-rosters/",
+        "contracts/tool-packs/",
+        "infra/desk-gateway/",
+        "infra/railway/",
+        "infra/tailscale/",
+        "grokbot/",
+        "skills/desk-bootstrap/",
+        "prompts-assembled/",
+        "ci/gates/check_desk_integrity.py",
+        ".github/workflows/desk-intake.yml"
+      ]
+    }
+  },
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.8,
+      "output_tail": "143 passed in 9.77s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 107 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/desk-v2-tool-rosters-v1.yaml",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-4 FAIL — contracts/changes/desk-v2-tool-rosters-v1.yaml\n  - change document does not cover every contract surface in this change.\n      Declared: contracts/tool-rosters/_core.yaml\n      Undeclared: contracts/README.md, contracts/tool-packs/clippyos.yaml, contracts/tool-packs/desklanes.yaml, contracts/tool-packs/kanbanos.yaml, contracts/tool-rosters/android.yaml, contracts/tool-rosters/infra.yaml, contracts/tool-rosters/ios.yaml, contracts/tool-rosters/lead.yaml, contracts/tool-rosters/quality.yaml, contracts/tool-rosters/systems.yaml, contracts/tool-rosters/web.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/desk-v2-tool-rosters-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-4 — 13 contract surface file(s) touched:\n    contracts/README.md\n    contracts/changes/desk-v2-tool-rosters-v1.yaml\n    contracts/tool-packs/clippyos.yaml\n    contracts/tool-packs/desklanes.yaml\n    contracts/tool-packs/kanbanos.yaml\n    contracts/tool-rosters/_core.yaml\n    contracts/tool-rosters/android.yaml\n    contracts/tool-rosters/infra.yaml\n    contracts/tool-rosters/ios.yaml\n    contracts/tool-rosters/lead.yaml\n    contracts/tool-rosters/quality.yaml\n    contracts/tool-rosters/systems.yaml\n    contracts/tool-rosters/web.yaml\n\nG-4 PASS — desk-v2-tool-rosters-v1: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "  7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "bash scripts/assemble-prompts.sh --check",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "assemble-prompts --check: 7 seats up to date (roster spectrumwebco.json, version 2026-09-30)"
+    },
+    {
+      "cmd": "python3 -m venv /tmp/gwvenv && /tmp/gwvenv/bin/pip install -e services/desk-gateway asgi-lifespan 'pytest>=8.0' 'pytest-asyncio>=1.0' && cd services/desk-gateway && /tmp/gwvenv/bin/python -m pytest tests/ -q",
+      "exit_code": 0,
+      "duration_s": 5.2,
+      "output_tail": "47 passed in 5.21s"
+    },
+    {
+      "cmd": "python3 - <<'PY'  # the body of .github/workflows/gates-template-sync.yml, run locally against both files\nfrom pathlib import Path\ndef body(p):\n    lines = Path(p).read_text().splitlines(keepends=True)\n    i = 0\n    while i < len(lines) and (lines[i].lstrip().startswith('#') or not lines[i].strip()):\n        i += 1\n    return ''.join(lines[i:])\nlive, tpl = body('.github/workflows/gates.yml'), body('ci/.github/workflows/gates.yml')\nassert live == tpl\nprint(f'Gate definitions match — {len(live.splitlines())} lines shared with the template.')\nPY",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "Gate definitions match — 134 lines shared with the template."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "  FOREIGN  skills/tool-packs/SKILL.md  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    },
+    {
+      "cmd": "for each of the 17 commits in origin/main..HEAD: resolve its seat from the subject prefix (or, for `receipt:` commits, from the .receipts/<bot>/ path it writes) and run `python3 ci/gates/check_ownership.py --bot <seat> --files <that commit's files>`",
+      "exit_code": 0,
+      "duration_s": 3.1,
+      "output_tail": "PASS  c8d66a49  bot-06-quality-security     28 files\nPASS  3fd2c624  bot-06-quality-security      1 files\nPASS  567882d9  bot-02-web-edge              1 files\nPASS  fad4cf4c  bot-02-web-edge              1 files\nPASS  9f1c1efa  bot-03-android               1 files\nPASS  ea93b6b1  bot-03-android               1 files\nPASS  fca22928  bot-04-ios                   1 files\nPASS  e5c25063  bot-04-ios                   1 files\nPASS  1222eefa  bot-01-systems-backend      28 files\nPASS  f7254c65  bot-01-systems-backend       1 files\nPASS  52bd482a  bot-05-infrastructure       12 files\nPASS  75c0199b  bot-05-infrastructure        1 files\nPASS  6f5d81c8  bot-00-programming-lead     13 files\nPASS  9ea006fd  bot-00-programming-lead      1 files\nPASS  b458bca8  bot-06-quality-security     14 files\nPASS  ca11abf1  bot-06-quality-security      1 files\nPASS  dc66a231  bot-06-quality-security      1 files\nALL 17 COMMITS PASS G-1 UNDER THEIR OWN SEAT"
+    },
+    {
+      "cmd": "git diff --diff-filter=D --name-only origin/main HEAD",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "(no output; zero files deleted relative to main)"
+    },
+    {
+      "cmd": "for each of the 31 files main changed since the merge base but the tip did not: git diff --quiet origin/main HEAD -- <file>",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "(no CHANGED lines; all 31 main-only files byte-identical to origin/main on this branch)"
+    },
+    {
+      "cmd": "bash -n infra/desk-gateway/install.sh && bash -n infra/desk-gateway/install-nginx.sh && bash -n scripts/assemble-prompts.sh",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "(no output; all three parse. All three open with `set -euo pipefail` and quote their expansions.)"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/gates.yml')); yaml.safe_load(open('ci/.github/workflows/gates.yml'))\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "(no output; both workflow files parse as YAML after the hand resolution)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -v",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "24 passed in 0.26s"
+    },
+    {
+      "cmd": "cp .github/workflows/gates.yml /tmp/gates.good.yml && git show e0ad62ad:.github/workflows/gates.yml > .github/workflows/gates.yml && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "7 failed, 17 passed — every injection payload is accepted by the tip's workflow, and both P1 assertions fail on it"
+    },
+    {
+      "cmd": "cp /tmp/gates.good.yml .github/workflows/gates.yml && git diff --stat -- .github/workflows/gates.yml && python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.9,
+      "output_tail": "(empty diffstat = restored byte-for-byte)\n143 passed in 9.93s"
+    },
+    {
+      "cmd": "# Greptile's own scenario: leave the anchored regex in the file as a comment but let an unanchored match govern, then run the presence check and the behavioural check separately\npython3 -c \"<replace the if-guard, keep the pattern as a comment>\" && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q -k anchored ; python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q -k injection_payload",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "-k anchored:          2 passed, 22 deselected   <- the text-presence proxy is fooled\n-k injection_payload: 5 failed, 9 passed        <- running the shipped step is not"
+    },
+    {
+      "cmd": "bash -c '<the workflow's bot-resolution logic> ' with GITHUB_HEAD_REF set to each of: bot-01-$(id)/x, bot-01-`whoami`/x, 'bot-01-a;cat /etc/passwd/x', 'bot-01-a$(curl attacker.test)/x', 'bot-01-a\"; rm -rf /; #/x', bot-07-nope/x, claude/desk-v2-stack-q0ct4r",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "every payload REJECTED; bot-03-android/feat-push and bot-01-systems-backend/x still accepted"
+    },
+    {
+      "cmd": "python3 - <<'PY' (parse both gates.yml with yaml.safe_load, assert no step's run: body contains '${{')",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": ".github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body\nci/.github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body"
+    },
+    {
+      "cmd": "python3 - (regex + pathlib: does the roster 'surface' pattern accept '..' and escape the export tree?)",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "schema=ACCEPT  contracts/../../../etc/passwd -> /etc/passwd  ESCAPES TREE\nschema=ACCEPT  contracts/../../root/.ssh/authorized_keys -> /root/.ssh/authorized_keys  ESCAPES TREE"
+    },
+    {
+      "cmd": "grep -n 'User\\|ProtectSystem' infra/desk-gateway/desk-gateway.service",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "9:User=root\n10:Group=root\n16:NoNewPrivileges=true   (no ProtectSystem, no ReadWritePaths)"
+    },
+    {
+      "cmd": "cd services/desk-gateway && pytest tests/ -q   # after the four fixes",
+      "exit_code": 0,
+      "duration_s": 6.1,
+      "output_tail": "52 passed in 6.11s"
+    },
+    {
+      "cmd": "git show HEAD:services/desk-gateway/src/desk_gateway/store.py > store.py && pytest tests/test_units.py -k origin -q",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "> assert gh[\"intake_id\"] != slack[\"intake_id\"]\nE AssertionError: assert 'in-b8f78aaf93fc' != 'in-b8f78aaf93fc'\n1 failed"
+    },
+    {
+      "cmd": "jq -n with the clip() filter, at and beyond the gateway's title/ask limits",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "in title=500 ask=30000 -> out title=200 (<=200) ask=20000 (<=20000)"
+    },
+    {
+      "cmd": "cd services/desk-gateway && pytest tests/test_server.py -q -k contract_propose   # through the MCP endpoint, not the helper",
+      "exit_code": 0,
+      "duration_s": 1.6,
+      "output_tail": "5 passed, 25 deselected in 1.61s"
+    },
+    {
+      "cmd": "# control A — remove the safe_path call, keep the containment check\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not safe_path(args[\"surface\"])']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
+      "exit_code": 0,
+      "duration_s": 1.9,
+      "output_tail": "5 passed, 25 deselected in 1.76s — the containment check refuses the same '..' payloads, so the two guards are genuinely redundant here. git diff --stat after the restore: empty."
+    },
+    {
+      "cmd": "# control B — keep safe_path, remove the containment check\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not target.resolve().is_relative_to(tree.resolve())']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
+      "exit_code": 1,
+      "duration_s": 1.5,
+      "output_tail": "FAILED test_contract_propose_will_not_write_through_a_symlink_in_the_tree\n1 failed, 4 passed, 25 deselected in 1.63s — safe_path sees a clean relative path, so only containment stops the symlink. git diff --stat after the restore: empty."
+    },
+    {
+      "cmd": "# control C — remove BOTH guards, i.e. the handler as PR #22 shipped it\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not safe_path(args[\"surface\"])', 'if not target.resolve().is_relative_to(tree.resolve())']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
+      "exit_code": 1,
+      "duration_s": 2.2,
+      "output_tail": "FAILED ...escapes_the_tree[contracts/../../../tmp/desk-gateway-escape.yaml]\nFAILED ...escapes_the_tree[contracts/../../root/.ssh/authorized_keys]\nFAILED ...escapes_the_tree[contracts/ok/../../../../tmp/desk-gateway-escape.yaml]\nFAILED ...will_not_write_through_a_symlink_in_the_tree\n4 failed, 1 passed, 25 deselected in 2.06s — the one pass is the legitimate-surface test, as it should be. git diff --stat after the restore: empty."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml validates after merging both sides' rules: 7 bots, 103 rules (main had 100 after #27, the tip adds 3)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The gate self-test suite passes: 143 tests, 0 failures. main's #12-#16 gate changes and the tip's G-7 gate coexist, and the 24 new workflow-injection tests are included",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3 PASS — 107 files scanned across the whole landing, no secrets. No seat passphrase was read, written or changed; infra/desk-gateway/gateway.env.example holds placeholder names only",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4 FAILED before the fix. main's #16 requires a change document's declared surfaces to cover the diff; the tip's desk-v2-tool-rosters-v1.yaml predated that rule and declared 1 of 12 paths. This is a genuine incompatibility between main and the tip, not a rebase artifact — the gate was correctly refusing a document that did not describe its own change",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-4 PASSES after declaring the remaining 11 surfaces individually. No version bump: the change is unaltered and still non-breaking; only its self-description was incomplete. Listed path by path, not as contracts/**, which the template notes would pass while describing nothing",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-7 PASS — the new desk-integrity gate accepts all 7 rosters, 3 packs and 22 prompt files as landed, with the 7 grokbot templates clean",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "assemble --check PASS — prompts-assembled/ and the prompts/<SEAT>.xml aliases match what the v1.1 sources plus the spectrumwebco roster produce. The assembled prompts carried over the rebase without drift, so CODING DESK can be regenerated from this branch",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The desk-gateway's own suite passes: 47 tests, 0 failures, against the rebased tree with the four Greptile fixes applied",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "The live workflow and its distributable template do not diverge — 134 shared lines. This is the check main's #15 added, run locally with the same logic, and it is why .github/workflows/gates.yml was rebuilt as main's header plus the template body rather than resolved line by line",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-1 path ownership cannot pass for this PR under any single seat, and that is the gate working as designed: the landing spans all seven seats' paths, so every seat sees the other six as FOREIGN. Recorded as a known and unfixable-by-construction failure for an integration PR, not worked around",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "Each of the 17 replayed commits passes G-1 under its own authoring seat. That is the meaningful ownership check for this landing: the rebase preserved the per-seat boundaries that PRs #17-#24 were reviewed against, and introduced no cross-seat write",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "Nothing on main was dropped: zero deletions relative to origin/main",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "Nothing on main was reverted: all 31 files main changed since the merge base (Wave 2 #12-#15, #16, Hindsight .mcp.json #25, SECURITY.md and .pre-commit-config.yaml #27) are byte-identical to origin/main on this branch. The 5 overlapping files are the only ones this landing touches on both sides, and each is a superset of main's version",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The three shell scripts the tip adds parse and use `set -euo pipefail` with quoted expansions",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "Both workflow files are valid YAML after the hand resolution — the add/add resolution did not leave a structurally broken workflow",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "The two Greptile gates.yml P1s are locked in by 24 tests in ci/tests/test_gates.py (TestWorkflowShellInjection), run against both the live workflow and the template: no ${{ }} inside any run: body, the acting-bot pattern anchored at both ends, seven injection payloads refused by the shipped step, three real branches still resolving",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "Those tests have teeth — against the tip's vulnerable workflow, 7 fail: both P1 assertions and every injection payload. A test that passes on correct code without failing on broken code would be worthless; this is the negative control",
+      "evidence_command_index": 16,
+      "expects_failure": true
+    },
+    {
+      "claim": "Behavioural confirmation independent of the tests: the workflow's own bot-resolution logic, run standalone, rejects command substitution, backticks, a semicolon chain and a quote-break in the branch name, while still resolving legitimate bot-prefixed branches",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "Structural confirmation that neither P1 survives on this branch: both workflow files parse and no step's run: body contains a GitHub expression",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Greptile P1 (path traversal) reproduced end to end: the roster pattern for 'surface' accepts contracts/../../../etc/passwd because its character class contains '.' and '/', and the joined path resolves outside the export tree",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "The traversal was a root-owned arbitrary write: the unit runs User=root with no ProtectSystem or ReadWritePaths confinement, and the write happens before check_secrets.py runs",
+      "evidence_command_index": 22
+    },
+    {
+      "claim": "Four Greptile findings fixed and the gateway suite green at 52 tests (40 + 12: the traversal guard through the handler, the symlink case, the legitimate surface, safe_path at unit level, and origin-scoped intake)",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "Negative control on the intake fix: against the previous store the slack request is handed the github request's intake_id, which is the silent-drop bug Greptile described",
+      "evidence_command_index": 24,
+      "expects_failure": true
+    },
+    {
+      "claim": "The intake workflow's truncation holds at and beyond both gateway limits, so a long issue reaches LEAD clipped rather than being lost to a 400",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "The negative control is reproducible as recorded: the live workflow is copied aside before being overwritten, restored afterwards, and the restore verified by an empty diffstat plus a full green suite — so the 'both workflows clean' claim above can be re-derived from this sequence rather than taken on trust",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "The injection tests now run the shipped step extracted from the workflow YAML rather than a transcribed copy. Proven against Greptile's own scenario: with the anchored pattern left in the file as a comment and an unanchored match governing, the text-presence check still passes while the behavioural tests fail on all five injection payloads. The copy-based version could not have caught that",
+      "evidence_command_index": 18,
+      "expects_failure": true
+    },
+    {
+      "claim": "The traversal regression tests now exercise contract_propose through the MCP endpoint rather than asserting on safe_path, so they observe the handler's behaviour and not the helper's. The symlink case substitutes repo.export to produce a tree git could not build, and asserts the outside file is byte-unchanged rather than only that the call failed",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "Guard attribution, established by removing each in turn: safe_path alone can be removed without failing a test, because the containment check refuses the same '..' payloads — that is defense in depth, not missing coverage. safe_path remains as the cheap early rejection every other repo-path tool in the gateway uses",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "The containment check is the guard the symlink case depends on: removing it alone fails that test and only that test, because safe_path sees 'contracts/api/authorized_keys' as a clean relative path",
+      "evidence_command_index": 28,
+      "expects_failure": true
+    },
+    {
+      "claim": "The tests are not vacuous: against the handler as PR #22 shipped it, with both guards absent, 4 of the 5 fail — all three escape payloads and the symlink. This is the control that matters, and the one the previous safe_path-only tests would have passed",
+      "evidence_command_index": 29,
+      "expects_failure": true
+    }
+  ],
+  "security_findings_carried_forward": [
+    {
+      "id": "4140127768",
+      "priority": "P1",
+      "source": "Greptile, PR #22",
+      "title": ".github/workflows/gates.yml — branch/bot name interpolated into shell",
+      "verdict": "VALID against the tip. The tip's copy of the live workflow ran `--bot \"${{ steps.bot.outputs.bot }}\"` inside run:, and validated the bot id against an unanchored `^bot-0[0-6]-`, which accepts `bot-01-$(id)` and carries it into a later shell.",
+      "disposition": "FIXED on this branch. The acting bot is now derived from the GITHUB_HEAD_REF / GITHUB_REF environment variables rather than a ${{ }} expansion, validated against `^bot-0[0-6]-[a-z0-9-]+$` (anchored at both ends), and passed to later steps through an env: block as \"$BOT\". No ${{ }} appears inside any run: body in either gates.yml.",
+      "how": "The conflict resolution kept main's hardened body (#12-#15) and discarded the tip's older pre-hardening copy, adding only the tip's genuinely new G-7 step. Verified by grep: every ${{ }} in both .github/workflows/gates.yml and ci/.github/workflows/gates.yml sits in an env: block.",
+      "residual": "None open. Regression-tested by running the shipped 'Determine the acting bot' step itself, extracted from the workflow YAML and invoked the way Actions invokes it (bash -e, with a real $GITHUB_OUTPUT), for both the live workflow and the template."
+    },
+    {
+      "id": "4140127775",
+      "priority": "P1",
+      "source": "Greptile, PR #22",
+      "title": "gates.yml — receipt path shell injection",
+      "verdict": "VALID against the tip. The tip's copy ran `RECEIPT=$(ls -1 \".receipts/${{ steps.bot.outputs.bot }}\"/*.json | head -n1)` and then interpolated `${{ steps.receipt.outputs.path }}` into three further run: bodies.",
+      "disposition": "FIXED on this branch. BOT, BASE_REF and RECEIPT all reach the shell through env: and are referenced as quoted variables. The receipt is additionally now selected from the diff (`git diff --name-only --diff-filter=d \"origin/$BASE_REF...HEAD\"`) rather than by globbing the directory, which also closes the stale-receipt fail-open main's #16 fixed.",
+      "how": "Same resolution as above.",
+      "residual": "None open. Covered by the same regression tests."
+    },
+    {
+      "id": null,
+      "priority": "informational",
+      "source": "this landing",
+      "title": ".github/workflows/desk-intake.yml, new from PR #22, audited for the same class",
+      "verdict": "CLEAN. It declares `permissions: {}`, passes attacker-controlled issue title, body and author login through env: rather than interpolating them, and builds its JSON with `jq -n --arg`, which cannot be escaped out of. `set -euo pipefail` is set.",
+      "disposition": "No change made.",
+      "residual": "The intake token is passed as `-H \"Authorization: Bearer $DESK_INTAKE_TOKEN\"` on the curl argv, which is readable from /proc on a shared runner. Negligible on an ephemeral GitHub-hosted runner and not a P1; left for INFRA rather than changed here, since it is outside what this landing needs to fix and would edit an INFRA-owned file. STILL OPEN — unaffected by anything in this PR, and not covered by the contract_propose tests, which are a different component."
+    },
+    {
+      "id": "4140571384",
+      "priority": "P1",
+      "source": "Greptile, PR #29",
+      "title": "contract_propose wrote outside the proposal tree, as root",
+      "verdict": "VALID, and more severe than reported — reproduced; an absolute surface would also escape via pathlib, though the schema's leading contracts/ blocks that route",
+      "disposition": "FIXED: systems.py already imported safe_path and used it elsewhere; contract_propose now calls it, plus a resolved-containment check so a symlink in the tree cannot redirect the write.",
+      "how": "Regression-tested with four escape payloads and two legitimate surfaces.",
+      "residual": "Regression-tested through the handler, not the helper: three escape payloads and a symlinked target refused via /mcp/systems, with the outside file verified byte-unchanged. Shown non-vacuous by removing both guards (4 of 5 fail) and each in turn — the containment check carries the property; safe_path is redundant for '..' payloads and kept as the cheap early rejection every other repo-path tool here uses. STILL OPEN: the roster pattern itself admits '..'. Tightening it is a contract change needing acknowledgements, and the write path is now guarded, so the schema is no longer load-bearing for this. Raised for QUALITY."
+    },
+    {
+      "id": "4140571393",
+      "priority": "P1",
+      "source": "Greptile, PR #29",
+      "title": "g5/g6 approval_id is never verified against any approval record",
+      "verdict": "VALID and systemic. No approval record exists anywhere in the gateway; rosters.py only checks that a gated tool's SCHEMA requires the field, never the value. Every g5/g6 tool across Play, App Store, Vercel and Railway accepts any string and echoes it back, where it reads as an audit trail. approval_id='full' satisfies the 100 percent production check.",
+      "disposition": "NOT FIXED — deliberately. A real fix needs an approval store, an issuance path with an answer to who approves and how they authenticate, single-use scope-bound consumption, and new tools, which is a contract change. That is a feature and SYSTEMS'/LEAD's design call; inventing it inside a landing PR would put an unreviewed authorization mechanism into the security-critical path, and a partial fix would look like security without being any.",
+      "residual": "OPEN. Proposed shape recorded on the review thread. Pre-existing from PR #22 and unchanged by this landing. Does not block the file-level landing; should block pointing real Play or App Store credentials at this gateway."
+    }
+  ],
+  "g1_g6_notes": {
+    "G-1": "Cannot pass under a single seat — this is a seven-seat integration PR. Each of the 17 commits passes under its own seat; see claim 11. The manifest self-check passes.",
+    "G-2": "This receipt.",
+    "G-3": "PASS on the change (107 files). Pre-existing fixture findings in ci/tests/test_gates.py are recorded, not suppressed.",
+    "G-4": "PASS after declaring the 11 surfaces main's #16 now requires. Failure and fix both recorded above.",
+    "G-5": "Not a deployment. This PR lands files; it starts no service and runs no migration. The gateway's own rollback story is in infra/desk-gateway/ as INFRA wrote it. Rollback for this PR is: do not merge, or revert the merge commit — nothing on main is modified in place, so a revert restores main exactly.",
+    "G-6": "No destructive operation. Zero deletions relative to main; no history rewritten on any stack branch, which all still point at their original commits.",
+    "G-7": "PASS — 7 rosters, 3 packs, 22 prompt files, 7 templates clean."
+  },
+  "stamp_note": "Stamped by QUALITY (bot-06-quality-security) as CLEAR_WITH_WAIVERS, merge_claim.allowed=true, on head 2bc2f395. Not self-approval: this receipt's bot is bot-00-programming-lead, so the independent check G-2 exists to enforce is satisfied. Recorded with the head it was given on rather than as an unqualified approval, because commits landed after it: 089e751 (make the three negative controls replayable, and fix an off-by-one that had overwritten the desk-intake caveat with the traversal evidence) and this one. Both are receipt corrections raised by review — neither changes the diff QUALITY read — but the stamp covers 2bc2f395, and a reviewer should know that rather than infer it. The waivers are the three findings still marked open in security_findings_carried_forward: the intake token on curl's argv, the roster pattern still admitting '..', and the unverified g5/g6 approval IDs.",
+  "explicit": "Draft pull request only. Did not merge, did not undraft, did not push to main, did not squash-merge. No stack branch was rewritten or deleted.",
+  "unverified": [
+    "No CI run was observed, and none can be. GitHub Actions is not executing in this repository: on PR #27 the gates, gate-self-test and sync jobs all reported failure within 2-3 seconds across two separate workflow runs, with empty check output and job logs returning HTTP 404. #27 was merged in that state. Every gate result in this receipt is a local run on the rebased tree, which is why they are recorded command by command. Whether Actions starts working is INFRA's, and it is a pre-existing condition of main, not something this landing changed.",
+    "G-1 as CI would run it would fail before any gate executed: the branch is claude/desk-v2-stack-q0ct4r, and the workflow requires a bot-0N-name/ prefix to attribute the change. The branch name was fixed by the work order. This affects every claude/* PR in this repository, including #25 and #27.",
+    "The desk-gateway suite was run against dependencies resolved fresh from PyPI into a throwaway venv, not against a lockfile — the repository has none for this service. A different resolution could behave differently. httpx, mcp, pydantic, pyyaml and uvicorn were installed from the pyproject ranges.",
+    "No gateway was started, no MCP endpoint was reached, no OAuth flow was exercised and no seat was registered. The 40 tests are the service's own unit and ASGI-level tests; nothing here validates the live desk.swcstudio.space deployment, the Railway forwarders, the Tailscale ACL or the nginx vhosts. Those need INFRA on the VPS.",
+    "acknowledgements on desk-v2-tool-rosters-v1.yaml is still []. Adding surfaces did not add acks, and this landing did not collect them — the seats ack through desk_contract_ack once their gateway endpoints exist. G-4 passes without them because the change is non-breaking, where a rejection would still block.",
+    "The contracts/README.md resolution is a hand-written merge of two documents. Both sides' content is present and the 'empty-of-product' sentence was corrected to match what now ships, but no gate checks prose, so a reviewer should read that file rather than trust the diff's shape.",
+    "The pre-commit hooks were not run over this landing. They were installed against main's config, and the one pre-existing G-3 finding they surface (synthetic fixtures in ci/tests/test_gates.py, recorded in #27's receipt) is unrelated to this change.",
+    "Greptile and Cursor have not reviewed the rebased tree. The two P1s above are closed by inspection of the resolved file plus a grep for ${{ }} inside run: bodies, not by a fresh review pass. Any other #22 finding not listed above was not found, which is not the same as not existing.",
+    "This receipt was committed with `git add -f`: .gitignore ignores .receipts/**/*.json while every tracked receipt is committed, and both G-2 and the workflow require one. Same condition every previous receipt hit; unchanged here.",
+    "The rebase replayed 17 commits and their SHAs therefore changed (e0ad62ad -> dc66a231 for the tip). The original commits still exist on bot-06-quality-security/desk-v2-assembled-prompts. Trees were compared per-file against main, but the replayed commits' trees were not compared one by one against their originals — only the cumulative result was.",
+    "The four fixes touch files owned by bot-01-systems-backend (services/desk-gateway/**) and bot-05-infrastructure (.github/workflows/desk-intake.yml), written here by LEAD. That is a cross-seat write, and on a single-seat PR it would fail G-1. It is recorded rather than hidden: this PR is already a seven-seat landing that cannot pass single-seat G-1 (see the earlier claim), and the alternative was landing a known root-level arbitrary file write. SYSTEMS and INFRA should review these five files specifically."
+  ],
+  "observations": [
+    "PRs #17-#24 were squash-merged into intermediate stack branches rather than into main, which is how main came to lack services/desk-gateway, contracts/tool-rosters, grokbot/, infra/desk-gateway and skills/desk-bootstrap while all eight PRs read as merged. Worth a note in the stack procedure: a squash-merge into a branch that never reaches main leaves the PR green and the repository unchanged.",
+    "The tip carried an older copy of .github/workflows/gates.yml than main did, so a naive 'prefer the tip' resolution would have silently reverted the #12-#15 shell-injection hardening on the live workflow. main's gates-template-sync.yml is what makes that recoverable: because the live body must equal the template body, the correct resolution is mechanical rather than a judgement call.",
+    "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix.",
+    "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through.",
+    "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did.",
+    "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage.",
+    "Greptile caught the same mistake twice in this PR, in two different files: a test that asserts on a helper rather than on the code path that calls it. The workflow-injection tests ran a copy of the bot-resolution script; the traversal tests asserted safe_path directly and would have passed against a handler that never called it. Both now execute the real path. The pattern worth remembering: when a fix is 'call the existing guard', the test has to prove the call happens, because the guard itself was never broken.",
+    "Two receipt defects in this PR came from editing it with a script rather than reading it back: an insertion shifted every later evidence_command_index, and an append put the traversal finding at index 3 while a later edit wrote its residual to index 2, overwriting the desk-intake caveat. Both were caught by review, not by me. A receipt is the artifact whose whole value is being trustworthy, so a programmatic edit to one needs the same read-back a code change gets.",
+    "The gates workflow selected the receipt for a change with `... | head -n1`, which breaks on any change adding more than one of a seat's receipts. This landing adds two LEAD receipts — desk-v2-grokbot-share.json replayed from PR #23 by the rebase, and this one — so the selector resolved to the replayed one. It failed closed here because that receipt has no approved_by, but it would have passed on it had that task been stamped, validating this landing against a receipt describing different work. Same defect class as the one #16 fixed for change documents, in the sibling selector nobody revisited."
+  ],
+  "approved_by": "bot-06-quality-security"
+}

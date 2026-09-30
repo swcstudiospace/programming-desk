@@ -1,0 +1,398 @@
+"""Programming Desk gateway: one MCP endpoint per seat, contract-defined rosters, LEAD-only intake."""
+
+from __future__ import annotations
+
+import asyncio
+import contextvars
+import json
+import logging
+import os
+import re
+import secrets
+import sys
+import time
+from pathlib import Path
+from typing import Any
+
+import uvicorn
+from mcp.server.auth.middleware.auth_context import get_access_token
+from mcp.server.auth.settings import AuthSettings, ClientRegistrationOptions
+from mcp.server.mcpserver import MCPServer
+from mcp.server.transport_security import TransportSecuritySettings
+from mcp.types import CallToolResult, TextContent
+from mcp.types import Tool as MCPTool
+from pydantic import AnyHttpUrl
+from starlette.requests import Request
+from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+
+from desk_gateway import __version__
+from desk_gateway.config import MAX_LIVE_TOOLS, SEATS, TOOL_DEADLINE_SEC, Settings
+from desk_gateway.oauth import ConsentError, SeatOAuthProvider, seat_of
+from desk_gateway.pages import consent_page, landing_page, message_page
+from desk_gateway.redact import contains_secret, redact_value
+from desk_gateway.rosters import RosterError, Rosters, ToolSpec
+from desk_gateway.schema import SchemaError, validate
+from desk_gateway.store import Store
+from desk_gateway.tools import Services, ToolContext, resolve
+
+logger = logging.getLogger("desk_gateway")
+
+PAGE_HEADERS = {
+    "Cache-Control": "no-store",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'",
+}
+SEAT_PATH = re.compile(r"^/mcp/(?P<seat>[a-z]+)(?:/packs/(?P<pack>[a-z][a-z0-9-]{1,40}))?/?$")
+RESOURCE_META_PATH = re.compile(r"^/\.well-known/oauth-protected-resource/mcp(?:/[a-z]+(?:/packs/[a-z0-9-]+)?)?/?$")
+INTAKE_PRIORITIES = ("low", "normal", "high", "urgent")
+INTAKE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["title", "ask"],
+    "properties": {
+        "origin": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,40}$"},
+        "title": {"type": "string", "minLength": 3, "maxLength": 200},
+        "ask": {"type": "string", "minLength": 10, "maxLength": 20000},
+        "links": {"type": "array", "maxItems": 20, "items": {"type": "string", "maxLength": 500, "pattern": "^https://"}},
+        "priority": {"type": "string", "enum": list(INTAKE_PRIORITIES), "default": "normal"},
+        "requested_by": {"type": "string", "maxLength": 120},
+        "idempotency_key": {"type": "string", "maxLength": 200},
+    },
+}
+
+current_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_seat", default=None)
+current_pack: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_pack", default=None)
+
+INSTRUCTIONS = """\
+Programming Desk gateway. You are connected as one seat; tools/list is your contract
+(contracts/tool-rosters/<seat>.yaml). A tool that is not listed does not exist. Call desk_brief at
+the start of a turn and desk_ownership_resolve before the first edit. Read tools fail open with a
+`reason`; write tools fail closed. Tools tagged g5 need rollback_plan and approval_id, g6 need
+approval_id (PD-5). A 403 means you are on another seat's endpoint: stop and tell LEAD.
+"""
+
+
+class SeatServer(MCPServer):
+    def __init__(self, services: Services, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.services = services
+
+    def _surface(self) -> tuple[str, dict[str, ToolSpec]]:
+        seat = current_seat.get() or seat_of(get_access_token())
+        if seat is None or seat not in SEATS:
+            raise PermissionError("no seat")
+        pack = current_pack.get()
+        if pack:
+            return seat, self.services.rosters.pack_surface(seat, pack)
+        return seat, self.services.rosters.surface(seat, self.services.store.packs_for(seat))
+
+    async def list_tools(self) -> list[MCPTool]:
+        try:
+            _, tools = self._surface()
+        except (PermissionError, RosterError) as exc:
+            logger.warning("tools/list refused: %s", exc)
+            return []
+        return [
+            MCPTool(
+                name=spec.name,
+                title=spec.name.replace("_", " "),
+                description=spec.description + (f" Gates: {' '.join(spec.gates)}." if spec.gates else ""),
+                input_schema=spec.input_schema,
+                annotations={"readOnlyHint": spec.read_only, "destructiveHint": "g6" in spec.gates},
+            )
+            for spec in tools.values()
+        ]
+
+    async def call_tool(self, name: str, arguments: dict[str, Any], context: Any = None) -> CallToolResult:
+        started = time.monotonic()
+        try:
+            seat, tools = self._surface()
+        except (PermissionError, RosterError) as exc:
+            return _result({"error": "forbidden", "reason": str(exc)}, is_error=True)
+        spec = tools.get(name)
+        if spec is None:
+            return _result({"error": "unknown_tool", "reason": f"{name} is not on the {seat} roster; a tool the gateway did not list does not exist"}, is_error=True)
+        try:
+            args = validate(spec.input_schema, arguments or {})
+        except SchemaError as exc:
+            return _result({"error": "invalid_args", "reason": str(exc)}, is_error=True)
+        if contains_secret(json.dumps(args)):
+            return _result({"error": "secret_refused", "reason": "tool arguments contain a credential shape; never paste secrets into tool calls (PD-4)"}, is_error=True)
+        ctx = ToolContext(services=self.services, seat=self.services.rosters.seats[seat], spec=spec)
+        error: str | None = None
+        try:
+            fn = resolve(spec.backend)
+            async with asyncio.timeout(TOOL_DEADLINE_SEC):
+                payload = await fn(ctx, args)
+        except TimeoutError:
+            error = "deadline"
+            payload = {"error": "deadline", "reason": f"{name} did not finish within {TOOL_DEADLINE_SEC:.0f}s"}
+        except LookupError:
+            error = "backend_missing"
+            payload = {"error": "backend_missing", "reason": f"{spec.backend} is not implemented on this gateway"}
+        except Exception as exc:
+            logger.exception("tool %s failed", name)
+            error = "internal"
+            payload = {"error": "internal", "reason": f"{type(exc).__name__} while running {name}"}
+        if payload.get("error"):
+            error = str(payload["error"])
+        if error and spec.read_only and "results" not in payload and "rows" not in payload:
+            payload.setdefault("reason", error)
+        ms = (time.monotonic() - started) * 1000
+        event = self.services.audit.tool_event(seat=seat, tool=name, arguments=args, ok=error is None, ms=ms, error=error, gates=spec.gates)
+        self.services.audit.fire_and_forget(event)
+        return _result(redact_value(payload), is_error=bool(error) and not spec.read_only)
+
+
+def _result(payload: dict[str, Any], *, is_error: bool = False) -> CallToolResult:
+    return CallToolResult(content=[TextContent(type="text", text=json.dumps(payload, default=str))], structured_content=payload, is_error=is_error)
+
+
+class SeatRouter:
+    """Maps /mcp/<seat>[/packs/<app>] onto the single MCP route, refusing a token that belongs to
+    another seat with a real HTTP 403 before the request reaches the MCP handler."""
+
+    def __init__(self, app: Any, provider: SeatOAuthProvider, rosters: Rosters) -> None:
+        self.app = app
+        self.provider = provider
+        self.rosters = rosters
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") != "http":
+            await self.app(scope, receive, send)
+            return
+        path = scope.get("path") or ""
+        if RESOURCE_META_PATH.match(path):
+            scope = dict(scope)
+            scope["path"] = "/.well-known/oauth-protected-resource/mcp"
+            scope["raw_path"] = scope["path"].encode()
+            await self.app(scope, receive, send)
+            return
+        match = SEAT_PATH.match(path)
+        if not match:
+            await self.app(scope, receive, send)
+            return
+        seat, pack = match.group("seat"), match.group("pack")
+        if seat not in SEATS:
+            await _json(send, 404, {"error": "unknown_seat", "seats": sorted(SEATS)})
+            return
+        token = _bearer(scope)
+        if token:
+            access = await self.provider.load_access_token(token)
+            token_seat = seat_of(access)
+            if access is None:
+                pass
+            elif token_seat != seat:
+                await _json(send, 403, {"error": "wrong_seat", "reason": f"this token belongs to {token_seat or 'no seat'}; connect to /mcp/{token_seat} or re-authorise with the {seat} passphrase"})
+                return
+        if pack and not self.rosters.pack_surface(seat, pack):
+            await _json(send, 404, {"error": "unknown_pack", "reason": f"no pack {pack} for seat {seat}"})
+            return
+        scope = dict(scope)
+        scope["path"] = "/mcp"
+        scope["raw_path"] = b"/mcp"
+        seat_token = current_seat.set(seat)
+        pack_token = current_pack.set(pack)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_seat.reset(seat_token)
+            current_pack.reset(pack_token)
+
+
+def _bearer(scope: dict[str, Any]) -> str | None:
+    headers = {k.lower(): v for k, v in (scope.get("headers") or [])}
+    auth = headers.get(b"authorization")
+    if auth and auth.lower().startswith(b"bearer "):
+        return auth[7:].decode(errors="ignore").strip()
+    key = headers.get(b"x-connector-key")
+    return key.decode(errors="ignore").strip() if key else None
+
+
+async def _json(send: Any, status: int, body: dict[str, Any]) -> None:
+    raw = json.dumps(body).encode()
+    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(raw)).encode()), (b"cache-control", b"no-store")]})
+    await send({"type": "http.response.body", "body": raw})
+
+
+class ConnectorKeyHeader:
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope.get("type") == "http":
+            headers = list(scope.get("headers") or [])
+            has_auth = any(key == b"authorization" for key, _ in headers)
+            connector_key = next((val for key, val in headers if key == b"x-connector-key"), None)
+            if connector_key and not has_auth:
+                scope = dict(scope)
+                scope["headers"] = [*headers, (b"authorization", b"Bearer " + connector_key)]
+        await self.app(scope, receive, send)
+
+
+def create_mcp(settings: Settings, services: Services, oauth: SeatOAuthProvider) -> SeatServer:
+    mcp = SeatServer(
+        services,
+        name="desk-gateway",
+        title="Programming Desk gateway",
+        description="One MCP endpoint per Programming Desk seat, with contract-defined tool rosters.",
+        version=__version__,
+        instructions=INSTRUCTIONS,
+        log_level=settings.log_level if settings.log_level in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO",
+        auth=AuthSettings(
+            issuer_url=AnyHttpUrl(settings.issuer_url),
+            resource_server_url=AnyHttpUrl(settings.resource_url),
+            validate_token_resource=False,
+            required_scopes=["mcp"],
+            client_registration_options=ClientRegistrationOptions(enabled=True, valid_scopes=["mcp", *(f"seat:{s}" for s in SEATS)], default_scopes=["mcp"]),
+        ),
+        auth_server_provider=oauth,
+    )
+    store = services.store
+
+    @mcp.custom_route("/health", methods=["GET"])
+    async def health(_request: Request) -> Response:
+        roster = store.roster()
+        return JSONResponse(
+            {
+                "status": "ok",
+                "service": "desk-gateway",
+                "version": __version__,
+                "seats": {s: f"/mcp/{s}" for s in SEATS},
+                "packs": sorted(services.rosters.packs),
+                "registered_seats": sorted(k for k, v in (roster.get("seats") or {}).items() if v.get("agent_uuid")),
+                "channel_registered": bool(roster.get("channel_id")),
+                "intake": store.intake_counts(),
+                "oauth": {
+                    "issuer": settings.issuer_url,
+                    "authorization_endpoint": f"{settings.issuer_url}/authorize",
+                    "token_endpoint": f"{settings.issuer_url}/token",
+                    "registration_endpoint": f"{settings.issuer_url}/register",
+                },
+            }
+        )
+
+    @mcp.custom_route("/", methods=["GET"])
+    async def root(_request: Request) -> Response:
+        return HTMLResponse(landing_page(settings), headers=PAGE_HEADERS)
+
+    @mcp.custom_route("/oauth/consent", methods=["GET"])
+    async def consent_get(request: Request) -> Response:
+        pending = oauth.pending(request.query_params.get("request", ""))
+        if pending is None:
+            return HTMLResponse(message_page("Request expired", "Start the connection again from Grok Bot."), status_code=410, headers=PAGE_HEADERS)
+        return HTMLResponse(consent_page(request_id=pending.request_id, client_name=pending.client_name, client_id=pending.client_id, redirect_host=pending.redirect_host), headers=PAGE_HEADERS)
+
+    @mcp.custom_route("/oauth/consent", methods=["POST"])
+    async def consent_post(request: Request) -> Response:
+        form = await request.form()
+        request_id = str(form.get("request") or "")
+        if str(form.get("action") or "") == "deny":
+            target = oauth.deny(request_id)
+            if target is None:
+                return HTMLResponse(message_page("Request expired", "Start the connection again from Grok Bot."), status_code=410, headers=PAGE_HEADERS)
+            return RedirectResponse(target, status_code=303, headers={"Cache-Control": "no-store"})
+        try:
+            target = oauth.approve(request_id, str(form.get("passphrase") or ""))
+        except ConsentError as exc:
+            if exc.code == "bad_passphrase":
+                pending = oauth.pending(request_id)
+                if pending is not None:
+                    return HTMLResponse(consent_page(request_id=pending.request_id, client_name=pending.client_name, client_id=pending.client_id, redirect_host=pending.redirect_host, error="bad_passphrase"), status_code=401, headers=PAGE_HEADERS)
+            logger.warning("oauth consent rejected: %s", exc.code)
+            return HTMLResponse(message_page("Request closed", "Start the connection again from Grok Bot."), status_code=403, headers=PAGE_HEADERS)
+        return RedirectResponse(target, status_code=303, headers={"Cache-Control": "no-store"})
+
+    @mcp.custom_route("/v1/intake", methods=["POST"])
+    async def intake(request: Request) -> Response:
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        origin = settings.origin_for_intake_token(token)
+        if origin is None:
+            if token and settings.seat_for_passphrase(token):
+                return JSONResponse({"error": "forbidden", "reason": "seat tokens cannot submit intake; only origin tokens can"}, status_code=403)
+            return JSONResponse({"error": "unauthorized", "reason": "missing or unknown origin token"}, status_code=401)
+        try:
+            body = await request.json()
+        except ValueError:
+            return JSONResponse({"error": "invalid_json"}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "invalid_body"}, status_code=400)
+        body.setdefault("origin", origin)
+        try:
+            item = validate(INTAKE_SCHEMA, body)
+        except SchemaError as exc:
+            return JSONResponse({"error": "invalid_args", "reason": str(exc)}, status_code=400)
+        if item["origin"] != origin:
+            return JSONResponse({"error": "forbidden", "reason": f"token belongs to origin {origin}"}, status_code=403)
+        if contains_secret(item["ask"]) or contains_secret(item["title"]):
+            return JSONResponse({"error": "secret_refused", "reason": "the ask contains a credential shape; remove it and resend"}, status_code=422)
+        record = store.intake_create(item)
+        event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
+        store.audit_append({**event, "ts_gateway": time.time()})
+        services.audit.fire_and_forget(event)
+        return JSONResponse({"ok": True, "intake_id": record["intake_id"], "state": record["state"], "queue": store.intake_counts()}, status_code=202)
+
+    return mcp
+
+
+def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
+    settings = settings or Settings.from_env()
+    settings.data_dir.mkdir(parents=True, exist_ok=True)
+    contracts_dir = settings.repo_dir / "contracts"
+    rosters = Rosters.load(contracts_dir)
+    store = Store(settings.data_dir)
+    services = Services.build(settings, store, rosters)
+    oauth = SeatOAuthProvider(settings, store_dir=settings.data_dir / "oauth")
+    mcp = create_mcp(settings, services, oauth)
+    origins = [
+        "http://127.0.0.1",
+        "http://127.0.0.1:*",
+        "http://localhost",
+        "http://localhost:*",
+        f"https://{settings.public_host}",
+        f"https://{settings.public_host}:*",
+        "https://grok.com",
+        "https://grok.x.ai",
+        "https://x.ai",
+        "https://cursor.com",
+        *settings.extra_allowed_origins,
+    ]
+    transport_security = TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=["127.0.0.1", "127.0.0.1:*", "localhost", "localhost:*", "[::1]", "[::1]:*", settings.public_host, f"{settings.public_host}:*", "testserver"],
+        allowed_origins=origins,
+    )
+    starlette_app = mcp.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, transport_security=transport_security, host=settings.public_host)
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters))
+    app.state = {"store": store, "services": services, "oauth": oauth, "rosters": rosters, "mcp": mcp}
+    return app, settings
+
+
+def _load_env_file(path: Path) -> None:
+    if not path.is_file():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s", stream=sys.stderr)
+    _load_env_file(Path(os.environ.get("GATEWAY_ENV_FILE", "/etc/desk-gateway/gateway.env")))
+    app, settings = build_app()
+    missing = [s for s in SEATS if s not in settings.seat_passphrases]
+    if missing:
+        logger.warning("no passphrase for seats %s; those endpoints cannot be authorised", ",".join(missing))
+    logger.info("starting desk-gateway v%s on %s:%s (data=%s, repo=%s, live-tool ceiling %s)", __version__, settings.host, settings.port, settings.data_dir, settings.repo_dir, MAX_LIVE_TOOLS)
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level=settings.log_level.lower(), proxy_headers=True, forwarded_allow_ips="127.0.0.1")
+
+
+def generate_passphrases() -> dict[str, str]:
+    return {s: secrets.token_urlsafe(24) for s in SEATS}

@@ -1,0 +1,127 @@
+{
+  "task_id": "systems-pr33-greptile-p1-trusted-gates-2026-09-30",
+  "bot": "bot-01-systems-backend",
+  "branch": "bot-00-programming-lead/desk-v2-stack-land-on-main",
+  "pull_request": 33,
+  "started_at": "2026-09-30T04:40:00Z",
+  "completed_at": "2026-09-30T07:10:00Z",
+  "summary": "Greptile P1s in services/desk-gateway, rebased onto cb9e385: gates_run and secret_scan execute the gateway's own gate scripts against an exported ref passed as data (4140823507); gates_run runs G-1..G-7 and cannot report ok:true on a partial run (4140823511); railway_redeploy compares prior_deployment_id to the service's current deployment before the write (4140823531); Play staged rollout preserves the releases already on the track (4140823534). Also posts the intake reply before advancing the record, closing the remaining ordering gap in 4140823522, and kills a timed-out child by process group so the git processes a gate starts cannot outlive it (extends 4140823546).",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "uv run pytest -q  (services/desk-gateway)",
+      "exit_code": 0,
+      "duration_s": 9.4,
+      "output_tail": "86 passed in 9.43s"
+    },
+    {
+      "cmd": "negative control: point gates_run's first gate back at the export, then uv run pytest -k never_executes_the_gates",
+      "exit_code": 1,
+      "duration_s": 1.2,
+      "output_tail": "AssertionError: the exported ref's ['check_ownership.py'] ran as the gateway — 1 failed"
+    },
+    {
+      "cmd": "uv run pytest -q -k never_executes  (after restoring the trusted call)",
+      "exit_code": 0,
+      "duration_s": 1.4,
+      "output_tail": "2 passed, 84 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files $(git diff --name-only cb9e385..HEAD)",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 10 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only cb9e385..HEAD)",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "G-3 PASS — 10 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "uvx --with pyyaml --from pytest pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.8,
+      "output_tail": "157 passed in 10.80s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "desk_gates_run and desk_secret_scan execute only the gate scripts installed with the gateway: the poisoned-export test asserts the bytes of every script exec'd, read at exec time, equal the gateway's own copy, and that no script path lies inside the export",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "A poisoned ci/gates/check_ownership.py — and a poisoned ci/gates/yaml.py, which the old sys.path[0] would have imported — leave no marker, so neither ran",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The negative control above shows the same test failing against the previous behaviour, so it is keyed on the vulnerability and not merely green",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "With no trusted ci/gates installed beside the gateway, both tools return not_configured rather than falling back to the ref's copy",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "gates_run always runs G-1 manifest, G-1 ownership, G-3, G-4 and G-7; without a usable receipt_path it returns ok:false and names G-2 and G-5/G-6 in skipped and verdict",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk_intake_ack posts the GitHub reply before advancing the record: on a 403 the intake keeps its prior state and the failure names it; the unconfigured-gateway carve-out INFRA landed is unchanged",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk_play_staged_rollout reads the track and puts its existing releases back into the PUT, dropping none of them, and refuses to write a track it could not read",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk_railway_redeploy refuses with stale_deployment and issues no mutation unless the target environment's current deployment id equals prior_deployment_id",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "A timed-out run_command leaves neither the child nor a child of its own alive, asserted on recorded pids rather than on a process-name match",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "ci/tests/test_gates.py is green at this base: the TestWorkflowShellInjection failures this change reported on the previous tip were fixed by INFRA in ae56145",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "No gateway was deployed or restarted; all evidence is from the unit suite in services/desk-gateway and the gate scripts run locally",
+    "No upstream was contacted: Play Console, App Store Connect, Railway and GitHub are stubbed in the tests, and the gateway holds no credentials here",
+    "DESK_GATE_USER privilege dropping is plumbed and fails closed by design, but is not exercised by a test — it needs a real unprivileged account and a root parent process",
+    "G-1 on PR #33 attributes the whole branch to bot-00-programming-lead from the branch prefix, so every seat's files on this stack read as foreign to it. Pre-existing property of the stack-landing branch",
+    "Greptile was not re-polled for tip_match after these commits"
+  ],
+  "files_changed": [
+    ".receipts/bot-01-systems-backend/systems-pr33-greptile-p1-trusted-gates-2026-09-30.json",
+    "services/desk-gateway/src/desk_gateway/config.py",
+    "services/desk-gateway/src/desk_gateway/repo.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
+    "services/desk-gateway/src/desk_gateway/tools/quality.py",
+    "services/desk-gateway/src/desk_gateway/tools/lead.py",
+    "services/desk-gateway/src/desk_gateway/tools/mobile.py",
+    "services/desk-gateway/src/desk_gateway/tools/infra.py",
+    "services/desk-gateway/tests/test_server.py",
+    "services/desk-gateway/tests/test_units.py"
+  ],
+  "destructive": false,
+  "secrets_committed": false,
+  "p1s_addressed": [
+    "4140823507",
+    "4140823511",
+    "4140823522",
+    "4140823531",
+    "4140823534"
+  ],
+  "p2s_addressed": [
+    "4140823542",
+    "4140823546",
+    "4140823551"
+  ],
+  "p1s_deferred": [],
+  "base_commit": "cb9e3858ecbc0208a82b9c88bb2ee83db45567b3"
+}

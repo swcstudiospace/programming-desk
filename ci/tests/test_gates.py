@@ -13,6 +13,7 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -943,6 +944,100 @@ class TestEveryGateIsWired:
             f"{workflow} never runs: {', '.join(unwired)}. A gate script in ci/gates/ that no "
             "step invokes enforces nothing. Wire it up, add it to REQUIRED above, or delete it."
         )
+
+
+class TestReceiptSelection:
+    """G-2 must read the receipt for THIS change, not one replayed alongside it.
+
+    A rebase or a stack landing adds several of a seat's receipts at once, all of them
+    "added" relative to the base. Selecting by sort order then validates the change against
+    a receipt describing different work — failing closed when that receipt has no
+    approved_by, and passing on it when it has one. That second case is the same fail-open
+    G-4's change-document selector was fixed for; this is the sibling selector.
+
+    Runs the shipped step rather than a copy of it, for the reason the injection tests do.
+    """
+
+    @staticmethod
+    def _select(workflow: str, tmp_path: Path, receipts: dict[str, dict | None],
+                head_ref: str) -> subprocess.CompletedProcess:
+        """Run the shipped selection step against a fixture set of receipts.
+
+        `receipts` maps filename to its JSON content, or None to write invalid JSON. The
+        step's `git diff` is stubbed by pre-writing receipts.txt, which is what it consumes.
+        """
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        body = next(
+            s["run"] for job in doc["jobs"].values() for s in (job.get("steps") or [])
+            if s.get("id") == "receipt" and s.get("run")
+        )
+        # Drop the `git diff ... > receipts.txt` line: the fixture supplies that file.
+        kept = [ln for ln in body.splitlines(keepends=True)
+                if "git diff" not in ln and not ln.strip().startswith(('"origin/$BASE_REF', "| grep -E"))]
+
+        bot_dir = tmp_path / ".receipts" / "bot-00-programming-lead"
+        bot_dir.mkdir(parents=True)
+        listing = []
+        for name, content in receipts.items():
+            f = bot_dir / name
+            f.write_text("not json" if content is None else json.dumps(content))
+            listing.append(str(f.relative_to(tmp_path)))
+        (tmp_path / "receipts.txt").write_text("\n".join(listing) + "\n")
+
+        script = tmp_path / "select.sh"
+        script.write_text("".join(kept))
+        return subprocess.run(
+            ["bash", "-e", str(script)],
+            capture_output=True, text=True, cwd=tmp_path,
+            env={"BOT": "bot-00-programming-lead", "BASE_REF": "main",
+                 "HEAD_REF": head_ref, "GITHUB_OUTPUT": str(tmp_path / "out"),
+                 "PATH": os.environ["PATH"]},
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_single_receipt_is_used_as_is(self, workflow, tmp_path):
+        """The common case must keep working, including when it names no branch."""
+        r = self._select(workflow, tmp_path, {"only.json": {"task_id": "x"}}, "any/branch")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "only.json" in (tmp_path / "out").read_text()
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_replayed_receipt_does_not_win_on_sort_order(self, workflow, tmp_path):
+        """The real case: 'grokbot' sorts before 'stack', and only the latter is this change."""
+        r = self._select(workflow, tmp_path, {
+            "desk-v2-grokbot-share.json": {"task_id": "replayed"},
+            "desk-v2-stack-land-on-main.json": {"task_id": "this", "branch": "bot-00/land"},
+        }, "bot-00/land")
+        assert r.returncode == 0, r.stdout + r.stderr
+        selected = (tmp_path / "out").read_text()
+        assert "desk-v2-stack-land-on-main.json" in selected
+        assert "grokbot" not in selected
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_ambiguous_receipts_stop_the_build(self, workflow, tmp_path):
+        """Two receipts and none naming this branch is not a guess the gate may make."""
+        r = self._select(workflow, tmp_path, {
+            "a.json": {"task_id": "a"}, "b.json": {"task_id": "b"},
+        }, "bot-00/land")
+        assert r.returncode != 0
+        assert "2 receipts" in r.stdout + r.stderr
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_receipt_still_fails(self, workflow, tmp_path):
+        r = self._select(workflow, tmp_path, {}, "bot-00/land")
+        assert r.returncode != 0
+        assert "no verification receipt" in r.stdout + r.stderr
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_unreadable_receipt_does_not_crash_the_selection(self, workflow, tmp_path):
+        """A malformed receipt must not take the gate down; it just cannot be the match."""
+        r = self._select(workflow, tmp_path, {
+            "broken.json": None,
+            "good.json": {"task_id": "this", "branch": "bot-00/land"},
+        }, "bot-00/land")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "good.json" in (tmp_path / "out").read_text()
 
 
 class TestWorkflowShellInjection:

@@ -31,10 +31,11 @@ jobs:
             echo "::error::DESK_INTAKE_TOKEN secret is not set on this repository"
             exit 1
           fi
-          # /v1/intake caps title at 200 characters and ask at 20000. An issue longer than
-          # either would be rejected with a 400 and LEAD would never see it, so truncate
-          # here and say so in the text rather than dropping the intake. jq counts
-          # characters, which is what the gateway's maxLength counts too.
+          # /v1/intake bounds both fields at BOTH ends: title 3..200, ask 10..20000. Either
+          # limit crossed is a 400, and the workflow has no fallback comment, so the label
+          # is applied and LEAD never sees the request — it looks handled to whoever applied
+          # it. An empty or one-line issue body is ordinary, not adversarial, so pad as well
+          # as truncate and say which happened. jq counts characters, as the gateway does.
           jq -n \
             --arg title "$ISSUE_TITLE" --arg ask "$ISSUE_BODY" --arg url "$ISSUE_URL" \
             --arg by "$ISSUE_USER" --arg key "$IDEMPOTENCY_KEY" \
@@ -43,9 +44,13 @@ jobs:
               if (. | length) > $limit
               then (.[0:$limit - ($note | length)] + $note)
               else . end;
+            def floor($min; $fallback):
+              if (. | length) < $min then $fallback else . end;
             {origin: "github",
-             title: ($title | clip(200; "…")),
-             ask: ($ask | clip(20000; "\n\n[truncated — see the issue for the full text]")),
+             title: ($title | floor(3; "GitHub issue intake") | clip(200; "…")),
+             ask: ($ask
+                   | floor(10; "No description was given on the issue. See the link for context.")
+                   | clip(20000; "\n\n[truncated — see the issue for the full text]")),
              links: [$url],
              requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json
           curl --fail-with-body -sS --max-time 30 \

@@ -74,20 +74,60 @@ jobs:
         env:
           BOT: ${{ steps.bot.outputs.bot }}
           BASE_REF: ${{ github.base_ref || 'main' }}
+          HEAD_REF: ${{ github.head_ref }}
         run: |
           # The receipt must be the one THIS change adds, not whichever filename happens
           # to sort first in the bot's directory. Picking the first filename lets an old
           # receipt from an unrelated task satisfy G-2 and G-5/G-6 for a change it never
           # describes — which is the one thing G-2 exists to prevent.
-          RECEIPT=$(git diff --name-only --diff-filter=d \
+          #
+          # One change can add several of a seat's receipts: a rebase or a stack landing
+          # replays earlier ones alongside the new one, and they are all "added" relative
+          # to the base. `head -n1` then resolved to whichever sorted first, so G-2 read a
+          # receipt describing a different task — failing closed when that receipt had no
+          # approved_by, but passing on it when it did. So: exactly one candidate is used
+          # as-is; several are narrowed by the branch each receipt names; anything still
+          # ambiguous stops the build instead of guessing.
+          git diff --name-only --diff-filter=d \
             "origin/$BASE_REF...HEAD" -- ".receipts/$BOT" \
-            | grep -E '\.json$' | head -n1 || true)
-          if [[ -z "$RECEIPT" ]]; then
-            echo "::error::G-2 — this change adds no verification receipt under .receipts/$BOT/"
-            echo "::error::A completion claim requires a receipt for THIS task, not a previous one."
-            echo "::error::See skills/verification-receipts/"
-            exit 1
-          fi
+            | grep -E '\.json$' > receipts.txt || true
+          python3 - <<'SELECT' > receipt.path
+          import json, os, sys
+          from pathlib import Path
+
+          bot, head = os.environ["BOT"], os.environ.get("HEAD_REF") or ""
+          candidates = [p for p in Path("receipts.txt").read_text().split() if p]
+
+          if not candidates:
+              sys.exit(
+                  f"::error::G-2 — this change adds no verification receipt under .receipts/{bot}/\n"
+                  "::error::A completion claim requires a receipt for THIS task, not a previous one.\n"
+                  "::error::See skills/verification-receipts/"
+              )
+
+          def branch_of(path):
+              try:
+                  return json.loads(Path(path).read_text()).get("branch")
+              except (OSError, ValueError):
+                  return None
+
+          if len(candidates) > 1:
+              matched = [p for p in candidates if branch_of(p) == head]
+              if len(matched) != 1:
+                  listing = "\n".join(f"::error::    {p}  (branch: {branch_of(p)!r})" for p in candidates)
+                  sys.exit(
+                      f"::error::G-2 — this change adds {len(candidates)} receipts under "
+                      f".receipts/{bot}/ and {len(matched)} name the branch {head!r}:\n"
+                      f"{listing}\n"
+                      "::error::Exactly one must name this branch, so the gate reads the receipt for\n"
+                      "::error::THIS change rather than one replayed alongside it. Set 'branch' on the\n"
+                      "::error::receipt this change is for."
+                  )
+              candidates = matched
+
+          print(candidates[0])
+          SELECT
+          RECEIPT=$(cat receipt.path)
           echo "Receipt for this change: $RECEIPT"
           echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
 

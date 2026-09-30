@@ -4,7 +4,7 @@
   "receipt_kind": "integration_landing",
   "recorded_at": "2026-09-30T04:00:00+00:00",
   "repo": "swcstudiospace/programming-desk",
-  "branch": "claude/desk-v2-stack-q0ct4r",
+  "branch": "bot-00-programming-lead/desk-v2-stack-land-on-main",
   "grok_run": "20260930T031945Z-30f61c15",
   "head_commit_sha": null,
   "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
@@ -457,7 +457,8 @@
     "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did.",
     "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage.",
     "Greptile caught the same mistake twice in this PR, in two different files: a test that asserts on a helper rather than on the code path that calls it. The workflow-injection tests ran a copy of the bot-resolution script; the traversal tests asserted safe_path directly and would have passed against a handler that never called it. Both now execute the real path. The pattern worth remembering: when a fix is 'call the existing guard', the test has to prove the call happens, because the guard itself was never broken.",
-    "Two receipt defects in this PR came from editing it with a script rather than reading it back: an insertion shifted every later evidence_command_index, and an append put the traversal finding at index 3 while a later edit wrote its residual to index 2, overwriting the desk-intake caveat. Both were caught by review, not by me. A receipt is the artifact whose whole value is being trustworthy, so a programmatic edit to one needs the same read-back a code change gets."
+    "Two receipt defects in this PR came from editing it with a script rather than reading it back: an insertion shifted every later evidence_command_index, and an append put the traversal finding at index 3 while a later edit wrote its residual to index 2, overwriting the desk-intake caveat. Both were caught by review, not by me. A receipt is the artifact whose whole value is being trustworthy, so a programmatic edit to one needs the same read-back a code change gets.",
+    "The gates workflow selected the receipt for a change with `... | head -n1`, which breaks on any change adding more than one of a seat's receipts. This landing adds two LEAD receipts — desk-v2-grokbot-share.json replayed from PR #23 by the rebase, and this one — so the selector resolved to the replayed one. It failed closed here because that receipt has no approved_by, but it would have passed on it had that task been stamped, validating this landing against a receipt describing different work. Same defect class as the one #16 fixed for change documents, in the sibling selector nobody revisited."
   ],
   "approved_by": "bot-06-quality-security"
 }

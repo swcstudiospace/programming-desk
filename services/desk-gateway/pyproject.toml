@@ -10,6 +10,10 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=2.2.0,<3",
     "pydantic>=2.11",
+    # App Store Connect auth mints an ES256 JWT per call. The [crypto] extra pulls in
+    # cryptography, which PyJWT needs for ES256 — without it the import in upstreams.py
+    # fails and the ASC tools report not_configured even with valid credentials.
+    "pyjwt[crypto]>=2.8",
     "pyyaml>=6.0",
     "uvicorn>=0.34",
 ]

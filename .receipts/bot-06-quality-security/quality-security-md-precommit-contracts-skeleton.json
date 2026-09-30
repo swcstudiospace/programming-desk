@@ -127,6 +127,36 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "G-3 PASS — 16 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "..................                                                       [100%]\n90 passed in 4.84s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-1 manifest OK — 7 bots, 100 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "    contracts/changes/contracts-skeleton-v0.1.0.yaml\n    openapi.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-3 PASS — 16 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "    openapi.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
     }
   ],
   "claims": [
@@ -201,6 +231,26 @@
     {
       "claim": "G-3 PASS across the whole change",
       "evidence_command_index": 16
+    },
+    {
+      "claim": "After merging origin/main (31 commits, including the live CI wiring), the 90 gate self-tests still pass — main did not touch check_contracts.py or test_gates.py, so the G-4 tightening merges without interaction",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "The merged manifest validates at 100 rules (was 90 at the fork point)",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "G-1 PASS post-merge — 16 files, all bot-06-quality-security",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "G-3 PASS post-merge",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "G-4 PASS post-merge with the change document",
+      "evidence_command_index": 21
     }
   ],
   "unverified": [
@@ -247,5 +297,12 @@
       "disposition": "FIXED: ci/hooks/g4-preflight.sh resolves and passes the document, and refuses more than one active document.",
       "residual": null
     }
-  ]
+  ],
+  "corrections": [
+    "EARLIER CLAIM WITHDRAWN: '.github/workflows/ does not exist in this repository'. True at the fork point (65f62e5); false now. main commit 1738ec4 wired the Quality Gates workflow at .github/workflows/, and gates-template-sync.yml keeps it identical to the ci/.github/workflows/ template. CI is live on this repository.",
+    "EARLIER CLAIM WITHDRAWN: 'ci/.github/workflows/gates.yml is UNOWNED'. main commit dcc4e03 assigned ci/.github/workflows to bot-05-infrastructure. It is FOREIGN to QUALITY now, not unowned — still not this change's to edit, but for a different reason.",
+    "SCOPE CORRECTED on the Greptile P1: main's live workflow already selects the change document from the diff (git diff --name-only ... -- contracts/changes) rather than by globbing the directory, so the selector half of that finding was fixed upstream, independently, before this branch merged main in. The gate-level surface-coverage check added here is defence in depth, not the only barrier: it still binds a document to its change for every other caller — the manual pre-flight, run_all.py, and a human running the gate by hand — none of which get the workflow's diff-based selection.",
+    "'.gitignore is UNOWNED' STILL HOLDS after the merge (re-verified against the 100-rule manifest)."
+  ],
+  "merge_note": "origin/main advanced 31 commits between this branch's fork point and the first review round. Merged in cleanly — no conflicts, including in docs/quality-gates.md and docs/cross-bot-protocol.md, which both sides edited."
 }

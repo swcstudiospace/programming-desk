@@ -49,24 +49,34 @@ memory_brief (+ etag) ──▶ act ──▶ memory_write ──▶ events_emit
 
 The procedure, the tool-name mapping onto the gateway's `desk_*` equivalents, and the failure modes
 are in [`../skills/desk-bootstrap/desk-production-loop/SKILL.md`](../skills/desk-bootstrap/desk-production-loop/SKILL.md),
-which is enabled on all seven seat templates. Four points are desk policy rather than skill detail:
+which is enabled on all seven seat templates. Five points are desk policy rather than skill detail:
 
-1. **No repo work before a brief that returned an etag.** Reading files is fine; editing,
-   committing, branching, pushing, opening a PR, or any `write` tool call waits for the brief. A
-   seat that edits first is re-deciding something already recorded in the memory plane it skipped.
-   The etag goes in the receipt as `brief_etag`, so a reviewer can see which revision the seat read.
-2. **Degraded mode needs a human ack.** `memory_brief` is a `read` and fails open, so an empty brief
-   with a `reason` — or one with no etag — is *unknown*, never *none*. Working the repo anyway needs
-   a recorded acknowledgement, routed the way approvals already are: a build seat asks LEAD priority
+1. **No repo work before a brief that succeeded, with its revision marker recorded.** Reading files
+   is fine; editing, committing, branching, pushing, opening a PR, or any `write` tool call waits for
+   the brief. A seat that edits first is re-deciding something already recorded in the memory plane it
+   skipped. The marker goes in the receipt as `brief_etag` — the etag where the tool's contract has
+   one, and otherwise the strongest stamp the response does carry, named. `desk_brief` returns no etag
+   today, so a gateway seat records `desk_brief.generated_at=<value>`. **A successful brief from a
+   tool with no etag field is not degraded**; reading it that way would make a human ack the price of
+   every ordinary turn on the desk.
+2. **Degraded mode needs a human ack.** Degraded means the brief *failed*: `memory_brief` is a `read`
+   and fails open, so an empty brief with a `reason`, a deadline-cut call, an unlisted tool, or an
+   etag-bearing tool that returned no etag is *unknown*, never *none*. Working the repo anyway needs a
+   recorded acknowledgement, routed the way approvals already are: a build seat asks LEAD priority
    false; LEAD asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim
    reason in `unverified`, it covers one turn on one ticket, it is not a g5/g6 `approval_id`, and it
    is never typed by the seat that needs it. No ack is a blocker, and a reported blocker is a
    finished turn.
-3. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
+3. **Degradation is signalled in the event payload, never by swapping the event kind.** A degraded
+   turn that got its ack and finished the work still emits `implementation.completed` with the receipt
+   path, plus `payload.degraded: true` and the ack id. `ticket.blocked` is for the turn that *stopped*
+   — no ack, or ack refused. `docs/handoff-contracts.md` routes on kind, so a finished turn labelled
+   `ticket.blocked` sends LEAD chasing a blocker for work that is sitting ready for review.
+4. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
    RAGFlow or Hindsight server (`user-ragflow`, `user-hindsight`, or a direct MCP/HTTP endpoint):
    that path needs a credential the seat must not hold, leaves no event row, and can retain outside
    `pd-<seat>`.
-4. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
+5. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
    a skill — for itself or another seat — until a `skills.approve` capability exists. `skills_propose`
    opens a PR; a proposal is not an installed skill.
 

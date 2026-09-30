@@ -49,11 +49,23 @@ SEATS: list[tuple[str, str, str, str]] = [
 #
 # desk-production-loop is a base skill rather than a per-seat load="always" entry because it is
 # desk policy, not a seat preference: the loop (brief -> act -> memory_write -> events_emit ->
-# handoff_to_hermes, with memory_brief and its etag required before any repo work) has to hold on
-# every seat or the memory plane has holes in it, and a seat that could opt out of it is a seat
-# whose brief the next seat cannot trust. It also carries the two negative defaults -- no raw docs
-# or memory connector, and skills list/invoke only until skills.approve exists -- which are
-# likewise desk-wide.
+# handoff_to_hermes, with a successful memory_brief and its recorded revision marker required
+# before any repo work) has to hold on every seat or the memory plane has holes in it, and a seat
+# that could opt out of it is a seat whose brief the next seat cannot trust. It also carries the two
+# negative defaults -- no raw docs or memory connector, and skills list/invoke only until
+# skills.approve exists -- which are likewise desk-wide.
+#
+# This is NOT the list the doctor checks. desk_doctor's skills row compares installed_skills against
+# _declared_skills() in services/desk-gateway/src/desk_gateway/tools/core.py, which reads
+# <skill path="skills/<dir>/SKILL.md"> out of prompts/<bot_id>.xml and then appends its own
+# hard-coded ("verification-receipts", "desk-doctor", "desk-bootstrap"). BASE_SKILLS here and that
+# tuple there are two independent notions of "every seat has this", and adding a name here does not
+# reach the doctor: a seat can omit desk-production-loop and still get a green skills row, which
+# makes the rollout unverifiable exactly where verification matters. Closing it is a one-line
+# SYSTEMS change -- add "desk-production-loop" to that tuple -- on a path LEAD does not own
+# (bot-01 under ownership.yaml), raised in
+# .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json. Until it lands, a green
+# doctor skills row is silent about this skill, not proof that it is installed.
 BASE_SKILLS = [
     "desk-bootstrap",
     "desk-production-loop",

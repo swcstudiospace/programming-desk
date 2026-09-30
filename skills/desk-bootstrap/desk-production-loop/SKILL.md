@@ -1,6 +1,6 @@
 ---
 name: desk-production-loop
-description: The default production turn for a desk seat — memory_brief (+ etag) before any repo work, act inside owned paths, memory_write, events_emit, handoff_to_hermes. Use at the start of every ticket, before the first edit, and before any completion claim. Also use to decide whether a failed brief permits degraded mode.
+description: The default production turn for a desk seat — memory_brief (+ its etag or revision marker) before any repo work, act inside owned paths, memory_write, events_emit, handoff_to_hermes. Use at the start of every ticket, before the first edit, and before any completion claim. Also use to decide whether a failed brief permits degraded mode, and which event kind a degraded turn emits.
 bots: [all]
 gates: [G-1, G-2, G-3]
 ---
@@ -26,7 +26,8 @@ you have a ticket. This is the turn shape for every ticket, not an optional enha
 brief ──▶ act ──▶ memory_write ──▶ events_emit ──▶ handoff_to_hermes
 ```
 
-**The one hard precondition: no repository work before a brief that returned an etag.** Reading
+**The one hard precondition: no repository work before a brief that succeeded, with its revision
+marker recorded in the receipt as `brief_etag`** (the etag where the tool has one — §2). Reading
 files is fine. Editing, committing, branching, pushing, opening a PR, or calling any `write` tool
 is repo work, and all of it waits for the brief. A seat that edits first is deciding again
 something the desk already decided, with no way to know it — and the memory plane it was supposed
@@ -37,10 +38,12 @@ Ticket in hand. About to touch the repo?
 │
 ├─ memory_brief called this turn?              NO ──▶ Call it. §2
 │  │ YES
-├─ It returned an etag?                        NO ──▶ DEGRADED. Human ack or stop. §3
+├─ Did it succeed?  (content, no `reason`,     NO ──▶ DEGRADED. Human ack or stop. §3
+│  │  not deadline-cut, tool was listed)
 │  │ YES
-├─ Recorded the etag in the receipt?           NO ──▶ Record it, then act. §2
-│  │ YES
+├─ Recorded its revision marker as             NO ──▶ Record it, then act. §2
+│  │ brief_etag in the receipt?                       (a successful brief from a tool with no
+│  │ YES                                               etag field is NOT degraded — §2)
 ├─ Paths resolve to your seat?                 NO ──▶ Not yours. Blocker to LEAD (G-1). §4
 │  │ YES
 ├─ Need docs or memory?  ──▶ substrate/gateway only. Never a raw docs or memory server. §4
@@ -76,14 +79,14 @@ Phases 3 and 4 are not reporting. They are how the next turn — yours or anothe
 that this turn happened at all. A turn that edits code and emits nothing is invisible to the brief
 that the next seat will read, which is exactly the state §2 exists to prevent.
 
-### §2 Phase 1 — brief, and the etag
+### §2 Phase 1 — brief, and its revision marker
 
 Call `memory_brief` (or `desk_brief`) once at the start of the turn, with `graph_id` and `task_id`
 when the ticket carries them. What comes back is the substrate brief for the graph, recall from
-`pd-<seat>` and `pd-desk`, and the seat's open tickets — plus an **etag** identifying the exact
-brief revision you read.
+`pd-<seat>` and `pd-desk`, and the seat's open tickets — and, where the tool's contract provides one,
+an **etag** identifying the exact brief revision you read.
 
-The etag is the thing that makes the brief evidence rather than atmosphere. Record it:
+The recorded revision marker is what makes the brief evidence rather than atmosphere. Record it:
 
 1. **In the receipt**, as `brief_etag`, alongside the `task_id`. A reviewer can then ask whether
    the decision you made was available to you when you made it.
@@ -92,18 +95,35 @@ The etag is the thing that makes the brief evidence rather than atmosphere. Reco
 
 Re-brief with `refresh: true` when the turn spans a long gap, after your own `memory_write` if you
 need the fact back in the same turn, or when another seat may have written to `pd-desk` meanwhile.
-**If the etag changed, re-read before you claim anything**: the brief you acted on is no longer the
+**If the marker changed, re-read before you claim anything**: the brief you acted on is no longer the
 current one, and the difference is where a contradiction hides.
 
-The brief is cached five minutes at the gateway. A cached brief is still a brief and still carries
-its etag; the cache is not a degraded state.
+The brief is cached five minutes at the gateway. A cached brief is still a brief; note `cached: true`
+alongside the marker, because the cache is not a degraded state and must not be reported as one.
 
-> **Not yet threaded through the roster.** `contracts/tool-rosters/_core.yaml` gives `desk_brief`
-> no etag output field and `desk_memory_retain` / `desk_event_emit` no etag input, and every roster
-> schema is `additionalProperties: false` — so passing one today is a validation error, not a hint.
-> Until QUALITY lands that contract change (G-4), the receipt is the only place the etag is
-> recorded, and the receipt is enough to satisfy this section. Record it from whatever the live
-> `memory_brief` response calls it, and name that field in the receipt.
+#### When the tool has no etag field
+
+`contracts/tool-rosters/_core.yaml` gives `desk_brief` no etag output, and `services/desk-gateway`'s
+`core.brief` returns `seat`, `generated_at`, `substrate`, `recall`, `loaded_packs`, `intake_queue`,
+`reminders` and `cached` — no etag among them. `desk_memory_retain` and `desk_event_emit` take no
+etag input either, and every roster schema is `additionalProperties: false`, so passing one today is
+a validation error rather than an ignored hint.
+
+**A successful brief from a tool whose contract has no etag field is not degraded.** Read that
+sentence twice: the opposite reading would put every gateway-backed turn on the desk into §3 and
+make a human ack the price of ordinary work, which is the failure mode this section exists to avoid,
+not to create. What you record is the strongest revision marker the response actually carries, named
+so a reviewer can check it:
+
+| Brief you called | `brief_etag` records |
+|---|---|
+| A tool whose contract carries an etag, and it returned one | the etag |
+| `desk_brief` today | `desk_brief.generated_at=<value>` (plus `cached: true` when the five-minute cache served it) — `generated_at` *is* the brief's revision stamp |
+| A tool whose contract carries an etag and it came back without one | nothing — that brief did not complete. §3 |
+
+Name the field, not just the value. `brief_etag: "desk_brief.generated_at=1790761742.31"` is checkable;
+a bare number is not. Once QUALITY lands the etag in the roster (G-4), row 3 starts applying to
+`desk_brief` too, and row 2 retires.
 
 ### §3 Degraded mode needs a human ack
 
@@ -111,8 +131,12 @@ its etag; the cache is not a degraded state.
 a `reason` string, not an error. That is the dangerous case, because an empty brief reads exactly
 like a ticket nobody has touched.
 
-**Degraded mode is any of:** the brief returned empty with a `reason`; the call was cut by the 20 s
-deadline; the response carried no etag; or the connector did not list the tool.
+**Degraded mode is the brief failing, not the plane lacking a field.** It is any of: the brief
+returned empty with a `reason`; the call was cut by the 20 s deadline; the connector did not list the
+tool; or a brief whose tool contract *does* carry an etag came back without one, which means the
+call did not complete. It is **not** a successful brief from a tool that has no etag field — see §2,
+"When the tool has no etag field". Today that is every `desk_brief` call, and none of them is
+degraded.
 
 In degraded mode you may read the repository and you may report. You may **not** do repo work
 without a recorded human acknowledgement:
@@ -122,8 +146,12 @@ without a recorded human acknowledgement:
 | 1 | Stop before the first edit. Do not retry in a loop — one retry, then it is degraded. |
 | 2 | Ask for the ack the way approvals are already routed: a build seat asks LEAD (priority false); LEAD asks Ove in the 1:1. State the tool, the verbatim `reason`, and what you intend to edit. |
 | 3 | Record the returned ack id in the receipt under `approvals`, with `operation: "degraded-loop: repo work without a memory brief"`, and put the verbatim `reason` in `unverified`. |
-| 4 | Act. Emit the turn's events with `degraded: true` in the payload so the event log shows which rows were produced without a brief. |
+| 4 | Act, and emit the **normal** kinds for what happened — `implementation.started`, then `implementation.completed` with the receipt path — each carrying `payload.degraded: true`, `payload.reason` and the ack id. Degradation is a property of the turn, not its outcome (§6). |
 | 5 | Do **not** fire `handoff_to_hermes`. A handoff propagates an unknown memory state into another runtime, where it stops being visible. Hand off only if the ack says so in as many words. |
+
+If the ack does not come, or is refused, the turn stops and **that** is the `ticket.blocked` case:
+emit it with `payload.reason: "brief_degraded"` and the verbatim brief `reason`. Its consumer is LEAD,
+which is correct for a turn that produced nothing and needs a decision.
 
 An ack authorises **one turn** of repo work on **one ticket**. It is not an `approval_id` for a g5
 or g6 tool and does not substitute for one. **Never type an ack id you were not given** — a
@@ -169,6 +197,15 @@ repository, `scripts/generate-templates.py`, and `skills/pack-sync` in the one d
 A seat that adds a skill to itself is executing unreviewed instructions with no receipt, and
 `desk_doctor check`'s `installed_skills` row will disagree with the pack on the next run.
 
+> **Doctor does not yet require this skill.** `_declared_skills()` in
+> `services/desk-gateway/src/desk_gateway/tools/core.py` builds the required list from the
+> `<skill path="…">` entries in `prompts/<bot_id>.xml` plus a hard-coded
+> `("verification-receipts", "desk-doctor", "desk-bootstrap")`. `desk-production-loop` is in neither,
+> so a seat that never installed it still gets a green skills row. Adding it to that tuple is a
+> one-line SYSTEMS change on a path LEAD does not own. Until it lands, a green doctor row is
+> **silent** about this skill — compare your `/` menu against your `grokbot/templates/<SEAT>.md`
+> instead, and tell LEAD if it is missing.
+
 **Write the receipt before the claim**, per `skills/verification-receipts` (G-2). The loop does not
 replace that; phases 3 and 4 are downstream of it, because `memory_write` is refused without a
 `receipt_path` or a `source`.
@@ -194,10 +231,24 @@ already in `docs/handoff-contracts.md` — `implementation.started`, `implementa
 ticket.
 
 **Do not mint a new event kind.** The catalogue is QUALITY's (`docs/handoff-contracts.md`); a kind
-no consumer reads is a row nobody will ever act on. A degraded turn (§3) is therefore
-`ticket.blocked` with `payload.reason: "brief_degraded"`, `payload.degraded: true` and the ack id —
-not a new `loop.*` kind. A dedicated kind would be a welcome contract change; it is QUALITY's to
-make (G-4).
+no consumer reads is a row nobody will ever act on. A dedicated `loop.*` kind would be a welcome
+contract change, and it is QUALITY's to make (G-4).
+
+**A degraded turn (§3) is signalled in the payload, never by swapping the kind.** The kind says what
+happened to the work; `payload.degraded` says what the seat knew while doing it. The catalogue routes
+on kind, so swapping it misroutes the turn:
+
+| The turn | Kind | Payload |
+|---|---|---|
+| Completed, brief fine | `implementation.completed` | `receipt_path` |
+| Completed, brief degraded, ack recorded | `implementation.completed` | `receipt_path`, `degraded: true`, `reason`, ack id |
+| Stopped — no ack, or ack refused | `ticket.blocked` | `reason: "brief_degraded"`, the verbatim brief `reason` |
+
+`implementation.completed` is what carries finished work and its receipt to the integrator and
+QUALITY; `ticket.blocked` is a blocker escalated to LEAD. Labelling a finished degraded turn
+`ticket.blocked` would report a blocker for work that is actually sitting ready for review — the
+receipt would say one thing and the event log another, and the seat waiting on LEAD would be waiting
+for nothing.
 
 Payloads are redacted and capped at 4 KB. Put identifiers and outcomes in them, not transcripts.
 
@@ -246,13 +297,15 @@ Rules that already bind, before the schema exists:
 
 | Never | Because |
 |---|---|
-| Edit before a brief with an etag, without a recorded ack | §2, §3 — the decision may already exist and you cannot see it |
+| Edit before a brief that succeeded, without a recorded ack | §2, §3 — the decision may already exist and you cannot see it |
+| Treat a successful brief as degraded because the tool has no etag field | §2 — that reading makes a human ack the price of every ordinary turn |
 | Retry a failed brief in a loop | One retry, then degraded. The audit log fills with the same refusal |
 | Treat an empty brief as "nothing known" | It fails open. Empty plus a `reason` is *unknown* |
 | Call a raw docs or memory server | §4 — un-audited, needs a credential the seat must not hold |
 | Install, edit or approve a skill for itself | §4 — unreviewed instructions, no receipt, no `skills.approve` |
 | Edit a foreign path to "finish the feature" | G-1. Cross-seat work is contract-first |
 | Mint an event kind | §6 — nothing consumes it |
+| Swap a kind to signal degradation | §6 — the catalogue routes on kind; a finished turn labelled `ticket.blocked` reports a blocker for work that is ready for review |
 | Invent an ack id, an `approval_id`, or a packet signature | PD-5, G-3 — a fabricated approval with an audit trail |
 | Claim done without a receipt | G-2. A claim without a command is a guess with confident phrasing |
 | Hand off a goal that already has an Agent Bus job | Two branches, one goal, a merge race a human untangles |
@@ -261,29 +314,53 @@ Rules that already bind, before the schema exists:
 
 ## Worked examples
 
-**Good — SYSTEMS, one ticket, brief available.**
+**Good — SYSTEMS, one ticket, gateway brief (the common case today).**
 
 ```
-memory_brief {graph_id: "ut-…", task_id: "intake-ack-idempotent"}
-  → brief + etag "w/\"a41f…\"" ; recall shows a 2026-09-24 decision on the ack path
-receipt stub: task_id, brief_etag: "w/\"a41f…\"" (from the memory_brief response)
+desk_brief {graph_id: "ut-…", task_id: "intake-ack-idempotent"}
+  → seat, generated_at: 1790761742.31, substrate, recall, loaded_packs, reminders
+    recall shows a 2026-09-24 decision on the ack path.  No etag field on this tool — §2 row 2,
+    and a successful brief, so NOT degraded.
+receipt stub: task_id, brief_etag: "desk_brief.generated_at=1790761742.31"
 desk_ownership_resolve {paths: ["services/desk-gateway/src/…/intake.py"]}  → bot-01  ✔ mine
-events_emit {kind: "implementation.started", graph_id, task_id}
+desk_event_emit {kind: "implementation.started", graph_id, task_id}
 … edit, run the tests, record cmd + exit_code in the receipt …
-memory_write {content: "Intake ack replays are collapsed on idempotency_key in the gateway, not
-  the queue; window is 30 days", receipt_path: ".receipts/bot-01-systems-backend/…json",
+desk_memory_retain {content: "Intake ack replays are collapsed on idempotency_key in the gateway,
+  not the queue; window is 30 days", receipt_path: ".receipts/bot-01-systems-backend/…json",
   graph_id, task_id, tags: ["intake","idempotency"]}
-events_emit {kind: "implementation.completed", graph_id, task_id, payload: {receipt_path: "…"}}
+desk_event_emit {kind: "implementation.completed", graph_id, task_id, payload: {receipt_path: "…"}}
 Desk post: "awaiting-review / pending QUALITY" + receipt path.  No handoff — SYSTEMS did the work.
 ```
 
-The brief surfaced the existing decision, so the seat extended it instead of re-litigating it. The
-etag says which revision it read, and the next seat's brief shows this turn.
+The brief surfaced the existing decision, so the seat extended it instead of re-litigating it. No ack
+was needed or asked for: nothing failed. `generated_at` says which revision it read, and the next
+seat's brief shows this turn.
 
-**Bad — same ticket, brief down.**
+**Good — same seat, brief degraded, ack recorded, work finished.**
 
 ```
-memory_brief {…} → {} with reason: "substrate unreachable"
+desk_brief {…} → {} with reason: "substrate unreachable"      ← §3, one retry, still empty
+→ LEAD (priority false): "desk_brief empty, reason 'substrate unreachable'. Intending to edit
+   services/desk-gateway/src/…/intake.py. Ack to proceed?"   → LEAD ↔ Ove → ack-2026-09-30-004
+receipt: approvals[{operation: "degraded-loop: repo work without a memory brief",
+  approved_by: "…", id: "ack-2026-09-30-004"}]; unverified: ["brief empty — reason
+  'substrate unreachable'; prior decisions on this ticket unknown"]; brief_etag: null
+desk_event_emit {kind: "implementation.started", …, payload: {degraded: true,
+  reason: "substrate unreachable", ack: "ack-2026-09-30-004"}}
+… work, tests, receipt …
+desk_event_emit {kind: "implementation.completed", …, payload: {receipt_path: "…",
+  degraded: true, ack: "ack-2026-09-30-004"}}     ← completed, NOT ticket.blocked (§6)
+No handoff_to_hermes — the ack did not cover one.
+```
+
+The work is finished and routes to the integrator and QUALITY as finished work. `payload.degraded`
+tells a later reader the seat was flying without the brief. Had the ack never come, the turn would
+have stopped and emitted `ticket.blocked` instead — and produced no diff.
+
+**Bad — same ticket, brief down, no ack.**
+
+```
+desk_brief {…} → {} with reason: "substrate unreachable"
 Seat reads it as "no prior decisions", edits the ack path, writes a receipt, retains
   "intake acks are not idempotent" with the receipt path, and reports done.
 ```
@@ -316,10 +393,13 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
 | Degraded work, no ack | No `approvals` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |
-| Etag not recorded | Reviewer cannot tell what state you read | Record it in the receipt, naming the response field it came from |
-| Etag moved mid-turn | Two turns' claims disagree | Re-brief and re-read before claiming |
+| Revision marker not recorded | Reviewer cannot tell what state you read | Record it in the receipt, naming the response field it came from (§2) |
+| Marker moved mid-turn | Two turns' claims disagree | Re-brief and re-read before claiming |
+| Successful brief called degraded because the tool exposes no etag | An ack requested for every ordinary turn; acks stop meaning anything | §2 row 2 — record `generated_at`; degraded is the brief *failing* |
+| Degraded turn emitted as `ticket.blocked` after finishing the work | LEAD chases a blocker for work sitting ready for review | §6 — kind says the outcome, `payload.degraded` says the conditions |
 | Raw docs or memory call | No event row; retain outside `pd-<seat>` | §4 — substrate or gateway only |
 | Seat enables its own skill | `installed_skills` disagrees with the pack at next doctor | List and invoke only, until `skills.approve` (§4) |
+| Green doctor read as proof this skill is installed | Seat runs without the loop and nothing reports it | `_declared_skills()` in the gateway does not list it yet (§4). Check the `/` menu against the template |
 | Turn ends without `memory_write` / `events_emit` | Next brief shows the turn never happened | Both are in-turn, not follow-ups |
 | New event kind | Rows nobody consumes | Use the catalogue; ask QUALITY for a kind (G-4) |
 | Provisional packet field sent | Validation error, or false provenance | Omit until SPE-4792 lands; say unsigned |
@@ -331,7 +411,8 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 
 | Rule | Gate or directive | Why |
 |---|---|---|
-| Brief with an etag before repo work; ack recorded otherwise | G-2, PD-1 | Acting on unknown memory state is claiming without observing |
+| A brief that succeeded before repo work, its marker in `brief_etag`; ack recorded otherwise | G-2, PD-1 | Acting on unknown memory state is claiming without observing |
+| Degradation goes in the payload, never in the event kind | G-4 | The catalogue routes on kind; a misrouted turn is a blocker nobody owns or work nobody reviews |
 | `memory_write` refused without `receipt_path` or `source` | G-2 | Memory is downstream of verification, never a substitute |
 | Paths resolved to this seat before the first edit | G-1 | One owner per path; an unowned or foreign edit is a silent collision |
 | Docs and memory only via substrate or gateway | G-3, PD-4 | The redactor and the tenant key are not the seat's to bypass |

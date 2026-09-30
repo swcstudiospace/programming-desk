@@ -149,6 +149,11 @@ A claim citing a failing command sets `"expects_failure": true`. The gate then r
 command to have a **non-zero** exit — so the flag cannot be used to excuse a claim whose evidence
 actually failed. It asserts "this was supposed to fail", not "ignore the exit code".
 
+Under `--strict`, an `expects_failure` claim worded exhaustively ("confirmed every case fails") is
+still rejected even when the receipt records other commands for other claims (the fix that follows
+the reproduction, say). One expected-failure command is reproduction evidence for the bug it names
+— it is never exhaustive evidence, and the receipt's total command count does not change that.
+
 ### §3 Matching evidence to claims
 
 The most common G-2 failure is a claim citing a command that does not prove it.

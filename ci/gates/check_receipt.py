@@ -182,11 +182,26 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 f"    If this is a reproduction step, set \"expects_failure\": true on the claim."
             )
 
-        if strict and EXHAUSTIVE_RE.search(text) and len(commands) < 2:
-            problems.append(
-                f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
-                f"only {len(commands)} command(s)"
-            )
+        if strict and EXHAUSTIVE_RE.search(text):
+            if expects_failure:
+                # A claim's own expects_failure must not borrow the receipt's OTHER
+                # commands to waive this check. The claim is evidenced by exactly one
+                # command that was *expected to fail* — that is reproduction evidence for
+                # the bug it names, never exhaustive evidence, no matter how many other
+                # commands the receipt records for other claims (e.g. the fix that follows
+                # it). len(commands) is a receipt-wide count and says nothing about this
+                # claim's own evidence, so it must not be what decides this.
+                problems.append(
+                    f"claim[{i}] {text!r} sets expects_failure and asserts "
+                    "exhaustiveness — a single expected-failure command cannot be "
+                    "exhaustive evidence, regardless of how many other commands the "
+                    "receipt records"
+                )
+            elif len(commands) < 2:
+                problems.append(
+                    f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
+                    f"only {len(commands)} command(s)"
+                )
 
     # --- loop_acks: degraded-mode turn acks (G-2) -------------------------
     # Optional: a receipt for a turn that never went degraded OMITS the field, or carries [].

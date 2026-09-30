@@ -16,6 +16,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -32,7 +33,7 @@ def run_gate(script: str, *args: str) -> subprocess.CompletedProcess:
     )
 
 
-def write_receipt(tmp_path: Path, **overrides) -> Path:
+def _receipt_dict(**overrides) -> dict:
     receipt = {
         "task_id": "test-task",
         "bot": "bot-01-systems-backend",
@@ -47,9 +48,51 @@ def write_receipt(tmp_path: Path, **overrides) -> Path:
         "approved_by": "bot-06-quality-security",
     }
     receipt.update(overrides)
+    return receipt
+
+
+def write_receipt(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "receipt.json"
-    path.write_text(json.dumps(receipt))
+    path.write_text(json.dumps(_receipt_dict(**overrides)))
     return path
+
+
+def _probe_receipt_problems(*, strict: bool = False, **receipt_overrides) -> str:
+    """Run the shipped check_receipt.py against a throwaway receipt; return its stderr.
+
+    Used only to feature-detect whether ci/gates/check_receipt.py, as it currently sits on
+    disk, already carries a given fix — never to assert real gate behaviour, which the
+    tests below do directly against run_gate(). Needed because gate-self-test (CI) overlays
+    ci/gates/ from the PR base ref before this suite runs (Greptile P1 4140823500): a PR
+    that adds or changes receipt validation sees its own new behaviour here only once that
+    base ref carries it too — normally, once the PR has merged.
+    """
+    with tempfile.TemporaryDirectory() as td:
+        path = Path(td) / "receipt.json"
+        path.write_text(json.dumps(_receipt_dict(**receipt_overrides)))
+        args = ["--receipt", str(path)] + (["--strict"] if strict else [])
+        return run_gate("check_receipt.py", *args).stderr
+
+
+def _gate_supports_loop_acks() -> bool:
+    """True once ci/gates/check_receipt.py, as currently on disk, validates loop_acks."""
+    stderr = _probe_receipt_problems(loop_acks=None)
+    return "loop_acks" in stderr and "must be a list" in stderr
+
+
+def _gate_flags_expects_failure_exhaustiveness() -> bool:
+    """True once check_receipt.py stops letting a receipt-wide command count waive
+    --strict's exhaustiveness check for an expects_failure claim (Greptile P1, PR #45)."""
+    stderr = _probe_receipt_problems(
+        strict=True,
+        commands=[
+            {"cmd": "pytest tests/test_x.py", "exit_code": 1},
+            {"cmd": "pytest tests/", "exit_code": 0},
+        ],
+        claims=[{"claim": "confirmed every case fails", "evidence_command_index": 0,
+                 "expects_failure": True}],
+    )
+    return "exhaustive" in stderr.lower()
 
 
 # ===========================================================================
@@ -263,6 +306,33 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "expects_failure but command[0] exited 0" in r.stderr
 
+    def test_expects_failure_cannot_waive_strict_exhaustiveness(self, tmp_path):
+        """A claim's own expects_failure must not borrow the receipt's OTHER commands to
+        dodge --strict. This claim is evidenced by exactly one command that was expected
+        to fail — reproduction evidence for the bug it names, never exhaustive evidence —
+        regardless of how many other commands (e.g. the fix that follows it) the receipt
+        records for other claims."""
+        if not _gate_flags_expects_failure_exhaustiveness():
+            pytest.skip(
+                "ci/gates/check_receipt.py at the pinned base ref predates this fix — "
+                "gate-self-test overlays ci/gates/ from the PR base ref (Greptile P1 "
+                "4140823500), so this activates once that ref carries it"
+            )
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "pytest tests/test_x.py", "exit_code": 1},
+                {"cmd": "pytest tests/", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "confirmed every case fails", "evidence_command_index": 0,
+                 "expects_failure": True},
+            ],
+        )
+        r = run_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "exhaustive" in r.stderr.lower()
+
 
 # ===========================================================================
 # G-2 — loop_acks (degraded-mode turn acknowledgements)
@@ -282,6 +352,14 @@ def valid_ack(**overrides) -> dict:
     return ack
 
 
+@pytest.mark.skipif(
+    not _gate_supports_loop_acks(),
+    reason=(
+        "ci/gates/check_receipt.py at the pinned base ref predates loop_acks validation — "
+        "gate-self-test overlays ci/gates/ from the PR base ref (Greptile P1 4140823500), "
+        "so this class activates once that ref carries the feature (normally: after merge)"
+    ),
+)
 class TestG2LoopAcks:
 
     def test_omitted_loop_acks_passes(self, tmp_path):

@@ -125,19 +125,54 @@ ABSENCE_CLAIM_RE = re.compile(
 # (e.g. `grep -c` always prints a count, even "0") is evidence the chain reached it; a
 # short-circuited chain prints nothing at all. Anchored to the START of the command (not
 # end-to-end like EXISTENCE_ONLY_RE above), since a content search is chained on after it.
+# The path each branch guards is captured so a quiet search (see SILENT_SEARCH_RE below) can
+# be checked against a separate, independent existence command for that same path.
 COMPOUND_EXISTENCE_GATE_RE = re.compile(
-    r"^\s*(?:test\s+-[a-z]\s+\S+|\[\s+-[a-z]\s+\S+\s+\])\s*&&",
+    r"^\s*(?:test\s+-[a-z]\s+(?P<gate_path1>\S+)|\[\s+-[a-z]\s+(?P<gate_path2>\S+)\s+\])\s*&&",
     re.IGNORECASE,
 )
 
 # `grep -q`/`grep --quiet` is defined to print nothing at all, whether it matches or not —
-# silence is its normal, successful behaviour, not a sign the chain short-circuited. Requiring
-# captured output_tail from a quiet search (as COMPOUND_EXISTENCE_GATE_RE's check otherwise
-# does) is a bar a real, fully-executed quiet search can never clear, so it wrongly rejected
-# valid negative evidence: `test -f X && grep -q PATTERN X` exiting 1 with empty output is
-# exactly what "X exists and PATTERN is absent from it" looks like (Greptile P1, PR #45,
-# "Silent searches fail validation").
+# silence is its normal, successful behaviour, not a sign the chain short-circuited. But that
+# cuts both ways: it also means a quiet search's empty output_tail can never be told apart
+# from `test -f X` failing and the chain short-circuiting before grep ever ran — both leave
+# the same non-zero exit code and the same empty output (Greptile P1, PR #45, "Missing file
+# passes quiet-grep check"). Exit code plus output_tail alone cannot resolve that ambiguity,
+# so a quiet-search chain needs independent proof the file existed: a separate command in
+# the receipt that tests the same path and exits 0 (see _confirmed_by_sibling_existence_check
+# below). Without that sibling evidence, a quiet-grep compound is rejected as content proof,
+# same as the unquiet case above (Greptile P1, PR #45, "Silent searches fail validation" —
+# superseded: accepting a bare quiet-grep chain on its own exit code let a missing file pass
+# as a quiet no-match).
 SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet\b)")
+
+
+def _is_positive_existence_check(cmd: dict, path: str) -> bool:
+    """True if `cmd` is a bare existence check (EXISTENCE_ONLY_RE) naming `path` that
+    itself exited 0 — independent proof the path was actually there, not inferred from
+    the exit code of a compound command that might never have reached it.
+    """
+    cmd_text = str(cmd.get("cmd", ""))
+    return (
+        cmd.get("exit_code") == 0
+        and path in cmd_text
+        and bool(EXISTENCE_ONLY_RE.match(cmd_text.strip()))
+    )
+
+
+def _confirmed_by_sibling_existence_check(commands: list, path: str, exclude_idx: int) -> bool:
+    """True if some OTHER command in the receipt independently proves `path` existed.
+
+    This is the only evidence that can break the tie between a quiet-grep compound that
+    actually ran and found nothing, and one whose leading existence check failed and never
+    reached grep at all — both look identical from the compound command's own exit code and
+    output_tail alone.
+    """
+    return any(
+        _is_positive_existence_check(other, path)
+        for j, other in enumerate(commands)
+        if j != exclude_idx and isinstance(other, dict)
+    )
 
 
 class ReceiptError(Exception):
@@ -257,6 +292,24 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
 
         if strict and EXHAUSTIVE_RE.search(text):
             if expects_failure:
+                cmd_text = str(cited.get("cmd", "")) if isinstance(cited, dict) else ""
+                output_tail = (
+                    str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
+                )
+
+                # A quiet-grep compound (`test -f X && grep -q PATTERN X`) with empty
+                # output_tail is ambiguous on its own exit code alone (see SILENT_SEARCH_RE
+                # above) — it needs one specific OTHER command as corroboration: a bare
+                # existence check on that same path that itself exited 0. gate_path is set
+                # only when the cited command is exactly that shape, so every other claim
+                # keeps the single-command rule below unchanged.
+                gate_match = COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
+                gate_path = (
+                    gate_match.group("gate_path1") or gate_match.group("gate_path2")
+                    if gate_match and not output_tail.strip() and SILENT_SEARCH_RE.search(cmd_text)
+                    else None
+                )
+
                 # A single expected-failure command CAN be exhaustive evidence: a search
                 # that exits non-zero exactly when it finds nothing across its whole target
                 # (e.g. a grep for any populated value) is reproduction evidence and total
@@ -268,32 +321,41 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 # is a receipt-wide count, but here it is used the other way around from the
                 # passing-evidence branch below: for THIS claim, more commands elsewhere in
                 # the receipt is exactly the sign that something else might be doing the
-                # padding, not more support. With no other command in the receipt to borrow
-                # from, this claim's cited command is plainly its entire evidence, and its
-                # own scope is what a human reviewer judges (approved_by), same as any other
-                # evidence-matching question this gate cannot verify by itself.
-                if len(commands) > 1:
+                # padding, not more support — with one narrow exception: a command whose
+                # only job is confirming gate_path existed is not padding the claim's
+                # coverage, it is the sole way a quiet-grep compound's ambiguous exit code
+                # can be trusted at all (Greptile P1, PR #45, "Missing file passes
+                # quiet-grep check"). With no other, unexplained command in the receipt to
+                # borrow from, this claim's cited command is plainly its entire evidence,
+                # and its own scope is what a human reviewer judges (approved_by), same as
+                # any other evidence-matching question this gate cannot verify by itself.
+                padding = [
+                    j for j, other in enumerate(commands)
+                    if j != idx and not (
+                        gate_path and isinstance(other, dict)
+                        and _is_positive_existence_check(other, gate_path)
+                    )
+                ]
+                if padding:
                     problems.append(
                         f"claim[{i}] {text!r} sets expects_failure and asserts "
                         "exhaustiveness, and the receipt records other commands beyond the "
-                        "one cited — they cannot be what makes this claim exhaustive, so "
-                        "its cited command must be the receipt's only command for this to "
+                        "one cited that are not a sibling existence check confirming the "
+                        "same path — they cannot be what makes this claim exhaustive, so "
+                        "its cited command must be the receipt's only command (or paired "
+                        "only with a command that confirms the path existed) for this to "
                         "pass under --strict"
                     )
                 else:
-                    # Being the receipt's only command clears the padding concern above,
-                    # but proves nothing by itself about WHY the command failed. A claim
-                    # that "every value is empty" needs a failure that came from searching
-                    # the content and finding nothing, not from the target being absent —
-                    # those are different facts, and only a human (approved_by) can judge
-                    # whether the command's own scope truly covers "every"/"all". This gate
-                    # can at least catch the two shapes of thin evidence that pattern most
-                    # often: a missing-target error, and a command that only checks
-                    # existence and never looks at content either way.
-                    cmd_text = str(cited.get("cmd", "")) if isinstance(cited, dict) else ""
-                    output_tail = (
-                        str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
-                    )
+                    # Clearing the padding concern above proves nothing by itself about WHY
+                    # the command failed. A claim that "every value is empty" needs a
+                    # failure that came from searching the content and finding nothing, not
+                    # from the target being absent — those are different facts, and only a
+                    # human (approved_by) can judge whether the command's own scope truly
+                    # covers "every"/"all". This gate can at least catch the shapes of thin
+                    # evidence that pattern most often: a missing-target error, a command
+                    # that only checks existence and never looks at content either way, and
+                    # a quiet-grep compound with no independent proof its target existed.
                     if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(
                         _strip_quoted(cmd_text)
                     ):
@@ -315,26 +377,38 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                             )
                         # else: the claim is about the path's absence, not its content —
                         # the existence probe's exit code is direct, sufficient evidence.
-                    elif (
-                        COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
-                        and not output_tail.strip()
-                        and not SILENT_SEARCH_RE.search(cmd_text)
-                    ):
-                        problems.append(
-                            f"claim[{i}] {text!r} asserts exhaustiveness via a command that "
-                            f"chains a content search after an existence check "
-                            f"({cmd_text!r}) with no captured output — the existence check "
-                            "failing would short-circuit the chain and produce this exact "
-                            "same exit code without the search ever running. Record "
-                            "output_tail evidence that the search itself executed (e.g. a "
-                            "`grep -c` count), or cite the existence check and the search "
-                            "as separate commands"
-                        )
-                        # else: a `grep -q`/`--quiet` search prints nothing whether it
-                        # matches or not, so empty output_tail is what a real, fully-executed
-                        # quiet search looks like too — the existence check already proved
-                        # the target present, so the chain's exit code alone is valid
-                        # negative evidence here.
+                    elif COMPOUND_EXISTENCE_GATE_RE.match(cmd_text) and not output_tail.strip():
+                        if not SILENT_SEARCH_RE.search(cmd_text):
+                            problems.append(
+                                f"claim[{i}] {text!r} asserts exhaustiveness via a command "
+                                f"that chains a content search after an existence check "
+                                f"({cmd_text!r}) with no captured output — the existence "
+                                "check failing would short-circuit the chain and produce "
+                                "this exact same exit code without the search ever running. "
+                                "Record output_tail evidence that the search itself "
+                                "executed (e.g. a `grep -c` count), or cite the existence "
+                                "check and the search as separate commands"
+                            )
+                        else:
+                            if not gate_path or not _confirmed_by_sibling_existence_check(
+                                commands, gate_path, idx
+                            ):
+                                problems.append(
+                                    f"claim[{i}] {text!r} asserts exhaustiveness via a "
+                                    f"quiet search chained after an existence check "
+                                    f"({cmd_text!r}) with no captured output — `grep -q`/"
+                                    "`--quiet` prints nothing whether it matches or not, so "
+                                    "this exit code is identical whether the search ran and "
+                                    f"found nothing, or the existence check on {gate_path!r} "
+                                    "failed and the chain short-circuited before grep ever "
+                                    "ran. Record a separate command in 'commands' that "
+                                    f"tests {gate_path!r} and exits 0, proving the file was "
+                                    "actually there when the search ran"
+                                )
+                            # else: a separate command elsewhere in the receipt already
+                            # proved the target present, so the chain's own exit code —
+                            # reachable only if its existence check passed too — is valid
+                            # negative content evidence.
             elif len(commands) < 2:
                 problems.append(
                     f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "

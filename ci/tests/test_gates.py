@@ -621,11 +621,14 @@ class TestG2Receipts:
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
 
-    def test_expects_failure_silent_grep_q_is_exhaustive_evidence(self, tmp_path):
-        """`grep -q` never prints anything, matched or not — a real, fully-executed quiet
-        search chained after an existence check looks identical to a short-circuited one on
-        output alone, so the `output_tail` requirement that guards the compound-command case
-        above must not apply to it (Greptile P1, PR #45, "Silent searches fail validation").
+    def test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep -q PATTERN X` short-circuits on a missing X before grep ever
+        runs, leaving the exact same exit code (1) and the exact same empty output as X
+        existing and the quiet grep finding nothing — `grep -q` never prints anything
+        either way. Exit code and output_tail alone cannot tell "X was searched and found
+        empty" from "X was never searched because it doesn't exist", so this ambiguous,
+        uncorroborated compound must not pass as exhaustive content evidence (Greptile P1,
+        PR #45, "Missing file passes quiet-grep check").
         """
         p = write_receipt(
             tmp_path,
@@ -639,7 +642,55 @@ class TestG2Receipts:
             ],
         )
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "quiet search" in r.stderr
+
+    def test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence(
+        self, tmp_path
+    ):
+        """The same quiet-grep compound as above, but now paired with a second, independent
+        command that proves .env.example actually existed (a bare `test -f` that itself
+        exited 0) — that sibling evidence is what a real, fully-executed quiet no-match
+        needs to be trusted, and resolves the ambiguity the previous test blocks on
+        (Greptile P1, PR #45, "Missing file passes quiet-grep check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+                {"cmd": "test -f .env.example", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding(self, tmp_path):
+        """A second command that has nothing to do with confirming the cited command's
+        target existed (here: an existence check on a different path) is still padding, not
+        corroboration — the sibling-evidence exception only covers a command that actually
+        proves the SAME path was there (Greptile P1, PR #45, "Missing file passes
+        quiet-grep check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+                {"cmd": "test -f unrelated.txt", "exit_code": 0},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
 
     def test_expects_failure_content_removal_claim_rejects_bare_existence_check(self, tmp_path):
         """A claim about CONTENT being removed ("the deprecated tokens were removed from the

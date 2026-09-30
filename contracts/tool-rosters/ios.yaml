@@ -1,16 +1,14 @@
-# IOS roster: core 8 + 15 = 23. Contract surface (QUALITY); consumer bot-04-ios.
-# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): two disclosed, known blockers on
-# the 8 new desk_ios_* tools below, neither resolved in this change (both outside its 3-file
-# scope; see the receipt at .receipts/bot-06-quality-security/spe-5161-ios-roster-companion.json):
-#   1. CAPACITY (G-7): the 15 own tools already exceed ci/gates/check_desk_integrity.py's
-#      ROSTER_MAX_TOOLS=15 once summed with the 8 core tools (23 effective). Follow-up: split
-#      desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise ROSTER_MAX_TOOLS.
-#   2. BACKEND RESOLUTION: services/desk-gateway/src/desk_gateway/tools/resolve() imports
-#      desk_gateway.tools.<the part of `backend` before the dot> (see tools/__init__.py). The 8
-#      new tools use an `ios.*` backend prefix, but no desk_gateway/tools/ios.py module exists
-#      (the roster's 7 existing tools use `mobile.*`, which tools/mobile.py does implement).
-#      Calling any of the 8 new tools raises ModuleNotFoundError until that module is added.
-#      services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml), not QUALITY.
+# IOS roster: core 8 + 7 own = 15. Contract surface (QUALITY); consumer bot-04-ios.
+# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): the 8 local/MetaVR tools added
+# for SPE-5161 / PR #48 (bot-04-ios/spe-5161-ios-tools-metavr) would have put this roster at 23
+# effective tools against ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 ceiling (G-7).
+# Resolved by moving them out of the permanent roster into two tool-packs instead of raising the
+# ceiling: contracts/tool-packs/ios-local.yaml (5 filesystem-only tools, app ioslocal) and
+# contracts/tool-packs/ios-metavr.yaml (3 MetaVR device tools, app iosmetavr). ios seats load
+# either via desk_app_tools_load for the life of one ticket. See
+# contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml for the full change record, including a
+# second, still-open blocker: services/desk-gateway has no ios.py backend module, so calling
+# any of these tools today raises ModuleNotFoundError (bot-01-systems-backend's to fix).
 version: 1.1.0
 seat: bot-04-ios
 short: ios
@@ -121,147 +119,3 @@ tools:
         app: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
         task_id: { type: string, minLength: 3, maxLength: 120 }
         unload: { type: boolean, default: false }
-
-  # --- SPE-5161 / PR #48 local iOS tool companion (bot-04-ios/spe-5161-ios-tools-metavr, tip
-  # 7dfb11e) ----------------------------------------------------------------------------------
-  # All eight run on Linux against files already on disk, or a MetaVR executable of the exact
-  # given name found on PATH. None boots a Simulator, invokes xcodebuild, or submits to the App
-  # Store; see ios/tools/IOS_TOOLS.md on that branch for the underlying CLI these wrap.
-  - name: desk_ios_plist_lint
-    kind: read
-    gates: []
-    description: >-
-      Lint an Info.plist already on disk: blank usage-description strings, and an
-      always-location entitlement present without its when-in-use counterpart. Linux-safe pure
-      parse; does not invoke Xcode, xcodebuild, or a Simulator.
-    backend: ios.plist_lint
-    input:
-      type: object
-      additionalProperties: false
-      required: [path]
-      properties:
-        path: { type: string, minLength: 1, maxLength: 500 }
-        as_json: { type: boolean, default: true }
-
-  - name: desk_ios_entitlements_scan
-    kind: read
-    gates: []
-    description: >-
-      Scan .entitlements and Info.plist files under a path on disk for entitlement keys and
-      usage-description keys, or diff that inventory between diff_base and diff_head paths.
-      Requires either path, or both diff_base and diff_head; the gateway's schema validator
-      supports no conditional-required combinator (see services/desk-gateway/src/desk_gateway/
-      schema.py), so an incomplete call is rejected by the backend, not the schema. Filesystem-
-      only and Linux-safe. Distinct from desk_entitlements_diff, which diffs two git refs rather
-      than two paths already checked out.
-    backend: ios.entitlements_scan
-    input:
-      type: object
-      additionalProperties: false
-      required: []
-      properties:
-        path: { type: string, minLength: 1, maxLength: 500 }
-        diff_base: { type: string, minLength: 1, maxLength: 500 }
-        diff_head: { type: string, minLength: 1, maxLength: 500 }
-
-  - name: desk_ios_spm_test_linux
-    kind: write
-    gates: []
-    description: >-
-      Run `swift test` for a Swift package when a Swift toolchain is on PATH; skips rather than
-      failing when the toolchain is missing. dry_run prints the planned command without running
-      it. Never invokes xcodebuild and never boots a Simulator.
-    backend: ios.spm_test_linux
-    input:
-      type: object
-      additionalProperties: false
-      required: [package]
-      properties:
-        package: { type: string, minLength: 1, maxLength: 500 }
-        dry_run: { type: boolean, default: false }
-
-  - name: desk_ios_snapshot_diff
-    kind: write
-    gates: []
-    description: >-
-      Hash-diff two fixture files or directories (sha256, plus width/height for PNG payloads)
-      and write the result to out. Not a pixel diff and does not render UI. kind: write (not
-      read) because it writes an out artifact: server.py's call_tool() sets is_error from
-      `bool(error) and not spec.read_only`, so a read-kind tool's backend failure would be
-      reported as a non-error MCP result — wrong for a tool whose job is producing a file.
-    backend: ios.snapshot_diff
-    input:
-      type: object
-      additionalProperties: false
-      required: [before, after, out]
-      properties:
-        before: { type: string, minLength: 1, maxLength: 500 }
-        after: { type: string, minLength: 1, maxLength: 500 }
-        out: { type: string, minLength: 1, maxLength: 500 }
-
-  - name: desk_ios_xcodebuild_receipt
-    kind: read
-    gates: []
-    description: >-
-      Parse a saved xcodebuild log file for its final TEST/BUILD SUCCEEDED/FAILED line, scheme,
-      destination, and error lines. Reads the log file only; does not invoke xcodebuild and does
-      not boot a Simulator.
-    backend: ios.xcodebuild_receipt
-    input:
-      type: object
-      additionalProperties: false
-      required: [log]
-      properties:
-        log: { type: string, minLength: 1, maxLength: 500 }
-
-  - name: desk_ios_device_screenshot
-    kind: write
-    gates: []
-    description: >-
-      Capture a device screenshot via a MetaVR `device_screenshot` executable found on PATH by
-      that exact name. Skips (no device contacted, no stand-in image written) when the binary is
-      missing; never claims a Simulator was used. kind: write (not read) because it writes an
-      out artifact and a skip/failure must surface as an MCP error, not a masked non-error
-      result (see server.py's read_only-gated is_error).
-    backend: ios.device_screenshot
-    input:
-      type: object
-      additionalProperties: false
-      required: [serial, out]
-      properties:
-        serial: { type: string, minLength: 1, maxLength: 200 }
-        out: { type: string, minLength: 1, maxLength: 500 }
-
-  - name: desk_ios_ui_dump
-    kind: write
-    gates: []
-    description: >-
-      Dump the on-device UI hierarchy via a MetaVR `ui_dump` executable found on PATH by that
-      exact name. Skips (no device contacted) when the binary is missing; never fabricates a
-      stand-in dump. kind: write (not read) because it writes an out artifact and a skip/failure
-      must surface as an MCP error, not a masked non-error result (see server.py's
-      read_only-gated is_error).
-    backend: ios.ui_dump
-    input:
-      type: object
-      additionalProperties: false
-      required: [serial, out]
-      properties:
-        serial: { type: string, minLength: 1, maxLength: 200 }
-        out: { type: string, minLength: 1, maxLength: 500 }
-
-  - name: desk_ios_ui_tap
-    kind: write
-    gates: []
-    description: >-
-      Send a tap to a device via a MetaVR `ui_tap` executable found on PATH by that exact name.
-      Skips (no device contacted) when the binary is missing; never claims a tap was delivered
-      when it was not invoked.
-    backend: ios.ui_tap
-    input:
-      type: object
-      additionalProperties: false
-      required: [serial, out]
-      properties:
-        serial: { type: string, minLength: 1, maxLength: 200 }
-        out: { type: string, minLength: 1, maxLength: 500 }

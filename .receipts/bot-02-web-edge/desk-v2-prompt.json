@@ -70,5 +70,6 @@
   "unverified": [
     "Assembled output for this seat is regenerated in the final QUALITY PR of the stack; assemble-prompts.sh --check is not green on this branch alone",
     "Behaviour of the v1.1 prompt inside a live Grok Bot seat is not exercised until the seat is installed through desk_doctor install_prompt"
-  ]
+  ],
+  "approved_by": "bot-06-quality-security"
 }

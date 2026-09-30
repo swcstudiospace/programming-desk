@@ -1,0 +1,29 @@
+{
+  "_fixture": "NOT a real receipt. The defect Greptile round 9 raised: human_granted_by names a SEAT, so the entry looks complete and has no human in it. Expected: fixtures/check-loop-acks.py exits 1 naming human_granted_by. See fixtures/README.md.",
+  "task_id": "fixture-loop-acks",
+  "bot": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "true",
+      "exit_code": 0,
+      "output_tail": "placeholder; this fixture is never executed as work"
+    }
+  ],
+  "claims": [],
+  "unverified": [
+    "fixture receipt; nothing here was verified"
+  ],
+  "approved_by": "bot-06-quality-security",
+  "approvals": [],
+  "loop_acks": [
+    {
+      "condition": "brief_degraded",
+      "operation": "degraded-loop: repo work without a memory brief",
+      "ack_id": "ack-0000-00-00-000",
+      "human_granted_by": "bot-00-programming-lead",
+      "relayed_by": "bot-00-programming-lead",
+      "at": "2026-09-30T09:41:11Z",
+      "scope": "one turn, ticket fixture-only"
+    }
+  ]
+}

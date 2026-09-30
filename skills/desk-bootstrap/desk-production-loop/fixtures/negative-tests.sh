@@ -54,9 +54,7 @@ OVERLAY=(
   "grokbot/README.md"
   "scripts/generate-templates.py"
   "ci/gates/check_rollback.py"
-  "ci/gates/check_receipt.py"
-  "skills/verification-receipts/SKILL.md"
-  "services/desk-gateway/src/desk_gateway/tools/quality.py"
+  "$LOOP_DIR/fixtures/check-loop-acks.py"
 )
 
 new_scratch() {
@@ -68,8 +66,9 @@ new_scratch() {
     mkdir -p "$scratch/$(dirname "$f")"
     cp "$REPO/$f" "$scratch/$f"
   done
-  mkdir -p "$scratch/$LOOP_DIR/fixtures" "$scratch/grokbot/templates"
+  mkdir -p "$scratch/$LOOP_DIR/fixtures" "$scratch/$LOOP_DIR/companion-patches" "$scratch/grokbot/templates"
   cp "$REPO/$LOOP_DIR/fixtures/"* "$scratch/$LOOP_DIR/fixtures/"
+  cp "$REPO/$LOOP_DIR/companion-patches/"* "$scratch/$LOOP_DIR/companion-patches/"
   cp "$REPO/grokbot/templates/"*.md "$scratch/grokbot/templates/"
 }
 

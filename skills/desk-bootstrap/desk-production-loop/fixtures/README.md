@@ -1,6 +1,7 @@
-# G-6 fixtures for the `loop_acks` rule
+# Fixtures for the `loop_acks` rule
 
-Three receipts that exist to be run through `ci/gates/check_rollback.py`. They are the evidence for
+Eight receipts and a checker. Three go through `ci/gates/check_rollback.py`, five through
+`check-loop-acks.py` beside them. They are the evidence for
 §3.1 of the skill — why a degraded-mode turn ack goes in `loop_acks` and never in `approvals[]` —
 and they are committed here so that reasoning is reproducible from the repository alone rather than
 from a `/tmp` path in someone's session.
@@ -37,3 +38,36 @@ a silent pass inside the gate that exists to stop unapproved destruction.
 instead of counting them — `verify.sh` fails on the second fixture. That failure is the correct
 signal: the hazard would be gone, and §3.1's second row would need rewriting rather than the
 fixture being edited to keep the old result.
+
+
+---
+
+## `loop_acks` shape fixtures, and the checker
+
+`check-loop-acks.py` applies §3.1's rules for a degraded-mode turn acknowledgement: the six required
+fields, the two-value `condition` vocabulary, `human_granted_by` rejected when it names a seat, and
+the entry shape guarded **before** any field is read. It is a LEAD-owned stand-in — the rule belongs
+in G-2, which is `bot-06-quality-security`'s, and the patch is
+[`../companion-patches/C-3-quality-loop-acks-g2.md`](../companion-patches/C-3-quality-loop-acks-g2.md).
+Until that lands, CI does not check `loop_acks` at all and this is what makes the rule executable.
+
+| Fixture | `loop_acks[0]` | Checker | Shows |
+|---|---|---|---|
+| `loop-acks-valid.json` | six fields, `human_granted_by: "Ove"`, `relayed_by` the LEAD seat | **exit 0** | The shape §3.1 asks for, including the relay named separately from the grantor |
+| `loop-acks-seat-grantor.json` | same, but `human_granted_by: "bot-00-programming-lead"` | **exit 1** | The round-9 defect: a complete-looking entry with no human in it, which reads as compliance |
+| `loop-acks-missing-grantor.json` | `human_granted_by` omitted | **exit 1** | An ack obtained and its grantor dropped |
+| `loop-acks-bad-condition.json` | `condition: "brief_slow"` | **exit 1** | An entry that cannot be matched to the turn it claims to authorise |
+| `loop-acks-malformed.json` | `loop_acks: ["ack-…"]` — strings, not objects | **exit 1**, and **no traceback** | A checker that crashes on malformed input gives no verdict, which is worse than one that says no. This is the guard C-3 must carry into G-2 |
+
+```sh
+F=skills/desk-bootstrap/desk-production-loop/fixtures
+python3 $F/check-loop-acks.py $F/loop-acks-valid.json            # 0
+python3 $F/check-loop-acks.py $F/loop-acks-seat-grantor.json     # 1
+python3 $F/check-loop-acks.py $F/loop-acks-missing-grantor.json  # 1
+python3 $F/check-loop-acks.py $F/loop-acks-bad-condition.json    # 1
+python3 $F/check-loop-acks.py $F/loop-acks-malformed.json        # 1, and not a traceback
+```
+
+`verify.sh` runs all five and asserts both the exit code and the absence of a traceback, so the
+acknowledgement rules cannot decay into prose again. `loop_acks` is optional: a receipt for a turn
+that never went degraded records nothing and passes.

@@ -369,6 +369,35 @@ So, fail closed:
 `human_granted_by` is Ove and its `relayed_by` is `null` — LEAD relays *for other seats*, and cannot
 relay for itself. A receipt where `human_granted_by` is a seat is invalid whichever seat wrote it.
 
+**No gate reads `loop_acks` yet, and that is half deliberate.** Deliberate that
+`ci/gates/check_rollback.py` must never see it — being counted there against destructive operations
+is the whole defect this field exists to avoid, since G-6 pairs approvals to destructive commands by
+count and anything it counts can vouch for an `rm -rf` it never authorised. Not deliberate that
+nothing validates the shape: that check belongs in G-2, which is `bot-06-quality-security`'s.
+
+**How presence and shape are checked.** Executably, here, today:
+
+```sh
+python3 skills/desk-bootstrap/desk-production-loop/fixtures/check-loop-acks.py <receipt>...
+```
+
+`fixtures/check-loop-acks.py` applies exactly the rules in this section — the six required fields,
+the two-value `condition` vocabulary, `human_granted_by` rejected when it names a seat, and the
+shape guarded before any field is read so a malformed entry is reported rather than raising inside
+the checker. Five committed fixtures cover the valid case and each failure mode, and `verify.sh`
+runs it over all of them, so these rules are executable rather than prose. `loop_acks` is optional:
+a turn that never went degraded records nothing and passes.
+
+What the checker cannot do is run in CI — a LEAD PR cannot add a gate. **The G-2 landing is
+companion [C-3](./companion-patches/C-3-quality-loop-acks-g2.md)**, with
+[C-4](./companion-patches/C-4-quality-receipt-contract.md) adding the field to the shared receipt
+contract in `skills/verification-receipts/SKILL.md`. Until both land, a malformed or seat-granted
+entry passes CI, and the only things standing against it are this section, the checker, and review.
+
+**LEAD is not exempt.** LEAD's own degraded turns are acked by Ove in the 1:1, so LEAD's
+`human_granted_by` is Ove and its `relayed_by` is `null` — LEAD relays *for other seats*, and cannot
+relay for itself. A receipt where `human_granted_by` is a seat is invalid whichever seat wrote it.
+
 **No gate reads `loop_acks`, and that is deliberate but incomplete.** Deliberate, because
 `ci/gates/check_rollback.py` must not see it — being counted as a destructive-op approval is the
 whole defect this field exists to avoid. Incomplete, because it means nothing validates the shape
@@ -501,24 +530,22 @@ receipt is the designed state. The rest of this section is about why the **stamp
 receipt-file edit, because two separate defects meet here and each one on its own looks like a small
 bug in a tool.
 
-**Defect 1 — the stamping tool deadlocks on its own input.** `desk_receipt_approve` gates the
-receipt before it stamps:
+**Obstacle 1 — the stamping tool needs two companion patches before a first stamp lands.**
+`desk_receipt_approve` gates the receipt before it stamps, and `ci/gates/check_receipt.py` treats an
+absent `approved_by` as a failure — so on an unstamped receipt, which is the expected input, the
+preflight refuses and the stamp is never reached. A second defect sits beside it in the same
+function: the tool reads the receipt at one sha and commits it from a fresh clone taken later, with
+no comparison in between, so a concurrent push to the branch is silently overwritten.
 
-```python
-# services/desk-gateway/src/desk_gateway/tools/quality.py — receipt_approve
-check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
-if not check.get("ok"):
-    return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", …)
-receipt["approved_by"] = ctx.bot_id          # ← never reached on a first stamp
-```
+Both are specified for their owners in
+[`companion-patches/`](./companion-patches/README.md) — C-1 (preflight gates the stamped candidate)
+and C-2 (a fresh-sha and content check before the write), both `bot-01-systems-backend`'s.
+**Once C-1 and C-2 land**, a QUALITY stamp on an unstamped receipt succeeds, the gates run over
+exactly the bytes that get committed, and a stamp raced by another push fails loudly as `stale_read`
+instead of clobbering it. Until then the first stamp is unavailable and `approved_by` stays empty —
+not a defect for a seat to work around, and never a reason to write a placeholder.
 
-`repo.receipt_check` writes the receipt **as fetched** to a scratch file and runs G-2 over it, and
-`ci/gates/check_receipt.py` fails an absent `approved_by` unconditionally — not behind `--strict`,
-and the preflight passes `strict=False` anyway. So the one state the tool exists to change is the one
-state it refuses: every correct unstamped receipt returns `gate_failed`, forever. Verified: G-2
-non-strict on an unstamped receipt exits 1 with `'approved_by' is missing`.
-
-**Defect 2 — and this is the one that rules out the obvious workaround.** The workaround for defect 1
+**Obstacle 2 — and it is the one the companions do not fix.** The shortcut around obstacle 1
 is to skip the tool: QUALITY reviews tip X and lands the stamp as a hand-written commit. That
 cannot work, and not because of a bug — because of what a commit is. **Writing the approval into a
 file on the branch creates a new tip Y.** Greptile's COMPLETED and the reviewed sha in the
@@ -562,8 +589,12 @@ nobody can check.
 get a preflight past itself. That fabricates the independent review the gate exists to require, and
 an empty string fails identically — `if not approved_by` catches both.
 
-**Ownership, plainly.** `services/**` is `bot-01-systems-backend`'s, `ci/gates/**` and
-`contracts/tool-rosters/**` are `bot-06-quality-security`'s. Closing this needs one change in each:
+**Ownership, plainly.** `services/**` is `bot-01-systems-backend`'s, `ci/gates/**`,
+`skills/verification-receipts/**` and `contracts/tool-rosters/**` are
+`bot-06-quality-security`'s. This PR ships none of their code: the four changes it depends on are
+written up as companion specs in [`companion-patches/`](./companion-patches/README.md), and an
+earlier round that landed two of them under LEAD attribution was reverted for it. Closing the
+sha-bound approval needs one change in each:
 a gateway tool that records a sha-bound approval without committing, and a G-2 that resolves
 `approval_ref` against the head instead of reading `approved_by` from the file. Both are specified
 with the proposed patches in the receipt's `blockers`. Until they land, **this PR's approval is not

@@ -61,10 +61,9 @@ V=load("docs/vps-agent-bus.md")
 R=load("grokbot/README.md")
 G=load("scripts/generate-templates.py")
 V_SELF=load("skills/desk-bootstrap/desk-production-loop/verify.sh")   # this script checks itself too
-VR=load("skills/verification-receipts/SKILL.md")      # the SHARED receipt contract (bot-06)
-G2=load("ci/gates/check_receipt.py")                  # the gate that reads loop_acks (bot-06)
-G6=load("ci/gates/check_rollback.py")                 # the gate that must NOT read it (bot-06)
-Q=load("services/desk-gateway/src/desk_gateway/tools/quality.py")   # receipt_approve (bot-01)
+G6=load("ci/gates/check_rollback.py")                 # asserted against, never edited here (bot-06)
+CP=Path("skills/desk-bootstrap/desk-production-loop/companion-patches")
+LA=load("skills/desk-bootstrap/desk-production-loop/fixtures/check-loop-acks.py")
 # ...but only its HEADER for the honesty assertions below. An assertion that searches the whole file
 # for its own literal always passes, because the literal is in the assertion: a tautology that would
 # survive deleting the comment it was meant to protect. The header is everything above `set -euo`,
@@ -194,10 +193,12 @@ for dead in ("approvals[{operation: \"degraded-loop", "no `approvals` entry"):
 # (b) the first QUALITY stamp cannot come from desk_receipt_approve, and no seat fakes it
 # R7b kept the facts about the deadlock; round 8 replaced the REMEDY they were attached to, so the
 # assertions that pinned the old remedy's sentences moved to R8a rather than being relaxed.
-need("the stamping tool deadlocks on its own input" in fS,"R7b deadlock named")
-need("gate_failed" in S and "gate_failed" in D,"R7b gate_failed code")
-need("never reached on a first stamp" in S,"R7b unreachable line cited")
-need("not behind `--strict`" in fS and "not behind `--strict`" in fD,"R7b not behind strict")
+# R7b's facts survive; round 10 moved their REMEDY into the companion specs, so the assertions
+# pin the obstacle and its companion rather than the old "the tool is broken" sentences.
+need("needs two companion patches before a first stamp lands" in fS,"R7b obstacle named")
+need("the preflight refuses and the stamp is never reached" in fS,"R7b preflight refusal")
+need("reads the receipt at one sha and commits it from a fresh clone taken later" in fS,"R7b TOCTOU named")
+need("C-1" in S and "C-2" in S,"R7b companions cited in skill")
 need("an empty string fails identically" in fS,"R7b empty string fails too")
 for owner in ("bot-01-systems-backend","bot-06-quality-security"):
     need(owner in S,"R7b owner named "+owner)
@@ -250,26 +251,48 @@ need("How presence is checked" in fS,"R8d presence check stated")
 # --- round 9 ---------------------------------------------------------------------------------
 # (a) the grantor of a degraded-mode ack is a HUMAN. A seat id there is a turn with no human in it,
 # recorded as though it complied -- worse than an absent field, because it reads as compliance.
-need("human_granted_by" in S and "human_granted_by" in VR,"R9a human grantor field")
-need("relayed_by" in S and "relayed_by" in VR,"R9a relay field")
+need("human_granted_by" in S and "human_granted_by" in LA,"R9a human grantor field")
+need("relayed_by" in S and "relayed_by" in LA,"R9a relay field")
 need("The grantor is a human, and the relay is not the grantor" in fS,"R9a rule stated")
 need("LEAD is not exempt" in fS,"R9a LEAD not exempt")
 need("A single `granted_by` field could not express this" in fS,"R9a why one field failed")
 need(not re.search(r"\bgranted_by:\s*\"",S),"R9a bare granted_by in an example")
-# (b) loop_acks is in the SHARED receipt contract and G-2 checks its shape -- no longer LEAD-only
-need("loop_acks" in VR,"R9b loop_acks in shared contract")
-need("REQUIRED_LOOP_ACK_FIELDS" in G2,"R9b G-2 field list")
-need("SEAT_ID_RE" in G2,"R9b G-2 seat-id guard")
-need("loop_acks" not in G6,"R9b check_rollback must NOT read loop_acks")
-need("must never be taught to read `loop_acks`" in flat(VR),"R9b warning in shared contract")
-# (c) the first stamp works: the preflight gates the STAMPED candidate, not the fetched receipt
-need("candidate = dict(receipt)" in Q,"R9c stamp-into-candidate")
-i=Q.index("candidate = dict(receipt)")
-need("receipt_check(candidate" in Q[i:i+1200],"R9c gates run on the candidate")
-need("gate_failed" in Q and "once stamped" in Q,"R9c failure message updated")
-need("exists to change was the one state it refused" in Q,"R9c deadlock explained in place")
-# the old order must be gone: nothing may gate the fetched receipt before stamping
-need("does not pass G-2/G-3/G-5/G-6 before stamping" not in Q,"R9c old preflight message removed")
+# (b) round 10: the loop_acks rule is EXECUTABLE here, and its G-2 landing is a companion. The
+# gate and the shared contract are bot-06's, so this PR ships a checker plus a spec, not their code.
+need(LA.startswith("#!/usr/bin/env python3"),"R10b checker is executable")
+for f in ("REQUIRED_FIELDS","CONDITIONS","SEAT_ID_RE"):
+    need(f in LA,"R10b checker constant "+f)
+need("isinstance(ack, dict)" in LA,"R10b checker guards shape before fields")
+need("loop_acks" not in G6,"R10b check_rollback must NOT read loop_acks")
+# and the checker is RUN over every committed ack fixture, so the rules are executable here rather
+# than only described. The malformed one is the important row: a checker that tracebacks on bad
+# input gives no verdict, which is worse than one that says no.
+for name,want in (("loop-acks-valid.json",0),("loop-acks-seat-grantor.json",1),
+                  ("loop-acks-missing-grantor.json",1),("loop-acks-bad-condition.json",1),
+                  ("loop-acks-malformed.json",1)):
+    f=FIX/name
+    need(f.is_file(),"R10b ack fixture missing: "+name)
+    r_=subprocess.run([sys.executable,str(FIX/"check-loop-acks.py"),str(f)],capture_output=True,text=True)
+    need(r_.returncode==want,f"R10b {name}: checker exited {r_.returncode}, expected {want}")
+    need("Traceback" not in r_.stderr,f"R10b {name}: the checker tracebacked instead of reporting")
+# the four companion specs exist and name their owners -- this is what replaced the reverted code
+need(CP.is_dir() and (CP/"README.md").is_file(),"R10b companion-patches dir")
+CPR=(CP/"README.md").read_text()
+for c,owner in (("C-1","bot-01-systems-backend"),("C-2","bot-01-systems-backend"),
+                ("C-3","bot-06-quality-security"),("C-4","bot-06-quality-security")):
+    hits=sorted(CP.glob(c+"-*.md"))
+    need(len(hits)==1,"R10b companion note for "+c)
+    need(owner in hits[0].read_text(),"R10b "+c+" names its owner")
+    need(c in CPR,"R10b "+c+" listed in the companion README")
+need("fresh-sha" in CPR or "stale_read" in (CP/"C-2-systems-approve-toctou.md").read_text(),"R10b C-2 TOCTOU remedy")
+# (c) round 10: nothing in the skill or the docs may describe a companion-owned tool as simply
+# broken -- the honest framing is what it will do once the companion lands, and that it is required
+for dead in ("cannot make a first stamp","the tool deadlocks","is broken"):
+    need(dead not in fS,"R10c defeatist tool wording in skill: "+dead)
+    need(dead not in fD,"R10c defeatist tool wording in doc: "+dead)
+need("companion" in fS.lower() and "companion" in fD.lower(),"R10c companions named")
+need("companion-patches/" in S and "companion-patches/" in D,"R10c companion path cited")
+need("Once C-1 and C-2 land" in fS,"R10c post-companion behaviour stated")
 # (d) the three G-6 fixtures, including the control that passes for the RIGHT reason
 for name,want in (("g6-turn-ack-in-approvals.json",1),
                   ("g6-turn-ack-four-fields.json",0),
@@ -323,5 +346,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R9b shared contract + G-2 shape check, R9c first stamp unblocked, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
 PY

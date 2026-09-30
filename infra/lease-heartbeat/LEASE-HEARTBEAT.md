@@ -223,6 +223,41 @@ heartbeat's interval this is **not** bound to `LEASE_TTL_S`: the sweeper renews 
 missed tick delays a release rather than losing a lease. Past 60s an expired lease can sit long
 enough that a seat waiting on the claim notices, which is the delay the sweeper exists to prevent.
 
+### Why a wrapper, not a bare `curl`
+
+`ExecStart` calls `substrate-lease-reap.sh` rather than `curl` directly, because
+**`curl --fail-with-body` fails on a non-2xx status and nothing else, and MCP does not report tool
+failures with a status code.** A `tools/call` whose tool failed answers **HTTP 200** with
+`isError: true` inside `result`; a protocol-level failure answers 200 with a JSON-RPC `error`
+member. Under a bare curl both are exit 0, so systemd marks the sweep successful while every
+expired lease stays unreaped until something calls the tool on demand — a green timer over a job
+that is not running, which is precisely the failure §2 and §4 are written to avoid.
+
+The wrapper's contract is the opposite: **exit non-zero unless the tool actually ran and actually
+succeeded.**
+
+| Exit | Meaning |
+|---|---|
+| 0 | Swept: HTTP 2xx, no JSON-RPC `error`, `result.isError` not set |
+| 2 | HTTP status was not 2xx |
+| 3 | curl could not complete the request (connect, timeout, bad config) |
+| 4 | The response could not be parsed as an MCP result |
+| 5 | The tool reported failure — JSON-RPC `error`, or `result.isError` |
+
+It understands both a plain JSON body and an SSE (`text/event-stream`) one, since streamable-HTTP
+MCP may answer either way for the same call and a sweeper that understood only one would quietly
+stop checking results the day the server changed framing.
+
+Failing bodies are logged to the journal, bounded by `SUBSTRATE_LEASE_REAP_LOG_BYTES` — a failing
+sweep is undiagnosable without them, and the request is a fixed no-argument tool call, so the body
+carries no credential of its own. The bearer is still only ever in the curl config file; the
+wrapper never reads or echoes it.
+
+It also keeps the curl invocation out of a systemd command line, where `%` is special and
+`--write-out '%{http_code}'` would need escaping.
+
+Requires `curl` and `python3`, both already present on a host running `substrate-mcp`.
+
 ### The two files the installer writes, and why they are files
 
 `ExecStart` carries **no secret**, and neither does any `Environment=` line. A bearer on a command

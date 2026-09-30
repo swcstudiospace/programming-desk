@@ -30,16 +30,17 @@ Group=root
 # REQUIRED, no `-` prefix: without the env file every ${...} below expands empty and curl is
 # invoked with no URL, no config and no request body. Fail on the missing file instead.
 EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
-# STUB: the request body and curl config are written by the installer; see LEASE-HEARTBEAT.md §6
-# for both file contents. --fail-with-body so a non-2xx is a unit failure AND the body reaches the
-# journal, which is the difference between "the sweep failed" and "the sweep failed because ...".
-ExecStart=/usr/bin/curl --fail-with-body --silent --show-error \
-  --max-time ${SUBSTRATE_LEASE_REAP_TIMEOUT_SEC} \
-  --config ${SUBSTRATE_LEASE_REAP_CURL_CONFIG} \
-  --header "Content-Type: application/json" \
-  --header "Accept: application/json, text/event-stream" \
-  --data @${SUBSTRATE_LEASE_REAP_REQUEST} \
-  ${SUBSTRATE_MCP_URL}
+# A wrapper, not a bare curl, because `curl --fail-with-body` only fails on a non-2xx status and
+# MCP does not report tool failures that way: a failed `tools/call` answers HTTP 200 with
+# `isError: true` in the result, and a protocol failure answers 200 with a JSON-RPC `error`. Both
+# would leave systemd marking the sweep successful while expired leases stayed unreaped — a green
+# timer over a job that is not running. The wrapper checks the payload and exits non-zero unless
+# the tool actually ran and actually succeeded; its exit codes are listed in its own header and in
+# LEASE-HEARTBEAT.md §6. It also keeps the curl invocation out of a systemd command line, where
+# `%` is special and would have to be escaped.
+#
+# STUB: the request body and curl config are written by the installer; see LEASE-HEARTBEAT.md §6.
+ExecStart=/opt/programming-desk/infra/lease-heartbeat/substrate-lease-reap.sh
 # Keep below the timer interval, or a hung sweep occupies the next tick. Generated from
 # SUBSTRATE_LEASE_REAP_TIMEOUT_SEC at install time — PLACEHOLDER literal here.
 TimeoutStartSec=30

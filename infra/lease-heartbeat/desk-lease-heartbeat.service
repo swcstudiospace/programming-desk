@@ -22,7 +22,11 @@ Type=oneshot
 User=root
 Group=root
 WorkingDirectory=/opt/programming-desk
-EnvironmentFile=-/etc/desk-lease-heartbeat/heartbeat.env
+# REQUIRED, with no `-` prefix: the `-` would let systemd start a renewal with no env file at all,
+# so the unit would run with no seat, no holder id, no endpoint and no token — renewing nothing,
+# succeeding quietly, and leaving the operator with a green timer and an expiring lease. A missing
+# env file must fail the unit loudly instead.
+EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
 # STUB: SYSTEMS entrypoint, not yet present.
 ExecStart=/opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat renew
 # PLACEHOLDER — generate from LEASE_TIMEOUT_S at install time, the same way the timer's

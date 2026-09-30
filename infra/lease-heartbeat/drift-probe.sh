@@ -60,16 +60,20 @@ die_config() {
   exit "$EX_NOT_ATTEMPTED"
 }
 
-# Seconds as a bare number, no unit suffix. The variables are named *_TIMEOUT_S and the field is
-# emitted as `"timeout_s": <n>`, so a suffix would both make that name a lie and produce
-# `"timeout_s":2s` — unparseable JSON from an input the operator had every reason to think valid.
-# `timeout` accepts a bare number as seconds, so nothing is lost.
+# Seconds as a bare number, no unit suffix, and no leading zero. The variables are named
+# *_TIMEOUT_S and the field is emitted as `"timeout_s": <n>`, so a suffix would both make that
+# name a lie and produce `"timeout_s":2s`. A leading zero is the same class of fault and easier to
+# miss: `05` is a perfectly ordinary thing to type, `timeout` accepts it, and it emits
+# `"timeout_s":05` — which JSON forbids, so the snapshot the caller gets is unparseable even
+# though every probe succeeded. Both are rejected here rather than normalised, because silently
+# turning 05 into 5 hides a config file that says something the operator did not mean.
+# `timeout` reads a bare number as seconds, so nothing is lost.
 check_duration() {
   local name="$1" value="$2"
-  if [[ ! "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-    die_config "$name must be a number of seconds, with no unit suffix (e.g. 5 or 2.5), got: $value"
+  if [[ ! "$value" =~ ^(0|[1-9][0-9]*)([.][0-9]+)?$ ]]; then
+    die_config "$name must be a number of seconds — no unit suffix, no leading zero (e.g. 5 or 2.5), got: $value"
   fi
-  if [[ "$value" =~ ^0+([.]0+)?$ ]]; then
+  if [[ "$value" =~ ^0([.]0+)?$ ]]; then
     die_config "$name must be greater than zero, got: $value"
   fi
 }
@@ -182,12 +186,31 @@ probe_tip() {
 # honestly assert without the store credential.
 probe_one_target() {
   local target="$1" host="" port="" started="" elapsed_ms="" reachable="false" err=""
+
+  # An EMPTY entry is malformed, not skippable. `events-host:4000,` has a trailing comma, and
+  # quietly dropping the empty field would have the probe check one plane, count one target and
+  # report ok:true for a list the operator wrote two entries into — a whole plane disappearing
+  # from the scan because of a stray comma is exactly the silent gap this probe exists to close.
+  if [[ -z "$target" ]]; then
+    printf '{"target":%s,"reachable":false,"probed":false,"error":%s}' \
+      "$(jstr "")" "$(jstr "empty target entry — check for a stray or trailing comma")"
+    return "$EX_MALFORMED"
+  fi
+
   host=${target%%:*}
   port=${target##*:}
 
-  if [[ -z "$host" || -z "$port" || "$host" == "$target" || ! "$port" =~ ^[0-9]+$ ]]; then
+  # The port is emitted as an unquoted JSON number, so it is validated like a duration: no leading
+  # zero (`080` would emit `"port":080`, which JSON forbids), and inside the real port range. A
+  # probe whose snapshot cannot be parsed is worth no more than a probe that did not run.
+  if [[ -z "$host" || -z "$port" || "$host" == "$target" || ! "$port" =~ ^[1-9][0-9]*$ ]]; then
     printf '{"target":%s,"reachable":false,"probed":false,"error":%s}' \
-      "$(jstr "$target")" "$(jstr "expected host:port")"
+      "$(jstr "$target")" "$(jstr "expected host:port, with a port of 1-65535 and no leading zero")"
+    return "$EX_MALFORMED"
+  fi
+  if (( port > 65535 )); then
+    printf '{"target":%s,"reachable":false,"probed":false,"error":%s}' \
+      "$(jstr "$target")" "$(jstr "port out of range (1-65535): $port")"
     return "$EX_MALFORMED"
   fi
 
@@ -228,11 +251,21 @@ probe_reach() {
   printf '{"probe":"reachability","checked_at":%s,"timeout_s":%s,"targets":[' \
     "$(jstr "$(now_utc)")" "$PROBE_TIMEOUT_S"
   if [[ -n "$targets" ]]; then
-    local IFS=','
-    for t in $targets; do
+    # Split by hand rather than with IFS word-splitting or `read -ra`: both DISCARD a trailing
+    # empty field, so `events-host:4000,` would arrive as one target and the stray comma — along
+    # with whatever plane the operator meant to put after it — would vanish silently. This loop
+    # keeps every field, empty ones included, so probe_one_target can count them as malformed.
+    local rest="$targets"
+    local -a parts=()
+    while [[ "$rest" == *,* ]]; do
+      parts+=("${rest%%,*}")
+      rest="${rest#*,}"
+    done
+    parts+=("$rest")
+
+    for t in "${parts[@]}"; do
       t="${t#"${t%%[![:space:]]*}"}"
       t="${t%"${t##*[![:space:]]}"}"
-      [[ -z "$t" ]] && continue
       requested=$((requested + 1))
       [[ $first -eq 1 ]] || printf ','
       first=0

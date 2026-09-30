@@ -29,10 +29,11 @@ OnUnitActiveSec=45
 # wasted work, not a correctness problem — the tool is idempotent — so the jitter is politeness.
 RandomizedDelaySec=5
 AccuracySec=1s
-# Deliberately NOT Persistent: a sweep missed while the host was down is worthless on resume,
-# because the next tick does the same work seconds later. Persistent=true would only produce a
-# thundering catch-up burst after every boot.
-Persistent=false
+# Persistent= is omitted, not set false: it replays missed activations for CALENDAR timers only,
+# so on a monotonic timer like this one it is a no-op either way, and writing it down would imply
+# a resume behaviour that is not on offer. Nothing is lost — a sweep missed while the host was
+# down is worthless on resume, because OnBootSec fires one a minute after boot and the next tick
+# does the same work seconds later.
 Unit=substrate-lease-reap.service
 
 [Install]

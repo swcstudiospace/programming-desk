@@ -11,7 +11,7 @@
   "pull_request": 38,
   "started_at": "2026-09-30T06:56:00Z",
   "completed_at": "2026-09-30T07:20:00Z",
-  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load.",
+  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load. Fifth tip: eight more Greptile findings on #38, all verified real and all fixed — leading zeros breaking the probe's unquoted JSON numbers (durations and ports), an empty target entry from a stray comma vanishing from the scan, EnvironmentFile optional on both units, Persistent= promising a catch-up tick a monotonic timer never delivers, the cron sketch both ignoring LEASE_INTERVAL_S above 60 and sourcing the env file as shell, the cadence invariant missing its TIMEOUT term because OnUnitActiveSec measures from renewal START not finish, and the receipt citing superseded PR #36.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -232,6 +232,66 @@
       "output_tail": "parsed: {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"coord_reap_leases\",\"arguments\":{}}} | tool: coord_reap_leases | args: {}"
     },
     {
+      "cmd": "DRIFT_PROBE_TIMEOUT_S=05 ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "{\"probe\":\"config\",\"ok\":false,\"error\":\"DRIFT_PROBE_TIMEOUT_S must be a number of seconds — no unit suffix, no leading zero (e.g. 5 or 2.5), got: 05\"}"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:080",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "parsed; ok=False malformed=1 err=expected host:port, with a port of 1-65535 and no leading zero"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:70000",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "ok=False err=port out of range (1-65535): 70000"
+    },
+    {
+      "cmd": "for t in '127.0.0.1:1,' ',127.0.0.1:1' '127.0.0.1:1,,127.0.0.1:2'; do ./infra/lease-heartbeat/drift-probe.sh reach \"$t\"; done  # each must count the empty entry and exit 3",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "trailing: requested=2 malformed=1 ok=False exit=3 | leading: requested=2 malformed=1 ok=False exit=3 | interior: requested=3 malformed=1 ok=False exit=3"
+    },
+    {
+      "cmd": "for t in '127.0.0.1:1,127.0.0.1:2' ' 127.0.0.1:1 , 127.0.0.1:2 '; do ./infra/lease-heartbeat/drift-probe.sh reach \"$t\"; done  # clean lists must still exit 0",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "two clean: requested=2 malformed=0 ok=True exit=0 | with whitespace: requested=2 malformed=0 ok=True exit=0"
+    },
+    {
+      "cmd": "systemd-analyze verify substrate-lease-reap.service substrate-lease-reap.timer desk-lease-heartbeat.timer",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "(no output — all three verify clean after the EnvironmentFile and Persistent changes)"
+    },
+    {
+      "cmd": "systemd-analyze verify desk-lease-heartbeat.service",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "desk-lease-heartbeat.service: Command /opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat is not executable: No such file or directory"
+    },
+    {
+      "cmd": "grep -n '^EnvironmentFile=' infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/substrate-lease-reap.service",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "desk-lease-heartbeat.service:29:EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env\nsubstrate-lease-reap.service:32:EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env  (no '-' prefix on either)"
+    },
+    {
+      "cmd": "grep -n '\\. /etc/desk-lease-heartbeat' infra/lease-heartbeat/LEASE-HEARTBEAT.md",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — the cron sketch no longer sources the env file as shell)"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all  # 8123 = local python http.server",
+      "exit_code": 0,
+      "duration_s": 1.3,
+      "output_tail": "top ok=True | tip ok=True remote_checked=True relation=ahead / reach ok=True req=2 malformed=0 unattempted=0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
+    },
+    {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json --bot bot-05-infrastructure --strict",
       "exit_code": 1,
       "duration_s": 0.2,
@@ -392,8 +452,53 @@
       "evidence_command_index": 35
     },
     {
-      "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
+      "claim": "Greptile P1 4141980702 fixed for durations: a leading zero is rejected before any probe runs, so the snapshot can no longer carry timeout_s:05, which JSON forbids.",
       "evidence_command_index": 36,
+      "expects_failure": true
+    },
+    {
+      "claim": "The same finding applied to the port, which is also emitted unquoted: 080 is now rejected as malformed and the surrounding JSON stays parseable.",
+      "evidence_command_index": 37,
+      "expects_failure": true
+    },
+    {
+      "claim": "Port range is enforced as well, so 70000 is malformed rather than probed.",
+      "evidence_command_index": 38,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile P1 4141980726 fixed: an empty entry from a trailing, leading or doubled comma is counted and reported malformed instead of being silently skipped. Bash word-splitting and read -ra both discard a trailing empty field, so the list is split by hand.",
+      "evidence_command_index": 39
+    },
+    {
+      "claim": "Clean target lists, including ones with whitespace around entries, still exit 0 after the stricter parsing.",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "Greptile P1 4141980742 and P2 4141980755 fixed in the units: EnvironmentFile is required on both services and Persistent is gone from the heartbeat timer; all three affected units verify clean.",
+      "evidence_command_index": 41
+    },
+    {
+      "claim": "The heartbeat service's only systemd-analyze complaint remains the documented stub ExecStart, which is the SYSTEMS entrypoint that does not exist yet.",
+      "evidence_command_index": 42,
+      "expects_failure": true
+    },
+    {
+      "claim": "Neither unit still carries the '-' prefix that let systemd start a renewal with no env file at all.",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": "Greptile P2 4141980775 fixed: the cron sketch no longer sources the systemd EnvironmentFile as shell, which would mangle a token containing shell-significant characters.",
+      "evidence_command_index": 44,
+      "expects_failure": true
+    },
+    {
+      "claim": "The probe's ordinary path is unaffected by all four changes: a healthy run still exits 0 with the remote tip checked, an open port up and a closed port down.",
+      "evidence_command_index": 45
+    },
+    {
+      "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
+      "evidence_command_index": 46,
       "expects_failure": true
     }
   ],
@@ -408,7 +513,8 @@
     "The cadence invariant now includes the jitter term (INTERVAL + JITTER <= TTL/3) and all three unit literals are generated at install time — but no installer exists yet to enforce it, so the guarantee is documented, not executed",
     "Quality Gates has not yet been observed passing on the renamed bot-05-infrastructure/* branch — the rename satisfies the acting-bot regex locally, but only a CI run proves the remaining gates green",
     "The sweeper is not installed and has never been run against a live substrate-mcp: coord_reap_leases has not been called, so neither the tool name, its argument shape, nor its response on a sweep with nothing to reap is confirmed (LEASE-HEARTBEAT.md §5 asks SYSTEMS for all three)",
-    "systemd-analyze verify parses the sweeper units but does not execute them; the ${...} expansions in ExecStart are unresolved because no EnvironmentFile exists on this host"
+    "systemd-analyze verify parses the sweeper units but does not execute them; the ${...} expansions in ExecStart are unresolved because no EnvironmentFile exists on this host",
+    "The cadence invariant now carries a TIMEOUT term because OnUnitActiveSec measures from when a renewal started, not finished — this is read from the systemd documentation and the unit files, not observed on a running timer, since nothing is installed"
   ],
   "files_changed": [
     "infra/substrate/SUBSTRATE-ENV.md",
@@ -435,8 +541,17 @@
     "4141814773",
     "4141814784",
     "4141814794",
-    "4141898005"
+    "4141898005",
+    "4141980702",
+    "4141980721",
+    "4141980726",
+    "4141980742"
   ],
-  "p2s_addressed": [],
+  "p2s_addressed": [
+    "4141980755",
+    "4141980762",
+    "4141980775",
+    "4141980782"
+  ],
   "p1s_deferred": []
 }

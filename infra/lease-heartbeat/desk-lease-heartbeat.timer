@@ -1,21 +1,28 @@
 # STUB — not installed. SPE-4792 INFRA half. Pairs with desk-lease-heartbeat.service.
 #
-# OnUnitActiveSec, not OnCalendar: the interval is "since the last renewal finished", which is what
-# a lease TTL is measured against. OnCalendar would drift against a renewal that took 20s.
+# OnUnitActiveSec, not OnCalendar: the tick is relative to this unit's own last activation rather
+# than to wall-clock slots, so a restart or a slow tick does not leave the cadence permanently out
+# of phase the way a calendar schedule would.
+#
+# It measures from when the previous renewal STARTED, not when it finished. That matters for the
+# invariant: the gap between two *completed* renewals is the interval plus however long the second
+# one took, which is bounded by LEASE_TIMEOUT_S. So the bound below carries a TIMEOUT term; see
+# LEASE-HEARTBEAT.md §3.
 #
 # Both literals below are PLACEHOLDER values for review, not agreed ones. SYSTEMS owns
 # LEASE_TTL_S, LEASE_INTERVAL_S and LEASE_JITTER_S (see lease-heartbeat.env.example); systemd
 # cannot read an interval from an EnvironmentFile, so whoever installs this generates both from
 # the env rather than hand-editing them out of sync with it.
 #
-# The invariant that must hold is on the SUM, not on OnUnitActiveSec alone:
+# The invariant that must hold is on the SUM of all three terms, not on OnUnitActiveSec alone:
 #
-#     OnUnitActiveSec + RandomizedDelaySec  <=  LEASE_TTL_S / 3
+#     OnUnitActiveSec + RandomizedDelaySec + TimeoutStartSec  <=  LEASE_TTL_S / 3
 #
-# RandomizedDelaySec is added to each tick, so at the permitted boundary
-# LEASE_INTERVAL_S = LEASE_TTL_S / 3 the real gap is INTERVAL + JITTER — already past a third of
-# the TTL before the renewal even starts, which eats the margin the third-of-TTL rule exists to
-# buy. Jitter is part of the cadence, so it is part of the invariant. LEASE-HEARTBEAT.md §3.
+# Each term is time that can pass between one renewal landing and the next: the interval itself,
+# the jitter added to every tick, and the runtime of the next renewal — which OnUnitActiveSec does
+# not wait out, and which is bounded only by TimeoutStartSec. Leave any of them out of the bound
+# and the worst-case gap exceeds a third of the TTL, which is the margin the rule exists to buy.
+# LEASE-HEARTBEAT.md §3.
 
 [Unit]
 Description=Renew the Programming Desk seat lease (SPE-4792)
@@ -29,8 +36,11 @@ OnUnitActiveSec=60
 # renew in lockstep; counted against the invariant above, never added on top of it.
 RandomizedDelaySec=5
 AccuracySec=1s
-# A missed window (host asleep, unit masked) renews on resume instead of waiting for the next slot.
-Persistent=true
+# Persistent= is deliberately absent: it only replays missed activations for CALENDAR timers, so
+# setting it here would promise a catch-up tick that a monotonic timer never delivers. Resume is
+# handled by OnBootSec above — after a boot the first renewal lands 30s in, and a lease missed
+# while the host was down has already expired and been reaped, which is the designed outcome, not
+# something to catch up on.
 Unit=desk-lease-heartbeat.service
 
 [Install]

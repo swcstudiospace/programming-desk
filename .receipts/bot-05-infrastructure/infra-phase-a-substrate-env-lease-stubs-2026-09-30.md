@@ -87,6 +87,22 @@ Both units verify clean under `systemd-analyze`. Still not installed, and `coord
 never been called — the tool name, its argument shape and its response when there is nothing to
 reap are all open questions for SYSTEMS (§5).
 
+## Fifth tip — eight more Greptile findings on #38, all real
+
+| Finding | Verdict | Fix |
+|---|---|---|
+| **4141980702** P1 leading zeros break probe JSON | Correct. `05` and port `080` passed validation and emitted unquoted, and JSON forbids leading zeros — every probe could succeed while the snapshot stayed unparseable | Rejected, not normalised, for durations **and** ports (ports were the half not reported); port range enforced too |
+| **4141980726** P1 empty targets pass validation | Correct. A trailing comma dropped a whole plane from the scan with `ok: true` | Split by hand: bash word-splitting *and* `read -ra` both discard a trailing empty field, so neither would have caught it. Empty entries now count as malformed |
+| **4141980742** P1 heartbeat environment optional | Correct. `EnvironmentFile=-` let systemd renew with no seat, holder, endpoint or token — a green timer over an expiring lease | `-` dropped from both services; installer checklist now validates identity, endpoint and state, not just cadence |
+| **4141980721** P1 timer understates renewal gaps | Correct, and it invalidated my own invariant. `OnUnitActiveSec` measures from renewal **start**, so the next renewal's runtime lands on top of the gap | Invariant is now `INTERVAL + JITTER + TIMEOUT <= TTL/3`, with a table saying why each term counts |
+| **4141980755** P2 missed renewals not replayed | Correct. `Persistent=` applies to calendar timers only, so my comment promised a catch-up tick that never arrives | Removed from the heartbeat timer; the reap timer's comment corrected the same way |
+| **4141980762** P2 cron ignores configured interval | Correct. The line fires every minute whatever the env says | Narrowed to `LEASE_INTERVAL_S == 60` exactly, with what a different cadence would require |
+| **4141980775** P2 cron misreads environment values | Correct. `. file` *executes* it, and systemd's `EnvironmentFile` is not shell — a token with `$`, a backtick or a quote would be mangled | Sketch now passes `--env-file` to the entrypoint; the option is added to the §5 asks for SYSTEMS |
+| **4141980782** P2 receipt cites superseded PR | Correct | Already fixed in `4e92549` before the finding arrived |
+
+Two of these (leading-zero ports, and the reap timer's `Persistent` comment) were extensions of
+the reported finding that Greptile had not flagged, fixed in the same pass.
+
 ## For QUALITY / LEAD
 
 Two things need a decision from someone else before this can go further:

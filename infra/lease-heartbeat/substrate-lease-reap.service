@@ -27,7 +27,9 @@ Wants=substrate-mcp.service
 Type=oneshot
 User=root
 Group=root
-EnvironmentFile=-/etc/desk-lease-heartbeat/heartbeat.env
+# REQUIRED, no `-` prefix: without the env file every ${...} below expands empty and curl is
+# invoked with no URL, no config and no request body. Fail on the missing file instead.
+EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
 # STUB: the request body and curl config are written by the installer; see LEASE-HEARTBEAT.md §6
 # for both file contents. --fail-with-body so a non-2xx is a unit failure AND the body reaches the
 # journal, which is the difference between "the sweep failed" and "the sweep failed because ...".

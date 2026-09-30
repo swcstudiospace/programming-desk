@@ -61,38 +61,65 @@ fires, and `systemctl list-timers` shows the last and next run as plain facts.
 
 ### Cron sketch, if the host has no systemd
 
-Equivalent, and worse in one specific way: cron's finest granularity is one minute, so
-`LEASE_INTERVAL_S` under 60 is not expressible and a sub-minute TTL cannot be honoured.
+Not equivalent, and the gaps are worth stating rather than discovering:
 
 ```cron
-# /etc/cron.d/desk-lease-heartbeat — sketch. Requires LEASE_INTERVAL_S >= 60.
-# run-parts style env: cron does not read EnvironmentFile, so the wrapper sources it.
+# /etc/cron.d/desk-lease-heartbeat — sketch. Requires LEASE_INTERVAL_S == 60 exactly.
+# Cron has no EnvironmentFile, so the entrypoint reads it directly — see the warning below.
 * * * * * root /usr/bin/flock -n /run/desk-lease-heartbeat.lock \
-  /bin/sh -c '. /etc/desk-lease-heartbeat/heartbeat.env && exec desk-lease-heartbeat renew' \
+  desk-lease-heartbeat renew --env-file /etc/desk-lease-heartbeat/heartbeat.env \
   >> /var/log/desk-lease-heartbeat.log 2>&1
 ```
 
-`flock -n` is not optional: without it a renewal that overruns a minute has two ticks running
-against the same lease. The wrapper must source the env file because cron has no
-`EnvironmentFile`, which also means the env file's `0600` mode is the only thing protecting
-`LEASE_ENDPOINT_TOKEN` from the log directory — redirect stdout carefully.
+**`LEASE_INTERVAL_S == 60` exactly, not `>= 60`.** Cron's finest granularity is one minute, so a
+sub-minute interval is not expressible — but the ceiling matters just as much: this line fires
+every minute *whatever* the env file says, so a valid `LEASE_INTERVAL_S=120` renews twice as often
+as configured. A cron host that needs any other interval needs a wrapper that tracks elapsed time
+against `LEASE_STATE_DIR` and exits early when the tick is not due. The systemd path is the
+supported one; this is a fallback with a single supported cadence.
+
+**The entrypoint reads the env file; the wrapper must not source it.** An earlier version of this
+sketch used `sh -c '. heartbeat.env && exec ...'`, which is wrong: sourcing *executes* the file as
+shell, and systemd's `EnvironmentFile` format is not shell. A token containing `$`, a backtick or
+a quote would be expanded, mangled or would abort the wrapper — so cron would renew with a
+different credential, or fail, while the systemd unit on the next host read the same file
+correctly. Hence `--env-file`, parsed by the entrypoint the way systemd parses it. This is the
+one thing INFRA needs from SYSTEMS before the cron path is usable at all (§5).
+
+`flock -n` is not optional either: without it a renewal that overruns a minute has two ticks
+running against the same lease.
+
+The env file's `0600` mode is the only thing keeping `LEASE_ENDPOINT_TOKEN` out of the log
+directory, so redirect stdout carefully — and never add `set -x` to a wrapper around it.
 
 ## 3. Cadence invariant
 
 ```
 LEASE_TIMEOUT_S   <   LEASE_INTERVAL_S
-LEASE_INTERVAL_S  +   LEASE_JITTER_S   <=   LEASE_TTL_S / 3
+LEASE_INTERVAL_S  +   LEASE_JITTER_S   +   LEASE_TIMEOUT_S   <=   LEASE_TTL_S / 3
 ```
 
-- **`INTERVAL + JITTER <= TTL/3`** so two consecutive missed renewals do not expire a live lease.
-  One missed tick is a network blip; three is a dead holder. At `INTERVAL = TTL/2` a single slow
-  tick plus one blip loses a lease the seat still holds, and the seat finds out by having its
-  claim taken.
-  **The jitter is inside the bound, not on top of it.** `RandomizedDelaySec` is added to every
-  tick, so bounding `INTERVAL` alone and then adding jitter puts the real gap past a third of the
-  TTL at the permitted boundary — the margin is gone before the renewal starts. Jitter is part of
-  the cadence, so it is part of the invariant.
+- **`INTERVAL + JITTER + TIMEOUT <= TTL/3`** so two consecutive missed renewals do not expire a
+  live lease. One missed tick is a network blip; three is a dead holder. At `INTERVAL = TTL/2` a
+  single slow tick plus one blip loses a lease the seat still holds, and the seat finds out by
+  having its claim taken.
+
+  **Every term is time that can pass between one renewal landing and the next**, which is why all
+  three are inside the bound rather than added on top of it:
+
+  | Term | Why it counts |
+  |---|---|
+  | `LEASE_INTERVAL_S` | the tick itself |
+  | `LEASE_JITTER_S` | `RandomizedDelaySec` is added to *every* tick, not averaged away |
+  | `LEASE_TIMEOUT_S` | **`OnUnitActiveSec` measures from when the previous renewal *started*, not when it finished.** So the next renewal's own runtime lands on top of the interval, and its worst case is the timeout |
+
+  Drop any one of them and the worst-case gap between *completed* renewals exceeds a third of the
+  TTL at the permitted boundary — the margin is gone before the renewal starts. The systemd
+  measurement point is the subtle one: an interval "since the last run finished" would not need
+  the `TIMEOUT` term, and that is not what `OnUnitActiveSec` does.
 - **`TIMEOUT < INTERVAL`** so a hung renewal cannot eat the tick that would have recovered from it.
+  This is implied by the bound above but stated separately because it is the one an operator
+  tuning a single value is most likely to break.
 - `LEASE_JITTER_S` exists because seven seats restarted together otherwise renew in lockstep
   forever, which turns one substrate hiccup into seven lost leases.
 
@@ -115,13 +142,24 @@ Install once SYSTEMS lands the entrypoint. At that point the installer, matching
 1. Create `/etc/desk-lease-heartbeat/heartbeat.env` from `lease-heartbeat.env.example` **once**,
    `0600 root:root`, and never overwrite it — an installer that rewrites a live env file is an
    installer that drops the token on upgrade.
-2. Refuse to proceed when `LEASE_TTL_S`, `LEASE_INTERVAL_S`, `LEASE_TIMEOUT_S` or `LEASE_JITTER_S`
-   is empty, or when **either** §3 inequality fails — including the jitter term. Guessing a
-   cadence means a lease expiring at a time nobody agreed to.
+2. Refuse to proceed when **any** of these is empty, and refuse when either §3 inequality fails —
+   including the jitter and timeout terms:
+
+   | Group | Variables | Why a missing one is fatal |
+   |---|---|---|
+   | Cadence | `LEASE_TTL_S`, `LEASE_INTERVAL_S`, `LEASE_TIMEOUT_S`, `LEASE_JITTER_S` | Guessing a cadence means a lease expiring at a time nobody agreed to |
+   | **Identity** | `LEASE_SEAT`, `LEASE_HOLDER_ID` | A renewal with no seat renews nothing while the unit reports success — a green timer over an expiring lease |
+   | **Endpoint** | `LEASE_ENDPOINT_URL`, `LEASE_ENDPOINT_TOKEN` | Same failure, one step later: nowhere to send the renewal, or no right to make it |
+   | State | `LEASE_STATE_DIR` | The drift probe reads the last-renewal timestamp from here |
+
+   Cadence alone is not enough: the unit files now require the env file (no `-` prefix on
+   `EnvironmentFile=`), so a *missing* file fails loudly — but a file that is present and half
+   filled in is the case that still looks healthy, and only this check catches it.
 3. Generate all three unit literals rather than shipping the placeholders: `OnUnitActiveSec` from
    `LEASE_INTERVAL_S`, `RandomizedDelaySec` from `LEASE_JITTER_S`, and `TimeoutStartSec` from
    `LEASE_TIMEOUT_S`. Leaving any of them at its literal is how the §3 guarantee quietly stops
-   holding.
+   holding. Do **not** add `Persistent=` to the timer: it replays missed activations only for
+   calendar timers, so on a monotonic timer it promises a catch-up tick that never arrives.
 4. `mkdir -p /var/lib/desk-lease-heartbeat` (matching `ReadWritePaths=` in the unit) for
    `LEASE_STATE_DIR`.
 5. `systemctl enable --now desk-lease-heartbeat.timer`, then verify with `systemctl list-timers`
@@ -141,6 +179,9 @@ What INFRA needs back, and is blocked on before this can be installed:
 
 - The `services/desk-lease-heartbeat` entrypoint and its `renew` subcommand's exit-code contract
   (which exit codes mean "retry next tick" versus "lease lost, stop claiming it").
+- A `--env-file` option on that entrypoint, parsing the file the way systemd's `EnvironmentFile`
+  does. Without it the cron fallback has no safe way to load the env: sourcing it executes it as
+  shell, which mangles any token containing `$`, a backtick or a quote (§2).
 - Values for `LEASE_TTL_S`, `LEASE_INTERVAL_S` and `LEASE_JITTER_S`.
 - Whether a lost lease should leave the timer running (INFRA's assumption: yes — it keeps trying
   and reports; stopping the timer means a recovered host never re-announces itself).

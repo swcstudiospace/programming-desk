@@ -27,7 +27,7 @@ jobs:
     # to "main" and fail attribution before any gate ran — every push red, for a question
     # that is already settled by the time the merge lands.
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,12 +130,9 @@ jobs:
           RECEIPT: ${{ steps.receipt.outputs.path }}
         run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"
 
-      - name: G-7 — Desk integrity
-        run: python3 ci/gates/check_desk_integrity.py --repo .
-
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

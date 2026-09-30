@@ -55,10 +55,12 @@
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
     },
     {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
-      "exit_code": 0,
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $({ git diff --name-only $(git merge-base HEAD origin/main) HEAD; git diff --name-only HEAD; } | sort -u | tr '\\n' ' ')",
+      "exit_code": 1,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  skills/README.md  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
+      "note": "Rewritten twice, both times for honesty. It first read `git diff --name-only origin/main`, a floating ref: once main advanced to 0a35be6 the same string listed .mcp.json, ownership.yaml and a bot-05 receipt that this branch never touched, so it was not reproducible. It is now pinned to the merge-base and covers the working tree. Its recorded exit code also changed from 0 to 1 -- not because the earlier run was wrong, but because the branch has since gained skills/README.md, which bot-00 does not own.",
+      "expects_failure": true
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only origin/main | tr '\\n' ' ')  # after Greptile round 1 fixes",
@@ -78,6 +80,31 @@
       "exit_code": 1,
       "duration_s": 0.02,
       "output_tail": "NONE \u2014 all contradictions resolved (grep exit 1 = no match, which is the wanted result)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json docs/intake-e2e-runbook.md docs/vps-agent-bus.md skills/agent-bus/SKILL.md skills/README.md",
+      "exit_code": 1,
+      "duration_s": 0.06,
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  skills/README.md  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits.",
+      "note": "The set is scoped to this branch's own changes via the merge-base (65f62e5). A plain two-dot diff against origin/main also lists .mcp.json, ownership.yaml and a bot-05 receipt, which arrived on main in 0a35be6 and are not this branch's edits."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json docs/intake-e2e-runbook.md docs/vps-agent-bus.md skills/agent-bus/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files skills/README.md",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-00-programming-lead/agent-bus-skill-vps-doc-2026-09-29.json docs/intake-e2e-runbook.md docs/vps-agent-bus.md skills/README.md skills/agent-bus/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "G-3 PASS \u2014 5 file(s) scanned, no secrets detected"
     }
   ],
   "claims": [
@@ -111,8 +138,9 @@
       "expects_failure": true
     },
     {
-      "claim": "Greptile round 1 on PR #14 raised one P1 and four P2. The P1 lost-jobId gap and the P2 idempotency_key overclaim are both fixed in the two files: the skill writes the jobId to the receipt the moment agent_bus_start_job returns (the step-2 idempotency check reads jobIds from .receipts/, so a session-only jobId is an invisible running job), and neither file presents idempotency_key as retry protection. agent_bus_wait_job now carries the live descriptor's timeout_sec and poll_sec names, and the stale 'timeout default 180s' phrasing is gone from both.",
-      "evidence_command_index": 9
+      "claim": "G-1 no longer passes for bot-00-programming-lead across everything this branch changes: skills/README.md is bot-06-quality-security's and was added on operator instruction. The round-1 content fixes themselves are unaffected -- the jobId-before-waiting rule, the idempotency_key qualification and the timeout_sec/poll_sec alignment are all still asserted by the content check, and the four originally-owned paths still pass G-1 on their own.",
+      "evidence_command_index": 7,
+      "expects_failure": true
     },
     {
       "claim": "G-1 still passes for bot-00-programming-lead on the complete four-path branch after the round-1 fixes. No path moved outside bot-00 ownership.",
@@ -129,6 +157,23 @@
     {
       "claim": "The runbook no longer contradicts itself about these two paths. Greptile cited line 146; four further places said the same thing (the BUS_TOKEN paragraph, both ownership-table rows, and the unverified list) and all five are corrected, so no surviving line tells an operator the skill is absent.",
       "evidence_command_index": 10
+    },
+    {
+      "claim": "G-1 FAILS for bot-00-programming-lead on this branch because skills/README.md is owned by bot-06-quality-security. The operator instructed LEAD to add the agent-bus index row anyway after being told twice that it is a cross-seat edit. This is a deliberate, recorded ownership violation, not an accident and not a gate that was worked around: the gate was run, it failed, and the failure is reported here. QUALITY owns the decision to accept it, waive it, or split the row into its own bot-06 PR.",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "The violation is confined to that one path. G-1 passes for bot-00-programming-lead on the other four files this branch changes, so nothing else crossed a seat boundary.",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "skills/README.md resolves to bot-06-quality-security, which is the seat that could have made this edit without a G-1 failure. The manifest was not modified to make the path LEAD-owned.",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "G-3 reports no secret across all five changed files, including skills/README.md.",
+      "evidence_command_index": 14
     }
   ],
   "unverified": [
@@ -138,11 +183,11 @@
     "wsUrl streaming was never exercised. The bus token is not held by the desk and was not sought.",
     "Greptile not run \u2014 that is QUALITY's gate, not LEAD's.",
     "pr_url is null at the time this receipt was written; the draft PR is opened in the same push.",
-    "skills/README.md still has no agent-bus row in its skill map. That file is owned by bot-06-quality-security, so LEAD did not edit it \u2014 adding the row from this PR would be a G-1 FOREIGN cross-seat edit. Greptile round 1 raised this as a P2 (comment 4137143680) and acknowledged it as follow-up work; it cannot be fixed from this PR. QUALITY adds the row, or a follow-up PR under bot-06 does.",
     "Server-side deduplication on idempotency_key is unverified. The skill and the doc now say so rather than presenting the field as retry protection. Confirming it needs a live bus experiment the desk has not run.",
     "ci/gates/run_all.py was not run as a suite; the three gates relevant to this docs-only diff (G-1 manifest, G-1 per-file, G-3) were run individually and are recorded above.",
     "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval.",
-    "The reproducibility sweep covers the commands recorded in this receipt on this branch. It is not a claim that ci/gates/run_all.py passes as a suite: run_all.py requires --bot and --receipt and was not invoked, and G-2 still fails closed while approved_by is empty."
+    "The reproducibility sweep covers the commands recorded in this receipt on this branch. It is not a claim that ci/gates/run_all.py passes as a suite: run_all.py requires --bot and --receipt and was not invoked, and G-2 still fails closed while approved_by is empty.",
+    "skills/README.md now carries the agent-bus row, added on explicit operator instruction after LEAD twice reported that the file is bot-06-quality-security's. That edit makes G-1 fail for bot-00-programming-lead on this branch (recorded above with expects_failure). It is unresolved, not resolved: QUALITY either accepts the cross-seat edit, waives it as earlier Greptile P2s were waived, or asks for the row to move to a bot-06 PR. Greptile's own round-1 position was that no change was needed here."
   ],
   "blockers": [],
   "files_changed": [
@@ -156,10 +201,20 @@
   "approvals": [],
   "approved_by": "",
   "reproducibility_check": {
-    "performed_at": "2026-09-29T19:06:00Z",
+    "performed_at": "2026-09-30T00:00:00Z",
     "method": "Every string in commands[].cmd was extracted from this receipt and re-executed with bash -c from the repo root, comparing each actual exit code against the recorded one.",
-    "result": "All 11 commands re-execute with their recorded exit codes, including the two intentional non-zero entries (index 6, G-2 fails closed while approved_by is empty; index 10, grep finds no match, which is the wanted result).",
+    "result": "All 15 commands re-execute with their recorded exit codes, including four intentional non-zero entries (index 6, G-2 failing closed while approved_by is empty; index 7 and index 11, G-1 failing FOREIGN on skills/README.md; index 10, the grep finding no match, which is the wanted result).",
     "not_recorded_as_a_command": "This sweep is deliberately not itself an entry in commands[]: a command that re-executes every command in the receipt would include itself and recurse without terminating.",
-    "prompted_by": "Greptile round 2 P1, comment 4137232677 \u2014 commands[9] had held a prose paraphrase in angle brackets with a recorded exit_code of 0, which a reviewer could not reproduce and which G-2 would have accepted on the recorded exit code alone."
+    "prompted_by": "Greptile round 2 P1, comment 4137232677 \u2014 commands[9] had held a prose paraphrase in angle brackets with a recorded exit_code of 0, which a reviewer could not reproduce and which G-2 would have accepted on the recorded exit code alone.",
+    "drift_caught": "Re-running the sweep after the skills/README.md edit caught commands[7] recording exit 0 while actually exiting 1. Two causes compounded: the branch gained a path bot-00 does not own, and the command interpolated a floating origin/main that had advanced to 0a35be6. Both are fixed in that entry rather than left as a green record of a red gate."
+  },
+  "ownership_override": {
+    "path": "skills/README.md",
+    "owner": "bot-06-quality-security",
+    "acting_bot": "bot-00-programming-lead",
+    "authorized_by": "operator instruction in session, after LEAD raised the G-1 conflict twice",
+    "gate_result": "G-1 FAIL (FOREIGN), recorded not suppressed",
+    "manifest_touched": false,
+    "note": "ownership.yaml was deliberately NOT edited to legitimize the write. Narrowing or rewriting the manifest to silence this gate is exactly what docs/intake-e2e-runbook.md forbids, so the failure stands on the record instead."
   }
 }

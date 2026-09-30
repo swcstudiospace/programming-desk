@@ -85,6 +85,48 @@
       "exit_code": 0,
       "duration_s": 0.4,
       "output_tail": "Installed: .git/hooks/pre-commit -> ci/hooks/pre-commit\nRunning in migration mode with existing hooks at .git/hooks/pre-commit.legacy\nUse -f to use only pre-commit.\npre-commit installed at .git/hooks/pre-commit"
+    },
+    {
+      "cmd": "mkdir -p /tmp/claude-0/-home-user-programming-desk/1409f1a2-1ff0-5148-b454-f2d39e088761/scratchpad/oldgate && git show 3428bc5:ci/gates/check_contracts.py > /tmp/claude-0/-home-user-programming-desk/1409f1a2-1ff0-5148-b454-f2d39e088761/scratchpad/oldgate/check_contracts.py && python3 /tmp/claude-0/-home-user-programming-desk/1409f1a2-1ff0-5148-b454-f2d39e088761/scratchpad/oldgate/check_contracts.py --manifest ownership.yaml --files contracts/api/notifications.yaml --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-4 — 1 contract surface file(s) touched:\n    contracts/api/notifications.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/api/notifications.yaml --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "      contracts/changes/ validates a change it never described — or the\n      paths above belong in its 'surfaces:' list.\n  See docs/cross-bot-protocol.md and skills/contract-first-changes/SKILL.md"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "    contracts/events/README.md\n    openapi.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "bash ci/hooks/g4-preflight.sh openapi.yaml contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "    openapi.yaml\n    contracts/changes/contracts-skeleton-v0.1.0.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 5.0,
+      "output_tail": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 4.80s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "    contracts/changes/archive/.gitkeep\n    contracts/changes/contracts-skeleton-v0.1.0.yaml\n    openapi.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 16 file(s) scanned, no secrets detected"
     }
   ],
   "claims": [
@@ -130,6 +172,35 @@
     {
       "claim": "Installing the framework config over the native hook chains rather than displaces it: pre-commit enters migration mode, moves the native hook to .git/hooks/pre-commit.legacy and keeps running it, so G-3 coverage cannot be lost by installing this config. The three commits on this branch each ran the native scan first and the framework hooks after.",
       "evidence_command_index": 9
+    },
+    {
+      "claim": "Greptile P1 reproduced against the pre-fix gate: a BREAKING change to contracts/api/notifications.yaml with zero acknowledgements exits 0 when validated against the unrelated skeleton change document — the fail-open the CI template's `ls | head -n1` selector can reach",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "The same input against the fixed gate exits 1: the declared surfaces do not cover contracts/api/notifications.yaml, so a stale document can no longer validate a change it never described",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "This PR's own change still validates after the tightening — the change document now declares all seven contract paths it touches",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "Greptile P2 fixed: the pre-flight resolves the active change document and reports G-4 PASS, which it could never do before",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "The 90 gate self-tests still pass unchanged after the gate change",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "G-1 PASS on the full 16-file change: every path still resolves to bot-06-quality-security, including the new ci/hooks/g4-preflight.sh and the docs and skill updates",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "G-3 PASS across the whole change",
+      "evidence_command_index": 16
     }
   ],
   "unverified": [
@@ -141,7 +212,10 @@
     "CI selects a change document with `ls -1 contracts/changes/*.yaml | head -n1`, which picks the alphabetically first file rather than the one this PR proposes. With one active document that resolves correctly; contracts/changes/README.md documents the archive/ convention that keeps it correct. The workflow itself was not changed — Actions are out of scope for this change.",
     "Did not merge, did not undraft, and did not push to main.",
     "The .pre-commit-config.yaml header was corrected after this observation. An earlier draft claimed installing the framework hook REPLACES the native one; it does not, and the commands above record what actually happens.",
-    "This receipt was committed with `git add -f`. .gitignore line 5 ignores .receipts/**/*.json, yet all 22 existing receipts are tracked and both G-2 and the CI template require a committed receipt — so -f is how the existing ones got in, not a workaround invented here. Not fixed in this change: it is a one-line .gitignore question affecting every seat, and .gitignore matches no pattern in ownership.yaml, so G-1 reports it UNOWNED and any edit to it needs a manifest rule first."
+    "This receipt was committed with `git add -f`. .gitignore line 5 ignores .receipts/**/*.json, yet all 22 existing receipts are tracked and both G-2 and the CI template require a committed receipt — so -f is how the existing ones got in, not a workaround invented here. Not fixed in this change: it is a one-line .gitignore question affecting every seat, and .gitignore matches no pattern in ownership.yaml, so G-1 reports it UNOWNED and any edit to it needs a manifest rule first.",
+    "A narrower case of the P1 class survives: if a later change happens to touch a path the stale document also declares, coverage is satisfied and the stale document validates it. The complete fix is to require the change document to appear in the diff, which every existing G-4 test would fail — they all write the document to a tmp_path outside the file list — and ci/tests/test_gates.py is owned by bot-01-systems-backend. Needs that owner to update the fixtures alongside the gate.",
+    "No regression test was added for the new surface-coverage rule, for the same ownership reason: the gate self-test suite lives in bot-01's path. The behaviour is evidenced by the before/after pair above rather than by a committed test, which is weaker — a future edit to check_contracts.py could silently undo it.",
+    "The root cause Greptile named, `ls -1 contracts/changes/*.yaml | head -n1` in ci/.github/workflows/gates.yml, is NOT fixed. That file matches no pattern in ownership.yaml (verified UNOWNED), Actions are out of scope for this change, and the workflow is a template not installed as CI. The gate-level and hook-level guards make the mis-selection fail rather than pass; the selector itself is INFRA's to fix."
   ],
   "g1_g6_notes": {
     "G-1": "PASS — 10 files, all bot-06-quality-security. No manifest change required.",
@@ -155,5 +229,23 @@
   "explicit": "Draft pull request only. Did not merge, did not undraft, did not push to main.",
   "observations": [
     "`.gitignore` is UNOWNED under the current manifest (verified: check_ownership.py --bot bot-06-quality-security --files .gitignore exits 1 with UNOWNED). Raised, not fixed — adding a rule is a manifest change beyond the scope of this one."
+  ],
+  "greptile_findings": [
+    {
+      "id": "4140427487",
+      "priority": "P1",
+      "title": "Stale change document can pass G-4",
+      "verdict": "VALID — reproduced, exit 0 on a breaking change with no acks",
+      "disposition": "FIXED at the gate: declared surfaces must cover the diff.",
+      "residual": "Narrower overlap case, see unverified. Needs bot-01 for the test fixtures."
+    },
+    {
+      "id": "4140427492",
+      "priority": "P2",
+      "title": "Manual preflight always fails",
+      "verdict": "VALID — reproduced, failed even with a valid change document present",
+      "disposition": "FIXED: ci/hooks/g4-preflight.sh resolves and passes the document, and refuses more than one active document.",
+      "residual": null
+    }
   ]
 }

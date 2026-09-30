@@ -29,6 +29,20 @@ def _add_metavr(sub, name: str) -> None:
     parser.set_defaults(func=lambda args, cmd=name: metavr_wrap(cmd, args.serial, args.out))
 
 
+def _add_ui_tap(sub) -> None:
+    parser = sub.add_parser("ui_tap")
+    parser.add_argument("--serial", required=True)
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--x", type=float)
+    parser.add_argument("--y", type=float)
+    parser.add_argument("--selector")
+    parser.set_defaults(
+        func=lambda args: metavr_wrap(
+            "ui_tap", args.serial, args.out, x=args.x, y=args.y, selector=args.selector
+        )
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m ios.tools")
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -58,8 +72,9 @@ def build_parser() -> argparse.ArgumentParser:
     log.add_argument("--log", type=Path, required=True)
     log.set_defaults(func=lambda args: parse_file(args.log))
 
-    for name in ("device_screenshot", "ui_dump", "ui_tap"):
+    for name in ("device_screenshot", "ui_dump"):
         _add_metavr(sub, name)
+    _add_ui_tap(sub)
     return parser
 
 
@@ -81,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
         return code
     if payload.get("status") in {"error"}:
         return 2
-    if payload.get("status") in {"failed"}:
+    if payload.get("status") in {"failed", "unverified"}:
         return 1
     return 0
 

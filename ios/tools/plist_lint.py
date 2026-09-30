@@ -15,8 +15,23 @@ USAGE_KEYS = (
     "NSLocationAlwaysUsageDescription",
     "NSUserTrackingUsageDescription",
     "NSBluetoothAlwaysUsageDescription",
+    "NSBluetoothPeripheralUsageDescription",
     "NSFaceIDUsageDescription",
     "NSLocalNetworkUsageDescription",
+    "NSContactsUsageDescription",
+    "NSCalendarsUsageDescription",
+    "NSRemindersUsageDescription",
+    "NSMotionUsageDescription",
+    "NSHealthShareUsageDescription",
+    "NSHealthUpdateUsageDescription",
+    "NSHealthClinicalHealthRecordsShareUsageDescription",
+    "NSSpeechRecognitionUsageDescription",
+    "NSSiriUsageDescription",
+    "NSHomeKitUsageDescription",
+    "NSAppleMusicUsageDescription",
+    "NSVideoSubscriberAccountUsageDescription",
+    "NSNearbyInteractionUsageDescription",
+    "NSSensorKitUsageDescription",
 )
 
 

@@ -30,8 +30,6 @@ def _digest(path: Path) -> dict:
 
 
 def _index(path: Path) -> dict[str, dict]:
-    if path.is_file():
-        return {path.name: _digest(path)}
     if not path.is_dir():
         raise FileNotFoundError(path)
     out = {}
@@ -40,7 +38,32 @@ def _index(path: Path) -> dict[str, dict]:
     return out
 
 
+def _diff_single(before: Path, after: Path) -> dict:
+    """Compare two individual files by content, not by name. --before and
+    --after routinely have different basenames (before.png vs after.png);
+    keying on the name would misreport every single-file comparison as one
+    file added plus one removed instead of a change."""
+    left = _digest(before)
+    right = _digest(after)
+    changed = []
+    if left["sha256"] != right["sha256"]:
+        row = {"path": after.name, "before": left, "after": right}
+        if "png" in left or "png" in right:
+            row["png_size_changed"] = left.get("png") != right.get("png")
+        changed.append(row)
+    return {
+        "added": [],
+        "removed": [],
+        "changed": changed,
+        "unchanged": 0 if changed else 1,
+        "pixel_diff": False,
+        "ui_rendered": False,
+    }
+
+
 def diff(before: Path, after: Path) -> dict:
+    if before.is_file() and after.is_file():
+        return _diff_single(before, after)
     left = _index(before)
     right = _index(after)
     added = sorted(set(right) - set(left))

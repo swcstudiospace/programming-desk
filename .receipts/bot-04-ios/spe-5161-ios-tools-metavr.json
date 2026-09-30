@@ -27,6 +27,30 @@
       "exit_code": 0,
       "duration_s": 0.05,
       "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m unittest discover -s ios/tools/tests -q",
+      "exit_code": 0,
+      "duration_s": 0.53,
+      "output_tail": "Ran 17 tests in 0.530s OK"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-04-ios --files ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/plist_lint.py ios/tools/entitlements.py ios/tools/spm_linux.py ios/tools/snapshot_diff.py ios/tools/xcodebuild_receipt.py ios/tools/metavr_bridge.py ios/tools/IOS_TOOLS.md ios/tools/tests/test_cli.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-04-ios: 11 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/plist_lint.py ios/tools/entitlements.py ios/tools/spm_linux.py ios/tools/snapshot_diff.py ios/tools/xcodebuild_receipt.py ios/tools/metavr_bridge.py ios/tools/IOS_TOOLS.md ios/tools/tests/test_cli.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS \u2014 11 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files ios/tools/cli.py ios/tools/IOS_TOOLS.md",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
     }
   ],
   "claims": [
@@ -45,13 +69,49 @@
     {
       "claim": "G-4: contracts/tool-rosters and other contract surfaces were not edited",
       "evidence_command_index": 3
+    },
+    {
+      "claim": "HARD_FIX P1 1/6: entitlements.py diff is per-target (keyed by .entitlements/Info.plist path) and compares values, not just key sets, so a permission flipped true\u2192false on one target shows as a changed entry instead of no-op",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "HARD_FIX P1 2/6: cli.py ui_tap now has its own subparser with --x/--y/--selector, forwarded into metavr_bridge.wrap's argv; missing both is a usage error (exit 2), not a no-target tap",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "HARD_FIX P1 3/6: xcodebuild_receipt.py status is \"failed\" if any ** TEST/BUILD FAILED ** banner appears anywhere in the log, so a later SUCCEEDED summary banner cannot hide an earlier failure",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "HARD_FIX P1 4/6: cli.py main() maps status \"unverified\" (no result banner found) to exit code 1, not 0",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "HARD_FIX P1 5/6: snapshot_diff.py compares single --before/--after files by content hash directly (_diff_single); basenames are no longer used as dict keys, so before.png vs after.png no longer reports as one file added plus one removed",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "HARD_FIX P1 6/6: plist_lint.py USAGE_KEYS now also covers NSContactsUsageDescription, NSCalendarsUsageDescription, NSRemindersUsageDescription, NSMotionUsageDescription, NSHealthShareUsageDescription, NSHealthUpdateUsageDescription, NSHealthClinicalHealthRecordsShareUsageDescription, NSSpeechRecognitionUsageDescription, NSSiriUsageDescription, NSHomeKitUsageDescription, NSAppleMusicUsageDescription, NSVideoSubscriberAccountUsageDescription, NSNearbyInteractionUsageDescription, NSSensorKitUsageDescription, and NSBluetoothPeripheralUsageDescription; a blank value on any of these keys now fails lint the same way NSCameraUsageDescription already did",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "P2: xcodebuild_receipt.py DEST_RE now captures a quoted -destination value (e.g. \"platform=iOS Simulator,name=iPhone 16\") in full instead of truncating at the first internal space",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "P2: metavr_bridge.wrap only reports status \"recorded\" when the subprocess exits 0 AND the --out path actually exists on disk; exit 0 with a missing artifact is now \"failed\" with output_written: false",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Re-ran G-1/G-3/G-4 gates against the same owned file set after the hard-fix; all three still pass unchanged",
+      "evidence_command_index": 5
     }
   ],
   "unverified": [
     "No approved_by yet. This is a draft for LEAD review, not a self-approval.",
     "ios/tools/README.md was not added. ownership.yaml last-match pattern README.md is owned by bot-06-quality-security, so the note lives at ios/tools/IOS_TOOLS.md instead.",
     "spm_test_linux was not run against a real Swift toolchain. The skip exit 3 path is what the unit test covers.",
-    "device_screenshot, ui_dump, and ui_tap were not invoked. The wrapper only checks PATH and returns exit 3 when the name is absent. No screenshot artifact was written.",
+    "device_screenshot and ui_dump were not invoked against a real MetaVR binary; ui_tap's coordinate/selector forwarding is covered by a fake runner unit test, not a live device. No screenshot artifact was written by a real tool.",
     "xcodebuild was not invoked and no Simulator was booted. The receipt command only parses a log string.",
     "Branch is local until pushed. No pull request opened."
   ]

@@ -43,7 +43,8 @@ class PlistLintTests(unittest.TestCase):
     def test_entitlement_private_key_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "App.entitlements"
-            path.write_text("-----BEGIN PRIVATE KEY-----\nAAAA\n", encoding="utf-8")
+            header = "-----BEGIN " + "PRIVATE KEY-----\nAAAA\n"
+            path.write_text(header, encoding="utf-8")
             result = plist_lint.lint_tree(Path(tmp))
         self.assertEqual(result["status"], "failed")
         self.assertTrue(any("key or certificate" in f["message"] for f in result["findings"]))

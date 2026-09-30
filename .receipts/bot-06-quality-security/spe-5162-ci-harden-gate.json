@@ -121,9 +121,10 @@
     },
     {
       "cmd": "bandit -r . --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
-      "exit_code": 0,
+      "exit_code": 1,
       "duration_s": 2.7,
-      "output_tail": "SARIF output written — 0 HIGH-severity findings scanning the whole repo (widened from services/ci per Greptile P1 4147142620 on PR #50)"
+      "output_tail": "CORRECTED ENTRY — this receipt originally recorded exit_code 0 here via `... | tail -10` piping, which reports tail's exit code, not bandit's: the exact class of error Greptile's receipt-evidence finding (4147142705) called out elsewhere in this same receipt, which I failed to apply to this command at the time. The real exit code is 1: B324 (SHA1 used in infra/unified-lsp-broker/broker.py's WebSocket handshake, HIGH severity) — confirmed on PR #50's actual CI run (job 110002295320) and reproduced locally by re-running without a pipe. See ci/tests/test_security_workflows.py's new test for the fix (scope to this PR's changed .py files instead of the whole repo).",
+      "expects_failure": true
     },
     {
       "cmd": "semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error .",
@@ -156,6 +157,37 @@
       "exit_code": 0,
       "duration_s": 10.4,
       "output_tail": "168 passed in 10.36s (157 pre-existing + 11 new)"
+    },
+    {
+      "cmd": "mcp__github__actions_get(method=download_workflow_run_artifact, resource_id=11113902354) to get a signed download URL, then curl that URL, unzip, and python3 -c \"import json; d=json.load(open('bandit.sarif')); [print(r['ruleId'], r['locations'][0]['physicalLocation']['artifactLocation']['uri']) for r in d['runs'][0]['results']]\" — the URL itself is a time-limited Azure blob SAS token, not reproducible verbatim; the download+inspect steps are",
+      "exit_code": 0,
+      "duration_s": 1.0,
+      "output_tail": "B324 infra/unified-lsp-broker/broker.py — the actual SARIF from PR #50's failed Bandit check run (job 110002295320), downloaded and inspected directly rather than guessed at from the truncated CI log (bandit's SARIF formatter writes findings only to the output file, not stdout)"
+    },
+    {
+      "cmd": "bandit infra/unified-lsp-broker/broker.py -lll",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "Reproduced locally: High: 1 — same B324 finding as CI, confirming this is a real, reproducible finding and not a CI-environment artifact",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git diff --name-only origin/main...HEAD -- '*.py'",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "ci/tests/test_security_workflows.py — the only Python file this PR's diff touches; confirms infra/unified-lsp-broker/broker.py is pre-existing code outside this PR's own changes"
+    },
+    {
+      "cmd": "bandit ci/tests/test_security_workflows.py --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "SARIF output written, exit 0 — scoping Bandit to only this PR's changed .py files (the fix) excludes the pre-existing broker.py finding while still scanning everything this PR actually added"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.5,
+      "output_tail": "169 passed (168 pre-existing + 1 new: test_scoped_to_pr_changed_files_not_whole_repo)"
     }
   ],
   "claims": [
@@ -234,8 +266,9 @@
       "evidence_command_index": 17
     },
     {
-      "claim": "Widening Bandit's scan target from services/ci to the whole repo (Greptile P1 4147142620 on PR #50: infra/ and web/ have executable code this gate was missing) is still 0 findings — the widen doesn't newly trip anything on the code that exists today",
-      "evidence_command_index": 18
+      "claim": "Widening Bandit's scan target from services/ci to the whole repo (Greptile P1 4147142620 on PR #50) is NOT safe to ship as `bandit -r .`: it trips a real, pre-existing HIGH finding (B324, SHA1 in a WebSocket handshake) in infra/unified-lsp-broker/broker.py, a file this PR doesn't touch and doesn't own. PR #50's own CI caught this for real (job 110002295320, second push) after the whole-repo-widen commit landed — this receipt's own initial evidence for that command was wrong (exit_code recorded as 0 via a pipe that masked bandit's real exit 1), the same class of mistake Greptile's receipt-evidence finding flagged elsewhere in this file",
+      "evidence_command_index": 18,
+      "expects_failure": true
     },
     {
       "claim": "Widening Semgrep's scan target to the whole repo without diff-scoping is NOT safe to ship as-is: it surfaces a real, pre-existing finding (use-defused-xml) in scripts/generate-templates.py, a file this PR does not touch and does not own. A naive fix for the 'misses SAST outside services/ci' finding would have made this PR's own gate red for someone else's code, and would make every future PR's gate red for the same reason until that file is fixed",
@@ -258,6 +291,27 @@
     {
       "claim": "The full gate suite (168 tests: 157 pre-existing + 11 new) passes with the workflow restored to its fixed state — no regression from any change in this round",
       "evidence_command_index": 23
+    },
+    {
+      "claim": "PR #50's own CI (job 110002295320) failed Bandit for real after the previous round's whole-repo-widen fix landed, not because of a sandbox artifact: the actual SARIF it produced contains exactly one HIGH finding, B324, in infra/unified-lsp-broker/broker.py — precisely the class of failure this receipt's own 'unverified' section had already flagged as an accepted, un-closed gap in the previous revision, now manifested",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "The B324 finding is real and reproducible, not an environment fluke: scanning infra/unified-lsp-broker/broker.py directly, locally, with the same bandit version (1.9.4) reproduces it",
+      "evidence_command_index": 25,
+      "expects_failure": true
+    },
+    {
+      "claim": "This PR's own diff touches exactly one Python file, so scoping Bandit to the PR's changed .py files (rather than the whole repo) is not a workaround that happens to pass today by coincidence of an empty file list — there is a real file being scanned",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "Scoping Bandit to this PR's changed .py files instead of `bandit -r .` resolves the failure: same tool, same version, same severity floor, exit 0 because the file that trips B324 is correctly out of scope for a PR that never touched it",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "The full gate suite (169 tests) still passes after this fix, including the new test asserting Bandit stays diff-scoped rather than regressing to a whole-repo scan",
+      "evidence_command_index": 28
     }
   ],
   "unverified": [
@@ -268,7 +322,8 @@
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
     "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
     "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
-    "Bandit's whole-repo widening (unlike Semgrep's) was NOT given a --baseline-commit / diff-only mode, because it currently has zero pre-existing findings and bandit's own baseline mechanism (-b against a stored JSON snapshot) is a heavier lift than a git-ref diff. If a future pre-existing Python file trips a HIGH bandit finding unrelated to some PR, that PR's gate would go red the same way the unscoped Semgrep run did here — this is an accepted, not a closed, gap."
+    "This receipt previously accepted the whole-repo Bandit scan as a known-but-unclosed gap ('zero pre-existing findings today'). That was wrong — infra/unified-lsp-broker/broker.py already had a HIGH finding (B324), and PR #50's own CI failed on it immediately, the same run this fix responds to. The gap is now closed by scoping Bandit to this PR's changed .py files (a computed git-diff file list, not bandit's own -b/--baseline JSON-snapshot mechanism, which needs a stored baseline artifact this workflow doesn't have anywhere to keep). What's still genuinely unverified: whether a PR that changes MANY .py files across unrelated areas could hit bandit's argv length limits passing them all as positional args — not exercised here since this PR only ever touched one.",
+    "This receipt's own bandit -r . entry (now corrected) was recorded with the wrong exit code because of `command | tail -N` piping reporting tail's exit status instead of the piped command's — the exact class of evidence error Greptile's review caught elsewhere in an earlier revision of this file. Prompted by finding it, audited every other command in this receipt for the same `| tail` / `| head` pattern: one other command pipes through `| tail -5` (the trivy-action tag listing at index 13), but its exit code was never load-bearing for a pass/fail claim — it's an informational tag listing, not a '0 findings' assertion — so it isn't the same bug. No other instance found."
   ],
   "files_changed": [
     "ownership.yaml",

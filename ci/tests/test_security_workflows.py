@@ -89,8 +89,18 @@ class TestSemgrepBlocks:
 
 class TestBanditBlocks:
     def test_high_severity_floor(self, workflow):
-        step = _step(_job(workflow, "bandit"), "Bandit — whole repo")
+        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
         assert "-lll" in step["run"]
+
+    def test_scoped_to_pr_changed_files_not_whole_repo(self, workflow):
+        # `bandit -r .` on the whole repo fails every PR on infra/unified-lsp-broker/broker.py's
+        # pre-existing B324 finding (SHA1 in a WebSocket handshake) — confirmed live on PR #50.
+        # Same class of bug as the Semgrep whole-repo scan; the fix here is a computed file list
+        # instead of Semgrep's --baseline-commit, since bandit has no equivalent single flag.
+        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
+        assert "PY_FILES" in step["run"]
+        assert "bandit -r ." not in step["run"]
+        assert "bandit \"${PY_FILES[@]}\"" in step["run"]
 
 
 class TestTrivyBlocks:

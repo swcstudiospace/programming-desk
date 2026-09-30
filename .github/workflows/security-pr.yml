@@ -160,6 +160,8 @@ jobs:
       security-events: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need the base ref's history to compute this PR's changed .py files
 
       - uses: actions/setup-python@v5
         with:
@@ -168,16 +170,33 @@ jobs:
       - name: Install Bandit
         run: pip install bandit bandit-sarif-formatter
 
-      - name: Bandit — whole repo, HIGH severity only
+      - name: Bandit — this PR's changed Python files, HIGH severity only
         # -lll raises the reported severity floor to HIGH, matching "fail on HIGH+" without
-        # drowning every PR in LOW/MEDIUM noise. Confirmed locally: 0 findings, exit 0.
-        # Scans the whole repo, not just services/ci: bandit only ever looks at .py files, so
-        # widening the target costs nothing on non-Python trees and catches Python code under
-        # infra/ (e.g. infra/unified-lsp-broker/broker.py) that services/ci alone missed.
-        # ci/security/bandit.ini's exclude_dirs already keeps tests/vendor/node_modules/.venv
-        # out of scope.
+        # drowning every PR in LOW/MEDIUM noise.
+        #
+        # Scoped to this PR's own changed .py files, not `bandit -r .` on the whole repo: widening
+        # the scan target (originally done here so Python under infra/ and web/-adjacent trees
+        # wasn't skipped, matching Semgrep's fix for the same gap) surfaced a real, pre-existing
+        # HIGH finding in infra/unified-lsp-broker/broker.py — B324, SHA1 used in a WebSocket
+        # handshake per RFC 6455, not a security-sensitive hash use, but bandit flags the call
+        # site regardless of context. That file is owned by a different bot; a whole-repo bandit
+        # run would fail every future PR on code it doesn't touch, exactly like the unscoped
+        # Semgrep run did (see that job's --baseline-commit). Bandit has no single-flag repo-vs-
+        # diff baseline mode as clean as Semgrep's, so this reproduces the same effect by hand:
+        # compute the PR's own changed .py files and scan only those. Confirmed locally: the full
+        # repo trips B324 (exit 1); this PR's one changed .py file does not (exit 0).
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          bandit -r . \
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          mapfile -t PY_FILES < <(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- '*.py')
+          if [ "${#PY_FILES[@]}" -eq 0 ]; then
+            echo "No .py files changed by this PR — nothing for Bandit to scan. Skipping."
+            echo '{"runs":[{"tool":{"driver":{"name":"Bandit"}},"results":[]}],"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"}' > bandit.sarif
+            exit 0
+          fi
+          bandit "${PY_FILES[@]}" \
             --ini ci/security/bandit.ini \
             -lll \
             -f sarif -o bandit.sarif

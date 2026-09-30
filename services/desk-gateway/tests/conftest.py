@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -30,6 +31,23 @@ MCP_HEADERS = {
 }
 
 
+def _settings_env_names() -> set[str]:
+    """Every variable config.py reads, taken from config.py itself.
+
+    Read from the source rather than listed here so a new upstream cannot be added without
+    the isolation below covering it. The assertion is the point: if the shape of config.py
+    changes so this stops matching, the fixture fails loudly instead of quietly letting
+    ambient credentials through again.
+    """
+    source = (ROOT / "src" / "desk_gateway" / "config.py").read_text()
+    names = set(re.findall(r'_env\(\s*"([A-Z0-9_]+)"', source))
+    assert len(names) > 20, (
+        f"only {len(names)} env names found in config.py — the _env(...) pattern this test "
+        "isolation depends on has changed, so upstream credentials would leak into tests"
+    )
+    return names
+
+
 @pytest.fixture
 def settings(tmp_path: Path):
     from desk_gateway.config import Settings
@@ -44,6 +62,13 @@ def settings(tmp_path: Path):
         **{f"SEAT_PASSPHRASE_{k.upper()}": v for k, v in PASS.items()},
     }
     old = dict(os.environ)
+    # Clear every upstream variable this fixture does not set. Otherwise an ambient token
+    # makes that upstream `configured`, and the suite issues live API calls with whatever
+    # credentials the host happens to hold — GitHub, Railway, Vercel, Play Console, App
+    # Store Connect. That is a real risk on the persistent self-hosted runner, and it also
+    # made test_intake_flow_only_lead_can_drain pass or fail depending on the environment.
+    for name in _settings_env_names() - set(env):
+        os.environ.pop(name, None)
     os.environ.update(env)
     try:
         yield Settings.from_env()

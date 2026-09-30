@@ -171,3 +171,79 @@ def test_store_roster_and_packs(tmp_path: Path):
     assert store.packs_for("ios") == ["kanbanos"]
     store.unload_pack("ios", "kanbanos")
     assert store.packs_for("ios") == []
+
+
+@pytest.mark.parametrize("sql", [
+    "SELECT 'delete'",                              # write keyword inside a literal
+    "SELECT * FROM t WHERE name LIKE '%create%'",   # ... and inside a LIKE pattern
+    "SELECT 1 -- drop table x",                     # ... and inside a comment
+    "/* note */ SELECT 1",
+    "SELECT 'a;b'",                                 # semicolon inside a literal
+    "WITH c AS (SELECT 1) SELECT * FROM c",
+])
+def test_read_only_sql_accepts_ordinary_reads(sql: str):
+    """Scanning the raw text rejected these: the keyword pattern matched inside quotes."""
+    from desk_gateway.upstreams import read_only_sql
+    assert read_only_sql(sql) is None, f"{sql!r} was refused"
+
+
+@pytest.mark.parametrize("sql", [
+    "DELETE FROM t",
+    "UPDATE t SET a = 1",
+    "INSERT INTO t VALUES (1)",
+    "SELECT 1; DROP TABLE t",                       # write smuggled after a read
+    "SELECT 1 WHERE x = 'a'; DROP TABLE t",         # ... past a literal
+    "SELECT 1; SELECT 2",                           # two statements
+])
+def test_read_only_sql_still_refuses_writes(sql: str):
+    """The point of blanking literals is to keep this list rejected while reads pass."""
+    from desk_gateway.upstreams import read_only_sql
+    assert read_only_sql(sql) is not None, f"{sql!r} was accepted"
+
+
+async def test_run_command_kills_the_child_on_timeout():
+    """asyncio.wait_for stops waiting; it does not stop the process.
+
+    Left unreaped, a slow gate or git command outlives the call that reported a timeout,
+    under the gateway's root service user and holding its export tree open.
+    """
+    import asyncio
+    from desk_gateway.upstreams import run_command
+
+    result = await run_command(["sleep", "30"], timeout=0.5)
+    assert result["exit_code"] == 124
+    assert "timed out" in result["stderr"]
+
+    # The child is gone, not merely detached: nothing is left to reap.
+    await asyncio.sleep(0.2)
+    remaining = await asyncio.create_subprocess_exec(
+        "pgrep", "-f", "^sleep 30$",
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+    )
+    out, _ = await remaining.communicate()
+    assert not out.strip(), f"sleep 30 survived the timeout: pids {out.decode().split()}"
+
+
+def test_settings_fixture_ignores_ambient_upstream_credentials(monkeypatch, settings):
+    """The suite must not pick up whatever tokens the host happens to hold.
+
+    An ambient GITHUB_TOKEN made the GitHub upstream `configured`, so tests issued live API
+    calls and test_intake_flow_only_lead_can_drain passed or failed depending on the
+    machine. On the persistent self-hosted runner the same leak covers Railway, Vercel,
+    Play Console and App Store Connect.
+    """
+    assert settings.github_token == "", "ambient GITHUB_TOKEN reached Settings"
+    assert settings.railway_api_token == ""
+    assert settings.vercel_token == ""
+    assert settings.play_access_token == ""
+    assert settings.asc_private_key_path == ""
+
+
+def test_settings_env_name_discovery_still_matches_config():
+    """The isolation above is only as good as its list of variable names."""
+    from tests.conftest import _settings_env_names
+    names = _settings_env_names()
+    for expected in ("GITHUB_TOKEN", "RAILWAY_API_TOKEN", "VERCEL_TOKEN",
+                     "PLAY_ACCESS_TOKEN", "ASC_PRIVATE_KEY_PATH",  # pragma: allowlist secret (env var names, no values)
+                     "HINDSIGHT_API_KEY"):
+        assert expected in names, f"{expected} is no longer discovered; it would leak"

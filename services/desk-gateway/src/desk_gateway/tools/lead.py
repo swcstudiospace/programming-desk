@@ -7,6 +7,7 @@ from typing import Any
 
 from desk_gateway.config import SEAT_LABEL, SEATS
 from desk_gateway.tools import ToolContext, failure
+from desk_gateway.upstreams import NOT_CONFIGURED
 
 GITHUB_ISSUE = re.compile(r"^https://github\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/issues/(\d+)$")
 
@@ -39,8 +40,28 @@ async def intake_ack(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
                 lines.append(f"- {extra}")
             lines.append(f"intake `{args['intake_id']}`")
             result = await svc.github.comment_on_issue(match.group(1), int(match.group(2)), "\n\n".join(lines))
-            notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"), "target": link}
+            notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
+                      "target": link, "error": result.get("error")}
             break
+    # A reply that was attempted and failed is surfaced, because the issue is the record of
+    # an intake and the workflow posts no fallback comment — so the requester was never
+    # told, and an unqualified ok: true tells LEAD the opposite. An unconfigured gateway is
+    # different in kind: nothing was attempted, there is nothing to retry, and every
+    # github-origin ack would otherwise be unusable on a deployment without a token. That
+    # case keeps reporting the ack it stored, with delivered: false and the reason.
+    #
+    # The ack itself is stored either way — state is advanced above. Reversing it, or
+    # tracking delivery so a retry is automatic, needs a state machine on the intake record
+    # that does not exist. Not invented here: LEAD sees the failure and calls again.
+    if notify.get("target") and not notify["delivered"] and notify.get("error") != NOT_CONFIGURED:
+        return failure(
+            "notify_failed",
+            f"ack stored, but the reply to {notify['target']} was not posted: "
+            f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
+            "The requester has not been told; call desk_intake_ack again.",
+            intake=updated,
+            notify=notify,
+        )
     return {"ok": True, "intake": updated, "notify": notify}
 
 

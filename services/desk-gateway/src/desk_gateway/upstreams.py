@@ -35,12 +35,32 @@ def not_configured(what: str) -> dict[str, Any]:
     return {"error": NOT_CONFIGURED, "reason": f"{what} is not configured on the gateway; record this under unverified"}
 
 
+_SQL_LITERAL_OR_COMMENT = re.compile(
+    r"'(?:[^']|'')*'"       # single-quoted literal, '' as the escape
+    r'|"(?:[^"]|"")*"'      # double-quoted identifier
+    r"|--[^\n]*"            # line comment
+    r"|/\*.*?\*/",          # block comment
+    re.DOTALL,
+)
+
+
+def _sql_code_only(sql: str) -> str:
+    """`sql` with literals and comments blanked, so keyword scanning sees operations only.
+
+    Scanning the raw text rejects ordinary reads: SELECT 'delete', or a LIKE '%create%'
+    filter, matches the write-keyword pattern inside its own quotes. Blanking rather than
+    deleting preserves offsets and cannot join two tokens into a third.
+    """
+    return _SQL_LITERAL_OR_COMMENT.sub(lambda m: " " * len(m.group()), sql)
+
+
 def read_only_sql(sql: str) -> str | None:
-    if not READ_ONLY_SQL.match(sql):
+    code = _sql_code_only(sql)
+    if not READ_ONLY_SQL.match(code.lstrip()):
         return "only SELECT or WITH statements are accepted"
-    if FORBIDDEN_SQL.search(sql):
+    if FORBIDDEN_SQL.search(code):
         return "statement contains a write keyword"
-    if ";" in sql.rstrip(";"):
+    if ";" in code.strip().rstrip(";"):
         return "one statement per call"
     return None
 
@@ -541,6 +561,20 @@ class AppStoreConnect:
         )
 
 
+async def _terminate(proc: asyncio.subprocess.Process) -> None:
+    """Stop a child and reap it, so it cannot outlive the call that started it."""
+    if proc.returncode is not None:
+        return
+    try:
+        proc.kill()
+    except ProcessLookupError:          # already gone between the check and the signal
+        pass
+    try:
+        await asyncio.wait_for(proc.wait(), 5)
+    except asyncio.TimeoutError:        # unkillable child; nothing further to do here
+        pass
+
+
 async def run_command(argv: list[str], *, cwd: str | None = None, timeout: float = 15.0, input_text: str | None = None, max_out: int = 6000) -> dict[str, Any]:
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -550,10 +584,20 @@ async def run_command(argv: list[str], *, cwd: str | None = None, timeout: float
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        out, err = await asyncio.wait_for(proc.communicate(input_text.encode() if input_text is not None else None), timeout)
     except FileNotFoundError:
         return {"exit_code": 127, "stdout": "", "stderr": f"{argv[0]}: not found", "cmd": shlex.join(argv)}
-    except asyncio.TimeoutError:
+    try:
+        out, err = await asyncio.wait_for(
+            proc.communicate(input_text.encode() if input_text is not None else None), timeout
+        )
+    except (asyncio.TimeoutError, asyncio.CancelledError) as exc:
+        # wait_for only stops waiting; the child keeps running. Gate and git commands here
+        # can be slow, and the unit runs as root, so an unreaped child per timeout
+        # accumulates processes holding the export tree open. Kill and reap before
+        # returning, and re-raise a cancellation rather than reporting it as a timeout.
+        await _terminate(proc)
+        if isinstance(exc, asyncio.CancelledError):
+            raise
         return {"exit_code": 124, "stdout": "", "stderr": f"timed out after {timeout:.0f}s", "cmd": shlex.join(argv)}
     return {
         "exit_code": proc.returncode,

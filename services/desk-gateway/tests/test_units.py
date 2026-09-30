@@ -551,3 +551,57 @@ async def test_commit_file_refuses_a_stale_tip_and_leaves_the_branch_untouched(t
     # left untouched: the remote still carries the other push, not a blind overwrite
     assert _receipt_on_remote(bare, branch, receipt_path)["approved_by"] == "someone-else"
     assert _git(bare, "rev-parse", branch) == current_sha
+
+
+async def test_commit_file_refuses_a_rewind_between_its_own_clone_and_push(tmp_path: Path, monkeypatch):
+    """Tip-rewind case: the branch is force-rewound to an ancestor after _commit_file's internal
+    clone but before its push. A plain push would still be a fast-forward from the rewound tip
+    (our commit descends from the old, pre-rewind sha) and would silently resurrect what the
+    rewind removed. The push must be conditional on the tip _commit_file itself observed, not
+    just the clone-time compare against the caller's expect_sha.
+    """
+    from desk_gateway.tools import quality
+    from desk_gateway.tools.quality import _commit_file
+
+    bare, gateway = _make_gateway_repo(tmp_path)
+    branch = "bot-01-systems-backend/receipt-rewind-race"
+    receipt_path = ".receipts/bot-01-systems-backend/rewind-race.json"
+    original = {
+        "task_id": "rewind-race-regression", "bot": "bot-01-systems-backend",
+        "commands": [], "claims": [], "unverified": [], "approved_by": "",
+    }
+    sha_a = _push_receipt(bare, tmp_path, branch, receipt_path, original)
+    grown = dict(original, approval_note="grown")
+    sha_b = _push_receipt(bare, tmp_path, branch, receipt_path, grown)
+    read_text = json.dumps(grown, indent=2) + "\n"
+
+    real_run_command = quality.run_command
+    rewound = {"done": False}
+
+    async def spy(argv, **kwargs):
+        result = await real_run_command(argv, **kwargs)
+        if not rewound["done"] and len(argv) >= 2 and argv[0] == "git" and argv[1] == "clone":
+            # Simulate someone force-rewinding the branch back to sha_a in the window between
+            # _commit_file's clone (just completed) and its eventual push.
+            rewind_work = tmp_path / "rewinder"
+            await real_run_command(["git", "clone", "--quiet", str(bare), str(rewind_work)])
+            await real_run_command(["git", "checkout", "--quiet", sha_a], cwd=str(rewind_work))
+            await real_run_command(["git", "push", "--quiet", "--force", "origin", f"HEAD:{branch}"], cwd=str(rewind_work))
+            rewound["done"] = True
+        return result
+
+    monkeypatch.setattr(quality, "run_command", spy)
+
+    ctx = _ctx(gateway)
+    stamped = dict(grown, approved_by=ctx.bot_id)
+    push = await _commit_file(
+        ctx, branch, receipt_path, json.dumps(stamped, indent=2) + "\n", "QUALITY: approve (rewind race)",
+        expect_sha=sha_b, expect_content=read_text,
+    )
+
+    assert push["pushed"] is False
+    assert push["reason"] == "stale_read"
+    assert push["found"] == sha_a
+
+    # left untouched: the remote still carries the rewind, not our resurrected commit
+    assert _git(bare, "rev-parse", branch) == sha_a

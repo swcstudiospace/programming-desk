@@ -341,8 +341,24 @@ async def _commit_file(
         commit = await run_command(["git", "-c", "user.name=desk-gateway", "-c", "user.email=desk-gateway@swcstudio.space", "commit", "-q", "-m", message], cwd=str(wt))
         if commit["exit_code"] != 0:
             return {"pushed": False, "reason": redact_text(commit["stderr"][-200:])}
-        push = await run_command(["git", "push", "-q", "origin", f"HEAD:{branch}"], cwd=str(wt), timeout=60)
+        # A plain push here would be a valid fast-forward even if the branch was rewound to an
+        # ancestor of found_sha during the clone-to-push window, silently resurrecting whatever
+        # the rewind meant to drop. force-with-lease makes the update atomic on found_sha: any
+        # tip change in that window, forward or rewind, fails the push instead of landing it.
+        push = await run_command(
+            ["git", "push", "-q", f"--force-with-lease={branch}:{found_sha}", "origin", f"HEAD:{branch}"],
+            cwd=str(wt), timeout=60,
+        )
         if push["exit_code"] != 0:
+            remote_now = await run_command(["git", "ls-remote", remote["stdout"].strip(), branch], cwd=str(wt))
+            remote_sha = remote_now["stdout"].split()[0] if remote_now["exit_code"] == 0 and remote_now["stdout"].strip() else None
+            if remote_sha is not None and remote_sha != found_sha:
+                return {
+                    "pushed": False,
+                    "reason": "stale_read",
+                    "expected": found_sha,
+                    "found": remote_sha,
+                }
             return {"pushed": False, "reason": redact_text(push["stderr"][-200:])}
         sha = await run_command(["git", "rev-parse", "HEAD"], cwd=str(wt))
         return {"pushed": True, "branch": branch, "commit": sha["stdout"].strip()}

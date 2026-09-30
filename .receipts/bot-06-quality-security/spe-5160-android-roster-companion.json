@@ -189,7 +189,7 @@
     "No live adb, emulator, or Quest/MetaVR device was exercised — this change adds no runtime code, only YAML contract surfaces and one test-assertion fix.",
     "desk_app_tools_load's live-tools ceiling (never exceed 20, per contracts/README.md) was not exercised against either new pack; that logic lives in the gateway's packs module, unmodified here.",
     "No CI run observed on this branch (no GitHub Actions workflow invoked from this session).",
-    "approved_by is intentionally absent — see stamp_note. This is QUALITY's own work on a contract surface it owns; G-2 rejects approved_by == bot as self-approval, and no Path B transfer/stamp was requested or performed on this branch."
+    "approved_by was intentionally null until this stamp — see stamp_note. This is QUALITY's own work on a contract surface it owns; G-2 rejects approved_by == bot as self-approval, so QUALITY never self-stamped it. LEAD has now stamped approved_by under the human owner's grant; no Path B transfer was requested or performed on this branch."
   ],
   "g1_g6_notes": {
     "G-1": "PASS — 5 files, all bot-06-quality-security.",
@@ -201,8 +201,8 @@
     "G-7": "PASS — 7 rosters, 5 packs, 22 prompt files checked. See blocker_resolution below for the history."
   },
   "approvals": [],
-  "approved_by": null,
-  "stamp_note": "approved_by is explicitly null, not omitted. This is QUALITY's own work on a contract surface it owns; G-2 rejects approved_by == bot as self-approval, so this seat does not self-stamp. LEAD or the human owner stamps it after an independent technical review clears the change.",
+  "approved_by": "bot-00-programming-lead",
+  "stamp_note": "approved_by was explicitly null at hand-off, not omitted: this is QUALITY's own work on a contract surface it owns, and G-2 rejects approved_by == bot as self-approval, so QUALITY never self-stamps. LEAD (bot-00-programming-lead) has now stamped this receipt under the human owner's (Ove) grant extending the LEAD G-2 stamp to PR #53 on 2026-10-01, after Greptile tip_match 5/5, G-7 PASS, and technical P1s clear. This stamp records LEAD's independent technical review only; it does not merge, undraft, or otherwise change the PR's review/merge state.",
   "explicit": "Pushed directly to this seat branch (bot-06-quality-security/spe-5160-android-roster-companion) for the existing draft PR #53, per explicit instruction not to open a new PR or push a claude/* branch. Did not merge, did not undraft, did not edit android/** or any path outside contracts/tool-rosters/android.yaml, contracts/tool-packs/androidlocal.yaml, contracts/tool-packs/androidmetavr.yaml, contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml, ci/tests/test_gates.py and this receipt.",
   "greptile_findings_round2": [
     {

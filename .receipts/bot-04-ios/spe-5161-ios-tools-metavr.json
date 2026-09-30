@@ -1,0 +1,58 @@
+{
+  "task_id": "spe-5161-ios-tools-metavr",
+  "bot": "bot-04-ios",
+  "started_at": "2026-09-30T15:57:00Z",
+  "completed_at": "2026-09-30T16:01:00Z",
+  "commands": [
+    {
+      "cmd": "python3 -m unittest discover -s ios/tools/tests -q",
+      "exit_code": 0,
+      "duration_s": 0.18,
+      "output_tail": "Ran 8 tests in 0.176s OK"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-04-ios --files ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/plist_lint.py ios/tools/entitlements.py ios/tools/spm_linux.py ios/tools/snapshot_diff.py ios/tools/xcodebuild_receipt.py ios/tools/metavr_bridge.py ios/tools/IOS_TOOLS.md ios/tools/tests/test_cli.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-04-ios: 11 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/plist_lint.py ios/tools/entitlements.py ios/tools/spm_linux.py ios/tools/snapshot_diff.py ios/tools/xcodebuild_receipt.py ios/tools/metavr_bridge.py ios/tools/IOS_TOOLS.md ios/tools/tests/test_cli.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS \u2014 11 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files ios/tools/cli.py ios/tools/IOS_TOOLS.md",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "python -m unittest on ios/tools/tests passes 8 cases covering plist lint, entitlements scan, SPM skip, snapshot hash, xcodebuild log parse, and MetaVR skip",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1: the new ios/tools files and the SPE-5161 receipt path class are owned by bot-04-ios",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3: no secret shapes in the ios/tools files",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4: contracts/tool-rosters and other contract surfaces were not edited",
+      "evidence_command_index": 3
+    }
+  ],
+  "unverified": [
+    "No approved_by yet. This is a draft for LEAD review, not a self-approval.",
+    "ios/tools/README.md was not added. ownership.yaml last-match pattern README.md is owned by bot-06-quality-security, so the note lives at ios/tools/IOS_TOOLS.md instead.",
+    "spm_test_linux was not run against a real Swift toolchain. The skip exit 3 path is what the unit test covers.",
+    "device_screenshot, ui_dump, and ui_tap were not invoked. The wrapper only checks PATH and returns exit 3 when the name is absent. No screenshot artifact was written.",
+    "xcodebuild was not invoked and no Simulator was booted. The receipt command only parses a log string.",
+    "Branch is local until pushed. No pull request opened."
+  ]
+}

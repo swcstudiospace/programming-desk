@@ -9,6 +9,12 @@
 #
 # The two must not diverge. .github/workflows/gates-template-sync.yml compares everything
 # below this comment block against the template and fails if they drift apart.
+#
+# Both jobs run on the organisation's self-hosted VPS runner, labelled
+# [self-hosted, Linux, X64], because this organisation's GitHub-hosted minutes are blocked by a
+# spending limit and hosted jobs die in seconds without reaching a gate. If that runner goes
+# offline these checks do not fail — they sit queued, which as a required check presents as a
+# pull request pending forever with no error to read. Check the runner before debugging a gate.
 
 name: Quality Gates
 
@@ -27,7 +33,7 @@ jobs:
     # to "main" and fail attribution before any gate ran — every push red, for a question
     # that is already settled by the time the merge lands.
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -132,7 +138,7 @@ jobs:
 
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

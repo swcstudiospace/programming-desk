@@ -7,6 +7,21 @@
 # environment variables, never interpolated into shell source with ${{ }}. A branch may
 # legally contain $ and ( ), so interpolating a branch-derived value into a script is
 # remote code execution on the runner, reachable before any gate can reject the bot.
+#
+# SETUP PREREQUISITE — runs-on. Both jobs below target a self-hosted runner labelled
+# [self-hosted, Linux, X64], because the originating organisation's GitHub-hosted minutes are
+# blocked by a spending limit. Before seeding a repository from this template, either give it a
+# runner carrying all three of those labels, or change both runs-on lines to ubuntu-latest.
+#
+# Do not skip this. A runs-on that matches no available runner does not fail — the job sits
+# queued. As a required status check that presents as a pull request pending forever with no
+# error to read, which is a worse failure than a red gate. Verify a matching runner is online
+# before making these checks required.
+#
+# A self-hosted runner also reuses its filesystem between jobs, unlike an ephemeral hosted VM,
+# and these jobs check out the pull request head and run its scripts. Register the runner as
+# --ephemeral, or confine it to a container or throwaway user, before pointing it at a
+# repository whose pull requests are not all from trusted authors.
 
 name: Quality Gates
 
@@ -25,7 +40,7 @@ jobs:
     # to "main" and fail attribution before any gate ran — every push red, for a question
     # that is already settled by the time the merge lands.
     if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -130,7 +145,7 @@ jobs:
 
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

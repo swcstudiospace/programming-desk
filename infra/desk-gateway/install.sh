@@ -2,7 +2,7 @@
 # Install or update the desk-gateway systemd service on the VPS. Safe to rerun.
 # Does not touch nginx, DNS or certificates — that is install-nginx.sh.
 #
-# Layout (Greptile P1 4141126594 / tip fixes 4141208705, 4141208711):
+# Layout (Greptile P1 4141126594 / tip fixes incl. 4141252895, 4141252905):
 # Canonical desk checkout is /opt/programming-desk so a future DESK_GATE_USER can
 # traverse the tree and run ci/gates. Do NOT set DESK_GATE_USER in the live env
 # until that drop is verified separately.
@@ -29,22 +29,20 @@ install -d -m 0755 -o root -g root /opt
 
 rsync_to_opt() {
   local src=$1
+  # rsync --delete is required so removed paths disappear under /opt (4141252905).
+  # No tar fallback: non-deleting sync leaves stale gates/rosters deployed.
+  if ! command -v rsync >/dev/null 2>&1; then
+    echo "install.sh: rsync is required to sync/prune $GATEWAY_ROOT (apt install rsync)" >&2
+    exit 1
+  fi
   echo "install.sh: syncing $src -> $GATEWAY_ROOT"
   mkdir -p "$GATEWAY_ROOT"
   # Keep the live venv; uv sync refreshes deps after the tree update.
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -a --delete \
-      --exclude '.venv/' \
-      --exclude '__pycache__/' \
-      --exclude '.pytest_cache/' \
-      --exclude '.git/objects/pack/*.keep' \
-      "$src"/ "$GATEWAY_ROOT"/
-  else
-    # Fallback without rsync: refresh via tar stream (still excludes .venv).
-    (cd "$src" && tar cf - \
-      --exclude='.venv' --exclude='__pycache__' --exclude='.pytest_cache' .) \
-      | (cd "$GATEWAY_ROOT" && tar xf -)
-  fi
+  rsync -a --delete \
+    --exclude '.venv/' \
+    --exclude '__pycache__/' \
+    --exclude '.pytest_cache/' \
+    "$src"/ "$GATEWAY_ROOT"/
 }
 
 if [[ ! -d "$GATEWAY_ROOT/services/desk-gateway" ]]; then
@@ -169,16 +167,19 @@ if ! runuser -u "$GATE_USER" -- test -r "$PROBE_SCRIPT"; then
   echo "install.sh: $GATE_USER cannot read $PROBE_SCRIPT — fix permissions before DESK_GATE_USER" >&2
   exit 1
 fi
-# Stronger probe: actually start the interpreter and compile the gate as desk-gate (4141208723).
+# Stronger probe without writing __pycache__ (4141208723 / tip fix 4141252895):
+# start the interpreter as desk-gate and compile source in memory only.
 if ! runuser -u "$GATE_USER" -- "$VENV_PY" -c 'import sys; assert sys.version_info >= (3, 11)'; then
   echo "install.sh: $GATE_USER cannot run $VENV_PY" >&2
   exit 1
 fi
-if ! runuser -u "$GATE_USER" -- "$VENV_PY" -m py_compile "$PROBE_SCRIPT"; then
-  echo "install.sh: $GATE_USER cannot compile $PROBE_SCRIPT" >&2
+if ! runuser -u "$GATE_USER" -- "$VENV_PY" -c \
+  'import pathlib, sys; p = pathlib.Path(sys.argv[1]); compile(p.read_text(encoding="utf-8"), str(p), "exec")' \
+  "$PROBE_SCRIPT"; then
+  echo "install.sh: $GATE_USER cannot parse $PROBE_SCRIPT" >&2
   exit 1
 fi
-echo "install.sh: verified $GATE_USER can read/compile ci/gates and run venv python (DESK_GATE_USER still unset)"
+echo "install.sh: verified $GATE_USER can read/parse ci/gates and run venv python (DESK_GATE_USER still unset)"
 
 install -m 0644 -o root -g root "$HERE/$UNIT" "/etc/systemd/system/$UNIT"
 systemctl daemon-reload

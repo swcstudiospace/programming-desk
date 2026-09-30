@@ -1,12 +1,14 @@
-# INFRA — RAGflow MCP in .mcp.json (+ self-hosted gates)
+# INFRA — RAGflow MCP in .mcp.json
 
-2026-09-30 · bot-05-infrastructure
+2026-09-30 · bot-05-infrastructure · QUALITY re-stamp after split from #32
 
 ## Change
-- Add `ragflow` HTTP MCP server to `.mcp.json` with `${RAGFLOW_MCP_API_KEY}`
-- `runs-on: [self-hosted, Linux, X64]` on Quality Gates / sync (org hosted billing block)
+Add `ragflow` HTTP MCP server to `.mcp.json` with `${RAGFLOW_MCP_API_KEY}`.
 
-## Rollback
-Revert this PR.
+## Not in this PR
+Self-hosted Actions runner migration lives only on draft PR #32.
+
+## QUALITY
+`approved_by` deliberately absent until QUALITY stamps.
 
 No secrets committed.

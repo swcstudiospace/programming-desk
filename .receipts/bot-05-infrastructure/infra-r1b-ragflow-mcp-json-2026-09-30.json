@@ -2,9 +2,9 @@
   "task_id": "infra-r1b-ragflow-mcp-json-2026-09-30",
   "bot": "bot-05-infrastructure",
   "started_at": "2026-09-30T02:30:00Z",
-  "completed_at": "2026-09-30T04:12:45Z",
+  "completed_at": "2026-09-30T04:23:52Z",
   "repo": "swcstudiospace/programming-desk",
-  "summary": "Add RAGflow HTTP MCP server to .mcp.json (Bearer ${RAGFLOW_MCP_API_KEY}) and point Quality Gates / sync workflows at VPS self-hosted runner labels [self-hosted, Linux, X64] so checks can run despite org GitHub-hosted Actions billing block.",
+  "summary": "Add RAGflow HTTP MCP server to .mcp.json with Bearer ${RAGFLOW_MCP_API_KEY}. Runner migration intentionally lives only on PR #32.",
   "commands": [
     {
       "cmd": "python3 -c \"import json;from pathlib import Path;d=json.loads(Path('.mcp.json').read_text());r=d['mcpServers']['ragflow'];assert r['type']=='http';assert '${RAGFLOW_MCP_API_KEY}' in r['headers']['Authorization'];print('ragflow mcp entry ok')\"",
@@ -12,19 +12,9 @@
       "observed": "ragflow mcp entry ok"
     },
     {
-      "cmd": "python3 -c \"from pathlib import Path; files=['.github/workflows/gates.yml','.github/workflows/gates-template-sync.yml','ci/.github/workflows/gates.yml'];\nfor f in files:\n t=Path(f).read_text();\n assert 'ubuntu-latest' not in t, f;\n assert 'runs-on: [self-hosted, Linux, X64]' in t, f;\nprint('all three workflows self-hosted only')\"",
+      "cmd": "python3 -c \"from pathlib import Path; files=['.github/workflows/gates.yml','.github/workflows/gates-template-sync.yml','ci/.github/workflows/gates.yml'];\nfor f in files:\n t=Path(f).read_text();\n assert 'runs-on: ubuntu-latest' in t, f;\n assert '[self-hosted' not in t, f;\nprint('workflows match main ubuntu-latest (no self-hosted on this PR)')\"",
       "exit_code": 0,
-      "observed": "all three workflows self-hosted only"
-    },
-    {
-      "cmd": "python3 -c \"from pathlib import Path; g=lambda p:(lambda L: ''.join(L[next((i for i,l in enumerate(L) if l.strip() and not l.lstrip().startswith('#')), len(L)):]))(Path(p).read_text().splitlines(True)); a=g('.github/workflows/gates.yml'); b=g('ci/.github/workflows/gates.yml'); print('gate bodies identical:', a==b); raise SystemExit(0 if a==b else 1)\"",
-      "exit_code": 0,
-      "observed": "gate bodies identical: True"
-    },
-    {
-      "cmd": "python3 -m pytest ci/tests/ -q",
-      "exit_code": 0,
-      "observed": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 4.12s"
+      "observed": "workflows match main ubuntu-latest (no self-hosted on this PR)"
     }
   ],
   "claims": [
@@ -33,35 +23,24 @@
       "evidence_command_index": 0
     },
     {
-      "claim": "gates.yml, gates-template-sync.yml, and ci template use runs-on [self-hosted, Linux, X64] with no ubuntu-latest",
+      "claim": "This PR does not change Quality Gates runner labels \u2014 workflows remain ubuntu-latest as on main (self-hosted lives on #32 only)",
       "evidence_command_index": 1
-    },
-    {
-      "claim": "Live gates.yml body stays identical to ci template body",
-      "evidence_command_index": 2
-    },
-    {
-      "claim": "Gate self-test suite passes on this branch",
-      "evidence_command_index": 3
     }
   ],
   "unverified": [
-    "Claude Cloud Session env still needs RAGFLOW_MCP_API_KEY set before tools appear in cloud sessions",
-    "Org GitHub-hosted Actions billing remains broken",
-    "QUALITY review of this PR not yet recorded \u2014 approved_by is the intended reviewer seat"
+    "Claude Cloud Session env still needs RAGFLOW_MCP_API_KEY before tools appear in cloud sessions",
+    "Org GitHub-hosted Actions billing still blocks ubuntu-latest checks on this PR until #32 merges or billing is fixed",
+    "approved_by left absent until QUALITY stamps (G-2 may fail until then \u2014 intentional per Greptile P1)"
   ],
   "files_changed": [
     ".mcp.json",
-    ".github/workflows/gates.yml",
-    ".github/workflows/gates-template-sync.yml",
-    "ci/.github/workflows/gates.yml",
     ".receipts/bot-05-infrastructure/infra-r1b-ragflow-mcp-json-2026-09-30.json",
     ".receipts/bot-05-infrastructure/infra-r1b-ragflow-mcp-json-2026-09-30.md"
   ],
   "contract_changes": [],
-  "rollback_plan": "Revert this PR (remove ragflow block from .mcp.json and/or restore ubuntu-latest on the three workflow files).",
+  "rollback_plan": "Revert this PR / remove the ragflow block from .mcp.json.",
   "approvals": [],
-  "approved_by": "bot-06-quality-security",
+  "approval_requested_from": "bot-06-quality-security",
   "destructive": false,
   "secrets_committed": false
 }

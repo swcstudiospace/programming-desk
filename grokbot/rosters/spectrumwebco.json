@@ -1,0 +1,43 @@
+{
+  "team": "spectrumwebco",
+  "roster_version": "2026-09-30",
+  "desk_channel_id": "4d78b294-5b65-46a9-bec9-86cdbc54aa3e",
+  "gateway_url": "https://desk.swcstudio.space",
+  "seats": {
+    "LEAD": {
+      "bot_id": "bot-00-programming-lead",
+      "uuid": "8b8edded-d0ac-4dc7-ab89-d13ed150e656",
+      "in_channel": true
+    },
+    "SYSTEMS": {
+      "bot_id": "bot-01-systems-backend",
+      "uuid": "cfb754de-5850-4c33-8329-eceaf8b8b508",
+      "in_channel": true
+    },
+    "WEB": {
+      "bot_id": "bot-02-web-edge",
+      "uuid": "25ca6685-cc8a-4223-bacb-6122eb02da54",
+      "in_channel": true
+    },
+    "ANDROID": {
+      "bot_id": "bot-03-android",
+      "uuid": "8af7effc-c418-400f-97ad-76eb6b9a5a6e",
+      "in_channel": true
+    },
+    "IOS": {
+      "bot_id": "bot-04-ios",
+      "uuid": "a2d933ec-c6cf-43b7-a060-bec226475fb6",
+      "in_channel": true
+    },
+    "INFRA": {
+      "bot_id": "bot-05-infrastructure",
+      "uuid": "21cd1b39-9dca-4f8c-8de0-95d8e518ad1a",
+      "in_channel": true
+    },
+    "QUALITY": {
+      "bot_id": "bot-06-quality-security",
+      "uuid": "c72f1ddf-893e-4da2-9fd3-5f73e307072b",
+      "in_channel": false
+    }
+  }
+}

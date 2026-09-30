@@ -1054,3 +1054,63 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | `docs/desk-operating-model.md` | Where the loop sits in the desk flow |
 | `contracts/tool-rosters/_core.yaml` | The eight core tools and their schemas (QUALITY) |
 | `ownership.yaml` | `skills/desk-bootstrap/**` → bot-00; `skills/**` → bot-06 |
+
+---
+
+## SPE-5715 — lease CAS + drift_scan: current wiring and the gap
+
+**LEAD's own audit, written before touching anything, because the ticket's premise did not match
+what this repository can show.** SPE-5715 asked to replace stubbed lease heartbeat/reap with live
+`graph_claim` / `graph_heartbeat` / `graph_complete` calls and to gate every claim on
+`coord_drift_scan(repo)`. Here is what a full read of this repo and its own substrate
+documentation actually supports, cited so the next seat does not have to re-derive it.
+
+**Already live, not a stub.** `graph_state` in
+`services/desk-gateway/src/desk_gateway/tools/lead.py` (the backend for the `desk_graph_state` tool
+in `contracts/tool-rosters/lead.yaml`) already calls the real substrate tools `graph_claim`,
+`graph_release` and `graph_complete` through `Substrate.call_tool`
+(`services/desk-gateway/src/desk_gateway/upstreams.py`). There is no stub heartbeat/reap
+application code in this repository to replace — PR #38's stubs are the *infrastructure* layer
+below this, and they are unfinished for a different reason, next.
+
+**Not live, and not this repo's to invent.**
+
+- **No `graph_heartbeat` tool exists.** `docs/upgrade-plan-desk-v2.md`'s own list of the 13
+  substrate-mcp tools names `graph_claim`, `graph_release` and `graph_complete` and nothing called
+  `graph_heartbeat`. PR #38's `infra/lease-heartbeat/desk-lease-heartbeat.{service,timer}` are
+  systemd stubs whose `ExecStart` names a `services/desk-lease-heartbeat` entrypoint that does not
+  exist in this repository — `infra/lease-heartbeat/LEASE-HEARTBEAT.md` §4 and §5 say so directly
+  and list it as the open blocker on SYSTEMS. Renewal semantics (what a lease *is*, CAS, TTL) are
+  documented there as SYSTEMS' to build, not INFRA's or LEAD's to assume.
+- **No `coord_drift_scan` implementation exists.** `infra/lease-heartbeat/DRIFT-SCAN.md` documents
+  `coord.drift_scan(repo)` as a **proposed** interface owned by SYSTEMS, with three open design
+  questions still unanswered in its §5 (raw snapshot vs. reduced verdict; cached vs. on-demand;
+  which reachability targets). No drift-kind enum or taxonomy exists anywhere in this repository —
+  not in `contracts/tool-rosters/`, not in the gateway source, not in either INFRA doc. There is
+  nothing named to gate a claim on, and nothing named to assert a smoke test against.
+- `agent-substrate` (said elsewhere to already carry `lease.ts`, `IndexStore` and `coord_drift_scan`
+  as merged) is a separate repository this session has no read access to — GitHub tool access here
+  is scoped to `swcstudiospace/programming-desk` only, and no local checkout exists. Whatever is
+  true there, it has not propagated into this repo's own docs or contracts as of `443ec60` (the
+  `main` tip at audit time): every in-repo source above still describes the heartbeat entrypoint and
+  `coord.drift_scan` as unbuilt SYSTEMS work.
+
+**What this means for the loop above.** §1's five phases (brief/act/memory_write/events_emit/
+handoff) do not include a claim/heartbeat/drift-scan step today, and this section does not add one:
+inventing a `coord_drift_scan` call or a `graph_heartbeat` call against tools that do not exist
+would validate against nothing and could not be verified per `skills/verification-receipts`. A
+claim/release/complete turn already goes through `desk_graph_state` exactly as documented in
+`contracts/tool-rosters/lead.yaml`; there is no drift gate to insert ahead of it until SYSTEMS
+publishes `coord_drift_scan` and its drift-kind vocabulary as a contract (`contracts/tool-rosters/`
+is QUALITY's, per `docs/cross-bot-protocol.md`).
+
+**Smoke coverage.** `fixtures/lease-cas-drift-smoke.py` proves exclusivity (two concurrent
+`graph_claim` calls on one node, live, against a real substrate-mcp) when `DESK_LEASE_SMOKE_LIVE`,
+`SUBSTRATE_URL` and `SUBSTRATE_TOKEN` are all configured, and skips cleanly with a printed reason
+otherwise. It does not attempt the expired-lease or tip/event-disagreement cases: neither a
+heartbeat tool nor `coord_drift_scan` exists to exercise, and asserting against an invented
+drift-kind name would be worse than not asserting at all.
+
+**Escalated to LEAD, not patched here.** Per this ticket's own instruction, a blocking gap in
+`agent-substrate` is SYSTEMS'/LEAD's to close, never a reason for this seat to invent a signature or
+a drift kind. See the SPE-5715 pull request description for the specific asks.

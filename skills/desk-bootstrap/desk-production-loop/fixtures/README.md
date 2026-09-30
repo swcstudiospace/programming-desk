@@ -71,3 +71,19 @@ python3 $F/check-loop-acks.py $F/loop-acks-malformed.json        # 1, and not a 
 `verify.sh` runs all five and asserts both the exit code and the absence of a traceback, so the
 acknowledgement rules cannot decay into prose again. `loop_acks` is optional: a receipt for a turn
 that never went degraded records nothing and passes.
+
+---
+
+## `lease-cas-drift-smoke.py` — SPE-5715
+
+Not run by `verify.sh` — it needs a live substrate-mcp and a real bearer token, neither of which
+belongs in a check that runs with no credentials and no network. Proves exclusivity (two concurrent
+`graph_claim` calls on one node, exactly one holder) against a real substrate when
+`DESK_LEASE_SMOKE_LIVE=1`, `SUBSTRATE_URL` and `SUBSTRATE_TOKEN` are all set; skips cleanly with a
+printed reason otherwise. It does not attempt the expired-lease or tip/event-disagreement cases —
+see the script's own docstring and the "SPE-5715" section of `../SKILL.md` for why neither tool
+exists yet to exercise.
+
+```sh
+python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py   # 0, SKIP printed, no env set
+```

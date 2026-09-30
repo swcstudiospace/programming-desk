@@ -1,0 +1,159 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "quality-security-md-precommit-contracts-skeleton",
+  "receipt_kind": "quality_surface_addition",
+  "recorded_at": "2026-09-30T00:00:00+00:00",
+  "repo": "swcstudiospace/programming-desk",
+  "branch": "claude/security-precommit-contracts-gjqopu",
+  "grok_run": "20260929T184100Z-bde9f437",
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
+  "summary": "Adds three QUALITY-owned surfaces that ownership.yaml and ARCHITECTURE.md already reference but that did not exist: SECURITY.md, .pre-commit-config.yaml, and the contracts/ skeleton with an openapi.yaml stub so G-4 has a surface to watch. Documentation and configuration only — no gate script was changed, weakened or excluded.",
+  "scope": {
+    "added": [
+      "SECURITY.md",
+      ".pre-commit-config.yaml",
+      "openapi.yaml",
+      "contracts/README.md",
+      "contracts/api/README.md",
+      "contracts/events/README.md",
+      "contracts/changes/README.md",
+      "contracts/changes/TEMPLATE.yaml.example",
+      "contracts/changes/archive/.gitkeep",
+      "contracts/changes/contracts-skeleton-v0.1.0.yaml"
+    ],
+    "modified": [],
+    "gate_scripts_touched": []
+  },
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .pre-commit-config.yaml SECURITY.md openapi.yaml contracts/README.md contracts/api/README.md contracts/events/README.md contracts/changes/README.md contracts/changes/TEMPLATE.yaml.example contracts/changes/archive/.gitkeep contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "    contracts/changes/TEMPLATE.yaml.example\n    contracts/changes/archive/.gitkeep\n    contracts/changes/contracts-skeleton-v0.1.0.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .pre-commit-config.yaml SECURITY.md openapi.yaml contracts/README.md contracts/api/README.md contracts/events/README.md contracts/changes/README.md contracts/changes/TEMPLATE.yaml.example contracts/changes/archive/.gitkeep contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 10 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files .pre-commit-config.yaml SECURITY.md openapi.yaml contracts/README.md contracts/api/README.md contracts/events/README.md contracts/changes/README.md contracts/changes/TEMPLATE.yaml.example contracts/changes/archive/.gitkeep contracts/changes/contracts-skeleton-v0.1.0.yaml --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files openapi.yaml",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "  A contract change needs a change document declaring whether it is breaking,\n  its version, its consumers, and their acknowledgements.\n  See docs/cross-bot-protocol.md §2"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 4.9,
+      "output_tail": "90 passed in 4.65s"
+    },
+    {
+      "cmd": "pre-commit validate-config .pre-commit-config.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "(no output; exit 0 = .pre-commit-config.yaml is a valid config)"
+    },
+    {
+      "cmd": "pre-commit run --all-files",
+      "exit_code": 1,
+      "duration_s": 5.2,
+      "output_tail": "G-3 — committed secrets..................................................Failed\nG-1 — ownership manifest self-check......................................Passed\nGate self-test (ci/tests)................................................Passed\nG-3 FAIL — 12 potential secret(s), all in ci/tests/test_gates.py"
+    },
+    {
+      "cmd": "pre-commit run --hook-stage manual g4-contract-preflight --all-files",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "  A contract change needs a change document declaring whether it is breaking,\n  its version, its consumers, and their acknowledgements.\n  See docs/cross-bot-protocol.md §2"
+    },
+    {
+      "cmd": "bash ci/hooks/install.sh && pre-commit install",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "Installed: .git/hooks/pre-commit -> ci/hooks/pre-commit\nRunning in migration mode with existing hooks at .git/hooks/pre-commit.legacy\nUse -f to use only pre-commit.\npre-commit installed at .git/hooks/pre-commit"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml still validates after the change (7 bots, 90 rules) — no new rule was needed; SECURITY.md, .pre-commit-config.yaml, contracts/** and openapi.yaml were already mapped to bot-06-quality-security",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1 PASS — all 10 added paths resolve to bot-06-quality-security; no foreign path and no unowned path in this change",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3 PASS — no secrets in the 10 added files. The SECURITY.md and openapi.yaml examples use placeholder shapes, not credential material",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4 PASS — the contract surfaces this change creates are covered by contracts/changes/contracts-skeleton-v0.1.0.yaml (non-breaking, v0.1.0, semantic_changes: [])",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-4 still blocks a contract surface touched without a change document — negative control, run on openapi.yaml with no --change, exits 1",
+      "evidence_command_index": 4,
+      "expects_failure": true
+    },
+    {
+      "claim": "The gate self-test suite still passes unchanged: 90 tests, 0 failures. No gate behaviour was altered by this change",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": ".pre-commit-config.yaml is a valid pre-commit configuration (pre-commit 4.6.2)",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The three pre-commit-stage hooks execute for real: G-1 manifest self-check and the gate self-test pass; the G-3 hook fails only on ci/tests/test_gates.py, which holds the synthetic fixtures the scanner is tested against",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    },
+    {
+      "claim": "The manual-stage G-4 pre-flight hook runs and reports the missing change document as designed — advisory at commit time, blocking in CI",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "Installing the framework config over the native hook chains rather than displaces it: pre-commit enters migration mode, moves the native hook to .git/hooks/pre-commit.legacy and keeps running it, so G-3 coverage cannot be lost by installing this config. The three commits on this branch each ran the native scan first and the framework hooks after.",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "This receipt's own content is not covered by command[2]; it did not exist when that scan ran. It is scanned by the pre-commit hook when committed, and by G-3 in CI against the base ref.",
+    "`pre-commit install -f`, which opts out of the legacy chaining, was not exercised. The default chaining path was: both hooks were installed and all three commits on this branch ran through them. The -f behaviour is stated in the config header from pre-commit's own documented flag, not from an observed run here.",
+    "The G-3 hits in ci/tests/test_gates.py were NOT fixed. That file matches `**/*.py` with no later override, so it is owned by bot-01-systems-backend and out of QUALITY's write scope. The correct fix is a per-line `# pragma: allowlist secret` with a reason, by its owner. No exclude: entry was added here, because excluding the path would also hide a real credential added to it later.",
+    "No CI run observed. .github/workflows/ does not exist in this repository; ci/.github/workflows/gates.yml is a template to be copied, and copying it is INFRA's call, not QUALITY's.",
+    "The openapi.yaml stub defines no endpoint, so no client was generated from it and no consumer acknowledged it. acknowledgements is [] on purpose rather than pre-filled — see the change document.",
+    "CI selects a change document with `ls -1 contracts/changes/*.yaml | head -n1`, which picks the alphabetically first file rather than the one this PR proposes. With one active document that resolves correctly; contracts/changes/README.md documents the archive/ convention that keeps it correct. The workflow itself was not changed — Actions are out of scope for this change.",
+    "Did not merge, did not undraft, and did not push to main.",
+    "The .pre-commit-config.yaml header was corrected after this observation. An earlier draft claimed installing the framework hook REPLACES the native one; it does not, and the commands above record what actually happens.",
+    "This receipt was committed with `git add -f`. .gitignore line 5 ignores .receipts/**/*.json, yet all 22 existing receipts are tracked and both G-2 and the CI template require a committed receipt — so -f is how the existing ones got in, not a workaround invented here. Not fixed in this change: it is a one-line .gitignore question affecting every seat, and .gitignore matches no pattern in ownership.yaml, so G-1 reports it UNOWNED and any edit to it needs a manifest rule first."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS — 10 files, all bot-06-quality-security. No manifest change required.",
+    "G-2": "This receipt. approved_by intentionally absent — see stamp_note.",
+    "G-3": "PASS on the change. Pre-existing fixture findings in ci/tests/test_gates.py are recorded above, not suppressed.",
+    "G-4": "PASS with contracts/changes/contracts-skeleton-v0.1.0.yaml. Negative control confirms the gate still fails without one.",
+    "G-5": "Not a deployment. No rollback plan required.",
+    "G-6": "No destructive operation. Every path in this change is newly added; nothing was deleted or rewritten."
+  },
+  "stamp_note": "approved_by is intentionally absent. This is QUALITY's own work, and G-2 rejects approved_by == bot as self-approval. An independent seat (LEAD or the human owner) stamps it at review. G-2 will FAIL on this receipt until then, which is the gate behaving correctly rather than a defect to work around.",
+  "explicit": "Draft pull request only. Did not merge, did not undraft, did not push to main.",
+  "observations": [
+    "`.gitignore` is UNOWNED under the current manifest (verified: check_ownership.py --bot bot-06-quality-security --files .gitignore exits 1 with UNOWNED). Raised, not fixed — adding a rule is a manifest change beyond the scope of this one."
+  ]
+}

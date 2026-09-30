@@ -1,0 +1,47 @@
+{
+  "task_id": "infra-r1b-ragflow-mcp-json-2026-09-30",
+  "bot": "bot-05-infrastructure",
+  "started_at": "2026-09-30T02:30:00Z",
+  "completed_at": "2026-09-30T04:23:52Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "Add RAGflow HTTP MCP server to .mcp.json with Bearer ${RAGFLOW_MCP_API_KEY}. Runner migration intentionally lives only on PR #32.",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import json;from pathlib import Path;d=json.loads(Path('.mcp.json').read_text());r=d['mcpServers']['ragflow'];assert r['type']=='http';assert '${RAGFLOW_MCP_API_KEY}' in r['headers']['Authorization'];print('ragflow mcp entry ok')\"",
+      "exit_code": 0,
+      "observed": "ragflow mcp entry ok"
+    },
+    {
+      "cmd": "python3 -c \"from pathlib import Path; files=['.github/workflows/gates.yml','.github/workflows/gates-template-sync.yml','ci/.github/workflows/gates.yml'];\nfor f in files:\n t=Path(f).read_text();\n assert 'runs-on: ubuntu-latest' in t, f;\n assert '[self-hosted' not in t, f;\nprint('workflows match main ubuntu-latest (no self-hosted on this PR)')\"",
+      "exit_code": 0,
+      "observed": "workflows match main ubuntu-latest (no self-hosted on this PR)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": ".mcp.json declares ragflow HTTP MCP with Bearer ${RAGFLOW_MCP_API_KEY} placeholder (no literal secret)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "This PR does not change Quality Gates runner labels \u2014 workflows remain ubuntu-latest as on main (self-hosted lives on #32 only)",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [
+    "Claude Cloud Session env still needs RAGFLOW_MCP_API_KEY before tools appear in cloud sessions",
+    "Org GitHub-hosted Actions billing still blocks ubuntu-latest checks on this PR until #32 merges or billing is fixed"
+  ],
+  "files_changed": [
+    ".mcp.json",
+    ".receipts/bot-05-infrastructure/infra-r1b-ragflow-mcp-json-2026-09-30.json",
+    ".receipts/bot-05-infrastructure/infra-r1b-ragflow-mcp-json-2026-09-30.md"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this PR / remove the ragflow block from .mcp.json.",
+  "approvals": [],
+  "approval_requested_from": "bot-06-quality-security",
+  "destructive": false,
+  "secrets_committed": false,
+  "approved_by": "bot-06-quality-security",
+  "approval_note": "QUALITY CLEAR_WITH_WAIVERS Path B tip stamp @ 89ef894 per LEAD ticket 2026-09-30. Prior absence intentional until QUALITY stamped. Prefer Ove merge after #32 (self-hosted). No secrets."
+}

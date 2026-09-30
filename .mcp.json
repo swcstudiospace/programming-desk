@@ -6,6 +6,13 @@
       "headers": {
         "Authorization": "Bearer ${HINDSIGHT_MCP_API_KEY}"
       }
+    },
+    "ragflow": {
+      "type": "http",
+      "url": "https://ragflow-production-b573.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${RAGFLOW_MCP_API_KEY}"
+      }
     }
   }
 }

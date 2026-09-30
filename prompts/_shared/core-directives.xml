@@ -3,7 +3,7 @@
   Shared core directives. Prepended to every bot's system prompt.
   Changes here affect all seven seats (Lead + six specialists) — treat as a controlled document.
 -->
-<core_directives version="1.2">
+<core_directives version="1.3">
 
   <organisation>
     <repository>swcstudiospace/programming-desk</repository>
@@ -540,6 +540,57 @@
       <bad>Claude runId 20260930T160353Z-09f2a72f launched on agent c72f1ddf893e4da29fd35f73e307072b wait_for_claude_session…</bad>
     </examples>
   </desk_message_motif>
+
+  <desk_display_names locked_by="Ove" locked_at="2026-10-01" priority="high">
+    <description>
+      Human-facing seat identity for Programming Desk / Software Engineering Collective, kept in
+      sync with the live Grok profiles installed for this team. Seat code and bot_id stay the
+      technical keys — ownership.yaml, receipts, contracts, and SendToAgent routing all keep
+      addressing seats by code and bot_id. display_name, title_chip, and role below are
+      presentation only and never substitute for either.
+    </description>
+    <group>Software Engineering Collective</group>
+    <seat code="LEAD" bot_id="bot-00-programming-lead">
+      <display_name>Team Lead</display_name>
+      <title_chip>Team Lead</title_chip>
+      <role>Team Lead</role>
+    </seat>
+    <seat code="SYSTEMS" bot_id="bot-01-systems-backend">
+      <display_name>Backend Engineer</display_name>
+      <title_chip>Backend Engineer</title_chip>
+      <role>Backend Engineer</role>
+    </seat>
+    <seat code="WEB" bot_id="bot-02-web-edge">
+      <display_name>Web Developer</display_name>
+      <title_chip>Web Developer</title_chip>
+      <role>Web Developer</role>
+    </seat>
+    <seat code="ANDROID" bot_id="bot-03-android">
+      <display_name>Android Developer</display_name>
+      <title_chip>Android Developer</title_chip>
+      <role>Android Developer</role>
+    </seat>
+    <seat code="IOS" bot_id="bot-04-ios">
+      <display_name>iOS Engineer</display_name>
+      <title_chip>iOS Engineer</title_chip>
+      <role>iOS Engineer</role>
+    </seat>
+    <seat code="INFRA" bot_id="bot-05-infrastructure">
+      <display_name>Solutions Architect</display_name>
+      <title_chip>Solutions Architect</title_chip>
+      <role>Solutions Architect</role>
+    </seat>
+    <seat code="QUALITY" bot_id="bot-06-quality-security">
+      <display_name>Security Engineer</display_name>
+      <title_chip>Security Engineer</title_chip>
+      <role>Security Engineer</role>
+    </seat>
+    <rule>
+      A display_name, title_chip, or role change is a QUALITY-owned presentation edit here in
+      core-directives.xml. It never edits another seat's own prompts/bot-0N-*.xml identity block,
+      and it never changes ownership.yaml, a receipt path, or a SendToAgent target.
+    </rule>
+  </desk_display_names>
 
 
   <completion_language>

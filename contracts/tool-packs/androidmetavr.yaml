@@ -27,7 +27,7 @@ title: android.tools — capture / MetaVR bridge
 seats: [android]
 tools:
   - name: androidmetavr_logcat_capture
-    kind: read
+    kind: write
     gates: []
     description: >-
       Capture logcat to a file via `android.tools logcat_capture`. backend adb dumps via `adb
@@ -46,7 +46,7 @@ tools:
         backend: { type: string, enum: [adb, metavr], default: adb }
 
   - name: androidmetavr_screenshot
-    kind: read
+    kind: write
     gates: []
     description: >-
       Capture a screenshot to a file via `android.tools screenshot`. backend adb uses `adb
@@ -64,7 +64,7 @@ tools:
         backend: { type: string, enum: [adb, metavr], default: adb }
 
   - name: androidmetavr_ui_dump
-    kind: read
+    kind: write
     gates: []
     description: >-
       MetaVR-primary UI hierarchy dump via `android.tools ui_dump`. Resolves the documented

@@ -101,5 +101,6 @@
     "Upstream adapters (Hindsight, RAGFlow, Greptime, Timescale, Dragonfly, Railway, Vercel, Greptile, Play, App Store Connect) are exercised only through their not_configured paths; no live upstream was reachable from the test run",
     "OAuth flow was driven in-process with httpx, not from a real Grok Bot 'Add MCP Server' card",
     "Loopback deployment on the VPS is smoke-tested (health, tools/list per seat, cross-seat 403) outside this receipt"
-  ]
+  ],
+  "approved_by": "bot-06-quality-security"
 }

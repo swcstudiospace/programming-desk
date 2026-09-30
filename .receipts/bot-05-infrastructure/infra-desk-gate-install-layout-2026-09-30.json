@@ -2,7 +2,7 @@
   "task_id": "infra-desk-gate-install-layout-2026-09-30",
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/desk-gate-install-layout",
-  "pull_request": null,
+  "pull_request": 34,
   "started_at": "2026-09-30T05:37:00Z",
   "completed_at": "2026-09-30T05:46:00Z",
   "summary": "Fix install layout for future DESK_GATE_USER (Greptile P1 4141126594): move desk checkout to /opt/programming-desk, create desk-gate system user, verify readable gates + executable venv python. Do NOT enable DESK_GATE_USER yet. config.py default path left to SYSTEMS (services/desk-gateway/**).",
@@ -29,8 +29,8 @@
     "install.sh creates desk-gate (nologin) and verifies read of ci/gates + execute of venv python without setting DESK_GATE_USER"
   ],
   "unverified": [
-    "Live VPS not re-installed in this PR — operator must rerun infra/desk-gateway/install.sh after merge",
-    "services/desk-gateway config.py still defaults repo_dir to /root/... — SYSTEMS should align default when ticketed; live env DESK_REPO_DIR wins after install",
+    "Live VPS not re-installed in this PR \u2014 operator must rerun infra/desk-gateway/install.sh after merge",
+    "services/desk-gateway config.py still defaults repo_dir to /root/... \u2014 SYSTEMS should align default when ticketed; live env DESK_REPO_DIR wins after install",
     "DESK_GATE_USER privilege drop still disabled by design until a follow-up enable ticket"
   ],
   "files_changed": [

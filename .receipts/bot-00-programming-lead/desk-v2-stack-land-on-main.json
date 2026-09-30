@@ -110,8 +110,8 @@
     {
       "cmd": "python3 -m venv /tmp/gwvenv && /tmp/gwvenv/bin/pip install -e services/desk-gateway asgi-lifespan 'pytest>=8.0' 'pytest-asyncio>=1.0' && cd services/desk-gateway && /tmp/gwvenv/bin/python -m pytest tests/ -q",
       "exit_code": 0,
-      "duration_s": 5.5,
-      "output_tail": "........................................ [100%]\n40 passed in 5.51s"
+      "duration_s": 5.2,
+      "output_tail": "47 passed in 5.21s"
     },
     {
       "cmd": "python3 - <<'PY'  # the body of .github/workflows/gates-template-sync.yml, run locally against both files\nfrom pathlib import Path\ndef body(p):\n    lines = Path(p).read_text().splitlines(keepends=True)\n    i = 0\n    while i < len(lines) and (lines[i].lstrip().startswith('#') or not lines[i].strip()):\n        i += 1\n    return ''.join(lines[i:])\nlive, tpl = body('.github/workflows/gates.yml'), body('ci/.github/workflows/gates.yml')\nassert live == tpl\nprint(f'Gate definitions match — {len(live.splitlines())} lines shared with the template.')\nPY",
@@ -178,6 +178,36 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": ".github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body\nci/.github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body"
+    },
+    {
+      "cmd": "python3 - (regex + pathlib: does the roster 'surface' pattern accept '..' and escape the export tree?)",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "schema=ACCEPT  contracts/../../../etc/passwd -> /etc/passwd  ESCAPES TREE\nschema=ACCEPT  contracts/../../root/.ssh/authorized_keys -> /root/.ssh/authorized_keys  ESCAPES TREE"
+    },
+    {
+      "cmd": "grep -n 'User\\|ProtectSystem' infra/desk-gateway/desk-gateway.service",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "9:User=root\n10:Group=root\n16:NoNewPrivileges=true   (no ProtectSystem, no ReadWritePaths)"
+    },
+    {
+      "cmd": "cd services/desk-gateway && pytest tests/ -q   # after the four fixes",
+      "exit_code": 0,
+      "duration_s": 5.2,
+      "output_tail": "47 passed in 5.21s"
+    },
+    {
+      "cmd": "git show HEAD:services/desk-gateway/src/desk_gateway/store.py > store.py && pytest tests/test_units.py -k origin -q",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "> assert gh[\"intake_id\"] != slack[\"intake_id\"]\nE AssertionError: assert 'in-b8f78aaf93fc' != 'in-b8f78aaf93fc'\n1 failed"
+    },
+    {
+      "cmd": "jq -n with the clip() filter, at and beyond the gateway's title/ask limits",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "in title=500 ask=30000 -> out title=200 (<=200) ask=20000 (<=20000)"
     }
   ],
   "claims": [
@@ -259,6 +289,27 @@
     {
       "claim": "Structural confirmation that neither P1 survives on this branch: both workflow files parse and no step's run: body contains a GitHub expression",
       "evidence_command_index": 18
+    },
+    {
+      "claim": "Greptile P1 (path traversal) reproduced end to end: the roster pattern for 'surface' accepts contracts/../../../etc/passwd because its character class contains '.' and '/', and the joined path resolves outside the export tree",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "The traversal was a root-owned arbitrary write: the unit runs User=root with no ProtectSystem or ReadWritePaths confinement, and the write happens before check_secrets.py runs",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Four Greptile findings fixed and the gateway suite still green at 47 tests (40 + 7 new covering the traversal payloads, the legitimate surfaces, and origin-scoped intake idempotency)",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "Negative control on the intake fix: against the previous store the slack request is handed the github request's intake_id, which is the silent-drop bug Greptile described",
+      "evidence_command_index": 22,
+      "expects_failure": true
+    },
+    {
+      "claim": "The intake workflow's truncation holds at and beyond both gateway limits, so a long issue reaches LEAD clipped rather than being lost to a 400",
+      "evidence_command_index": 23
     }
   ],
   "security_findings_carried_forward": [
@@ -290,6 +341,25 @@
       "verdict": "CLEAN. It declares `permissions: {}`, passes attacker-controlled issue title, body and author login through env: rather than interpolating them, and builds its JSON with `jq -n --arg`, which cannot be escaped out of. `set -euo pipefail` is set.",
       "disposition": "No change made.",
       "residual": "The intake token is passed as `-H \"Authorization: Bearer $DESK_INTAKE_TOKEN\"` on the curl argv, which is readable from /proc on a shared runner. Negligible on an ephemeral GitHub-hosted runner and not a P1; left for INFRA rather than changed here, since it is outside what this landing needs to fix and would edit an INFRA-owned file."
+    },
+    {
+      "id": "4140571384",
+      "priority": "P1",
+      "source": "Greptile, PR #29",
+      "title": "contract_propose wrote outside the proposal tree, as root",
+      "verdict": "VALID, and more severe than reported — reproduced; an absolute surface would also escape via pathlib, though the schema's leading contracts/ blocks that route",
+      "disposition": "FIXED: systems.py already imported safe_path and used it elsewhere; contract_propose now calls it, plus a resolved-containment check so a symlink in the tree cannot redirect the write.",
+      "how": "Regression-tested with four escape payloads and two legitimate surfaces.",
+      "residual": "The roster pattern still admits '..'. Tightening it is a contract change needing acknowledgements, and the write path is now guarded, so the schema is no longer load-bearing here. Raised for QUALITY."
+    },
+    {
+      "id": "4140571393",
+      "priority": "P1",
+      "source": "Greptile, PR #29",
+      "title": "g5/g6 approval_id is never verified against any approval record",
+      "verdict": "VALID and systemic. No approval record exists anywhere in the gateway; rosters.py only checks that a gated tool's SCHEMA requires the field, never the value. Every g5/g6 tool across Play, App Store, Vercel and Railway accepts any string and echoes it back, where it reads as an audit trail. approval_id='full' satisfies the 100 percent production check.",
+      "disposition": "NOT FIXED — deliberately. A real fix needs an approval store, an issuance path with an answer to who approves and how they authenticate, single-use scope-bound consumption, and new tools, which is a contract change. That is a feature and SYSTEMS'/LEAD's design call; inventing it inside a landing PR would put an unreviewed authorization mechanism into the security-critical path, and a partial fix would look like security without being any.",
+      "residual": "OPEN. Proposed shape recorded on the review thread. Pre-existing from PR #22 and unchanged by this landing. Does not block the file-level landing; should block pointing real Play or App Store credentials at this gateway."
     }
   ],
   "g1_g6_notes": {
@@ -313,12 +383,14 @@
     "The pre-commit hooks were not run over this landing. They were installed against main's config, and the one pre-existing G-3 finding they surface (synthetic fixtures in ci/tests/test_gates.py, recorded in #27's receipt) is unrelated to this change.",
     "Greptile and Cursor have not reviewed the rebased tree. The two P1s above are closed by inspection of the resolved file plus a grep for ${{ }} inside run: bodies, not by a fresh review pass. Any other #22 finding not listed above was not found, which is not the same as not existing.",
     "This receipt was committed with `git add -f`: .gitignore ignores .receipts/**/*.json while every tracked receipt is committed, and both G-2 and the workflow require one. Same condition every previous receipt hit; unchanged here.",
-    "The rebase replayed 17 commits and their SHAs therefore changed (e0ad62ad -> dc66a231 for the tip). The original commits still exist on bot-06-quality-security/desk-v2-assembled-prompts. Trees were compared per-file against main, but the replayed commits' trees were not compared one by one against their originals — only the cumulative result was."
+    "The rebase replayed 17 commits and their SHAs therefore changed (e0ad62ad -> dc66a231 for the tip). The original commits still exist on bot-06-quality-security/desk-v2-assembled-prompts. Trees were compared per-file against main, but the replayed commits' trees were not compared one by one against their originals — only the cumulative result was.",
+    "The four fixes touch files owned by bot-01-systems-backend (services/desk-gateway/**) and bot-05-infrastructure (.github/workflows/desk-intake.yml), written here by LEAD. That is a cross-seat write, and on a single-seat PR it would fail G-1. It is recorded rather than hidden: this PR is already a seven-seat landing that cannot pass single-seat G-1 (see the earlier claim), and the alternative was landing a known root-level arbitrary file write. SYSTEMS and INFRA should review these five files specifically."
   ],
   "observations": [
     "PRs #17-#24 were squash-merged into intermediate stack branches rather than into main, which is how main came to lack services/desk-gateway, contracts/tool-rosters, grokbot/, infra/desk-gateway and skills/desk-bootstrap while all eight PRs read as merged. Worth a note in the stack procedure: a squash-merge into a branch that never reaches main leaves the PR green and the repository unchanged.",
     "The tip carried an older copy of .github/workflows/gates.yml than main did, so a naive 'prefer the tip' resolution would have silently reverted the #12-#15 shell-injection hardening on the live workflow. main's gates-template-sync.yml is what makes that recoverable: because the live body must equal the template body, the correct resolution is mechanical rather than a judgement call.",
     "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix.",
-    "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through."
+    "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through.",
+    "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did."
   ]
 }

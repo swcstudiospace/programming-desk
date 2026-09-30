@@ -1,0 +1,123 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "spe-5160-android-roster-companion",
+  "branch": "bot-06-quality-security/spe-5160-android-roster-companion",
+  "grok_run": "20260930T160150Z-fcf3850e",
+  "repo": "swcstudiospace/programming-desk",
+  "companion_to": "PR #47 bot-03-android/spe-5160-android-tools-metavr, tip a38454de6dab84124b7be8f99d64418d9d12224f",
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
+  "summary": "QUALITY companion to Android PR #47: appends 9 desk_android_* tools wrapping android/tools (local adb/gradle + MetaVR tool-id bridge) to contracts/tool-rosters/android.yaml, and a matching G-4 non-breaking change document. android/** was not touched. G-7 (desk integrity) FAILS on the resulting roster — see blocker below.",
+  "scope": {
+    "added": [
+      "contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      ".receipts/bot-06-quality-security/spe-5160-android-roster-companion.json"
+    ],
+    "modified": [
+      "contracts/tool-rosters/android.yaml"
+    ],
+    "android_paths_touched": []
+  },
+  "commands": [
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-rosters/android.yaml')); print(len(d['tools']), d['version'])\"",
+      "exit_code": 0,
+      "output_tail": "16 1.1.0"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml'))\"",
+      "exit_code": 0,
+      "output_tail": "parsed OK, change_id=spe-5160-android-local-tools-v1.1.0"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files contracts/tool-rosters/android.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files contracts/tool-rosters/android.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-rosters/android.yaml --change contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — spe-5160-android-local-tools-v1.1.0: non-breaking, v1.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-rosters/android.yaml",
+      "exit_code": 1,
+      "output_tail": "G-4 FAIL — contract surfaces changed but no change document supplied."
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 1,
+      "output_tail": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) — must be within [10, 15]\nG-7 FAIL — desk integrity: 1 problem(s)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "android.yaml parses as valid YAML and now carries 16 tools (7 pre-existing + 9 new desk_android_* tools), version bumped 1.0.0 -> 1.1.0",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The new G-4 change document contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml is valid YAML",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ownership.yaml manifest still validates (7 bots, 103 rules) — no manifest edit was needed",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1 PASS: all 3 files this change adds/modifies resolve to bot-06-quality-security (contracts/tool-rosters/**, contracts/changes/**, .receipts/bot-06-quality-security/** are all QUALITY-owned per ownership.yaml)",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3 PASS: no secrets in the two contract files touched",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 PASS: the change document declares surface contracts/tool-rosters/android.yaml, breaking: false, version 1.1.0, previous_version 1.0.0, semantic_changes: [] — covers the roster edit",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-4 negative control: the same roster edit with no --change supplied still fails as designed",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "BLOCKER — G-7 (desk integrity) FAILS on this change as specified: the work order's 9 additional tools push android.yaml to 16 own tools (24 effective with the 8 core tools), but contracts/README.md and docs/upgrade-plan-desk-v2.md §11 cap every seat roster at [10, 15] effective tools, and android.yaml was already at the 15-tool ceiling (8 core + 7 own) before this change. This is enforced by ci/gates/check_desk_integrity.py and by ci/tests/test_gates.py::TestG7DeskIntegrity (including a test literally named test_roster_with_sixteen_tools_blocked). The files are written exactly as the work order specifies; CI will not go green until this is resolved.",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "G-7 resolution was not attempted in this change: the work order names contracts/tool-rosters/android.yaml as the only in-scope surface file, and android/** (where a tool-packs alternative would live under contracts/tool-packs/, per contracts/README.md's 'Application-specific bundles of at most five tools ... loaded per ticket') is explicitly out of scope and not owned by this seat's task. A fix needs either: (a) moving some/all 9 tools to a new contracts/tool-packs/android-*.yaml pack loaded via desk_app_tools_load instead of a permanent roster addition, or (b) a deliberate, reviewed change to the [10,15] cap in check_desk_integrity.py and its accompanying doc/test updates — both are scope/architecture decisions for LEAD or the human owner, not a QUALITY-seat call to make unilaterally on this branch.",
+    "No CI run observed on this branch — draft PR only, not pushed to main.",
+    "ci/tests/test_gates.py full suite was not re-run against this exact diff in this receipt (pytest not installed in a clean venv at receipt time for this pass); the G-7 CLI invocation above is the direct, authoritative reproduction of what that suite's TestG7DeskIntegrity class checks.",
+    "The pre-existing contracts/changes/ directory already holds two active *.yaml documents (contracts-skeleton-v0.1.0.yaml and desk-v2-tool-rosters-v1.yaml, both already merged to main) that per contracts/changes/README.md's 'one active document at a time' convention should have been archived. This is a pre-existing condition on main, not introduced by this change, and archiving them is out of this task's file scope (not one of the three files this work order authorizes). Direct --change invocation above avoids the ambiguity for this receipt's own verification; ci/hooks/g4-preflight.sh would currently refuse with 'more than one active change document' if run unqualified on main."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS — 3 files, all bot-06-quality-security.",
+    "G-2": "This receipt.",
+    "G-3": "PASS — no secrets in the 2 contract files.",
+    "G-4": "PASS with the new change document; negative control confirms the gate still fails without one.",
+    "G-5": "Not a deployment. No rollback plan required.",
+    "G-6": "No destructive operation. Nothing deleted or rewritten; android.yaml is appended to, existing tools kept verbatim.",
+    "G-7": "FAIL — see BLOCKER claim above. Reproduced directly with ci/gates/check_desk_integrity.py."
+  },
+  "stamp_note": "approved_by intentionally omitted. This is QUALITY's own work on a contract surface it owns; G-2 rejects approved_by == bot as self-approval, and no Path B transfer/stamp was requested or performed on this branch. An independent seat or the human owner stamps it at review.",
+  "explicit": "Draft pull request only. Did not merge, did not undraft, did not push to main, did not edit android/** or any path outside contracts/tool-rosters/android.yaml, contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml and this receipt.",
+  "blocker": {
+    "gate": "G-7 (ci/gates/check_desk_integrity.py)",
+    "problem": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) — must be within [10, 15]",
+    "why_it_happened": "android.yaml was already at the 15-tool ceiling (8 core + 7 own) before this task. The work order specified appending 9 more tools directly to the permanent roster, which this receipt does exactly as specified, but that addition alone overflows the documented per-seat cap by 9 tools — no amount of within-file adjustment on this branch can fix it without either dropping tools the work order requires or moving them out of the roster file entirely.",
+    "not_fixed_because": "Both real fixes (a tool-pack instead of a roster addition, or a reviewed cap change) are outside the three files this task authorizes and outside bot-06-quality-security's unilateral call — the cap and its rationale live in contracts/README.md and docs/upgrade-plan-desk-v2.md §11, which this seat does not get to override on its own branch.",
+    "recommendation": "LEAD/human decision needed: either (1) split the 9 tools into a contracts/tool-packs/android-tools.yaml pack (at most 5 tools, loaded per-ticket via desk_app_tools_load, per contracts/README.md's existing tool-packs section), or (2) explicitly raise the per-seat roster cap with a reviewed change to ci/gates/check_desk_integrity.py + ci/tests/test_gates.py + contracts/README.md's table, or (3) reduce this change to at most 8 of the 9 tools so android.yaml lands at exactly 15."
+  }
+}

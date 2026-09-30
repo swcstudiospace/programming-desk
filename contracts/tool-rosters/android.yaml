@@ -1,5 +1,5 @@
-# ANDROID roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-03-android.
-version: 1.0.0
+# ANDROID roster: core 8 + 16 = 24. Contract surface (QUALITY); consumer bot-03-android.
+version: 1.1.0
 seat: bot-03-android
 short: android
 endpoint: /mcp/android
@@ -113,3 +113,153 @@ tools:
         app: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
         task_id: { type: string, minLength: 3, maxLength: 120 }
         unload: { type: boolean, default: false }
+
+  # --- android.tools local/MetaVR bridge (SPE-5160, companion to PR #47) ------------------
+  # Wraps android/tools (local adb/gradle helpers + a documented-tool-id-only MetaVR bridge).
+  # emu_boot/install_apk/unit_test/instrumented_run act on a device or emulator; logcat_capture
+  # and screenshot take backend adb|metavr; ui_dump/ui_tap are MetaVR-primary wraps that resolve
+  # a documented tool id for the MetaVR MCP host to invoke rather than calling MCP themselves.
+
+  - name: desk_android_emu_boot
+    kind: write
+    gates: []
+    description: >-
+      Start (or, under dry_run, print the launch command for) an AVD emulator. dry_run never
+      spawns a process and never needs a device; a missing emulator binary or a spawn failure
+      is reported as skipped rather than raised.
+    backend: android.emu_boot
+    input:
+      type: object
+      additionalProperties: false
+      required: [avd]
+      properties:
+        avd: { type: string, minLength: 1, maxLength: 200 }
+        timeout_sec: { type: integer, minimum: 0, maximum: 600, default: 0 }
+        dry_run: { type: boolean, default: false }
+
+  - name: desk_android_adb_devices
+    kind: read
+    gates: []
+    description: List connected adb devices (`adb devices -l`) as structured text or JSON.
+    backend: android.adb_devices
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        as_json: { type: boolean, default: false }
+
+  - name: desk_android_install_apk
+    kind: write
+    gates: [g6]
+    description: >-
+      Install an APK onto a device with `adb install -r`. Destructive-class: approval_id is
+      required and echoed into the audit event. dry_run prints the adb argv and installs nothing.
+    backend: android.install_apk
+    input:
+      type: object
+      additionalProperties: false
+      required: [apk, approval_id]
+      properties:
+        apk: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        dry_run: { type: boolean, default: false }
+        approval_id: { type: string, minLength: 6, maxLength: 120 }
+
+  - name: desk_android_unit_test
+    kind: write
+    gates: []
+    description: >-
+      Run `./gradlew test` for a module. Prints a skip line and exits 0 when no Gradle wrapper
+      is present, so CI without a configured Android toolchain does not fail spuriously.
+    backend: android.unit_test
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        module: { type: string, maxLength: 300 }
+        gradle_args:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 200 }
+
+  - name: desk_android_instrumented_run
+    kind: write
+    gates: []
+    description: >-
+      Run an instrumented test component with `adb shell am instrument -w`. dry_run prints the
+      adb argv and runs nothing.
+    backend: android.instrumented_run
+    input:
+      type: object
+      additionalProperties: false
+      required: [component]
+      properties:
+        component: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        dry_run: { type: boolean, default: false }
+
+  - name: desk_android_logcat_capture
+    kind: read
+    gates: []
+    description: >-
+      Capture logcat to a file. backend adb dumps via `adb logcat`; backend metavr resolves the
+      documented device_logcat MetaVR tool id and reports it for the MetaVR MCP host to invoke —
+      this tool never calls MCP, the network or a metavr binary itself.
+    backend: android.logcat_capture
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        seconds: { type: integer, minimum: 1, maximum: 300, default: 10 }
+        backend: { type: string, enum: [adb, metavr], default: adb }
+
+  - name: desk_android_screenshot
+    kind: read
+    gates: []
+    description: >-
+      Capture a screenshot to a file. backend adb uses `adb screencap`; backend metavr resolves
+      the documented device_screenshot MetaVR tool id and reports it for the MetaVR MCP host to
+      invoke — this tool never calls MCP, the network or a metavr binary itself.
+    backend: android.screenshot
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        backend: { type: string, enum: [adb, metavr], default: adb }
+
+  - name: desk_android_ui_dump
+    kind: read
+    gates: []
+    description: >-
+      MetaVR-primary UI hierarchy dump. Resolves the documented ui_dump MetaVR tool id and
+      reports it for the MetaVR MCP host to invoke; the resolution message is written to out.
+    backend: android.ui_dump
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+
+  - name: desk_android_ui_tap
+    kind: write
+    gates: []
+    description: >-
+      MetaVR-primary UI tap. Resolves the documented ui_tap MetaVR tool id and reports it for
+      the MetaVR MCP host to invoke. Exactly one of resource_id or text is required to target
+      the tap; the backend rejects neither-or-both.
+    backend: android.ui_tap
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        serial: { type: string, maxLength: 120 }
+        resource_id: { type: string, minLength: 1, maxLength: 300 }
+        text: { type: string, minLength: 1, maxLength: 300 }

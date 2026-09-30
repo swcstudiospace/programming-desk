@@ -1,10 +1,16 @@
 # IOS roster: core 8 + 15 = 23. Contract surface (QUALITY); consumer bot-04-ios.
-# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): the 15 own tools below already
-# exceed ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 ceiling once summed with the
-# 8 core tools (23 effective). This is a disclosed, known G-7 failure — see the receipt at
-# .receipts/bot-06-quality-security/spe-5161-ios-roster-companion.json for the blocker and the
-# proposed follow-up (split desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise
-# ROSTER_MAX_TOOLS). Not resolved here: that follow-up is outside this change's file scope.
+# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): two disclosed, known blockers on
+# the 8 new desk_ios_* tools below, neither resolved in this change (both outside its 3-file
+# scope; see the receipt at .receipts/bot-06-quality-security/spe-5161-ios-roster-companion.json):
+#   1. CAPACITY (G-7): the 15 own tools already exceed ci/gates/check_desk_integrity.py's
+#      ROSTER_MAX_TOOLS=15 once summed with the 8 core tools (23 effective). Follow-up: split
+#      desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise ROSTER_MAX_TOOLS.
+#   2. BACKEND RESOLUTION: services/desk-gateway/src/desk_gateway/tools/resolve() imports
+#      desk_gateway.tools.<the part of `backend` before the dot> (see tools/__init__.py). The 8
+#      new tools use an `ios.*` backend prefix, but no desk_gateway/tools/ios.py module exists
+#      (the roster's 7 existing tools use `mobile.*`, which tools/mobile.py does implement).
+#      Calling any of the 8 new tools raises ModuleNotFoundError until that module is added.
+#      services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml), not QUALITY.
 version: 1.1.0
 seat: bot-04-ios
 short: ios
@@ -143,8 +149,11 @@ tools:
     description: >-
       Scan .entitlements and Info.plist files under a path on disk for entitlement keys and
       usage-description keys, or diff that inventory between diff_base and diff_head paths.
-      Filesystem-only and Linux-safe. Distinct from desk_entitlements_diff, which diffs two git
-      refs rather than two paths already checked out.
+      Requires either path, or both diff_base and diff_head; the gateway's schema validator
+      supports no conditional-required combinator (see services/desk-gateway/src/desk_gateway/
+      schema.py), so an incomplete call is rejected by the backend, not the schema. Filesystem-
+      only and Linux-safe. Distinct from desk_entitlements_diff, which diffs two git refs rather
+      than two paths already checked out.
     backend: ios.entitlements_scan
     input:
       type: object

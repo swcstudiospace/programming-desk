@@ -52,11 +52,17 @@
       "exit_code": 1,
       "duration_s": 13.5,
       "output_tail": "FAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_real_rosters_and_packs_pass\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_fixture_copy_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_prompt_source_with_placeholder_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_assembled_alias_under_prompts_is_checked_as_output\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_clean_template_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_missing_templates_dir_is_skipped_not_failed\n6 failed, 151 passed in 13.51s"
+    },
+    {
+      "cmd": "PYTHONPATH=services/desk-gateway/src python3 -c \"from desk_gateway.tools import resolve; resolve('ios.plist_lint')\"",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "ModuleNotFoundError: No module named 'desk_gateway.tools.ios'"
     }
   ],
   "claims": [
     {
-      "claim": "contracts/tool-rosters/ios.yaml and the new change document are valid YAML",
+      "claim": "contracts/tool-rosters/ios.yaml is valid YAML",
       "evidence_command_index": 0
     },
     {
@@ -88,11 +94,16 @@
       "claim": "the gate test suite's only failures on this branch are the six G-7 cases that assert the real rosters/packs/prompts pass structural checks, all failing for the same single root cause above (ios.yaml over ROSTER_MAX_TOOLS); no other test regressed",
       "evidence_command_index": 7,
       "expects_failure": true
+    },
+    {
+      "claim": "SECOND KNOWN BLOCKER, raised by Greptile review on PR #54 and reproduced here: the 8 new tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() imports `desk_gateway.tools.<prefix>` (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 new tools raises ModuleNotFoundError even once G-7 capacity is fixed. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml line 327), not QUALITY, so adding that module is out of this change's ownership and 3-file scope. Now disclosed in the roster header and the change document.",
+      "evidence_command_index": 8
     }
   ],
   "unverified": [
     "The G-7 capacity conflict is documented, not resolved. No tool-pack file was added and ROSTER_MAX_TOOLS was not raised; both are candidate fixes named in the change document and left for a follow-up change, per this task's 3-file scope.",
-    "Runtime behavior of the 8 new desk_ios_* tools (dispatch to services/desk-gateway, actual ios.plist_lint/ios.entitlements_scan/etc. backends) is not exercised here — this change adds only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
+    "The backend-resolution gap (ios.* has no desk_gateway/tools/ios.py) is documented, not resolved. Adding that module is bot-01-systems-backend's path (ownership.yaml); not attempted here.",
+    "Runtime behavior of the 8 new desk_ios_* tools (dispatch to services/desk-gateway, actual ios.plist_lint/ios.entitlements_scan/etc. backends) is not exercised end-to-end here beyond confirming the resolve() failure above — this change adds only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
     "desk_contract_ack acknowledgements from the 7 auto-resolved consumers (bot-00 through bot-06) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
     "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review."
   ]

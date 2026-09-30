@@ -12,10 +12,13 @@ summary: >
   ios roster, wrapping the Linux-safe CLI added in SPE-5161 / PR #48
   (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e). No existing tool, field or endpoint is
   renamed or removed; desk_entitlements_diff is unchanged and stays distinct from the new
-  desk_ios_entitlements_scan. KNOWN ISSUE: the roster now carries 15 own tools, which with the
-  8 core tools totals 23 effective tools against ci/gates/check_desk_integrity.py's
-  ROSTER_MAX_TOOLS=15 ceiling (G-7). That capacity fix (split into a tool-pack, or raise the
-  ceiling) is out of scope for this change document and is tracked in the accompanying receipt.
+  desk_ios_entitlements_scan. KNOWN ISSUES (both tracked in the accompanying receipt, neither
+  resolved here): (1) the roster now carries 15 own tools, which with the 8 core tools totals
+  23 effective tools against ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 ceiling
+  (G-7); fix is a tool-pack split or raising the ceiling. (2) the 8 new tools' `ios.*` backend
+  prefix has no corresponding desk_gateway/tools/ios.py module (services/desk-gateway/** is
+  owned by bot-01-systems-backend, confirmed via Greptile review on PR #54); calls will raise
+  ModuleNotFoundError until that module is added. Both fixes are out of scope for this change.
 
 semantic_changes: []
 

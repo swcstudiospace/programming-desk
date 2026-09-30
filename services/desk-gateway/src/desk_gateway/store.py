@@ -152,6 +152,29 @@ class Store:
                     return record
             return None
 
+    def intake_delivery(self, intake_id: str, key: str, state: str) -> dict[str, Any] | None:
+        """Record how far the origin reply for one ack got, as a write of its own.
+
+        Separate from intake_ack because it has to be durable *before* the reply is posted:
+        the reply goes out first (see tools.lead.intake_ack), so a failure anywhere after it
+        asks LEAD to call again, and only a record written before the post tells that second
+        call a comment may already exist. Keyed per ack rather than per intake, so a later
+        ack on the same intake is its own delivery.
+        """
+        with self._lock:
+            queue = self._read("intake", [])
+            for record in queue:
+                if record["intake_id"] == intake_id:
+                    deliveries = record.get("ack_deliveries") or {}
+                    deliveries[key] = {"state": state, "at": _now()}
+                    record["ack_deliveries"] = deliveries
+                    self._write("intake", queue)
+                    return record
+            return None
+
+    def intake_delivery_state(self, record: dict[str, Any], key: str) -> str | None:
+        return ((record.get("ack_deliveries") or {}).get(key) or {}).get("state")
+
     def intake_ack(self, intake_id: str, ack: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:
             queue = self._read("intake", [])

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from typing import Any
 
@@ -34,6 +36,9 @@ async def intake_ack(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     the intake was already marked accepted, so calling again — which is what the failure
     tells LEAD to do — retried a reply for a request that no longer looked claimed, and the
     queue counted work as answered that nobody had been told about.
+
+    That ordering makes the reply the thing a retry can duplicate, so it is delivered at most
+    once per ack: see _reply_once.
     """
     svc = ctx.services
     record = svc.store.intake_get(args["intake_id"])
@@ -45,23 +50,110 @@ async def intake_ack(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     notify: dict[str, Any] = {"delivered": False, "reason": "origin has no callback"}
     callback = _callback(record)
     if callback is not None:
-        link, repo, number = callback
-        result = await svc.github.comment_on_issue(repo, number, _ack_comment(args))
-        notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
-                  "target": link, "error": result.get("error")}
-        if not notify["delivered"] and notify.get("error") != NOT_CONFIGURED:
-            return failure(
-                "notify_failed",
-                f"the reply to {link} was not posted: "
-                f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
-                f"The requester has not been told, so intake {args['intake_id']} stays "
-                f"{record.get('state')} rather than {args['status']}; call desk_intake_ack again.",
+        notify, fail = await _reply_once(svc, record, args, callback)
+        if fail is not None:
+            return fail
+
+    updated = svc.store.intake_ack(args["intake_id"], ack)
+    if updated is None:
+        return failure(
+            "not_found",
+            f"intake {args['intake_id']} was gone before it could be advanced to {args['status']}",
+            notify=notify,
+        )
+    return {"ok": True, "intake": updated, "notify": notify}
+
+
+async def _reply_once(
+    svc: Any, record: dict[str, Any], args: dict[str, Any], callback: tuple[str, str, int]
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Post the origin reply at most once per ack, whatever fails after it.
+
+    Returns (notify, failure-or-None). The reply has to precede the store advance, so the
+    retry a failed advance asks for arrives with the comment already on the issue — and
+    nothing in the record said so, so the retry posted a second identical comment.
+
+    The guard is a write-ahead delivery marker plus the same marker embedded in the comment:
+
+    * nothing recorded — record `attempted`, then post. The post is only reached once that
+      record is durable, so no outcome can lose the fact that a comment may exist. If the
+      write itself fails, nothing was posted and there is nothing to duplicate.
+    * `attempted` — an earlier call posted, or died trying, and the issue is the record of
+      which. Found means it was delivered; genuinely absent means the post never landed and
+      may go out again. Unknown — a lookup that errored, or a thread longer than the page
+      budget — must not post, because an unknown is exactly the case that double-posts.
+    * `delivered` — skip the post; the caller still finishes the advance.
+
+    Keyed on the ack's content, so a retry of the same ack is suppressed while a deliberately
+    different ack (a later status, a new message) is a new reply.
+    """
+    link, repo, number = callback
+    key, marker = _delivery_marker(args)
+    prior = svc.store.intake_delivery_state(record, key)
+
+    if prior == "delivered":
+        return {"delivered": True, "reason": "the reply for this ack was already posted",
+                "target": link, "posted": False}, None
+
+    if prior == "attempted":
+        seen = await svc.github.find_issue_comment(repo, number, marker)
+        if seen.get("found"):
+            svc.store.intake_delivery(record["intake_id"], key, "delivered")
+            return {"delivered": True, "reason": "an earlier call already posted this reply",
+                    "target": link, "posted": False}, None
+        if seen.get("error") == NOT_CONFIGURED:
+            return {"delivered": False, "reason": seen.get("reason"), "target": link,
+                    "error": NOT_CONFIGURED, "posted": False}, None
+        if seen.get("error") or not seen.get("complete"):
+            reason = seen.get("reason") or f"the thread on {link} is longer than this check reads"
+            notify = {"delivered": False, "reason": reason, "target": link,
+                      "error": seen.get("error"), "posted": False}
+            return notify, failure(
+                "notify_unknown",
+                f"an earlier desk_intake_ack posted, or tried to post, the reply to {link}, and "
+                f"whether it landed cannot be read back: {reason}. Posting again could duplicate "
+                f"it, so intake {args['intake_id']} stays {record.get('state')} rather than "
+                f"{args['status']}; check {link} and ack again once GitHub can be read.",
                 intake=record,
                 notify=notify,
             )
+    else:
+        svc.store.intake_delivery(record["intake_id"], key, "attempted")
 
-    updated = svc.store.intake_ack(args["intake_id"], ack)
-    return {"ok": True, "intake": updated, "notify": notify}
+    result = await svc.github.comment_on_issue(repo, number, _ack_comment(args, marker))
+    notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
+              "target": link, "error": result.get("error"), "posted": bool(result.get("ok"))}
+    if notify["delivered"]:
+        svc.store.intake_delivery(record["intake_id"], key, "delivered")
+        return notify, None
+    if notify.get("error") == NOT_CONFIGURED:
+        # Nothing was sent and nothing can be, so the attempt marker would be a lie that costs
+        # a later ack a pointless lookup. Neither branch above matches this state, so an ack
+        # on a gateway that has since been given a token starts over and posts.
+        svc.store.intake_delivery(record["intake_id"], key, "unconfigured")
+        return notify, None
+    return notify, failure(
+        "notify_failed",
+        f"the reply to {link} was not posted: "
+        f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
+        f"The requester has not been told, so intake {args['intake_id']} stays "
+        f"{record.get('state')} rather than {args['status']}; call desk_intake_ack again.",
+        intake=record,
+        notify=notify,
+    )
+
+
+def _delivery_marker(args: dict[str, Any]) -> tuple[str, str]:
+    """(store key, comment marker) for one ack, derived from the ack itself.
+
+    A digest rather than the status alone: two acks can legitimately carry the same status
+    with different messages, and suppressing the second of those would lose a reply the
+    requester was owed. A retry of the same call digests the same way.
+    """
+    body = json.dumps({k: v for k, v in args.items() if k != "intake_id"}, sort_keys=True, default=str)
+    digest = hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+    key = f"{args['status']}:{digest}"
+    return key, f"<!-- desk-intake-ack {args['intake_id']} {args['status']} {digest} -->"
 
 
 def _callback(record: dict[str, Any]) -> tuple[str, str, int] | None:
@@ -74,7 +166,7 @@ def _callback(record: dict[str, Any]) -> tuple[str, str, int] | None:
     return None
 
 
-def _ack_comment(args: dict[str, Any]) -> str:
+def _ack_comment(args: dict[str, Any], marker: str) -> str:
     lines = [f"**Programming Desk** · LEAD · {args['status']}"]
     if args.get("graph_id"):
         lines.append(f"Graph ID: `{args['graph_id']}`")
@@ -82,7 +174,9 @@ def _ack_comment(args: dict[str, Any]) -> str:
         lines.append(args["message"])
     for extra in args.get("links") or []:
         lines.append(f"- {extra}")
-    lines.append(f"intake `{args['intake_id']}`")
+    # The marker is what a retry looks for, so it has to survive in the posted body; an HTML
+    # comment keeps it out of the rendered reply.
+    lines.append(f"intake `{args['intake_id']}`\n{marker}")
     return "\n\n".join(lines)
 
 

@@ -500,6 +500,29 @@ class GitHub:
     async def comment_on_issue(self, repo: str, number: int, body: str) -> dict[str, Any]:
         return await self.http.request("POST", f"/repos/{repo}/issues/{number}/comments", json={"body": body})
 
+    async def find_issue_comment(self, repo: str, number: int, marker: str, *, max_pages: int = 5) -> dict[str, Any]:
+        """Whether a comment carrying `marker` is already on the issue.
+
+        `complete` is the honest part: the thread is walked oldest-first in pages, and a
+        `found: false` that ran out of page budget is not evidence of absence. A caller using
+        this to decide whether it already posted something must not post on `complete: false`.
+        """
+        for page in range(1, max_pages + 1):
+            result = await self.http.request(
+                "GET", f"/repos/{repo}/issues/{number}/comments", params={"per_page": 100, "page": page}
+            )
+            if not result.get("ok"):
+                return result
+            comments = result.get("body")
+            if not isinstance(comments, list):
+                return {"error": UPSTREAM_ERROR, "reason": "github returned no comment list for the issue"}
+            for comment in comments:
+                if isinstance(comment, dict) and marker in (comment.get("body") or ""):
+                    return {"ok": True, "found": True, "complete": True}
+            if len(comments) < 100:
+                return {"ok": True, "found": False, "complete": True}
+        return {"ok": True, "found": False, "complete": False}
+
 
 class PlayConsole:
     def __init__(self, settings: Settings) -> None:

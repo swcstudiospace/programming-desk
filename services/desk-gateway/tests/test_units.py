@@ -119,6 +119,28 @@ def test_store_intake_is_idempotent_and_claimable(tmp_path: Path):
     assert acked["state"] == "accepted" and acked["graph_id"] == "ut-abc-deadbeef"
 
 
+def test_store_records_ack_delivery_separately_from_the_advance(tmp_path: Path):
+    """The delivery record has to survive a failed advance, which is the whole point of it.
+
+    tools.lead.intake_ack posts the origin reply before advancing, so a failed advance asks
+    LEAD to call again; only a record written before the post can tell that second call a
+    comment may already exist. Per ack key, so a later ack is its own delivery.
+    """
+    store = Store(tmp_path)
+    created = store.intake_create({"origin": "github", "title": "t", "ask": "do the thing"})
+    intake_id = created["intake_id"]
+
+    assert store.intake_delivery_state(created, "accepted:abc") is None
+    store.intake_delivery(intake_id, "accepted:abc", "attempted")
+    assert store.intake_delivery_state(store.intake_get(intake_id), "accepted:abc") == "attempted"
+    store.intake_delivery(intake_id, "accepted:abc", "delivered")
+
+    reread = store.intake_get(intake_id)
+    assert store.intake_delivery_state(reread, "accepted:abc") == "delivered"
+    assert store.intake_delivery_state(reread, "done:xyz") is None
+    assert store.intake_delivery("in-nosuchintake", "accepted:abc", "attempted") is None
+
+
 def test_store_intake_idempotency_is_scoped_by_origin(tmp_path: Path):
     """Two origins may pick the same key; neither may swallow the other's request.
 

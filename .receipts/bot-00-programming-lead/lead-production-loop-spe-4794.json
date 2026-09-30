@@ -487,6 +487,84 @@
       "exit_code": 0,
       "duration_s": 0.2,
       "output_tail": "G-5/G-6 PASS -- no deployments or destructive operations in this receipt. The fixtures are not this receipt; they are separate files run by the two commands above."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-2 FAIL -- 'approved_by' is missing. The OLD preflight order: receipt_approve gated the receipt exactly as fetched, so this is what it saw and why it returned gate_failed on every first stamp. P1-2 'before' half."
+    },
+    {
+      "cmd": "python3 -c \"import json; d=json.load(open('.receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json')); d['approved_by']='bot-06-quality-security'; d['approved_at']='2026-09-30T16:00:00Z'; json.dump(d,open('/tmp/candidate.json','w'),indent=2)\" && python3 ci/gates/check_receipt.py --receipt /tmp/candidate.json --bot bot-00-programming-lead; rm -f /tmp/candidate.json",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-2 PASS -- lead-production-loop-spe-4794: 74 command(s), 58 substantiated claim(s), 38 unverified item(s). The NEW preflight order: stamp into a candidate, gate the candidate. The deadlock was the ONLY thing between this receipt and a passing preflight. The candidate was written to /tmp and deleted; no stamp was applied to the receipt. P1-2 'after' half."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt <loop_acks fixture, human_granted_by='Ove'> --bot bot-00-programming-lead",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-2 PASS -- fixture-g6-turn-ack-in-loop-acks: 1 command(s). A well-formed loop_acks entry passes the new shape check."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt <same fixture, human_granted_by='bot-00-programming-lead'> --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-2 FAIL -- loop_acks[0] human_granted_by is 'bot-00-programming-lead', which is a seat, not a human -- degraded repo work needs a person's acknowledgement. The relaying seat goes in 'relayed_by'. This is the gate half of P1-1: the skill can say the grantor is a human, only a gate makes a seat id fail."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt <same fixture, human_granted_by removed> --bot bot-00-programming-lead",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-2 FAIL -- loop_acks[0] is missing ['human_granted_by'] -- a degraded-mode ack records the condition, the operation, the ack id, the human who granted it, when, and the one turn it covers."
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-in-approvals.json",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-5/G-6 FAIL -- approvals[1] is missing ['at', 'blast_radius']. Note the index: approvals[0] is now a VALID four-field approval for the rm -rf, so the receipt fails solely on the turn ack at [1] -- which is what the fixture claims to show. Before this round it held only the turn ack, so the destructive op was simply unapproved and the fixture proved less than it said."
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-in-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-5/G-6 PASS -- 1 destructive op(s) approved. The control: same receipt, ack moved to loop_acks. Passes for the RIGHT reason -- the rm -rf has its own approval and the ack is counted against nothing. Read against g6-turn-ack-four-fields.json (also exit 0, but with no approval for the rm -rf at all) it is the whole argument for the field split."
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "8 cases: baseline PASS, R6d, R7a, R8a, missing-template, R8b fixture drift, R9a human grantor, and OVERLAY completeness. 'ok: every case failed as intended, and the working tree was never written to'. Case [7] parses every load() out of verify.sh and fails if one is not overlaid from the working tree -- it caught the three files this round added to verify.sh on its first run, which is the point of it."
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "ok: ... R9a human grantor, R9b shared contract + G-2 shape check, R9c first stamp unblocked, R9d three G-6 fixtures, ... no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only 0b609d5 b2e34f6)",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS -- bot-00-programming-lead: 6 file(s) within owned paths. The LEAD-owned round-9 commit b2e34f6 in isolation: the skill, verify.sh and the four fixture files."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-1 FAIL -- FOREIGN ci/gates/check_receipt.py (bot-06-quality-security); FOREIGN services/desk-gateway/src/desk_gateway/tools/quality.py (bot-01-systems-backend); FOREIGN skills/verification-receipts/SKILL.md (bot-06-quality-security). DELIBERATE: commit 9b220cc crosses three foreign paths on the dispatcher's explicit instruction, given twice, after LEAD raised the conflict between 'fix the tool' and 'G-1 exits 0'. Isolated in its own commit so the owners can take, rewrite or revert it without touching LEAD's work."
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "7 templates up to date / 7 clean; G-7 PASS -- 7 rosters, 3 packs, 22 prompt files; G-1 manifest OK -- 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS -- no secrets detected across the branch, the four fixtures and the three cross-ownership files included"
     }
   ],
   "claims": [
@@ -731,6 +809,51 @@
     {
       "claim": "A sha-bound, commit-free approval is implementable on the gateway as it stands: upstreams.GitHub already carries a bearer token and an API-version header alongside comment_on_issue, so a check-run POST is a sibling method, and store.record_ack is an existing no-commit approval path that contract_ack already uses. The design in SS4.1 rests on those two facts rather than on new infrastructure.",
       "evidence_command_index": 69
+    },
+    {
+      "claim": "The first-stamp deadlock is fixed in receipt_approve by stamping into a candidate and running receipt_check over the candidate -- permit the expected-absent approved_by, set it, re-run the gates. The old order is reproduced first: G-2 on this receipt as fetched exits 1 with 'approved_by' is missing, which is exactly what the preflight saw.",
+      "evidence_command_index": 74,
+      "expects_failure": true
+    },
+    {
+      "claim": "Under the new order the same receipt passes: G-2 on the stamped candidate exits 0 with 74 commands and 58 substantiated claims, so the deadlock was the only thing between this receipt and a passing preflight. The candidate was built in /tmp and deleted; approved_by on the committed receipt is still unset.",
+      "evidence_command_index": 75
+    },
+    {
+      "claim": "G-2 now enforces the loop_acks shape: six required fields, condition drawn from the two blocker codes, and human_granted_by rejected when it names a seat. A well-formed entry passes.",
+      "evidence_command_index": 76
+    },
+    {
+      "claim": "A loop_acks entry whose human_granted_by is a seat id fails G-2 by name. This is the gate half of the human-grantor rule: the skill can state that the grantor is a person, but only a gate makes bot-00-programming-lead in that field fail.",
+      "evidence_command_index": 77,
+      "expects_failure": true
+    },
+    {
+      "claim": "A loop_acks entry with human_granted_by absent fails G-2 naming the missing field, so the field cannot be quietly omitted after an ack was obtained.",
+      "evidence_command_index": 78,
+      "expects_failure": true
+    },
+    {
+      "claim": "The failing G-6 fixture now carries a valid four-field approval for its destructive command and fails solely on the turn ack at approvals[1]. Before this round its approvals[] held only the turn ack, so the rm -rf was simply unapproved and the fixture demonstrated less than it claimed.",
+      "evidence_command_index": 79,
+      "expects_failure": true
+    },
+    {
+      "claim": "The new control fixture -- the same receipt with the ack in loop_acks -- passes G-6 for the right reason: the destructive op has its own approval and the ack is counted against nothing. Against g6-turn-ack-four-fields.json, which also exits 0 but has no approval for its rm -rf at all, it completes the argument for the field split.",
+      "evidence_command_index": 80
+    },
+    {
+      "claim": "The negative-test suite runs eight cases including a baseline that must pass, and its OVERLAY-completeness case parses every load() out of verify.sh and fails when one is not overlaid from the working tree. It caught the three files this round added on its first run, so the scratch tree can no longer silently test a dependency at HEAD.",
+      "evidence_command_index": 81
+    },
+    {
+      "claim": "The LEAD-owned round-9 commit b2e34f6 passes G-1 in isolation across its six paths. The ownership crossing is confined to commit 9b220cc.",
+      "evidence_command_index": 83
+    },
+    {
+      "claim": "G-1 FAILS on this branch, deliberately and by exactly three paths: ci/gates/check_receipt.py and skills/verification-receipts/SKILL.md (bot-06-quality-security) and services/desk-gateway/src/desk_gateway/tools/quality.py (bot-01-systems-backend). This is a recorded ownership violation made on the dispatcher's explicit instruction after LEAD raised the conflict, not an accident and not a claim that the boundary does not apply.",
+      "evidence_command_index": 84,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -771,7 +894,12 @@
     "Round 8, P1-2: the fixtures pin G-6's CURRENT behaviour, including the false PASS. That is deliberate -- the second row of SS3.1 depends on it -- but it means verify.sh now fails if check_rollback.py is improved. The fixture README says so, and says the fix in that case is to rewrite SS3.1 rather than to edit the fixture back to the old result.",
     "Round 8, P1-3: negative-tests.sh overlays the WORKING-tree copies of the files under test onto a git archive of HEAD. That is what makes it useful mid-round, but it means the scratch tree is a hybrid: tracked files at HEAD, files-under-test uncommitted. A rule that depends on a file it does not overlay would be tested at HEAD rather than at the working tree.",
     "Round 8, P1-4: NOT FIXED, and not fixable within LEAD's ownership. The preflight is in services/** (bot-01-systems-backend) and the gate in ci/gates/** (bot-06-quality-security). Both patches are specified in blockers. The work order asked LEAD to fix the tool; doing so would fail G-1, which the same order requires to exit 0, so the conflict was raised to the dispatcher rather than resolved by crossing the boundary.",
-    "Round 8, P2: loop_acks is still not in the shared receipt contract. The six-field table and the proposed G-2 rule are in the LEAD skill, which is where LEAD can put them; skills/verification-receipts/SKILL.md is bot-06's. Until it lands there, the only thing checking a degraded turn has a matching ack is a human reading the receipt."
+    "Round 8, P2: loop_acks is still not in the shared receipt contract. The six-field table and the proposed G-2 rule are in the LEAD skill, which is where LEAD can put them; skills/verification-receipts/SKILL.md is bot-06's. Until it lands there, the only thing checking a degraded turn has a matching ack is a human reading the receipt.",
+    "Round 9, P1-2: the receipt_approve change is verified at the level of the gate, not the tool. G-2 was run against the fetched receipt and against a stamped candidate, reproducing both sides of the deadlock, but desk_receipt_approve itself was never invoked -- no connector was reachable and the gateway was not run. That the reordered code path behaves as the two gate runs predict is inferred from reading it. The gateway's own test suite was not run either: pytest is not installed in this container.",
+    "Round 9, P1-2: the fix makes the tool work; it does not make a receipt-file stamp the right mechanism. receipt_approve still commits the stamped receipt to the PR branch, which advances the tip and restarts the review chase round 8's P1-1 diagnosed. The sha-bound, commit-free approval remains open in blockers, and it is why approved_by is still unset on this tip rather than obtainable now that the preflight works.",
+    "Round 9: this branch now carries a DELIBERATE G-1 violation in commit 9b220cc, touching three paths owned by bot-01-systems-backend and bot-06-quality-security. It was made on the dispatcher's instruction, repeated after LEAD raised the conflict between that instruction and the run's own requirement that G-1 exit 0. The owners did not review it. It is isolated in one commit so it can be taken, rewritten or reverted independently; LEAD's own round-9 work in b2e34f6 passes G-1 on its own.",
+    "Round 9, P1-1: the seat-id guard in G-2 matches the bot-0N ids and the seven seat labels. It is a denylist, so a grantor string that is neither a person nor a listed label -- 'the bot', 'desk automation', an empty-looking unicode string -- passes the check. It raises the cost of recording a seat as the grantor; it cannot prove a string names a real human.",
+    "Round 9, P2: the loop_acks shape check is in G-2 rather than G-6 deliberately, because anything check_rollback.py counts can vouch for a destructive operation it never authorised. That placement is asserted by verify.sh (loop_acks must NOT appear in check_rollback.py) but nothing prevents a future change from adding it there; the shared contract now says so in as many words, which is the strongest LEAD can make it."
   ],
   "blockers": [
     "SPE-4792 (signed handoff packet schema) has not landed, so handoff_to_hermes stays unsigned and the packet fields stay omitted. Documented, not worked around.",
@@ -785,10 +913,12 @@
     "The desk receipt schema in skills/verification-receipts/SKILL.md has no loop_acks field. This skill introduces it so that degraded-mode turn acks stop landing in approvals[], where G-6 validates every entry and pairs entries to destructive commands by count. That file is bot-06-quality-security's, so QUALITY adds the field and, if it is worth gating, the shape check. Raised by Greptile round-7 P1.",
     "An approval that is bound to a sha and does not create one needs one change in each of two foreign areas. (1) bot-01-systems-backend, services/desk-gateway: a QUALITY tool that records the approval WITHOUT committing -- preferred shape is a GitHub check run, `POST /repos/{repo}/check-runs` with `head_sha` set to the reviewed sha, a fixed `name` such as desk/quality-approval and `conclusion: \"success\"`, added to upstreams.GitHub beside comment_on_issue (the token and headers are already there); the no-commit alternative is a store.record_ack-style record keyed by (receipt_path, reviewed_sha), which contract_ack already demonstrates. (2) bot-06-quality-security, ci/gates/check_receipt.py: resolve the receipt's approval_ref {kind, name, reviewed_sha} against the CURRENT head and pass only when an approval exists for that exact sha, in place of reading approved_by from the file. Either half alone is not enough: (1) without (2) records an approval nothing reads, and (2) without (1) has nothing to resolve. Raised by Greptile round-8 P1.",
     "desk_receipt_approve's preflight deadlock (it gates the pre-stamp receipt, and G-2 fails an absent approved_by unconditionally) is still open from round 7 and is bot-01's or bot-06's to close. Round 8 makes it lower priority rather than fixed: even with the preflight repaired, the tool commits the stamped receipt to the PR branch, which advances the tip and restarts the review chase. Fixing the preflight makes the tool work; it does not make a receipt-file stamp the right mechanism. If it is repaired, it should be repaired as `receipt['approved_by'] = ctx.bot_id` BEFORE the receipt_check call so the gates run over what actually gets committed.",
-    "loop_acks belongs in the shared receipt contract at skills/verification-receipts/SKILL.md (bot-06-quality-security's), with the six fields documented in SS3.1 of the loop skill and this G-2 rule: if any command or claim in the receipt records a degraded turn, loop_acks must hold an entry whose condition matches and whose six fields are all present. It must NOT be added to ci/gates/check_rollback.py -- being counted there against destructive operations is the hazard the field exists to avoid. Raised by Greptile round-8 P2."
+    "loop_acks belongs in the shared receipt contract at skills/verification-receipts/SKILL.md (bot-06-quality-security's), with the six fields documented in SS3.1 of the loop skill and this G-2 rule: if any command or claim in the receipt records a degraded turn, loop_acks must hold an entry whose condition matches and whose six fields are all present. It must NOT be added to ci/gates/check_rollback.py -- being counted there against destructive operations is the hazard the field exists to avoid. Raised by Greptile round-8 P2.",
+    "Commit 9b220cc edits three paths LEAD does not own -- ci/gates/check_receipt.py and skills/verification-receipts/SKILL.md (bot-06-quality-security), and services/desk-gateway/src/desk_gateway/tools/quality.py (bot-01-systems-backend) -- and G-1 fails on this branch as a result. The owners need to review, adopt or revert it. Nothing in it is LEAD's to merge, and the branch should not merge with a red G-1 unless the owners have signed off on that commit specifically."
   ],
   "files_changed": [
     ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+    "ci/gates/check_receipt.py",
     "docs/desk-operating-model.md",
     "docs/vps-agent-bus.md",
     "grokbot/README.md",
@@ -800,15 +930,22 @@
     "grokbot/templates/SYSTEMS.md",
     "grokbot/templates/WEB.md",
     "scripts/generate-templates.py",
+    "services/desk-gateway/src/desk_gateway/tools/quality.py",
     "skills/desk-bootstrap/SKILL.md",
     "skills/desk-bootstrap/desk-production-loop/SKILL.md",
-    "skills/desk-bootstrap/desk-production-loop/verify.sh"
+    "skills/desk-bootstrap/desk-production-loop/fixtures/README.md",
+    "skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-four-fields.json",
+    "skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-in-approvals.json",
+    "skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-in-loop-acks.json",
+    "skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+    "skills/desk-bootstrap/desk-production-loop/verify.sh",
+    "skills/verification-receipts/SKILL.md"
   ],
   "contract_changes": [],
   "deployment": null,
   "rollback_plan": null,
   "approvals": [],
-  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name. Round-6 tip-fix dispatched as run 20260930T130155Z-3c21c0aa against tip e9c04647 (Greptile review 28066863, 5 P1 + 5 P2): all five P1s fixed, four of the five P2s fixed, and P2 4144833385 (wire the checks into CI) recorded as an INFRA/QUALITY ask because .github/workflows/** is not LEAD's. The approval stamp from the previous tip was removed rather than carried forward; this receipt is unapproved by design until QUALITY reviews the current tip. Round-7 tip-fix (Greptile review 28084795 tip_match on tip 427aa303, confidence 2/5, 3 open P1 + 1 open P2): all three P1s fixed and the P2 answered within ownership. approved_by remains absent -- the round-6 clearing stands, and round 7 established that the documented stamping tool cannot clear it either, which is now a blocker against bot-01/bot-06 rather than a LEAD action. Round-8 tip-fix (Greptile tip_match on tip bf22ed69, confidence 1/5, 4 open P1 + 3 open P2): P1-1, P1-2, P1-3 and all three P2s fixed. P1-4 is not fixable within LEAD's ownership -- the preflight is bot-01's and the gate is bot-06's -- and the work order's request to fix it conflicts with its own requirement that G-1 exit 0, so it was raised to the dispatcher with both patches specified. approved_by remains unset.",
+  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name. Round-6 tip-fix dispatched as run 20260930T130155Z-3c21c0aa against tip e9c04647 (Greptile review 28066863, 5 P1 + 5 P2): all five P1s fixed, four of the five P2s fixed, and P2 4144833385 (wire the checks into CI) recorded as an INFRA/QUALITY ask because .github/workflows/** is not LEAD's. The approval stamp from the previous tip was removed rather than carried forward; this receipt is unapproved by design until QUALITY reviews the current tip. Round-7 tip-fix (Greptile review 28084795 tip_match on tip 427aa303, confidence 2/5, 3 open P1 + 1 open P2): all three P1s fixed and the P2 answered within ownership. approved_by remains absent -- the round-6 clearing stands, and round 7 established that the documented stamping tool cannot clear it either, which is now a blocker against bot-01/bot-06 rather than a LEAD action. Round-8 tip-fix (Greptile tip_match on tip bf22ed69, confidence 1/5, 4 open P1 + 3 open P2): P1-1, P1-2, P1-3 and all three P2s fixed. P1-4 is not fixable within LEAD's ownership -- the preflight is bot-01's and the gate is bot-06's -- and the work order's request to fix it conflicts with its own requirement that G-1 exit 0, so it was raised to the dispatcher with both patches specified. approved_by remains unset. Round-9 tip-fix (Greptile tip_match review 28096832 on tip 0b609d5, confidence 3/5, 2 open P1 + 4 open P2): both P1s and all four P2s addressed. P1-2 required editing bot-01's and bot-06's paths, which LEAD did on the dispatcher's repeated instruction and recorded as a deliberate G-1 violation isolated in commit 9b220cc. approved_by remains unset.",
   "greptile_round_1": {
     "reviewed_head": "0d9caa5c46ca007cd6e77667c9cf950f7b7290af",
     "findings": [
@@ -947,7 +1084,7 @@
   "approval_state": {
     "state": "absent",
     "reason": "no sha-bound approval mechanism exists",
-    "note": "No approval is recorded on this receipt, and round 8 established that this is not a missing step but a missing mechanism. Round 6 cleared a stamp that named an earlier tip. Round 7 found that desk_receipt_approve cannot make a first stamp at all: it gates the receipt before stamping and G-2 fails an absent approved_by unconditionally, so it returns gate_failed on exactly this state. Round 8 found that the obvious workaround -- QUALITY reviewing the tip and landing the stamp as a commit -- cannot work either, and not because of a bug: writing the approval into a file on the branch CREATES a new tip, so the approval can never describe the head it is committed to. An approval must be bound to a sha and must not create one, and no mechanism on this desk satisfies both today. The two patches that would (a commit-free sha-bound approval tool in services/**, and a G-2 that resolves approval_ref against the head in ci/gates/**) are in blockers and are bot-01's and bot-06's. Neither LEAD nor any seat writes a placeholder here: an empty string fails the same check and a filled-in one fabricates the independent review the gate exists to require.",
+    "note": "No approval is recorded on this receipt, and round 8 established that this is not a missing step but a missing mechanism. Round 6 cleared a stamp that named an earlier tip. Round 7 found that desk_receipt_approve cannot make a first stamp at all: it gates the receipt before stamping and G-2 fails an absent approved_by unconditionally, so it returns gate_failed on exactly this state. Round 8 found that the obvious workaround -- QUALITY reviewing the tip and landing the stamp as a commit -- cannot work either, and not because of a bug: writing the approval into a file on the branch CREATES a new tip, so the approval can never describe the head it is committed to. An approval must be bound to a sha and must not create one, and no mechanism on this desk satisfies both today. The two patches that would (a commit-free sha-bound approval tool in services/**, and a G-2 that resolves approval_ref against the head in ci/gates/**) are in blockers and are bot-01's and bot-06's. Neither LEAD nor any seat writes a placeholder here: an empty string fails the same check and a filled-in one fabricates the independent review the gate exists to require. Round 9 removed one of the two obstacles: the preflight now stamps into a candidate and gates the candidate, so a first stamp from the expected unstamped state succeeds (proven against G-2 both ways). The other obstacle stands and is the operative one -- the tool still commits the stamped receipt to the PR branch, which advances the tip, so a stamp obtained this way would again describe a head nothing reviewed. approved_by therefore stays unset on this tip, awaiting the sha-bound commit-free mechanism in blockers, not a stamp.",
     "awaiting": "a sha-bound, commit-free approval mechanism (blockers) -- not a stamp on this receipt. Until one exists, G-2 red on this receipt is the accurate state and not an outstanding LEAD action."
   },
   "greptile_round_6": {
@@ -1108,5 +1245,50 @@
       }
     ],
     "note": "Round 8's P1-1 is the first finding in eight rounds that invalidated a MECHANISM rather than a sentence, and it did so by pointing at something the previous seven rounds had all demonstrated without noticing: every fix push moved the head past the reviewed tip. The receipt recorded each one and never drew the conclusion. The other three findings are the same class as round 7's -- evidence that could not be re-run (a /tmp fixture, a restore step that destroys its own context) and an assertion that could not fail (the V_SELF tautology). Taken together the lesson for round 9: check the evidence the way the rules get checked. A negative test that cannot fail, a fixture that cannot be found and a claim citing the wrong command are all the same defect as a rule asserted against one code path -- something that looks like verification and is not."
+  },
+  "files_changed_note": "Regenerated from `git diff --name-only origin/main...HEAD` rather than maintained by hand, which is how it drifted: round 8 added four files under skills/desk-bootstrap/desk-production-loop/fixtures/ and the inventory stayed at 15 while the claims cited 19. It now includes the fixtures, the three cross-ownership paths in commit 9b220cc, and this receipt.",
+  "greptile_round_9": {
+    "reviewed_head": "0b609d56f0707945b24ac4a061c591c1cbd1032d",
+    "review_id": 28096832,
+    "confidence": "3/5",
+    "findings": [
+      {
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Human grantor can disappear",
+        "disposition": "valid -- one `granted_by` field let a build seat record a complete, gate-clean entry naming only a seat, which is a degraded turn with no human in it reading as compliance. Split into human_granted_by (required, a person, seat ids rejected) and relayed_by (the seat that carried the ask). Fail-closed table added, LEAD explicitly not exempt, and G-2 now enforces it -- see the cross-ownership commit."
+      },
+      {
+        "severity": "P1",
+        "path": ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+        "title": "Approval cannot be stamped",
+        "disposition": "FIXED, by crossing ownership on instruction. receipt_approve now stamps into a candidate and gates the candidate, in the order the work order specified. Both sides reproduced against the real gate. services/** is bot-01's, so this is a deliberate G-1 violation isolated in commit 9b220cc. It does not close round 8's P1-1: the tool still commits the stamp and so advances the tip, which is why approved_by stays unset."
+      },
+      {
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/fixtures/g6-turn-ack-in-approvals.json",
+        "title": "Fixture lacks a valid destructive approval",
+        "disposition": "valid -- the fixture claimed to show a properly-approved destructive op rejected because of a turn ack, but its only approval WAS the turn ack, so the rm -rf was unapproved and the FAIL was partly legitimate. A real four-field approval is added; it now fails solely on approvals[1]. A third control fixture was added showing the corrected shape passing."
+      },
+      {
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+        "title": "Scratch overlays only the loop skill",
+        "disposition": "valid -- the generator, templates and check_rollback.py were tested at HEAD while the rules under test lived in the working tree. All inputs are now overlaid, and a new case parses every load() out of verify.sh and fails if one is not in OVERLAY, so the comment cannot go stale. It caught the three files this round added on its first run."
+      },
+      {
+        "severity": "P2",
+        "path": ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+        "title": "files_changed stale at 15 paths",
+        "disposition": "valid -- regenerated from git diff --name-only origin/main...HEAD rather than maintained by hand, which is how it drifted, with a note recording that it is now derived."
+      },
+      {
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "loop_acks not in shared contract",
+        "disposition": "FIXED, by crossing ownership on instruction. The field is in skills/verification-receipts/SKILL.md beside approvals[] with the entry shape and the warning that check_rollback.py must never read it, and check_receipt.py enforces six required fields, the condition vocabulary and the seat-id rejection. Both files are bot-06's; same deliberate violation."
+      }
+    ],
+    "note": "Round 9 is the first where the fix required crossing a seat boundary, and the shape of that matters more than the code: LEAD raised the conflict between 'fix the tool' and 'G-1 exits 0' rather than resolving it silently, was told to proceed, and then made the crossing as small and as reversible as it could be -- three files, one commit, G-1 green on the LEAD-only commit beside it, and the violation recorded in claims, unverified and blockers rather than buried. The substantive lesson is the P1-1 one: for eight rounds the ack rules were prose, and prose could not stop a seat writing its own id into the grantor field. The rule only became real when a gate rejected it, which is the same thing this receipt has been saying about claims and commands since round 1."
   }
 }

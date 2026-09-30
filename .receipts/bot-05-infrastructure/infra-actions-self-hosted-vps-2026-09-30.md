@@ -5,7 +5,7 @@
 - **Grok run:** `20260930T040531Z-bfab6620`
 - **Destructive:** no
 - **Secrets committed:** no
-- **Approved by:** *nobody yet* — see [Approval](#approval)
+- **Approved by:** `bot-06-quality-security` (QUALITY CLEAR_WITH_WAIVERS Path B, tip 1905e44) — see [Approval](#approval)
 - **Machine-readable receipt:** [`infra-actions-self-hosted-vps-2026-09-30.json`](./infra-actions-self-hosted-vps-2026-09-30.json)
 
 ## Supersedes the first receipt on this branch
@@ -196,32 +196,21 @@ rebase them, or merge `main` into each.
 
 ## Approval
 
-`approved_by` is deliberately `null`, so **G-2 fails on this receipt**, and that missing
-independent approval is the only thing it fails on. Everything else in the receipt is green.
+`approved_by` is now `bot-06-quality-security` — QUALITY CLEAR_WITH_WAIVERS (Path B local
+stamp) on tip `1905e44`, per LEAD ticket to INFRA 2026-09-30. INFRA committed the field
+after CLEAR so G-2 can go green; the prior `null` was deliberate until that stamp landed.
+
+Waived Greptile P1 4140722517 (ephemeral isolation / self-hosted runner trust) stays out of
+this receipt's claims and is tracked as a separate follow-up draft.
+
+### History (why it was null before CLEAR)
 
 Ove's GO authorised the self-hosted bypass as a *decision*. That is not a review of this
-diff, so it is recorded in the receipt's `task` field rather than laundered into
-`approved_by`. This follows
-[`claude-mcp-json-hindsight-20260930T023348Z-239b2b18.json`](./claude-mcp-json-hindsight-20260930T023348Z-239b2b18.json),
-which emptied the same field after greptile P1 4140306040 correctly called a
-named-but-absent reviewer a recorded approval that never happened.
+diff, so it stayed in the receipt's `task` field rather than being laundered into
+`approved_by` before QUALITY stamped. Commit `8e9d51b` had preset the field while admitting
+review had not happened; that premature value was correctly kept out of the merge tip until
+CLEAR_WITH_WAIVERS.
 
-### The parallel run set this field; the merge does not keep it
-
-Commit `8e9d51b` set `approved_by` to `bot-06-quality-security` while its own `unverified`
-list said *"QUALITY review of this PR not yet recorded — approved_by is the intended reviewer
-seat."* Both statements are in the same file: it records an approval and admits the approval
-did not happen.
-
-That would have turned G-2 green on a false record, which is worse than the red gate it
-replaces — a green G-2 is the signal a reviewer trusts, and this is the one failure mode G-2
-exists to catch. It is also the identical finding greptile P1 4140306040 raised against the
-mcp-json receipt, which this repository resolved by emptying the field rather than by
-defending it.
-
-So the merge keeps `null`. That is a deliberate disagreement with the other run, not a
-conflict resolved carelessly, and it is surfaced here and on the pull request for Ove rather
-than settled quietly. Everything else that run contributed was correct and is folded in.
-
-QUALITY (`bot-06-quality-security`) or Ove stamping `approved_by` is what turns G-2 green.
-Nothing else in the receipt has to change.
+Also note: open drafts **#29** and **#30** — #29 tip already carries `runs-on: [self-hosted,
+Linux, X64]` on the gate workflows; #30 is MCP+receipts only (no workflow files) per QUALITY
+split. #32 remains the source of truth for the runner change on `main` after Ove merge.

@@ -1,0 +1,112 @@
+{
+  "task_id": "desk-v2-contracts-gates",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-09-30T01:55:37Z",
+  "completed_at": "2026-09-30T01:55:48Z",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 101 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/bot-06-quality-security/upgrade-plan-desk-v2",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "\u2026ks/clippyos.yaml\n    contracts/tool-packs/desklanes.yaml\n    contracts/tool-packs/kanbanos.yaml\n    contracts/tool-rosters/_core.yaml\n    contracts/tool-rosters/android.yaml\n    contracts/tool-rosters/infra.yaml\n    contracts/tool-rosters/ios.yaml\n    contracts/tool-rosters/lead.yaml\n    contracts/tool-rosters/quality.yaml\n    contracts/tool-rosters/systems.yaml\n    contracts/tool-rosters/web.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/bot-06-quality-security/upgrade-plan-desk-v2",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 28 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/bot-06-quality-security/upgrade-plan-desk-v2 --change contracts/changes/desk-v2-tool-rosters-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "\u2026s/kanbanos.yaml\n    contracts/tool-rosters/_core.yaml\n    contracts/tool-rosters/android.yaml\n    contracts/tool-rosters/infra.yaml\n    contracts/tool-rosters/ios.yaml\n    contracts/tool-rosters/lead.yaml\n    contracts/tool-rosters/quality.yaml\n    contracts/tool-rosters/systems.yaml\n    contracts/tool-rosters/web.yaml\n\nG-4 PASS \u2014 desk-v2-tool-rosters-v1: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 9.8,
+      "output_tail": "........................................................................ [ 60%]\n...............................................                          [100%]\n119 passed in 9.57s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo . --prompts-dir /nonexistent --assembled-dir /nonexistent",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "NOTE: /nonexistent/ not found \u2014 prompt source check skipped\n  NOTE: /nonexistent/ not found \u2014 assembled prompt check skipped\n  NOTE: grokbot/templates/ not found \u2014 template check skipped\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 0 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "\u2026literal UUID at line(s) 28, 32 \u2014 use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\n  - prompts/bot-04-ios.xml: literal UUID at line(s) 29, 33 \u2014 use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\n  - prompts/bot-05-infrastructure.xml: literal UUID at line(s) 33, 37 \u2014 use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\n  See contracts/README.md and docs/upgrade-plan-desk-v2.md \u00a711\nG-7 FAIL \u2014 desk integrity: 6 problem(s)"
+    },
+    {
+      "cmd": "bash -n scripts/assemble-prompts.sh",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('prompts/bot-06-quality-security.xml')\"",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import re,sys; t=open('prompts/bot-06-quality-security.xml').read(); sys.exit(0 if not re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', t) and '{{DESK_GATEWAY_URL}}' in t and '{{DESK_CHANNEL_ID}}' in t else 1)\"",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml validates (every path resolves to exactly one bot)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1: every changed path in this PR is owned by the acting bot",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3: no committed secret shapes in the diff against the base branch",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4: the roster/pack contract surfaces ship with a non-breaking v1.0.0 change document",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Gate test suite passes including the new G-7 cases",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Rosters and packs pass G-7 structural checks (counts, schemas, gate fields, pack seats)",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "assemble-prompts.sh parses",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "QUALITY prompt source is well-formed XML",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "QUALITY prompt source uses placeholders and carries no literal UUID",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "G-7 prompt checks on this branch alone: the other seats' prompt sources are still v1.0 with literal ids until their PRs land, so the full check_desk_integrity run is not green here (it is at the top of the stack)",
+    "assemble-prompts.sh --check is stale on this branch by design; assembled outputs are regenerated in the final QUALITY PR",
+    "Consumer acknowledgements are recorded through desk_contract_ack once the gateway is public; the change document ships with none"
+  ],
+  "approved_by": "human:Oveshen Govender"
+}

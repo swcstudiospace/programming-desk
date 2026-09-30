@@ -88,6 +88,9 @@ jobs:
       - name: G-5/G-6 — Rollback and destructive operations
         run: python3 ci/gates/check_rollback.py --receipt "${{ steps.receipt.outputs.path }}"
 
+      - name: G-7 — Desk integrity
+        run: python3 ci/gates/check_desk_integrity.py --repo .
+
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
     runs-on: ubuntu-latest

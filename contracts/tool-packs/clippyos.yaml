@@ -1,0 +1,58 @@
+# Tool pack: ClippyOS. Loaded for one ticket via desk_app_tools_load.
+# Contract surface (QUALITY); consumers bot-02-web-edge, bot-03-android, bot-04-ios.
+version: 1.0.0
+app: clippyos
+title: ClippyOS
+seats: [web, android, ios]
+tools:
+  - name: clippyos_api_smoke
+    kind: read
+    gates: []
+    description: Hit the ClippyOS API health endpoint for one environment and report status, version and latency.
+    backend: packs.api_smoke
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        environment: { type: string, enum: [staging, production], default: staging }
+
+  - name: clippyos_render_job_status
+    kind: read
+    gates: []
+    description: Status of a ClippyOS render job by id.
+    backend: packs.render_job_status
+    input:
+      type: object
+      additionalProperties: false
+      required: [job_id]
+      properties:
+        environment: { type: string, enum: [staging, production], default: staging }
+        job_id: { type: string, pattern: "^[A-Za-z0-9_-]{4,80}$" }
+
+  - name: clippyos_push_test
+    kind: write
+    gates: []
+    description: Send a test push to a registered ClippyOS test device. Test devices only.
+    backend: packs.push_test
+    input:
+      type: object
+      additionalProperties: false
+      required: [platform, device_label]
+      properties:
+        platform: { type: string, enum: [android, ios] }
+        device_label: { type: string, pattern: "^[a-z0-9-]{2,40}$" }
+        title: { type: string, maxLength: 80, default: "Desk test push" }
+        body: { type: string, maxLength: 200, default: "Sent by the Programming Desk." }
+
+  - name: clippyos_crash_reports
+    kind: read
+    gates: []
+    description: Recent crash groups for the ClippyOS mobile apps from the configured crash reporter.
+    backend: packs.crash_reports
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        platform: { type: string, enum: [android, ios] }
+        since_hours: { type: integer, minimum: 1, maximum: 720, default: 24 }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 10 }

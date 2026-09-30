@@ -59,6 +59,13 @@ def main() -> int:
         [str(GATES_DIR / "check_rollback.py"), "--receipt", str(args.receipt)],
     ))
 
+    # G-7 reads the repo as it is rather than a diff or a receipt, so it takes no --bot and
+    # always runs: a bad roster is bad on every commit, not only the one that introduced it.
+    results.append(run(
+        "G-7  Desk integrity",
+        [str(GATES_DIR / "check_desk_integrity.py"), "--repo", str(REPO_ROOT)],
+    ))
+
     print(f"\n{'=' * 70}\nSUMMARY\n{'=' * 70}")
     failed = 0
     for name, code in results:

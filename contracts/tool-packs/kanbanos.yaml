@@ -1,0 +1,70 @@
+# Tool pack: KanbanOS. Loaded by ANDROID, IOS or WEB for one ticket via desk_app_tools_load.
+# Contract surface (QUALITY); consumers bot-02-web-edge, bot-03-android, bot-04-ios.
+# At most five tools per pack; live tools per seat never exceed 20.
+version: 1.0.0
+app: kanbanos
+title: KanbanOS
+seats: [web, android, ios]
+tools:
+  - name: kanbanos_api_smoke
+    kind: read
+    gates: []
+    description: Hit the KanbanOS API health and contract endpoints for one environment and report status, version and latency.
+    backend: packs.api_smoke
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        environment: { type: string, enum: [staging, production], default: staging }
+
+  - name: kanbanos_supabase_query
+    kind: read
+    gates: []
+    description: Read-only SQL against the KanbanOS Supabase project (SELECT only; rows capped).
+    backend: packs.supabase_query
+    input:
+      type: object
+      additionalProperties: false
+      required: [sql]
+      properties:
+        sql: { type: string, minLength: 6, maxLength: 4000 }
+        limit: { type: integer, minimum: 1, maximum: 200, default: 50 }
+
+  - name: kanbanos_push_test
+    kind: write
+    gates: []
+    description: Send a test push (FCM or APNs) to a registered test device for KanbanOS. Test devices only.
+    backend: packs.push_test
+    input:
+      type: object
+      additionalProperties: false
+      required: [platform, device_label]
+      properties:
+        platform: { type: string, enum: [android, ios] }
+        device_label: { type: string, pattern: "^[a-z0-9-]{2,40}$" }
+        title: { type: string, maxLength: 80, default: "Desk test push" }
+        body: { type: string, maxLength: 200, default: "Sent by the Programming Desk." }
+
+  - name: kanbanos_feature_flags
+    kind: read
+    gates: []
+    description: Current KanbanOS feature flags for one environment.
+    backend: packs.feature_flags
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        environment: { type: string, enum: [staging, production], default: staging }
+
+  - name: kanbanos_crash_reports
+    kind: read
+    gates: []
+    description: Recent crash groups for the KanbanOS mobile apps from the configured crash reporter.
+    backend: packs.crash_reports
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        platform: { type: string, enum: [android, ios] }
+        since_hours: { type: integer, minimum: 1, maximum: 720, default: 24 }
+        limit: { type: integer, minimum: 1, maximum: 50, default: 10 }

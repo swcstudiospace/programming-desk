@@ -123,8 +123,13 @@ def instrument_argv(
     return build_adb_argv("shell", "am", "instrument", "-w", component, serial=serial)
 
 
-def logcat_argv(*, serial: str | None = None) -> list[str]:
-    return build_adb_argv("logcat", "-d", serial=serial)
+def logcat_argv(*, serial: str | None = None, dump: bool = True) -> list[str]:
+    """Build a logcat argv. `dump=True` -> one-shot `-d` dump and exit;
+    `dump=False` -> a live stream, for a timed capture window."""
+    args = ["logcat"]
+    if dump:
+        args.append("-d")
+    return build_adb_argv(*args, serial=serial)
 
 
 def screenshot_argv(*, serial: str | None = None) -> list[str]:

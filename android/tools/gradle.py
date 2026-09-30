@@ -32,6 +32,22 @@ def find_gradlew(module: str | None = None, cwd: Path | None = None) -> Path | N
     return None
 
 
+def module_task(module: str, task: str = "test") -> str:
+    """Convert a filesystem module path (e.g. 'app', 'android/app') into a
+    Gradle project task reference (e.g. ':app:test', ':android:app:test').
+
+    Gradle treats any bare positional argument as a task name, so passing
+    the raw path (e.g. 'android/app') alongside 'test' makes Gradle look
+    for a *second*, nonexistent task called 'android/app' instead of
+    scoping the 'test' task to that project.
+    """
+    normalized = module.strip().replace("\\", "/").strip("/").lstrip(":")
+    segments = [seg for seg in normalized.replace(":", "/").split("/") if seg]
+    if not segments:
+        return task
+    return ":" + ":".join(segments) + ":" + task
+
+
 def unit_test(
     module: str | None = None,
     gradle_args: list[str] | None = None,
@@ -42,10 +58,10 @@ def unit_test(
     wrapper = find_gradlew(module=module, cwd=cwd)
     if wrapper is None:
         return 0, SKIP_LINE
-    argv = [str(wrapper), "test"]
     if module:
-        # Pass module as a Gradle project path hint when provided.
-        argv.append(module)
+        argv = [str(wrapper), module_task(module)]
+    else:
+        argv = [str(wrapper), "test"]
     if gradle_args:
         argv.extend(gradle_args)
     proc = subprocess.run(

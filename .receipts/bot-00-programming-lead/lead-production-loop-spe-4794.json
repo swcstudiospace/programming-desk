@@ -1,9 +1,9 @@
 {
   "task_id": "lead-production-loop-spe-4794",
   "bot": "bot-00-programming-lead",
-  "branch": "claude/spe-4794-production-loop-v4i18e",
+  "branch": "bot-00-programming-lead/spe-4794-production-loop",
   "started_at": "2026-09-30T06:54:22Z",
-  "completed_at": "2026-09-30T10:58:00Z",
+  "completed_at": "2026-09-30T14:10:00Z",
   "runtime": "claude-cloud",
   "lane": "A",
   "repo": "https://github.com/swcstudiospace/programming-desk",
@@ -13,7 +13,7 @@
     "SPE-4790"
   ],
   "agent_id": null,
-  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/37",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/40",
   "brief_etag": null,
   "change_summary": "SPE-4794: make brief -> act -> memory_write -> events_emit -> handoff_to_hermes the default production turn for every desk seat without waiting on Phase 0.5 code. Adds the LEAD-owned seat skill skills/desk-bootstrap/desk-production-loop/SKILL.md (memory_brief plus its etag required before any repo work; degraded mode needs a recorded human ack; docs and memory only through the substrate or the gateway; skills list/invoke only until skills.approve; handoff_to_hermes signed-packet fields stubbed for SPE-4792 and omitted rather than fabricated), wires it into BASE_SKILLS in scripts/generate-templates.py so all seven regenerated grokbot templates enable it, and documents the loop and the seat defaults in grokbot/README.md, docs/desk-operating-model.md and docs/vps-agent-bus.md.",
   "commands": [
@@ -21,25 +21,25 @@
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
       "exit_code": 0,
       "duration_s": 0.07,
-      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 13 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 13 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.31,
-      "output_tail": "G-3 PASS \u2014 13 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 13 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 0,
       "duration_s": 0.15,
-      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
     },
     {
       "cmd": "python3 scripts/generate-templates.py --check",
@@ -66,28 +66,28 @@
       "cmd": "git diff --stat origin/main -- ownership.yaml",
       "exit_code": 0,
       "duration_s": 0.02,
-      "output_tail": "(empty \u2014 ownership.yaml is byte-identical to origin/main)",
+      "output_tail": "(empty — ownership.yaml is byte-identical to origin/main)",
       "note": "QUALITY owns ownership.yaml. LEAD did not write the carve-out it would need for a top-level skills/desk-production-loop/ directory; the skill was placed inside LEAD's existing skills/desk-bootstrap/** carve-out instead."
     },
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json --bot bot-00-programming-lead --strict",
       "exit_code": 1,
       "duration_s": 0.03,
-      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
       "note": "That is the only problem reported. No structural problem, no bypass pattern, no unevidenced claim."
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 0.07,
-      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 14 file(s) within owned paths",
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 14 file(s) within owned paths",
       "note": "Re-run with this receipt staged. Commands 1 and 2 saw 13 files because they predated it; .receipts/bot-00-programming-lead/** is bot-00's, so the count changes and the verdict does not. The receipt needs git add -f: .gitignore line 5 ignores .receipts/**/*.json, which is how every committed receipt in this repository got there."
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 0.33,
-      "output_tail": "G-3 PASS \u2014 14 file(s) scanned, no secrets detected",
+      "output_tail": "G-3 PASS — 14 file(s) scanned, no secrets detected",
       "note": "Same re-run, this receipt included."
     },
     {
@@ -115,13 +115,13 @@
       "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q",
       "exit_code": 0,
       "duration_s": 11.1,
-      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.42s"
+      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.42s"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.45,
-      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules\nG-1 PASS \u2014 bot-00-programming-lead: 14 file(s) within owned paths\nG-3 PASS \u2014 14 file(s) scanned, no secrets detected",
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules\nG-1 PASS — bot-00-programming-lead: 14 file(s) within owned paths\nG-3 PASS — 14 file(s) scanned, no secrets detected",
       "note": "After the Greptile round. No new path entered the diff, so the fixes did not widen the PR."
     },
     {
@@ -135,7 +135,7 @@
       "cmd": "grep -n 'generated_at' services/desk-gateway/src/desk_gateway/tools/core.py | head -5",
       "exit_code": 0,
       "duration_s": 0.02,
-      "output_tail": "core.brief: now = time.time() at entry; result['generated_at'] = now; a cache hit returns {**cached[1], 'cached': True} \u2014 i.e. the ORIGINAL assembly time, for up to BRIEF_TTL_SEC.",
+      "output_tail": "core.brief: now = time.time() at entry; result['generated_at'] = now; a cache hit returns {**cached[1], 'cached': True} — i.e. the ORIGINAL assembly time, for up to BRIEF_TTL_SEC.",
       "note": "Greptile P1 4141919330 verified true: generated_at is the wall clock when the gateway assembled the response, not a memory revision. It moves on every fresh call whether or not memory changed, and freezes for the cache window after memory changed, so recording it as brief_etag and diffing it is unsound in both directions."
     },
     {
@@ -162,14 +162,14 @@
       "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q && python3 ci/gates/check_ownership.py --validate-manifest && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 12.0,
-      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.50s\nG-1 manifest OK \u2014 7 bots, 103 rules\nG-1 PASS \u2014 bot-00-programming-lead: 14 file(s) within owned paths\nG-3 PASS \u2014 14 file(s) scanned, no secrets detected",
-      "note": "Whole gate set after the round-2 fixes. 14 paths: verify.sh is new, so the count held because this receipt and the new script offset nothing \u2014 see files_changed (15 entries) and the per-file run below."
+      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.50s\nG-1 manifest OK — 7 bots, 103 rules\nG-1 PASS — bot-00-programming-lead: 14 file(s) within owned paths\nG-3 PASS — 14 file(s) scanned, no secrets detected",
+      "note": "Whole gate set after the round-2 fixes. 14 paths: verify.sh is new, so the count held because this receipt and the new script offset nothing — see files_changed (15 entries) and the per-file run below."
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main) && python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 0.5,
-      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS \u2014 15 file(s) scanned, no secrets detected",
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected",
       "note": "With verify.sh and this receipt staged. skills/desk-bootstrap/** is bot-00's, so the new script is LEAD's to add; no .py was created, because **/*.py resolves to bot-01."
     },
     {
@@ -197,20 +197,20 @@
       "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q && python3 ci/gates/check_ownership.py --validate-manifest && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main) && python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 12.2,
-      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.11s\nG-1 manifest OK \u2014 7 bots, 103 rules\nG-1 PASS \u2014 bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS \u2014 15 file(s) scanned, no secrets detected"
+      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.11s\nG-1 manifest OK — 7 bots, 103 rules\nG-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "grep -n 'def intake_counts\\|def pack_records' -A 12 services/desk-gateway/src/desk_gateway/store.py; sed -n 31,46p services/desk-gateway/src/desk_gateway/tools/core.py",
       "exit_code": 0,
       "duration_s": 0.03,
-      "output_tail": "store.pack_records and store.intake_counts are plain locked reads of the gateway's local JSON store and return a list / a dict of counts \u2014 no error shape and no upstream. reminders is a static two-item list. seat, generated_at and cached are computed locally. The only upstream-backed fields in the brief are substrate and recall.",
-      "note": "Proactive audit, not a reviewer finding. After three rounds each patching one more failure shape into \u00a72.1, LEAD enumerated every field of the brief to establish whether the list is now complete rather than merely current."
+      "output_tail": "store.pack_records and store.intake_counts are plain locked reads of the gateway's local JSON store and return a list / a dict of counts — no error shape and no upstream. reminders is a static two-item list. seat, generated_at and cached are computed locally. The only upstream-backed fields in the brief are substrate and recall.",
+      "note": "Proactive audit, not a reviewer finding. After three rounds each patching one more failure shape into §2.1, LEAD enumerated every field of the brief to establish whether the list is now complete rather than merely current."
     },
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh && python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main) && python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 1.1,
-      "output_tail": "ok: \u2026 R3 per-bank recall \u2026 no stale wording, no credential literal\ngenerate-templates --check: 7 templates up to date\nG-7 PASS\nG-1 PASS \u2014 bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS \u2014 15 file(s) scanned, no secrets detected",
+      "output_tail": "ok: … R3 per-bank recall … no stale wording, no credential literal\ngenerate-templates --check: 7 templates up to date\nG-7 PASS\nG-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected",
       "note": "verify.sh now also asserts the exhaustiveness note and the rule that the table must grow if the gateway adds another upstream-backed field."
     },
     {
@@ -218,35 +218,113 @@
       "exit_code": 0,
       "duration_s": 0.02,
       "output_tail": "def _read(self, name, default): if not path.exists(): return default; try: return json.loads(path.read_text(...)) except (OSError, json.JSONDecodeError): return default",
-      "note": "Greptile P2 4142123913 verified true. The local store reader swallows both error classes and returns the default, so loaded_packs and intake_queue cannot report a failure \u2014 they fail silently. LEAD's own proactive 'the list is complete' claim from the previous push was the overclaim; it is withdrawn and replaced above."
+      "note": "Greptile P2 4142123913 verified true. The local store reader swallows both error classes and returns the default, so loaded_packs and intake_queue cannot report a failure — they fail silently. LEAD's own proactive 'the list is complete' claim from the previous push was the overclaim; it is withdrawn and replaced above."
     },
     {
       "cmd": "grep -n 'recall.results\\[<bank>\\].reason' skills/desk-bootstrap/desk-production-loop/SKILL.md docs/desk-operating-model.md && bash skills/desk-bootstrap/desk-production-loop/verify.sh",
       "exit_code": 0,
       "duration_s": 0.08,
-      "output_tail": "SKILL.md:230 and docs/desk-operating-model.md both name recall.results[<bank>].reason\nok: \u2026 R3 per-bank recall \u2026 no stale wording, no credential literal",
-      "note": "Greptile P2 4142123900: \u00a73 named only substrate.reason and recall.reason, so a per-bank Hindsight failure would be acknowledged and receipted without its reason. \u00a73 now has a three-row table of reason paths, requires the bank name, and says why (pd-desk and pd-<seat> failing are different incidents). verify.sh asserts both files carry the path."
+      "output_tail": "SKILL.md:230 and docs/desk-operating-model.md both name recall.results[<bank>].reason\nok: … R3 per-bank recall … no stale wording, no credential literal",
+      "note": "Greptile P2 4142123900: §3 named only substrate.reason and recall.reason, so a per-bank Hindsight failure would be acknowledged and receipted without its reason. §3 now has a three-row table of reason paths, requires the bank name, and says why (pd-desk and pd-<seat> failing are different incidents). verify.sh asserts both files carry the path."
     },
     {
       "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main) && python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
       "exit_code": 0,
       "duration_s": 12.3,
-      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.52s\nG-1 PASS \u2014 bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS \u2014 15 file(s) scanned, no secrets detected",
+      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.52s\nG-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected",
       "note": "Whole gate set after the round-4 fixes, with everything staged."
     },
     {
       "cmd": "sed -n 296,319p services/desk-gateway/src/desk_gateway/tools/lead.py; sed -n 82,98p services/desk-gateway/src/desk_gateway/store.py",
       "exit_code": 0,
       "duration_s": 0.03,
-      "output_tail": "lead.roster_status returns {..., 'intake_queue': svc.store.intake_counts()} \u2014 the same call desk_brief makes \u2014 and uses store.packs_for, which has the same silent _read default. store.load_pack does _read('packs', {}) -> mutate -> _write('packs', packs), so on a corrupt file it reads {} and then overwrites the file.",
+      "output_tail": "lead.roster_status returns {..., 'intake_queue': svc.store.intake_counts()} — the same call desk_brief makes — and uses store.packs_for, which has the same silent _read default. store.load_pack does _read('packs', {}) -> mutate -> _write('packs', packs), so on a corrupt file it reads {} and then overwrites the file.",
       "note": "Greptile P1 4142177848 verified true on both halves. The remedy LEAD proposed in round 4 was circular (roster_status re-reads the identical source and returns the identical empty answer) and the pack suggestion was destructive (a write that discards every seat's pack records after reading a corrupt file as empty). Fixing a docs overclaim with advice that causes data loss is worse than the overclaim."
     },
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh && python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q",
       "exit_code": 0,
       "duration_s": 11.4,
-      "output_tail": "ok: \u2026 no stale wording, no credential literal\ngenerate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.3s",
+      "output_tail": "ok: … no stale wording, no credential literal\ngenerate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.3s",
       "note": "verify.sh now also asserts the bad remedy string is absent, so it cannot reappear."
+    },
+    {
+      "cmd": "sed -n 107,145p services/desk-gateway/src/desk_gateway/server.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "SeatServer.call_tool returns a SPARSE top-level {error, reason} for forbidden, unknown_tool, invalid_args, secret_refused, deadline, backend_missing and internal -- no seat/substrate/recall field. Round-6 P1-3 evidence: a call-level refusal is not the nested shape."
+    },
+    {
+      "cmd": "sed -n 19,46p services/desk-gateway/src/desk_gateway/tools/core.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "core.brief builds {seat, generated_at, substrate, recall, loaded_packs, intake_queue, reminders} and sets NO top-level error or reason; the cache branch alone adds \"cached\": True (`return {**cached[1], \"cached\": True}`), so the fresh path never sets the key. P1-3 + P2-10."
+    },
+    {
+      "cmd": "grep -n 'ok = any' -B 2 -A 3 services/desk-gateway/src/desk_gateway/tools/core.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "100:    ok = any(not r.get(\"error\") for r in results.values())  <- ANY over {hindsight, substrate}; line 103 returns {\"ok\": True, ..., \"results\": results}. P1-4: ok:true is compatible with one plane having refused."
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-rosters/_core.yaml')); print([(t['name'], t['input'].get('additionalProperties'), sorted(t['input']['properties'])) for t in d['tools'] if t['name'] in ('desk_brief','desk_memory_retain','desk_event_emit')])\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "desk_memory_retain additionalProperties=False props=['content','graph_id','receipt_path','source','tags','task_id'] -- no idempotency key exists and none can be added. desk_brief props=['graph_id','refresh','task_id'] -- no etag output. desk_event_emit props=['graph_id','kind','payload','task_id']. P1-4 + P1-2."
+    },
+    {
+      "cmd": "grep -n '\"kind\": \"note\"' -A 4 services/desk-gateway/src/desk_gateway/tools/core.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "186: \"kind\": \"note\",  187: \"summary\": f\"{SEAT_LABEL[ctx.short]} {args['kind']}\",  189: \"payload\": {\"seat\": ..., \"event\": args[\"kind\"], \"task_id\": ..., **payload}. P1-5: every catalogue kind is written as note; the type survives only in payload.event, and the seat's payload keys merge OVER the injected seat/event/task_id."
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "ok: ... R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, ... all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "mv grokbot/templates/IOS.md /tmp/IOS.md.bak && bash skills/desk-bootstrap/desk-production-loop/verify.sh; mv /tmp/IOS.md.bak grokbot/templates/IOS.md",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "FAIL: missing seat template(s): grokbot/templates/IOS.md -- exit 1. P2-8 negative test: under the previous glob this case printed \"7/7 templates\" and exited 0."
+    },
+    {
+      "cmd": "python3 -c \"...replace('**This is a documented contract gap, not a design.**', 'The catalogue routes on kind, so swapping it misroutes the turn.')...\" && bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "FAIL: R6d gap named -- exit 1. Reintroducing the superseded typed-routing claim is caught. SKILL.md restored from backup; git diff --stat clean afterwards."
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "generate-templates --check: 7 templates up to date / 7 template(s) clean; G-7 PASS -- desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS -- bot-00-programming-lead: 15 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS -- 15 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .github/workflows/gates.yml",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-1 FAIL -- bot-00-programming-lead / FOREIGN .github/workflows/gates.yml (owned by bot-05-infrastructure). P2-7 evidence: LEAD cannot wire verify.sh into the PR workflow."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL -- 'approved_by' is missing -- work must be reviewed by someone else. Expected: the approval was cleared in this push (P1-1) and stays absent until QUALITY stamps the current tip."
     }
   ],
   "claims": [
@@ -259,7 +337,7 @@
       "evidence_command_index": 1
     },
     {
-      "claim": "G-3 reports no secret in any of the thirteen changed files. No token, passphrase, tailnet name, key id or signature value was written \u2014 the signed-packet table names field names only.",
+      "claim": "G-3 reports no secret in any of the thirteen changed files. No token, passphrase, tailnet name, key id or signature value was written — the signed-packet table names field names only.",
       "evidence_command_index": 2
     },
     {
@@ -287,8 +365,8 @@
       "evidence_command_index": 7
     },
     {
-      "claim": "G-2 fails closed on this receipt while approved_by is empty. That empty field is intentional \u2014 LEAD does not self-approve, and the PR stays draft until QUALITY stamps it. It is not a completed approval and not a passing gate.",
-      "evidence_command_index": 8,
+      "claim": "G-2 fails closed on this receipt because no approval is recorded. approved_by, approved_at and approval_note were REMOVED in this push: the earlier stamp named tip d0370d77 and deferred tip matching, and G-2 only checks that approved_by is non-empty and differs from the authoring bot, so that stamp would have passed the gate for a tip it never reviewed. The failure is the designed state until QUALITY reviews the current tip.",
+      "evidence_command_index": 46,
       "expects_failure": true
     },
     {
@@ -308,7 +386,7 @@
       "evidence_command_index": 13
     },
     {
-      "claim": "Greptile P2 4141824957 was a real gap and is documented where LEAD owns the surface. The doctor's _declared_skills() derives from prompts/<bot_id>.xml plus a hard-coded three-name tuple, so BASE_SKILLS in the generator does not reach it and a green skills row is silent about desk-production-loop. The one-line SYSTEMS fix is named in scripts/generate-templates.py, in the skill \u00a74, and in this receipt's blockers. LEAD did not edit bot-01's code or another seat's prompt to close it.",
+      "claim": "Greptile P2 4141824957 was a real gap and is documented where LEAD owns the surface. The doctor's _declared_skills() derives from prompts/<bot_id>.xml plus a hard-coded three-name tuple, so BASE_SKILLS in the generator does not reach it and a green skills row is silent about desk-production-loop. The one-line SYSTEMS fix is named in scripts/generate-templates.py, in the skill §4, and in this receipt's blockers. LEAD did not edit bot-01's code or another seat's prompt to close it.",
       "evidence_command_index": 11
     },
     {
@@ -320,7 +398,7 @@
       "evidence_command_index": 15
     },
     {
-      "claim": "Greptile P1 4141919305 was a real and serious defect, and is fixed. A failed desk_brief is a fully populated response with the failure nested under substrate.error (or recall.error) and NO top-level reason, so the previous success test would have read a substrate outage as a quiet ticket and let a seat edit without the ack. New \u00a72.1 makes the verdict substrate.error absent AND recall.error absent AND tool listed AND not deadline-cut, states in bold that a populated response is not a successful brief, and says there is no top-level reason to look for. The L1 tree, \u00a73, the never-table, the failure modes, the gate mapping, a rewritten bad example and docs/desk-operating-model.md point 1 all carry it.",
+      "claim": "Greptile P1 4141919305 was a real and serious defect, and is fixed. A failed desk_brief is a fully populated response with the failure nested under substrate.error (or recall.error) and NO top-level reason, so the previous success test would have read a substrate outage as a quiet ticket and let a seat edit without the ack. New §2.1 makes the verdict substrate.error absent AND recall.error absent AND tool listed AND not deadline-cut, states in bold that a populated response is not a successful brief, and says there is no top-level reason to look for. The L1 tree, §3, the never-table, the failure modes, the gate mapping, a rewritten bad example and docs/desk-operating-model.md point 1 all carry it.",
       "evidence_command_index": 16
     },
     {
@@ -349,7 +427,7 @@
       "evidence_command_index": 22
     },
     {
-      "claim": "Greptile P1 4142053939 was a real defect and is fixed. core.memory_recall has two branches with two failure shapes: with Hindsight configured it appends {bank, **hit} per bank and returns early, so a failed bank appears only in recall.results[i].error and recall.error is never set; recall.error belongs to the substrate-fallback branch alone. The \u00a72.1 test now requires substrate.error absent AND recall.error absent AND no recall.results[].error, states that one failed bank is enough because pd-desk holds the desk's standing decisions, and the same correction is in docs/desk-operating-model.md point 1, point 3, the Lane C step, the L1 tree, \u00a73, the never-table, three failure-mode rows and the gate mapping.",
+      "claim": "Greptile P1 4142053939 was a real defect and is fixed. core.memory_recall has two branches with two failure shapes: with Hindsight configured it appends {bank, **hit} per bank and returns early, so a failed bank appears only in recall.results[i].error and recall.error is never set; recall.error belongs to the substrate-fallback branch alone. The §2.1 test now requires substrate.error absent AND recall.error absent AND no recall.results[].error, states that one failed bank is enough because pd-desk holds the desk's standing decisions, and the same correction is in docs/desk-operating-model.md point 1, point 3, the Lane C step, the L1 tree, §3, the never-table, three failure-mode rows and the gate mapping.",
       "evidence_command_index": 23
     },
     {
@@ -366,7 +444,7 @@
       "evidence_command_index": 26
     },
     {
-      "claim": "WITHDRAWN AND REPLACED (Greptile P2 4142123913). The earlier wording of this claim said the \u00a72.1 failure list was 'exhaustive for desk_brief'. That was an overclaim: substrate and recall are indeed the only fields that can REPORT a failure, but loaded_packs and intake_queue fail SILENTLY \u2014 store._read returns the caller's default on OSError or json.JSONDecodeError, so a corrupt or unreadable store file is indistinguishable from an empty pack list or an empty intake queue while every check in the table passes. The corrected claim: the three rows cover every failure the brief can report, and the skill now documents the silent-default limit separately with the rule that neither field's emptiness may be claimed as a fact.",
+      "claim": "WITHDRAWN AND REPLACED (Greptile P2 4142123913). The earlier wording of this claim said the §2.1 failure list was 'exhaustive for desk_brief'. That was an overclaim: substrate and recall are indeed the only fields that can REPORT a failure, but loaded_packs and intake_queue fail SILENTLY — store._read returns the caller's default on OSError or json.JSONDecodeError, so a corrupt or unreadable store file is indistinguishable from an empty pack list or an empty intake queue while every check in the table passes. The corrected claim: the three rows cover every failure the brief can report, and the skill now documents the silent-default limit separately with the rule that neither field's emptiness may be claimed as a fact.",
       "evidence_command_index": 27
     },
     {
@@ -374,11 +452,11 @@
       "evidence_command_index": 28
     },
     {
-      "claim": "Greptile P2 4142123913 was a valid catch on LEAD's own overclaim, and the claim it targeted is withdrawn rather than quietly reworded. The skill separates 'every failure the brief can report' from the silent-default limit, quotes store._read, and holds the operative rule that an empty loaded_packs or intake_queue means 'empty or unreadable, indistinguishable' and may not be claimed as a fact. CORRECTED by Greptile P1 4142177848: the remedy this claim originally cited \u2014 re-check with desk_roster_status, or load/unload a pack \u2014 was itself wrong, and is now removed and documented as forbidden. The handling is to record the value unverified as unread; see the replacement claim below.",
+      "claim": "Greptile P2 4142123913 was a valid catch on LEAD's own overclaim, and the claim it targeted is withdrawn rather than quietly reworded. The skill separates 'every failure the brief can report' from the silent-default limit, quotes store._read, and holds the operative rule that an empty loaded_packs or intake_queue means 'empty or unreadable, indistinguishable' and may not be claimed as a fact. CORRECTED by Greptile P1 4142177848: the remedy this claim originally cited — re-check with desk_roster_status, or load/unload a pack — was itself wrong, and is now removed and documented as forbidden. The handling is to record the value unverified as unread; see the replacement claim below.",
       "evidence_command_index": 29
     },
     {
-      "claim": "Greptile P2 4142123900 was valid and is fixed. \u00a73's ack, receipt and blocker steps now name all three reason paths \u2014 substrate.reason, recall.reason, and recall.results[<bank>].reason with the bank named \u2014 and state why the per-bank one is the easiest to lose: the round that added per-bank detection did not add per-bank reporting. docs/desk-operating-model.md point 3 carries the same three paths, and two failure-mode rows were added.",
+      "claim": "Greptile P2 4142123900 was valid and is fixed. §3's ack, receipt and blocker steps now name all three reason paths — substrate.reason, recall.reason, and recall.results[<bank>].reason with the bank named — and state why the per-bank one is the easiest to lose: the round that added per-bank detection did not add per-bank reporting. docs/desk-operating-model.md point 3 carries the same three paths, and two failure-mode rows were added.",
       "evidence_command_index": 30
     },
     {
@@ -392,35 +470,83 @@
     {
       "claim": "The round-5 fix weakened nothing: verify.sh passes with the new assertions, templates regenerate identically, G-7 passes and the 157 gate tests pass.",
       "evidence_command_index": 33
+    },
+    {
+      "claim": "A failed desk_brief has two distinct response shapes. A call-level refusal (forbidden, unknown_tool, invalid_args, secret_refused, deadline, backend_missing, internal) is a sparse top-level {error, reason} with no substrate or recall field, produced by SeatServer.call_tool; a completed brief returns the full object and sets no top-level error or reason at all. The skill now classifies on the top-level error key before judging, and the reason-path table has a row for the top-level reason so the ack and receipt procedure works on both shapes.",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "desk_brief exposes no etag in contracts/tool-rosters/_core.yaml and the schema is additionalProperties: false, so no revision marker is available to any gateway seat today. The skill therefore requires a recorded degraded-mode ack before repo work on such a brief, under its own operation string (brief_no_revision_marker), and states that brief_read_at + cached is a record and never a licence. It does NOT call the brief failed -- that would report an outage that did not happen.",
+      "evidence_command_index": 37
+    },
+    {
+      "claim": "core.memory_retain writes two planes and returns ok on any(), not all(), so ok: true is compatible with one plane having refused. The skill now instructs seats to read results per plane, records that only the two local refusals (evidence_required, secret_refused) prove nothing was written, and forbids a blind retry because the roster accepts no idempotency key.",
+      "evidence_command_index": 36
+    },
+    {
+      "claim": "core.event_emit writes top-level kind 'note' for every catalogue kind and carries the requested type in payload.event, so a consumer cannot route on the top-level kind. The skill documents payload.event as the routing field on the gateway path, records the contract gap against docs/handoff-contracts.md as QUALITY's G-4 change, forbids claiming an emission routed anywhere, and names seat/event/task_id as keys a payload must not set because the seat's payload merges over the gateway's.",
+      "evidence_command_index": 38
+    },
+    {
+      "claim": "verify.sh now asserts the seven seat template filenames exist, that the directory holds exactly those seven, and that the list matches the SEATS table in scripts/generate-templates.py -- before any per-template check runs or 7/7 is reported. Verified by removing IOS.md: FAIL, exit 1, where the previous glob printed 7/7 and exited 0.",
+      "evidence_command_index": 40,
+      "expects_failure": true
+    },
+    {
+      "claim": "Each round-6 rule is asserted in verify.sh, and the four superseded wordings are asserted ABSENT (the unscoped 'There is no top-level reason', the etag-less licence, 'The catalogue routes on kind, so swapping it misroutes the turn', and payload.reason: \"brief_degraded\"). Verified by reintroducing the typed-routing claim: FAIL: R6d gap named, exit 1.",
+      "evidence_command_index": 41,
+      "expects_failure": true
+    },
+    {
+      "claim": "The seven committed templates are still exactly what scripts/generate-templates.py produces, and desk integrity passes, after the round-6 edits. No template content changed in this push -- the fixes are in the skill, the two pack docs and verify.sh.",
+      "evidence_command_index": 42
+    },
+    {
+      "claim": "G-1 and G-3 pass for bot-00-programming-lead across the whole fifteen-path branch at this tip, this receipt included. Nothing crossed a seat boundary.",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": ".github/workflows/** is bot-05-infrastructure's under ownership.yaml, so wiring verify.sh and generate-templates.py --check into the PR workflow is a foreign edit for LEAD. G-1 reports FOREIGN on .github/workflows/gates.yml for this bot. P2-7 is recorded as an INFRA/QUALITY ask and verify.sh is strengthened instead of the boundary being crossed.",
+      "evidence_command_index": 45,
+      "expects_failure": true
     }
   ],
   "unverified": [
-    "The live memory_brief response was never observed in this session \u2014 the substrate/Hermes connector is not reachable from this cloud container, so whether substrate memory_brief returns an etag at all is unverified. What IS verified from the code is that the gateway's desk_brief does not (services/desk-gateway core.brief returns seat, generated_at, substrate, recall, loaded_packs, intake_queue, reminders, cached). The skill therefore requires a recorded revision marker rather than an etag specifically: the etag where a tool's contract has one, and desk_brief.generated_at otherwise. A successful brief from an etag-less tool is explicitly NOT degraded \u2014 Greptile P1 4141824942 caught the earlier wording, which would have degraded every gateway turn on the desk.",
-    "No memory_brief, memory_write, events_emit, graph_get or handoff_to_hermes call was made. The tool names, kinds and failure semantics are transcribed from contracts/tool-rosters/_core.yaml, docs/upgrade-plan-desk-v2.md \u00a74 and docs/vps-agent-bus.md \u00a72, not from a live call.",
-    "brief_etag on this receipt is null because this run could not brief at all: no connector, so desk_brief/memory_brief was never listed. Under the corrected \u00a73 that is genuinely degraded (tool not listed), not the etag-less-tool case \u2014 a LEAD docs turn in a container with no connector is the skill's own first example.",
+    "The live memory_brief response was never observed in this session — the substrate/Hermes connector is not reachable from this cloud container, so whether substrate memory_brief returns an etag at all is unverified. What IS verified from the code is that the gateway's desk_brief does not (services/desk-gateway core.brief returns seat, generated_at, substrate, recall, loaded_packs, intake_queue, reminders, cached). The skill therefore requires a recorded revision marker rather than an etag specifically: the etag where a tool's contract has one, and desk_brief.generated_at otherwise. A successful brief from an etag-less tool is explicitly NOT degraded — Greptile P1 4141824942 caught the earlier wording, which would have degraded every gateway turn on the desk.",
+    "No memory_brief, memory_write, events_emit, graph_get or handoff_to_hermes call was made. The tool names, kinds and failure semantics are transcribed from contracts/tool-rosters/_core.yaml, docs/upgrade-plan-desk-v2.md §4 and docs/vps-agent-bus.md §2, not from a live call.",
+    "brief_etag on this receipt is null because this run could not brief at all: no connector, so desk_brief/memory_brief was never listed. Under the corrected §3 that is genuinely degraded (tool not listed), not the etag-less-tool case — a LEAD docs turn in a container with no connector is the skill's own first example.",
     "The etag is not threaded through the roster schemas. contracts/tool-rosters/_core.yaml gives desk_brief no etag output and desk_memory_retain / desk_event_emit no etag input, and every roster schema is additionalProperties: false, so passing one today would be a validation error. The receipt is the only place it is recorded until QUALITY lands that contract change (G-4). The skill says so explicitly rather than implying the field already flows.",
-    "The five packet_* field names for the signed handoff are provisional placeholders for SPE-4792, which has not landed. They are documented as omit-do-not-send, and no signature, digest or key id was computed or invented. When SPE-4792 ships, its schema wins and the table in the skill \u00a77 and docs/vps-agent-bus.md is the thing to correct.",
+    "The five packet_* field names for the signed handoff are provisional placeholders for SPE-4792, which has not landed. They are documented as omit-do-not-send, and no signature, digest or key id was computed or invented. When SPE-4792 ships, its schema wins and the table in the skill §7 and docs/vps-agent-bus.md is the thing to correct.",
     "skills.approve does not exist as a capability anywhere in this repository. The rule is written as a standing restriction (list and invoke only) plus the condition that would lift it; it is not a claim that such a capability is being built or scheduled.",
-    "No new event kind was minted, so nothing here was verified against a live consumer. Degradation is signalled in payload.degraded on the kind that matches the outcome \u2014 implementation.completed for a finished degraded turn, ticket.blocked only for a turn that stopped without an ack. docs/handoff-contracts.md is QUALITY's contract surface and a dedicated loop.* kind is a G-4 change LEAD cannot make.",
+    "No new event kind was minted, so nothing here was verified against a live consumer. Degradation is signalled in payload.degraded on the kind that matches the outcome — implementation.completed for a finished degraded turn, ticket.blocked only for a turn that stopped without an ack. docs/handoff-contracts.md is QUALITY's contract surface and a dedicated loop.* kind is a G-4 change LEAD cannot make.",
     "The root .mcp.json still configures the hindsight and ragflow HTTP MCP servers. That file is bot-05-infrastructure's, so this change documents the boundary (Lane A cloud-session tooling, never a desk seat default) instead of editing it. Actually removing or re-scoping those entries is an INFRA ticket and is NOT done by this PR.",
     "skills/README.md still has no row for desk-production-loop. That file is bot-06-quality-security's; adding the row here would be the same cross-seat edit that PR #4's receipt already recorded as a deliberate G-1 violation. QUALITY adds the row.",
-    "The CI Quality Gates workflow will not attribute this branch. .github/workflows/gates.yml derives the acting bot from the branch prefix and requires ^bot-0[0-6]-[a-z0-9-]+$; this branch is claude/spe-4794-production-loop-v4i18e, so the 'Determine the acting bot' step exits 1 before G-1 runs. The gates recorded above were therefore run locally with --bot bot-00-programming-lead. A re-push under bot-00-programming-lead/spe-4794-production-loop would let CI run them, and needs the dispatcher's go-ahead since the branch name was pinned by the work order.",
-    "Greptile was not run \u2014 that is QUALITY's gate, not LEAD's.",
+    "CI attribution: .github/workflows/gates.yml derives the acting bot from the branch prefix and requires ^bot-0[0-6]-[a-z0-9-]+$. The PR branch bot-00-programming-lead/spe-4794-production-loop matches, so CI can attribute it; the gates recorded here were nonetheless run locally with --bot bot-00-programming-lead, and the CI run on the pushed tip is the independent record. The round-6 tip-fix commits were authored on claude/spe-4794-greptile-p1s-ceetv7 under the dispatcher's delivery rules and are for PR #40's branch; no second PR was opened.",
+    "Greptile was not run — that is QUALITY's gate, not LEAD's.",
     "ci/gates/run_all.py was not invoked as a suite; the individual gates relevant to this diff (G-1 manifest, G-1 per-branch, G-3, G-7, G-2) are recorded above.",
-    "pr_url is null at the time this receipt was written; the draft PR is opened from this branch in the same push.",
-    "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval.",
-    "The Greptile fixes are documentation-level and were verified by content assertions plus the repo's own gates, not by running a seat through the loop against a live gateway. Whether a seat actually follows the corrected \u00a73 and \u00a76 is observable only once the loop runs on a real ticket.",
-    "Whether the substrate memory_brief reached through the Hermes connector nests its upstream failure the same way desk_brief does is unverified \u2014 the connector was not reachable. The skill therefore states the rule concretely for desk_brief (substrate.error / recall.error, verified from the gateway source) and, for memory_brief, tells the seat to find the field that says the upstream failed rather than accept the envelope. That instruction is a discipline, not a transcribed field name.",
+    "pr_url and branch were stale on the previous tip: they named PR #37 and the claude/spe-4794-production-loop-v4i18e branch while the receipt was serving PR #40 on bot-00-programming-lead/spe-4794-production-loop. Both are corrected. CI selects a single added receipt without checking branch, so the mismatch would not have been caught by the receipt gate (Greptile round-6 P2).",
+    "No approval is recorded and G-2 --strict fails closed on this receipt. The earlier stamp was removed rather than re-dated because it named tip d0370d77 and deferred tip matching; G-2 checks only that approved_by is non-empty and differs from the authoring bot, so it would have passed for a tip nobody reviewed. QUALITY restamps against the current tip's sha, or the gate stays red. LEAD did not self-stamp.",
+    "The Greptile fixes are documentation-level and were verified by content assertions plus the repo's own gates, not by running a seat through the loop against a live gateway. Whether a seat actually follows the corrected §3 and §6 is observable only once the loop runs on a real ticket.",
+    "Whether the substrate memory_brief reached through the Hermes connector nests its upstream failure the same way desk_brief does is unverified — the connector was not reachable. The skill therefore states the rule concretely for desk_brief (substrate.error / recall.error, verified from the gateway source) and, for memory_brief, tells the seat to find the field that says the upstream failed rather than accept the envelope. That instruction is a discipline, not a transcribed field name.",
     "verify.sh asserts that the rules are PRESENT in the prose and that superseded wording is gone. It cannot assert that the rules are correct, or that a seat follows them. Two review rounds have now corrected rules that the earlier version of this check would have passed, which is the honest measure of its limits.",
     "The PR body was rewritten for head 7f3a69c after both review rounds, because the original body still described the superseded rules (etag-before-repo-work, 'no etag -> degraded', 11 commands, 14 files) that rounds 1 and 2 corrected. The round-by-round table in the body is the record of what changed; a reviewer reading only the first version of the body would have been misled about what this PR asserts.",
-    "The per-bank recall rule is read from the gateway source (core.memory_recall's two branches and HttpUpstream.request's failure shape), not from an observed desk_brief response \u2014 the connector is unreachable from this container. The exact key inside each recall.results[] entry is whatever HttpUpstream.request returns, which is 'error' plus 'reason'; if a future Hindsight adapter nests it differently, \u00a72.1 is the thing to correct.",
-    "The exhaustiveness claim is scoped to desk_brief as implemented at this commit of services/desk-gateway. It is read from the source, not from an observed response, and it says nothing about substrate memory_brief reached through the connector, whose response shape was never observed in this session."
+    "The per-bank recall rule is read from the gateway source (core.memory_recall's two branches and HttpUpstream.request's failure shape), not from an observed desk_brief response — the connector is unreachable from this container. The exact key inside each recall.results[] entry is whatever HttpUpstream.request returns, which is 'error' plus 'reason'; if a future Hindsight adapter nests it differently, §2.1 is the thing to correct.",
+    "The exhaustiveness claim is scoped to desk_brief as implemented at this commit of services/desk-gateway. It is read from the source, not from an observed response, and it says nothing about substrate memory_brief reached through the connector, whose response shape was never observed in this session.",
+    "Round 6, P1-2: requiring a degraded-mode ack for every etag-less brief means every gateway seat needs an ack on every turn that edits, until QUALITY lands the etag (G-4). That cost is stated in §2.3 as intended rather than hidden, but whether the desk sustains it -- or whether acks start being granted reflexively, which would make them meaningless in exactly the way round 1 warned about -- is not something this PR can verify. It is a policy risk, and the mitigation (one ack per turn, a short ask, retirement when the etag lands) is untested in practice.",
+    "Round 6, P1-4: the per-plane instructions are read from core.memory_retain at this commit. Whether an upstream that timed out actually committed is unknowable from the gateway's return value by construction -- that is the point of the rule -- so the guidance is a discipline for an uncertain outcome, not a way to resolve it. desk_memory_recall is a search, not a key lookup, so it can miss a fact that is present; the skill says so rather than presenting it as a dedup check.",
+    "Round 6, P1-5: no consumer of the substrate event log was observed. That desk_event_emit writes kind 'note' and payload.event is read from core.event_emit; whether any consumer actually routes on payload.event, or on the summary string, or on nothing, is unverified. The skill therefore forbids claiming an emission routed anywhere instead of asserting the payload contract works. The substrate/connector events_emit is a different tool and its envelope was never observed.",
+    "Round 6, P2-7: verify.sh and generate-templates.py --check are still not run by CI. .github/workflows/** and ci/.github/workflows/** are bot-05-infrastructure's and ci/.github/** is bot-06-quality-security's, so LEAD adding the step is a G-1 FOREIGN edit (evidence recorded above). A later template change could therefore still remove the loop while CI stays green -- G-7 checks templates for forbidden content, not for the required skill. Asked of INFRA/QUALITY; not worked around. verify.sh was strengthened instead, which narrows the hole without closing it.",
+    "The gate self-test suite (python3 -m pytest ci/tests) was NOT re-run at this tip: pytest is not installed in this container. The 157-test run recorded earlier in this receipt was at an earlier tip, and this push changes no gate -- only LEAD-owned prose and verify.sh -- but the suite passing at this exact tip is unverified here. CI runs it on the pushed branch.",
+    "The round-6 fixes are documentation-level and were verified by source reading plus content assertions, not by running a seat through the loop against a live gateway. No connector was reachable from this container, so no desk_brief, desk_memory_retain or desk_event_emit response was observed at any point in this round."
   ],
   "blockers": [
     "SPE-4792 (signed handoff packet schema) has not landed, so handoff_to_hermes stays unsigned and the packet fields stay omitted. Documented, not worked around.",
     "A top-level skills/desk-production-loop/ directory needs one last-match rule in ownership.yaml from QUALITY. Until then the skill lives under skills/desk-bootstrap/desk-production-loop/, and skills/README.md's map row is also QUALITY's to add.",
     "Threading the brief etag through desk_brief, desk_memory_retain and desk_event_emit is a contracts/tool-rosters/** change, which is QUALITY's contract surface (G-4).",
-    "desk_doctor does not require desk-production-loop. _declared_skills() in services/desk-gateway/src/desk_gateway/tools/core.py derives the required list from prompts/<bot_id>.xml plus a hard-coded ('verification-receipts', 'desk-doctor', 'desk-bootstrap'), so a seat can omit the new mandatory default and still get a green skills row. Proposed patch: add 'desk-production-loop' to that tuple. That file is bot-01-systems-backend's, so it is a SYSTEMS one-liner; alternatively each seat adds <skill path=\"skills/desk-bootstrap/desk-production-loop/SKILL.md\" load=\"always\"/> to its own prompt source, which would also need QUALITY to regenerate prompts-assembled/. LEAD did neither rather than edit foreign paths (G-1). Raised by Greptile P2 4141824957."
+    "desk_doctor does not require desk-production-loop. _declared_skills() in services/desk-gateway/src/desk_gateway/tools/core.py derives the required list from prompts/<bot_id>.xml plus a hard-coded ('verification-receipts', 'desk-doctor', 'desk-bootstrap'), so a seat can omit the new mandatory default and still get a green skills row. Proposed patch: add 'desk-production-loop' to that tuple. That file is bot-01-systems-backend's, so it is a SYSTEMS one-liner; alternatively each seat adds <skill path=\"skills/desk-bootstrap/desk-production-loop/SKILL.md\" load=\"always\"/> to its own prompt source, which would also need QUALITY to regenerate prompts-assembled/. LEAD did neither rather than edit foreign paths (G-1). Raised by Greptile P2 4141824957.",
+    "desk_event_emit collapses every catalogue kind to top-level kind 'note' and carries the requested type in payload.event, so the typed-event envelope in docs/handoff-contracts.md does not describe what the gateway writes. Two ways to close it, both QUALITY's (G-4): give desk_event_emit a kind passthrough so the envelope carries the catalogue type, or state in the catalogue that the gateway path routes on payload.event. Until one lands, no seat can claim an emission routed to a consumer. Raised by Greptile round-6 P1 4144833346.",
+    "The five degraded payload field names (degraded, blocker, upstream_reason, reason_path, ack) are LEAD's convention for this loop, not a catalogue contract: docs/handoff-contracts.md defines kinds, not payload keys, and desk_event_emit types payload as a free object so nothing validates them. Publishing them is QUALITY's G-4 change. Raised by Greptile round-6 P2 4144833414.",
+    "verify.sh and generate-templates.py --check are not wired into the PR workflow. .github/workflows/** is bot-05-infrastructure's, so the step is INFRA's to add (or QUALITY's under ci/.github/**). Proposed: run both in the gates workflow alongside G-7. Raised by Greptile round-6 P2 4144833385."
   ],
   "files_changed": [
     ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
@@ -443,8 +569,7 @@
   "deployment": null,
   "rollback_plan": null,
   "approvals": [],
-  "approved_by": "bot-06-quality-security",
-  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name.",
+  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name. Round-6 tip-fix dispatched as run 20260930T130155Z-3c21c0aa against tip e9c04647 (Greptile review 28066863, 5 P1 + 5 P2): all five P1s fixed, four of the five P2s fixed, and P2 4144833385 (wire the checks into CI) recorded as an INFRA/QUALITY ask because .github/workflows/** is not LEAD's. The approval stamp from the previous tip was removed rather than carried forward; this receipt is unapproved by design until QUALITY reviews the current tip.",
   "greptile_round_1": {
     "reviewed_head": "0d9caa5c46ca007cd6e77667c9cf950f7b7290af",
     "findings": [
@@ -453,21 +578,21 @@
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Successful briefs become degraded",
-        "disposition": "valid \u2014 fixed in this push"
+        "disposition": "valid — fixed in this push"
       },
       {
         "id": 4141824950,
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Completed work emits blocker",
-        "disposition": "valid \u2014 fixed in this push"
+        "disposition": "valid — fixed in this push"
       },
       {
         "id": 4141824957,
         "severity": "P2",
         "path": "scripts/generate-templates.py",
         "title": "Doctor misses mandatory skill",
-        "disposition": "valid \u2014 real gap; code fix is bot-01's, so documented with the proposed one-line patch and raised in blockers"
+        "disposition": "valid — real gap; code fix is bot-01's, so documented with the proposed one-line patch and raised in blockers"
       }
     ],
     "note": "This is not a Greptile pass or a merge claim. Greptile's verdict on the post-fix head had not been observed when this receipt was written."
@@ -480,21 +605,21 @@
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Failed briefs appear successful",
-        "disposition": "valid \u2014 fixed in this push (new \u00a72.1)"
+        "disposition": "valid — fixed in this push (new §2.1)"
       },
       {
         "id": 4141919330,
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Timestamp is not a revision",
-        "disposition": "valid \u2014 fixed in this push (brief_read_at, no comparison claim)"
+        "disposition": "valid — fixed in this push (brief_read_at, no comparison claim)"
       },
       {
         "id": 4141919348,
         "severity": "P1",
         "path": ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
         "title": "Verification command cannot run",
-        "disposition": "valid \u2014 fixed in this push (committed verify.sh, with a negative control)"
+        "disposition": "valid — fixed in this push (committed verify.sh, with a negative control)"
       }
     ],
     "note": "Round 2 corrected an over-correction from round 1: tightening the degraded-mode trigger off 'no etag' had left the success test reading the envelope instead of the nested error fields. Not a Greptile pass and not a merge claim; the verdict on the post-fix head was not observed when this receipt was written.",
@@ -502,10 +627,10 @@
       "head": "7f3a69c97488dc72ef23505c90c68eb8c3a2804e",
       "comment": "https://github.com/swcstudiospace/programming-desk/pull/37#discussion_r4142002993",
       "verdict": {
-        "4141919305": "fixed \u2014 confirmed by the reviewer on this head (success now read from nested substrate.error/recall.error, tool availability and deadline status)",
-        "4141919330": "fixed \u2014 confirmed (brief_read_at + cached; generated_at treated as a read timestamp, not an etag)",
-        "4141919348": "fixed \u2014 confirmed (receipt cites the committed, rerunnable verify.sh incl. the negative control)",
-        "4141824957": "REMAINS OPEN \u2014 the doctor's _declared_skills() still appends only verification-receipts, desk-doctor, desk-bootstrap. Not fixable by LEAD (bot-01 path). Raised as a SYSTEMS ticket, see followups."
+        "4141919305": "fixed — confirmed by the reviewer on this head (success now read from nested substrate.error/recall.error, tool availability and deadline status)",
+        "4141919330": "fixed — confirmed (brief_read_at + cached; generated_at treated as a read timestamp, not an etag)",
+        "4141919348": "fixed — confirmed (receipt cites the committed, rerunnable verify.sh incl. the negative control)",
+        "4141824957": "REMAINS OPEN — the doctor's _declared_skills() still appends only verification-receipts, desk-doctor, desk-bootstrap. Not fixable by LEAD (bot-01 path). Raised as a SYSTEMS ticket, see followups."
       },
       "note": "The reviewer's earlier round-2 comments cited 7f3a69c before it was pushed, because LEAD wrote the thread replies ahead of the push. The reviewer was correct that the SHA was absent from the ref at that moment; the push followed and the re-check above is against it."
     }
@@ -514,8 +639,8 @@
     {
       "ticket": "https://github.com/swcstudiospace/programming-desk/issues/39",
       "owner": "bot-01-systems-backend",
-      "title": "desk_doctor does not require desk-production-loop \u2014 _declared_skills() misses the new base skill",
-      "why_not_here": "services/** and **/*.py resolve to bot-01 under ownership.yaml; LEAD typing the fix is a G-1 FOREIGN failure. docs/desk-operating-model.md: a fix small enough to type is still not LEAD's \u2014 write the ticket.",
+      "title": "desk_doctor does not require desk-production-loop — _declared_skills() misses the new base skill",
+      "why_not_here": "services/** and **/*.py resolve to bot-01 under ownership.yaml; LEAD typing the fix is a G-1 FOREIGN failure. docs/desk-operating-model.md: a fix small enough to type is still not LEAD's — write the ticket.",
       "depends_on": "Must land after desk-production-loop reaches the templates, or every seat's doctor goes red on a skill that does not exist yet."
     },
     {
@@ -542,7 +667,7 @@
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Hindsight failures look successful",
-        "disposition": "valid \u2014 fixed in this push (\u00a72.1 covers recall.results[].error)"
+        "disposition": "valid — fixed in this push (§2.1 covers recall.results[].error)"
       }
     ],
     "note": "Third consecutive round to find a real hole in the same success test. Round 1 tightened the trigger off the missing etag; round 2 found the test reading the envelope; round 3 found it reading only one of the two shapes the gateway uses for recall failures. The rule is now written against both code branches rather than against the one the reviewer last pointed at."
@@ -555,17 +680,17 @@
         "severity": "P2",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Per-bank reason is omitted",
-        "disposition": "valid \u2014 fixed in this push (three-row reason-path table in \u00a73)"
+        "disposition": "valid — fixed in this push (three-row reason-path table in §3)"
       },
       {
         "id": 4142123913,
         "severity": "P2",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Brief completeness is overstated",
-        "disposition": "valid \u2014 LEAD's own claim withdrawn and replaced; silent-default limit documented"
+        "disposition": "valid — LEAD's own claim withdrawn and replaced; silent-default limit documented"
       }
     ],
-    "note": "Round 4 found both halves of the previous push: the per-bank detection added in round 3 had no matching per-bank reporting, and LEAD's proactive 'the list is complete' audit overstated its own result. The second is the more useful finding \u2014 a claim in a receipt is exactly what a reviewer is entitled to hold to account."
+    "note": "Round 4 found both halves of the previous push: the per-bank detection added in round 3 had no matching per-bank reporting, and LEAD's proactive 'the list is complete' audit overstated its own result. The second is the more useful finding — a claim in a receipt is exactly what a reviewer is entitled to hold to account."
   },
   "greptile_round_5": {
     "reviewed_head": "3796a8b71197abf6d2ac7eb39537f04218d4ee2a",
@@ -575,11 +700,92 @@
         "severity": "P1",
         "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
         "title": "Suggested checks cannot verify emptiness",
-        "disposition": "valid \u2014 the round-4 remedy was circular and destructive; removed and documented as forbidden"
+        "disposition": "valid — the round-4 remedy was circular and destructive; removed and documented as forbidden"
       }
     ],
     "note": "Round 5 found that the fix for round 4 was worse than the defect it fixed: one suggested tool re-read the identical source, the other was a write that would have destroyed the corrupt file it was meant to diagnose. Pattern across five rounds: each correction was sound about the sentence it was told to fix and unsound about the code one level further down. The receipt claim from round 4 is corrected in place rather than left standing."
   },
-  "approved_at": "2026-09-30T12:52:09Z",
-  "approval_note": "QUALITY reviewed tip d0370d77 (SPE-4794 desk production loop). Receipt claims verified against skill+verify.sh; prior Greptile rounds addressed in tip. Stamped via desk_receipt_approve-equivalent push (desk quality MCP not connected on this Bot; LEAD authorized stamp commit as G-2 unblock). Path B tip_match deferred until gates green on new tip."
+  "approval_state": {
+    "state": "absent",
+    "reason": "pending tip_match",
+    "note": "No approval is recorded on this receipt. The previous stamp named tip d0370d77 and explicitly deferred tip matching, while G-2 accepts any approved_by that is non-empty and differs from the authoring bot -- so a stamp tied to an older tip satisfied the gate for a tip nobody had reviewed. approved_by, approved_at and approval_note are therefore removed rather than re-dated. G-2 --strict fails closed on this receipt until QUALITY reviews the CURRENT tip and stamps it against that tip's sha. LEAD does not self-stamp and does not carry an approval forward across a push.",
+    "awaiting": "QUALITY review of the current head of bot-00-programming-lead/spe-4794-production-loop"
+  },
+  "greptile_round_6": {
+    "reviewed_head": "e9c046473e887265fc76d1a62bdcd34d55e83da5",
+    "review_id": 28066863,
+    "findings": [
+      {
+        "id": 4144833274,
+        "severity": "P1",
+        "path": ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+        "title": "Approval is not tip-matched",
+        "disposition": "valid -- approved_by / approved_at / approval_note removed, not re-dated. G-2 fails closed until QUALITY stamps the NEW tip. LEAD did not self-stamp."
+      },
+      {
+        "id": 4144833297,
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Gateway briefs lack required etags",
+        "disposition": "valid -- an etag-less brief is no longer a silent proceed. §2.3 splits 'the brief failed' from 'the brief succeeded with no revision marker' and requires a recorded ack for the second, under its own operation string. brief_read_at + cached is stated to be a record, never a licence."
+      },
+      {
+        "id": 4144833312,
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Gateway failures have top-level reasons",
+        "disposition": "valid -- §2.1 now classifies Shape A (call-level {error, reason}, nothing nested) against Shape B (completed brief, nothing at the top level) on the top-level error key, and §3's reason-path table has a row for the top-level reason with its error code, so the ack and receipt procedure works on both."
+      },
+      {
+        "id": 4144833326,
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Memory writes are not atomic",
+        "disposition": "valid -- §5 rewritten around the two planes and the any(): read results per plane, an error is not proof nothing was retained (only the two local refusals are), no idempotency key exists so an uncertain outcome is recalled before at most one retry, and a partial write goes in unverified honestly."
+      },
+      {
+        "id": 4144833346,
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Emitted events lose routing types",
+        "disposition": "valid -- §6.1 documents the gap rather than the claim: the gateway writes kind 'note', payload.event is the routing field on that path, seats still pass the catalogue kind, no seat claims an emission routed anywhere, and the three keys the gateway injects must not be set in a payload. Closing it is QUALITY's G-4 change; recorded in blockers."
+      },
+      {
+        "id": 4144833357,
+        "severity": "P2",
+        "path": ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+        "title": "Receipt points to previous PR",
+        "disposition": "valid -- branch and pr_url now name bot-00-programming-lead/spe-4794-production-loop and PR #40."
+      },
+      {
+        "id": 4144833385,
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/verify.sh",
+        "title": "Loop checks are not enforced",
+        "disposition": "valid, NOT fixed -- foreign path. .github/workflows/** is bot-05-infrastructure's; G-1 reports FOREIGN for this bot. Recorded in unverified and blockers as an INFRA/QUALITY ask; verify.sh strengthened instead of the boundary being crossed."
+      },
+      {
+        "id": 4144833402,
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/verify.sh",
+        "title": "Missing templates pass verification",
+        "disposition": "valid -- the seven filenames are asserted present, the directory must hold exactly those seven, and the list is cross-checked against the generator's SEATS table, all before 7/7 is reported. Negative test recorded."
+      },
+      {
+        "id": 4144833414,
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Blocked reason has two meanings",
+        "disposition": "valid -- three fields for three meanings: blocker (the desk code), upstream_reason (verbatim) and reason_path (where it was read). A bare payload.reason is now forbidden for either."
+      },
+      {
+        "id": 4144833435,
+        "severity": "P2",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Fresh briefs omit cached",
+        "disposition": "valid -- §2.2 states that the fresh path never sets the key and that an absent cached means false, is not a §2.1 failure, and is not recorded as a value the response carried."
+      }
+    ],
+    "note": "Round 6 found the same class of defect five times: a rule written against one code path while the gateway has two. The 'no top-level reason' rule was true of a completed brief and false of a call-level refusal; 'no etag is not degraded' was true about failure and false as a licence to work; 'fails closed means nothing was retained' was true of two local refusals and false of a timeout over two planes; 'the catalogue routes on kind' was true of the catalogue and false of the gateway that writes to it. Each fix is now scoped to the path it is true of, and verify.sh asserts both the new rule and the absence of the wording it replaced. The receipt's own approval was the fifth instance: a stamp true of one tip, read by the gate as true of any."
+  }
 }

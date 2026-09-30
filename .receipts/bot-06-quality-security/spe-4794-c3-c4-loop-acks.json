@@ -364,6 +364,68 @@
       "duration_s": 0.1,
       "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 1,
+      "duration_s": 2.4,
+      "output_tail": "4 failed, 42 passed, 154 deselected — FAILED test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration, test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration, test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration, test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration (run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 4 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed; the 5th new test, directory_sibling_wrong_path_is_still_padding, already passed pre-fix since it asserts rejection, which the unfixed gate already did)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix equivalent paths + -d/-r sibling probes'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-c3-c4-round7-hardfix 6e49b9b] QUALITY: SPE-4794 #45 hard-fix equivalent paths + -d/-r sibling probes\n 2 files changed, 146 insertions(+), 15 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 0,
+      "duration_s": 2.36,
+      "output_tail": "46 passed in 2.36s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"dotslash or directory_sibling_probe or readable_sibling_probe or directory_sibling_wrong_path\" -v",
+      "exit_code": 0,
+      "duration_s": 0.31,
+      "output_tail": "test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration PASSED, test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration PASSED, test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration PASSED, test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration PASSED, test_expects_failure_silent_grep_q_directory_sibling_wrong_path_is_still_padding PASSED — 5 passed, 195 deselected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 13.37,
+      "output_tail": "200 passed in 13.37s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
+      "expects_failure": true
     }
   ],
   "claims": [
@@ -632,6 +694,48 @@
       "claim": "This receipt correctly still has no approved_by — approved_by is intentionally left unset per this round's task instructions, and self-approval remains blocked by G-2 pending LEAD's independent review",
       "evidence_command_index": 58,
       "expects_failure": true
+    },
+    {
+      "claim": "Greptile review 28212220, tip_match 2/5 on f673f219, technical P1-1 ('Equivalent paths reject valid evidence') and P1-2 ('Valid filesystem probes rejected'): before this round's fix committed, 4 of the 5 new sibling-probe regression tests failed against the still-unfixed HEAD (run_candidate_gate() archives HEAD via 'git archive', not the working tree) — confirming those tests actually exercise the committed candidate rather than passing vacuously. The 5th (directory_sibling_wrong_path_is_still_padding) already passed pre-fix because it asserts the gate keeps rejecting a wrong-path sibling, which was never broken",
+      "evidence_command_index": 59,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _normalize_path() (posixpath.normpath, falling back to the original string when normalization collapses to '' or '.') is applied to both sides of the sibling-path comparison in _is_positive_existence_check(), so './config.yaml' and 'config.yaml' now match as the same target; FILE_EXISTENCE_PROBE_RE is extended from '-[fe]' to '-[fedr]', so a 'test -d'/'test -r' sibling (or its '[ ... ]' equivalent) now corroborates a quiet search the same way 'test -f'/'-e' already did, matching COMPOUND_EXISTENCE_GATE_RE's existing any-single-letter-flag acceptance on the compound's own gate",
+      "evidence_command_index": 60
+    },
+    {
+      "claim": "Full ci/tests/test_gates.py -k TestG2Receipts suite passes on this tip: 46 tests (41 on the prior tip + 5 new: ./config.yaml vs config.yaml sibling corroboration in both directions, a test -d sibling corroborating a quiet grep -R search, a test -r sibling corroborating a quiet grep search, and a wrong-path test -d sibling still rejected as padding), no regressions",
+      "evidence_command_index": 61
+    },
+    {
+      "claim": "The five new regression tests pass individually against the real candidate via run_candidate_gate(): a './config.yaml' sibling corroborates a compound gated on 'config.yaml' and vice versa, a 'test -d config' sibling corroborates a quiet 'grep -R -q' search gated on 'config', a 'test -r config.yaml' sibling corroborates a quiet grep search gated on the same path, and a 'test -d other-config' sibling does not corroborate a compound gated on the different path 'config' ('cannot be what makes this claim exhaustive' in the failure message)",
+      "evidence_command_index": 62
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 200 tests (195 on the prior tip + 5 new sibling-probe regression tests above), no regressions",
+      "evidence_command_index": 63
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's path-normalization and flag-extension changes",
+      "evidence_command_index": 64
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 65
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py, verification-receipts/SKILL.md, which was updated to document the -d/-r flags and path-normalization now accepted by the sibling probe) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 66
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 67
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by — left unset per this round's task instructions ('Do NOT add approved_by. Do NOT stamp.'), and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 68,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -647,8 +751,11 @@
     "COMPOUND_EXISTENCE_GATE_RE's 'no captured output' rule only recognises `test -f/-e X && ...` and `[ -f/-e X ] && ...` lead-ins (matching EXISTENCE_ONLY_RE's own alternation); a content search chained after a `stat`/`ls` existence probe, or chained with `;` instead of `&&`, is not covered by this round's fix and would need a follow-up if that shape turns out to matter in practice",
     "SILENT_SEARCH_RE recognises `grep -q`/`grep --quiet` specifically (including combined short flags like `-iq`); a different silent-by-design search tool (e.g. a custom script that also prints nothing) chained the same way is not covered by this round's sibling-existence-check requirement at all, so it still falls into the 'no captured output, not silent-search-shaped' rejection branch above it — this was scoped to the exact tool Greptile's finding used, not every possible silent search command",
     "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes — e.g. an absence claim that names neither a path noun nor one of the listed phrases — would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser",
-    "Superseded by this round's fix (see new commands/claims below): the sibling-existence-check exception to the pre-existing 'no other commands' padding rule is now restricted to a real file-existence probe (`test -f`/`test -e`/`[ -f ]`/`[ -e ]` only, via FILE_EXISTENCE_PROBE_RE) matched by EXACT path-token equality, and only when that sibling's command index is strictly lower than the quiet-search compound's own index. Any other extra command — a different flag (`test -n`, `-d`, ...), a substring/near-match path, a non-test-shaped existence probe like `find . -name X`, or a same-path match recorded AFTER the compound — is still treated as padding and rejected. Still intentionally conservative/fail-closed, not an exhaustive parser of every way existence could be proven.",
-    "The ordering requirement added this round (sibling command index < quiet-search command index) is enforced on the receipt's own array order, not on wall-clock timestamps — no per-command timestamp is recorded anywhere in this schema, so a receipt author who lists commands out of true execution order could still satisfy the check by construction. This trusts array order as a proxy for execution order, the same trust this gate already places in 'commands' elsewhere (e.g. nothing stops a receipt from listing any command in a fabricated sequence); closing that would need per-command timestamps in the schema, which is out of scope for this round's fix."
+    "Superseded twice: first by the sibling-path-exactness/ordering round (restricting the exception to test -f/-e via FILE_EXISTENCE_PROBE_RE, exact path-token equality, sibling strictly earlier than the compound), then by this round, which extends FILE_EXISTENCE_PROBE_RE to -f/-e/-d/-r and normalizes path tokens (./X vs X) before comparing. As of this round: a test -d or test -r sibling now corroborates the same as -f/-e, and an equivalent relative spelling of the same path now matches. What is still NOT covered, and remains fail-closed as padding: any other flag (test -n/-z, ...), a substring/near-match path even after normalization, a non-test-shaped existence probe like `find . -name X`, a path made equivalent only by resolving `..` against a working directory the gate does not know (normpath collapses `./` and doubled separators lexically, it does not consult the filesystem), and a same-path match recorded AFTER the compound. Still intentionally conservative/fail-closed, not an exhaustive parser of every way existence could be proven.",
+    "The ordering requirement added this round (sibling command index < quiet-search command index) is enforced on the receipt's own array order, not on wall-clock timestamps — no per-command timestamp is recorded anywhere in this schema, so a receipt author who lists commands out of true execution order could still satisfy the check by construction. This trusts array order as a proxy for execution order, the same trust this gate already places in 'commands' elsewhere (e.g. nothing stops a receipt from listing any command in a fabricated sequence); closing that would need per-command timestamps in the schema, which is out of scope for this round's fix.",
+    "_normalize_path() uses posixpath.normpath, a lexical/textual collapse (leading './', doubled separators, a trailing '/'); it does not touch case, does not resolve symlinks, and does not consult the filesystem at all, so two paths that are the same file only via a symlink, a case-insensitive filesystem, or a mount bind are still compared as different tokens and would not corroborate each other. This was scoped to the exact equivalence Greptile's finding demonstrated (a bare './' prefix), not a full path-equivalence resolver.",
+    "The full ci/tests/test_gates.py suite (200 tests, this round) only ran clean locally after installing pyyaml into the isolated uv-managed pytest tool venv (`uv pip install --python <pytest's interpreter> pyyaml`) — that venv had no pyyaml at all, which is an environment/tooling gap in this development container unrelated to this round's check_receipt.py/test_gates.py changes (confirmed: the same ~60 TestG7DeskIntegrity/TestReceiptDirectoryOwnership tests failed identically with the same 'pyyaml is required' error on a worktree checked out at the prior tip f673f219, before this round's changes). Not fixed as part of this HARD_FIX; flagging in case the organisation's actual CI runner has the same gap in whatever environment runs `ci/tests/`.",
+    "The candidate-gate before/after comparison for this round's two P1s (evidence_command_index 59-61) was captured by running the already-written new tests against the seat branch before committing this round's check_receipt.py fix, then again after — not by checking out the pre-fix commit into a separate worktree with this round's test file copied in. Both approaches rely on the same underlying mechanism (run_candidate_gate() extracts ci/gates/ from 'git archive HEAD', so an uncommitted working-tree fix is invisible to it until committed), and the observed failure-then-pass transition matches exactly what the mechanism predicts, but this is noted for transparency about the exact reproduction method used."
   ],
   "loop_acks": []
 }

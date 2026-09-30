@@ -2,32 +2,32 @@
   "task_id": "spe-5715-lease-cas-drift-scan-gap",
   "bot": "bot-00-programming-lead",
   "started_at": "2026-09-30T23:18:11Z",
-  "completed_at": "2026-09-30T23:34:01Z",
+  "completed_at": "2026-09-30T23:41:00Z",
   "commands": [
     {
-      "cmd": "git show --stat a43e208 (PR #38, INFRA lease-heartbeat/reap stubs)",
+      "cmd": "git show --stat a43e208",
       "exit_code": 0,
-      "output_tail": "INFRA: lease heartbeat install/env stubs + drift_scan probe helpers -- 'Nothing is installed and there is no install.sh: ExecStart names a services/** entrypoint that does not exist yet'"
+      "output_tail": "16 files changed, 2553 insertions(+), 1 deletion(-) -- PR #38, INFRA lease-heartbeat/reap stubs; infra/lease-heartbeat/**, infra/substrate/** only"
     },
     {
-      "cmd": "sed -n services/desk-gateway/src/desk_gateway/tools/lead.py (graph_state)",
+      "cmd": "sed -n '254,277p' services/desk-gateway/src/desk_gateway/tools/lead.py",
       "exit_code": 0,
-      "output_tail": "graph_state() at line 267 already maps claim/release/complete to real substrate tools graph_claim/graph_release/graph_complete via ctx.services.substrate.call_tool -- this is live code, not a stub"
+      "output_tail": "graph_state() maps claim/release/complete to the real substrate tools graph_claim/graph_release/graph_complete via ctx.services.substrate.call_tool(tool, payload, timeout=10) -- live code, not a stub"
     },
     {
-      "cmd": "grep -rn graph_heartbeat --include=*.py --include=*.md --include=*.yaml .",
+      "cmd": "grep -rn graph_heartbeat --include='*.py' --include='*.md' --include='*.yaml' . | grep -v '.git/'",
       "exit_code": 0,
-      "output_tail": "only hits are this receipt's own PR's new SKILL.md prose; no tool, roster entry or backend named graph_heartbeat exists anywhere in the repository"
+      "output_tail": "4 hits, all in this PR's own new SKILL.md prose (lines 1064/1078/1080/1100); no tool, roster entry or backend named graph_heartbeat exists anywhere else in the repository"
     },
     {
-      "cmd": "find . -path '*services/desk-lease-heartbeat*'",
+      "cmd": "find . -path './.git' -prune -o -path '*services/desk-lease-heartbeat*' -print",
       "exit_code": 0,
-      "output_tail": "no output -- the SYSTEMS-owned entrypoint infra/lease-heartbeat/LEASE-HEARTBEAT.md says desk-lease-heartbeat.service execs does not exist in this repository"
+      "output_tail": "no output -- the SYSTEMS-owned entrypoint infra/lease-heartbeat/LEASE-HEARTBEAT.md's desk-lease-heartbeat.service ExecStart names does not exist in this repository"
     },
     {
-      "cmd": "grep -rn 'drift_scan\\|coord.drift_scan' infra/ docs/ contracts/ services/",
+      "cmd": "grep -rln drift_scan infra/ docs/ contracts/ services/",
       "exit_code": 0,
-      "output_tail": "every hit is documentation of a proposed, unbuilt SYSTEMS interface (infra/lease-heartbeat/DRIFT-SCAN.md, LEASE-HEARTBEAT.md) or its mention in docs/upgrade-plan-desk-v2.md's flow sketch -- no implementation, no drift-kind enum, anywhere"
+      "output_tail": "infra/lease-heartbeat/DRIFT-SCAN.md, drift-probe.sh, LEASE-HEARTBEAT.md, lease-heartbeat.env.example -- all documentation of a proposed, unbuilt SYSTEMS interface; no implementation, no drift-kind enum, anywhere"
     },
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
@@ -46,8 +46,18 @@
     },
     {
       "cmd": "DESK_LEASE_SMOKE_LIVE=1 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
-      "exit_code": 0,
-      "output_tail": "SKIP: SUBSTRATE_TOKEN is unset -- no live substrate-mcp to prove exclusivity against"
+      "exit_code": 1,
+      "output_tail": "FAIL: SUBSTRATE_TOKEN is unset -- no live substrate-mcp to prove exclusivity against. Deliberately exit 1, not 0: once DESK_LEASE_SMOKE_LIVE opts in, a further missing precondition is a failed live run, not a clean skip (Greptile P2 finding on comment_id 4150358073)"
+    },
+    {
+      "cmd": "DESK_LEASE_SMOKE_LIVE=1 SUBSTRATE_TOKEN=fake python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
+      "exit_code": 1,
+      "output_tail": "FAIL: SUBSTRATE_URL is unset -- Settings defaults this to the loopback address, which would target a real endpoint silently instead of failing closed; set it explicitly (Greptile P1 finding on comment_id 4150358036)"
+    },
+    {
+      "cmd": "DESK_LEASE_SMOKE_LIVE=1 SUBSTRATE_TOKEN=fake SUBSTRATE_URL=http://127.0.0.1:7410 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
+      "exit_code": 1,
+      "output_tail": "FAIL: unexpected error during the live smoke, not a controlled outcome: ModuleNotFoundError(\"No module named 'mcp.client.client'\") -- this sandbox has no substrate-mcp or the mcp package installed; confirms the try/except around the live body converts an unhandled import failure deep inside Substrate.call_tool into a clean FAIL instead of a raw traceback (found during this session's own verification, beyond what review flagged)"
     }
   ],
   "claims": [
@@ -76,15 +86,16 @@
       "evidence_command_index": 6
     },
     {
-      "claim": "The new exclusivity smoke script skips cleanly (exit 0, printed reason) with no env configured, and again with only partial opt-in set -- it never hangs or silently passes",
+      "claim": "The exclusivity smoke script skips cleanly (exit 0) only when the opt-in itself is absent, and fails loudly (exit 1, no traceback) on every other missing precondition once opt-in is set -- addressing Greptile's review on this PR (comment_ids 4150358036, 4150358073)",
       "evidence_command_index": 7
     }
   ],
   "unverified": [
     "agent-substrate's actual current state (whether SPE-4792's lease.ts/IndexStore/coord_drift_scan landed there as the work order claims) could not be checked: this session's GitHub access is scoped to swcstudiospace/programming-desk only, and no local checkout of agent-substrate exists. This receipt only establishes that none of that foundation has propagated into programming-desk's own docs, contracts or code as of main@443ec60.",
-    "lease-cas-drift-smoke.py's pass/fail logic assumes a CAS conflict on graph_claim surfaces as the generic MCP wrapper's error/is_error, matching every other Substrate.call_tool result observed in this repo's source. This has not been exercised against a live substrate-mcp from this session (no credentials available), so the assumption is undemonstrated -- documented in the script's own docstring so a future live run can confirm or correct it before trusting the verdict.",
+    "lease-cas-drift-smoke.py's exclusivity verdict still assumes a genuine CAS refusal surfaces as the generic MCP wrapper's error=upstream_error (not upstream_timeout, which is now treated as inconclusive per Greptile comment_id 4150358048) and not as an ok:true response with a nested 'not claimed' verdict. This has not been exercised against a live substrate-mcp from any session with credentials, so the classification logic itself remains undemonstrated -- documented in the script's own docstring.",
     "This session has no desk-gateway MCP connection to call desk_brief / desk_memory_retain / desk_event_emit -- it is a GitHub-triggered Claude Code session, not a live desk seat. This receipt and the PR description serve as the durable record in place of that loop's phases 1/3/4.",
-    "Smoke cases (b) expired-lease drift and (c) tip/event-disagreement drift are not implemented in any form, live or skip-gated, because no callable tool (graph_heartbeat, coord_drift_scan) exists to exercise. This is reported as a blocking substrate gap, not a passing or skipped test."
+    "Smoke cases (b) expired-lease drift and (c) tip/event-disagreement drift are not implemented in any form, live or skip-gated, because no callable tool (graph_heartbeat, coord_drift_scan) exists to exercise. This is reported as a blocking substrate gap, not a passing or skipped test.",
+    "The n1 node_id used by the smoke (matching docs/intake-e2e-runbook.md's documented nodeId convention) has not been confirmed as substrate's actual required shape for graph_claim's node_id -- only that it matches this repo's own in-house convention rather than an arbitrary string, per Greptile comment_id 4150358061."
   ],
   "files_changed": [
     "skills/desk-bootstrap/desk-production-loop/SKILL.md",
@@ -97,6 +108,7 @@
   "approvals": [],
   "loop_acks": [],
   "blockers": [
-    "SPE-5715 cannot be completed as scoped without SYSTEMS shipping: (1) the services/desk-lease-heartbeat renewal entrypoint (or a documented graph_heartbeat-equivalent tool) that PR #38's units are stubbed against, and (2) a coord_drift_scan implementation plus a published drift-kind taxonomy in contracts/tool-rosters/. Escalated to LEAD in the PR description rather than invented here, per this ticket's own instruction not to guess substrate signatures or drift-kind names."
+    "SPE-5715 cannot be completed as scoped without SYSTEMS shipping: (1) the services/desk-lease-heartbeat renewal entrypoint (or a documented graph_heartbeat-equivalent tool) that PR #38's units are stubbed against, and (2) a coord_drift_scan implementation plus a published drift-kind taxonomy in contracts/tool-rosters/. Escalated to LEAD in the PR description rather than invented here, per this ticket's own instruction not to guess substrate signatures or drift-kind names.",
+    "PR #58's gates CI check fails on branch-name G-1 (claude/task-wy5scc does not match bot-0N-name/...), and gate-self-test fails on a pre-existing stale assertion in ci/tests/test_gates.py unrelated to this diff (expects 5 packs, repo has 7). Both flagged on the PR rather than worked around: the first needs an INFRA workflow exception or explicit branch-rename permission; the second is bot-06-quality-security's one-line fix, proposed in a PR comment."
   ]
 }

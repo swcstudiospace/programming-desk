@@ -1152,6 +1152,36 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "cannot be what makes this claim exhaustive" in r.stderr
 
+    def test_expects_failure_symlink_unsafe_dotdot_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f config` (no `..`) must NOT corroborate a compound gated on
+        `test -e link/../config && ...` just because `posixpath.normpath` would textually
+        collapse `link/../config` to `config`. That collapse assumes `link` is a plain
+        directory; if `link` is a symlink, `link/..` resolves to the parent of wherever the
+        symlink points, not back to the directory containing `link` — so `link/../config` can
+        name a completely different file than `config` even though the two strings normalize
+        the same way with naive textual `..` collapsing (Greptile P1, PR #45 round 10,
+        "Symlink-unsafe path collapse falsely corroborates searches"). The gate must treat
+        `link/../config` and `config` as distinct targets and refuse to let the sibling
+        corroborate the compound.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config", "exit_code": 0},
+                {"cmd": "test -e link/../config && grep -q legacy link/../config",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import posixpath
 import re
 import sys
 from pathlib import Path
@@ -134,15 +133,45 @@ FILE_EXISTENCE_PROBE_RE = re.compile(
 _TRAILING_SLASH_SAFE_FLAGS = {"d"}
 
 
+def _safe_normpath(path: str) -> str:
+    """A restricted `posixpath.normpath` that only removes `.` components and empty
+    components from doubled/trailing separators — it never cancels a `..` component against
+    a preceding NAMED component, unlike `posixpath.normpath`, because that cancellation
+    assumes the named component is a plain directory. When it is a symlink, `link/../config`
+    does NOT resolve to `config`: POSIX pathname resolution walks into whatever `link`
+    points at first, and `..` from there goes to THAT directory's parent, which can be
+    anywhere. `posixpath.normpath("link/../config")` collapses this to `"config"` purely
+    textually, with no filesystem access, so it wrongly treats `link/../config` and `config`
+    as the same target — a `test -f config` sibling would then falsely corroborate a compound
+    gated on `test -e link/../config`, an existence check on a completely different path if
+    `link` is a symlink elsewhere (Greptile P1, PR #45 round 10, "Symlink-unsafe path collapse
+    falsely corroborates searches"). Leaving every `..` in place (along with the named
+    component before it) means such a path can never normalize to the same string as the
+    plain target it was trying to impersonate. `.` components and empty components are always
+    safe to drop regardless of symlinks: removing a redundant `./` or a doubled `/` never
+    changes what the path resolves to.
+    """
+    is_absolute = path.startswith("/")
+    kept = [part for part in path.split("/") if part not in ("", ".")]
+    if not kept:
+        return "/" if is_absolute else "."
+    joined = "/".join(kept)
+    return ("/" + joined) if is_absolute else joined
+
+
 def _normalize_path(path: str, flag: str | None = None) -> str:
     """Collapse equivalent relative spellings of the same path (`./config.yaml` vs
     `config.yaml`, or a doubled separator) so sibling-probe matching compares what the path
     actually points at instead of the exact characters used to write it — plain string
     equality treated `./config.yaml` and `config.yaml` as different targets and rejected a
     valid sibling probe under `--strict` (Greptile P1, PR #45, "Equivalent paths reject valid
-    evidence"). `posixpath.normpath` on an empty result (a bare `.` or `./`) is not a
-    meaningful path token here, so that edge case falls back to the original string rather
-    than collapsing every such probe onto the same normalized value.
+    evidence"). Uses `_safe_normpath` rather than `posixpath.normpath`: the latter also
+    collapses `a/../b` to `b` textually, which is unsound when `a` is a symlink (see
+    `_safe_normpath`) — a `..` component is never cancelled here, so `link/../config` stays
+    `link/../config` and cannot collide with a sibling probe on the plain `config`. On an
+    empty result (a bare `.` or `./`) is not a meaningful path token here, so that edge case
+    falls back to the original string rather than collapsing every such probe onto the same
+    normalized value.
 
     A trailing slash is preserved by default rather than collapsed away: POSIX `test`/`[`
     requires a path with a trailing slash to resolve to a directory, so `test -f
@@ -158,7 +187,7 @@ def _normalize_path(path: str, flag: str | None = None) -> str:
     flag so only `-d` gets that collapse; every other flag keeps the slash significant.
     """
     has_trailing_slash = path.endswith("/") and path.strip() != "/"
-    normalized = posixpath.normpath(path)
+    normalized = _safe_normpath(path)
     if normalized in ("", "."):
         return path
     flag_allows_collapse = flag is not None and flag.lower() in _TRAILING_SLASH_SAFE_FLAGS

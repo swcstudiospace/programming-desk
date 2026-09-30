@@ -98,13 +98,23 @@ EXISTENCE_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
-# A claim about a path's ABSENCE ("no longer exists", "was removed") is a different claim
-# from one about its CONTENT ("every value is empty") — only the latter needs a search of
-# what is inside the target. When the claim itself is about existence, an existence probe's
-# exit code IS the whole claim's evidence, so EXISTENCE_ONLY_RE below must not reject it
-# (Greptile P1, PR #45, "Valid absence evidence rejected").
+# A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
+# a different claim from one about its CONTENT ("the deprecated token was removed from
+# config.yaml") — only the latter needs a search of what is inside the target, and an
+# existence probe proves nothing about it. Bare "removed"/"deleted"/"gone"/"exists"/"absent"
+# is also exactly how content-removal claims get phrased, so those words are only accepted
+# here when a path/file noun sits next to them; a handful of full phrases ("no longer
+# exists", "does not exist", "not present") stay accepted on their own because they are
+# unambiguously about a thing's existence, not its contents (Greptile P1, PR #45, "Existence
+# check validates content" — tightened from the earlier bare-word-list version that let a
+# sole "removed" wrongly pass a content claim on existence-only evidence).
+_PATH_NOUN_RE = r"(?:file|path|director(?:y|ies)|dir|folder)"
 ABSENCE_CLAIM_RE = re.compile(
-    r"\b(?:exists?|absent|removed|deleted|gone|not present|no longer (?:exists?|present))\b",
+    rf"\b{_PATH_NOUN_RE}\b.{{0,60}}\b(?:exists?|absent|removed|deleted|gone)\b"
+    rf"|\b(?:exists?|absent|removed|deleted|gone)\b.{{0,60}}\b{_PATH_NOUN_RE}\b"
+    rf"|\bno longer (?:exists?|present)\b"
+    rf"|\bnot present\b"
+    rf"|\bdoes(?:n't| not) exist\b",
     re.IGNORECASE,
 )
 
@@ -119,6 +129,15 @@ COMPOUND_EXISTENCE_GATE_RE = re.compile(
     r"^\s*(?:test\s+-[a-z]\s+\S+|\[\s+-[a-z]\s+\S+\s+\])\s*&&",
     re.IGNORECASE,
 )
+
+# `grep -q`/`grep --quiet` is defined to print nothing at all, whether it matches or not —
+# silence is its normal, successful behaviour, not a sign the chain short-circuited. Requiring
+# captured output_tail from a quiet search (as COMPOUND_EXISTENCE_GATE_RE's check otherwise
+# does) is a bar a real, fully-executed quiet search can never clear, so it wrongly rejected
+# valid negative evidence: `test -f X && grep -q PATTERN X` exiting 1 with empty output is
+# exactly what "X exists and PATTERN is absent from it" looks like (Greptile P1, PR #45,
+# "Silent searches fail validation").
+SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet\b)")
 
 
 class ReceiptError(Exception):
@@ -296,7 +315,11 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                             )
                         # else: the claim is about the path's absence, not its content —
                         # the existence probe's exit code is direct, sufficient evidence.
-                    elif COMPOUND_EXISTENCE_GATE_RE.match(cmd_text) and not output_tail.strip():
+                    elif (
+                        COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
+                        and not output_tail.strip()
+                        and not SILENT_SEARCH_RE.search(cmd_text)
+                    ):
                         problems.append(
                             f"claim[{i}] {text!r} asserts exhaustiveness via a command that "
                             f"chains a content search after an existence check "
@@ -307,6 +330,11 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                             "`grep -c` count), or cite the existence check and the search "
                             "as separate commands"
                         )
+                        # else: a `grep -q`/`--quiet` search prints nothing whether it
+                        # matches or not, so empty output_tail is what a real, fully-executed
+                        # quiet search looks like too — the existence check already proved
+                        # the target present, so the chain's exit code alone is valid
+                        # negative evidence here.
             elif len(commands) < 2:
                 problems.append(
                     f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "

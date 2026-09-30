@@ -54,6 +54,12 @@ need("with the bank name" in fS,"R4 name the bank")
 need("cannot fail loudly" in fS,"R4 silent default")
 need("json.JSONDecodeError" in S,"R4 store reader cited")
 need("empty or unreadable, indistinguishable" in fS,"R4 indistinguishable")
+# round 5 — the round-4 remedy was circular and destructive; it must stay deleted
+need("There is no second tool that settles it" in fS,"R5 no second tool")
+need("the same call the brief made" in fS,"R5 roster_status same call")
+need("A write, not a check" in fS,"R5 write-not-check")
+need("never diagnose with a write" in fS,"R5 never diagnose with a write")
+need("desk_roster_status` for LEAD's queue, a pack load/unload call for" not in S,"R5 bad remedy removed")
 need("complete for `desk_brief`" not in fS,"R4 stale completeness claim removed")
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")

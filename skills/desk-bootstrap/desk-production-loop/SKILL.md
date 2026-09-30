@@ -143,10 +143,24 @@ check in the table still passes.
 
 The consequence is narrow but real. This is **not** degraded mode — the memory plane is not involved,
 and §3 is about prior decisions being unknown. But **do not claim either field's emptiness as a
-fact**: "no pack is loaded" and "the intake queue is empty" are not things a brief can tell you. Use
-the tool that owns the answer (`desk_roster_status` for LEAD's queue, a pack load/unload call for
-packs), or record it in `unverified` as unread. A seat that reports "queue empty" off a brief whose
-store file was unreadable has invented an observation, which is PD-1 whether or not a gate catches it.
+fact**: "no pack is loaded" and "the intake queue is empty" are not things a brief can tell you. A
+seat that reports "queue empty" off a brief whose store file was unreadable has invented an
+observation, which is PD-1 whether or not a gate catches it.
+
+**There is no second tool that settles it, and looking for one makes things worse.** Every accessor
+goes through the same `_read` default, so a "confirming" call returns the same empty answer with no
+additional information:
+
+| Tempting | What it actually does |
+|---|---|
+| `desk_roster_status` to re-check the queue | Returns `"intake_queue": svc.store.intake_counts()` — **the same call the brief made**. Identical empty result, now with false confidence behind it. `packs_for` is the same story for the `packs` and `tool_count` rows |
+| A pack load or unload to "see" the pack list | **A write, not a check.** `store.load_pack` does `_read("packs", {})` → mutates → `_write`, so on a corrupt file it reads `{}`, then **overwrites the file**, discarding every seat's pack state. Diagnosing with this destroys the evidence and the data |
+
+So the only honest handling is: **record it in `unverified` as unread, and leave it there.** "Intake
+queue reported empty by `desk_brief`; cannot distinguish empty from an unreadable store, not
+independently observed" is a complete and correct entry. If the answer actually matters to the
+ticket, it is a question about the store file on the gateway host — an INFRA or SYSTEMS ask — not
+something a seat can resolve from tool output, and not a reason to start writing to the store.
 
 For a substrate `memory_brief` reached through the connector, apply the same discipline to whatever
 its live response uses: find the field that says the upstream failed, and do not accept the envelope
@@ -497,7 +511,9 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Failed Hindsight recall read as successful | `recall.error` absent because that path never sets it; the error sits in `recall.results[i]` | §2.1 — scan every bank entry; one failed bank is degraded |
 | Partial recall worked around | `pd-<seat>` answered, `pd-desk` errored, seat proceeded on its own bank | The shared bank holds the desk's standing decisions; §3 applies |
 | Ack or receipt says "recall failed" with no bank and no reason | Reader searches the wrong plane; the incident is undiagnosable later | §3 — quote `recall.results[<bank>].reason` and name the bank |
-| Empty `loaded_packs` / `intake_queue` claimed as a fact | "No packs loaded" / "queue empty" asserted from a store file that may be unreadable | §2.1 — the store reader returns the default on `OSError`/`JSONDecodeError`; ask the tool that owns the answer or record it unread |
+| Empty `loaded_packs` / `intake_queue` claimed as a fact | "No packs loaded" / "queue empty" asserted from a store file that may be unreadable | §2.1 — the store reader returns the default on `OSError`/`JSONDecodeError`; record it `unverified` as unread |
+| "Confirming" the empty queue with `desk_roster_status` | Same `store.intake_counts()` call, same empty answer, now believed | §2.1 — there is no independent read; `unverified` is the answer |
+| Loading or unloading a pack to inspect pack state | A write on a corrupt packs file reads `{}` and then overwrites it, destroying every seat's pack records | §2.1 — never diagnose with a write |
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
 | Degraded work, no ack | No `approvals` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |

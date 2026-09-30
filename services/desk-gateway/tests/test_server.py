@@ -471,3 +471,71 @@ async def test_gates_run_refuses_a_receipt_path_that_escapes_the_tree(rpc):
         "receipt_path": ".receipts/bot-01-systems-backend/../../../etc/passwd",
     })
     assert out["is_error"] is True and out["error"] == "invalid_args", out
+
+
+# ---------------------------------------------------------------------------
+# desk_intake_ack — the reply is the acknowledgement
+# ---------------------------------------------------------------------------
+
+INTAKE_BODY = {
+    "title": "Add /health to desklanes",
+    "ask": "Please add a /health endpoint returning 200 ok with a test.",
+    "links": ["https://github.com/swcstudiospace/desklanes/issues/12"],
+    "requested_by": "ove",
+    "idempotency_key": "github:desklanes:99",
+}
+
+
+async def _claim_one(client, rpc):
+    resp = await client.post("/v1/intake", headers={"Authorization": f"Bearer {INTAKE_TOKEN}"}, json=INTAKE_BODY)
+    assert resp.status_code == 202, resp.text
+    out = await rpc.call("lead", "desk_intake_next", {})
+    return out["work_order"]["intake_id"]
+
+
+async def test_intake_ack_fails_closed_when_the_github_reply_fails(client, rpc, monkeypatch):
+    """A failed reply must not leave an intake marked accepted.
+
+    The requester's only signal is the comment. Advancing the record first meant a 403, a
+    rate limit or a missing token produced ok:true on an accepted intake that nobody had
+    been told about, and no retry, because the record no longer looked claimed.
+    """
+    from desk_gateway.upstreams import GitHub
+
+    calls = []
+
+    async def fake_comment(self, repo, number, body):   # noqa: ARG001 — signature must match
+        calls.append((repo, number))
+        return {"error": "upstream_error", "reason": "github returned HTTP 403"}
+
+    monkeypatch.setattr(GitHub, "comment_on_issue", fake_comment)
+    intake_id = await _claim_one(client, rpc)
+
+    out = await rpc.call("lead", "desk_intake_ack", {"intake_id": intake_id, "status": "accepted", "graph_id": "ut-abc123-deadbeef"})
+    assert out["is_error"] is True, out
+    assert out["error"] == "notify_failed", out
+    assert out["notify"]["delivered"] is False and "403" in out["notify"]["reason"]
+    assert calls == [("swcstudiospace/desklanes", 12)]
+
+    # Not advanced: the same ack can go out again once GitHub answers.
+    status = await rpc.call("lead", "desk_intake_next", {})
+    assert status["queue"] == {"claimed": 1}, status["queue"]
+
+
+async def test_intake_ack_advances_once_the_reply_is_posted(client, rpc, monkeypatch):
+    """The refusal above would be satisfied by an ack that never advanced anything."""
+    from desk_gateway.upstreams import GitHub
+
+    posted = []
+
+    async def fake_comment(self, repo, number, body):   # noqa: ARG001 — signature must match
+        posted.append(body)
+        return {"ok": True, "status": 201, "body": {"id": 1}}
+
+    monkeypatch.setattr(GitHub, "comment_on_issue", fake_comment)
+    intake_id = await _claim_one(client, rpc)
+
+    out = await rpc.call("lead", "desk_intake_ack", {"intake_id": intake_id, "status": "accepted", "graph_id": "ut-abc123-deadbeef", "message": "queued for uplift"})
+    assert out["ok"] is True and out["intake"]["state"] == "accepted", out
+    assert out["notify"]["delivered"] is True
+    assert "ut-abc123-deadbeef" in posted[0] and intake_id in posted[0]

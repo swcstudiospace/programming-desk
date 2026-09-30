@@ -20,49 +20,70 @@ async def intake_next(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
 
 
 async def intake_ack(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Answer an intake request, and reply on its origin when it has one.
+
+    A reply that was attempted and failed is surfaced, because the issue is the record of an
+    intake and the workflow posts no fallback comment — so the requester was never told, and
+    an unqualified ok: true tells LEAD the opposite. An unconfigured gateway is different in
+    kind: nothing was attempted, there is nothing to retry, and every github-origin ack would
+    otherwise be unusable on a deployment without a token. That case keeps reporting the ack
+    it stored, with delivered: false and the reason.
+
+    The reply goes out *before* the record is advanced, so a failure leaves nothing to undo.
+    Storing first and posting second needed the state machine this record does not have:
+    the intake was already marked accepted, so calling again — which is what the failure
+    tells LEAD to do — retried a reply for a request that no longer looked claimed, and the
+    queue counted work as answered that nobody had been told about.
+    """
     svc = ctx.services
     record = svc.store.intake_get(args["intake_id"])
     if record is None:
         return failure("not_found", f"no intake {args['intake_id']}")
     ack = {k: v for k, v in args.items() if k != "intake_id"}
     ack["by"] = ctx.bot_id
-    updated = svc.store.intake_ack(args["intake_id"], ack)
+
     notify: dict[str, Any] = {"delivered": False, "reason": "origin has no callback"}
-    for link in updated.get("links") or []:
-        match = GITHUB_ISSUE.match(link)
-        if match and updated.get("origin") == "github":
-            lines = [f"**Programming Desk** · LEAD · {args['status']}"]
-            if args.get("graph_id"):
-                lines.append(f"Graph ID: `{args['graph_id']}`")
-            if args.get("message"):
-                lines.append(args["message"])
-            for extra in args.get("links") or []:
-                lines.append(f"- {extra}")
-            lines.append(f"intake `{args['intake_id']}`")
-            result = await svc.github.comment_on_issue(match.group(1), int(match.group(2)), "\n\n".join(lines))
-            notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
-                      "target": link, "error": result.get("error")}
-            break
-    # A reply that was attempted and failed is surfaced, because the issue is the record of
-    # an intake and the workflow posts no fallback comment — so the requester was never
-    # told, and an unqualified ok: true tells LEAD the opposite. An unconfigured gateway is
-    # different in kind: nothing was attempted, there is nothing to retry, and every
-    # github-origin ack would otherwise be unusable on a deployment without a token. That
-    # case keeps reporting the ack it stored, with delivered: false and the reason.
-    #
-    # The ack itself is stored either way — state is advanced above. Reversing it, or
-    # tracking delivery so a retry is automatic, needs a state machine on the intake record
-    # that does not exist. Not invented here: LEAD sees the failure and calls again.
-    if notify.get("target") and not notify["delivered"] and notify.get("error") != NOT_CONFIGURED:
-        return failure(
-            "notify_failed",
-            f"ack stored, but the reply to {notify['target']} was not posted: "
-            f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
-            "The requester has not been told; call desk_intake_ack again.",
-            intake=updated,
-            notify=notify,
-        )
+    callback = _callback(record)
+    if callback is not None:
+        link, repo, number = callback
+        result = await svc.github.comment_on_issue(repo, number, _ack_comment(args))
+        notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
+                  "target": link, "error": result.get("error")}
+        if not notify["delivered"] and notify.get("error") != NOT_CONFIGURED:
+            return failure(
+                "notify_failed",
+                f"the reply to {link} was not posted: "
+                f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
+                f"The requester has not been told, so intake {args['intake_id']} stays "
+                f"{record.get('state')} rather than {args['status']}; call desk_intake_ack again.",
+                intake=record,
+                notify=notify,
+            )
+
+    updated = svc.store.intake_ack(args["intake_id"], ack)
     return {"ok": True, "intake": updated, "notify": notify}
+
+
+def _callback(record: dict[str, Any]) -> tuple[str, str, int] | None:
+    if record.get("origin") != "github":
+        return None
+    for link in record.get("links") or []:
+        match = GITHUB_ISSUE.match(link)
+        if match:
+            return link, match.group(1), int(match.group(2))
+    return None
+
+
+def _ack_comment(args: dict[str, Any]) -> str:
+    lines = [f"**Programming Desk** · LEAD · {args['status']}"]
+    if args.get("graph_id"):
+        lines.append(f"Graph ID: `{args['graph_id']}`")
+    if args.get("message"):
+        lines.append(args["message"])
+    for extra in args.get("links") or []:
+        lines.append(f"- {extra}")
+    lines.append(f"intake `{args['intake_id']}`")
+    return "\n\n".join(lines)
 
 
 async def graph_register(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:

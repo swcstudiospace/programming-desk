@@ -81,7 +81,7 @@ def _usage_findings(by_target: dict[str, dict]) -> list[dict]:
 
 
 def _entitlement_delta(a: dict[str, dict], b: dict[str, dict]) -> dict:
-    result = {}
+    by_target = {}
     for target in sorted(set(a) | set(b)):
         left_vals, right_vals = a.get(target, {}), b.get(target, {})
         added = sorted(set(right_vals) - set(left_vals))
@@ -92,8 +92,10 @@ def _entitlement_delta(a: dict[str, dict], b: dict[str, dict]) -> dict:
             if not _values_equal(left_vals[key], right_vals[key])
         ]
         if added or removed or changed:
-            result[target] = {"added": added, "removed": removed, "changed": changed}
-    return result
+            by_target[target] = {"added": added, "removed": removed, "changed": changed}
+    flat_added = sorted({key for t in by_target.values() for key in t["added"]})
+    flat_removed = sorted({key for t in by_target.values() for key in t["removed"]})
+    return {"added": flat_added, "removed": flat_removed, "by_target": by_target}
 
 
 def _public(collected: dict) -> dict:

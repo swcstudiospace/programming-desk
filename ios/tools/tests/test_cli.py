@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 import plistlib
 import struct
 import subprocess
@@ -132,8 +133,18 @@ class CliTests(unittest.TestCase):
         self.assertIn("--target", proc.stderr)
 
     def test_cli_ui_tap_forwards_target(self):
-        proc = run("ui_tap", "--serial", "s1", "--out", "/tmp/out.png", "--target", "login.button")
+        with tempfile.TemporaryDirectory() as empty_path:
+            proc = subprocess.run(
+                [sys.executable, "-m", "ios.tools", "ui_tap", "--serial", "s1", "--out", "/tmp/out.png",
+                 "--target", "login.button"],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                env={**os.environ, "PATH": empty_path},
+            )
         body = json.loads(proc.stdout)
+        self.assertEqual(body["status"], "skipped")
         self.assertIn("--target", body["argv"])
         self.assertIn("login.button", body["argv"])
 
@@ -183,7 +194,7 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         body = json.loads(proc.stdout)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        change = body["entitlements"]["App.entitlements"]["changed"][0]
+        change = body["entitlements"]["by_target"]["App.entitlements"]["changed"][0]
         self.assertEqual(change["key"], "aps-environment")
         self.assertEqual(change["before"], "development")
         self.assertEqual(change["after"], "production")
@@ -197,7 +208,7 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         body = json.loads(proc.stdout)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        change = body["entitlements"]["."]["changed"][0]
+        change = body["entitlements"]["by_target"]["."]["changed"][0]
         self.assertEqual(change["before"], "development")
         self.assertEqual(change["after"], "production")
 
@@ -213,8 +224,10 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         body = json.loads(proc.stdout)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertNotIn("App.entitlements", body["entitlements"])
-        self.assertEqual(body["entitlements"]["Widget.entitlements"]["removed"], ["keychain-access-groups"])
+        self.assertNotIn("App.entitlements", body["entitlements"]["by_target"])
+        self.assertEqual(body["entitlements"]["by_target"]["Widget.entitlements"]["removed"], ["keychain-access-groups"])
+        # Flat added/removed stay present for backward compatibility, aggregated across targets.
+        self.assertEqual(body["entitlements"]["removed"], ["keychain-access-groups"])
 
     def test_entitlements_diff_type_change_is_not_equal(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,7 +239,7 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         body = json.loads(proc.stdout)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(len(body["entitlements"]["App.entitlements"]["changed"]), 1)
+        self.assertEqual(len(body["entitlements"]["by_target"]["App.entitlements"]["changed"]), 1)
 
     def test_entitlements_diff_data_and_date_values_do_not_crash(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -242,7 +255,7 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         self.assertEqual(proc.returncode, 0, proc.stderr)
         body = json.loads(proc.stdout)
-        changed = {c["key"] for c in body["entitlements"]["App.entitlements"]["changed"]}
+        changed = {c["key"] for c in body["entitlements"]["by_target"]["App.entitlements"]["changed"]}
         self.assertEqual(changed, {"stamp", "when"})
 
     def test_snapshot_diff_file_vs_directory_pair_by_name(self):
@@ -270,6 +283,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(parsed["status"], "failed")
         self.assertEqual(parsed["result"], "FAILED")
         self.assertEqual(parsed["action"], "TEST")
+
+    def test_xcodebuild_receipt_names_failing_target_not_later_one(self):
+        parsed = parse_log(
+            "xcodebuild -scheme DeskWidget -destination platform=iOS-Simulator,name=iPhone16 test\n"
+            "** TEST FAILED **\n"
+            "xcodebuild -scheme Desk -destination generic/platform=iOS test\n"
+            "** TEST SUCCEEDED **\n",
+            "fixture.log",
+        )
+        self.assertEqual(parsed["status"], "failed")
+        self.assertEqual(parsed["scheme"], "DeskWidget")
+        self.assertIn("Simulator", parsed["destination"])
 
 
 if __name__ == "__main__":

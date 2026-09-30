@@ -1,0 +1,32 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-p1-waiver-receipt-approve-seat-path-pr16",
+  "receipt_kind": "greptile_comment_waiver",
+  "status": "ACTIVE",
+  "recorded_at": "2026-09-30T13:09:28+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr": {
+    "number": 16,
+    "url": "https://github.com/swcstudiospace/programming-desk/pull/16",
+    "merge_request_id": "71730918",
+    "head_commit_sha": "d1731359fda981fd24b39f3966e97cfb6739e700"
+  },
+  "waiver": {
+    "who_waived": "bot-06-quality-security",
+    "authorized_by": "LEAD / Ove ticket: stamp approved_by on stack receipts; seat path stamps OK",
+    "why": "G-2 requires independent approved_by. Seat owns .receipts/<seat>/**. QUALITY stamps by committing approved_by on the seat PR branch (minimal JSON edit). G-1 for the seat PR uses --bot <seat> and PASS. Putting QUALITY-owned trees onto seat PRs is the Path B anti-pattern; editing the seat's own receipt is not. desk_receipt_approve must follow the same seat-branch path rule.",
+    "decision": "KEEP_SEAT_BRANCH_STAMP_PATH",
+    "do_not": "Do not require QUALITY-owned approve-* mirror receipts on seat PRs for routine G-2 stamps",
+    "quality_ack": "Stamp pass 2026-09-30 on #18-#23 used this path; local G-1/G-2 PASS observed."
+  },
+  "comments_waived": [
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409690",
+      "severity": "P1",
+      "title": "Approval edits another seat's receipt",
+      "path": "docs/upgrade-plan-desk-v2.md",
+      "addressed_at_prepare": false
+    }
+  ],
+  "approved_by": "human:Oveshen Govender"
+}

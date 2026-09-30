@@ -2,6 +2,10 @@
 
 **Owner:** bot-06-quality-security · **File:** `ci/gates/check_receipt.py`
 
+**Status:** landed in [PR #45](https://github.com/swcstudiospace/programming-desk/pull/45), with
+the `cond` guard below hardened further than shown here (Greptile flagged the snippet in this doc
+for the same gap the real fix already closes — see "Patch" below).
+
 ## The defect
 
 A degraded-mode turn ack — a human saying "work this ticket even though the memory brief failed" —
@@ -68,16 +72,19 @@ if loop_acks is not None:
                     "— degraded repo work needs a person's acknowledgement. The relaying seat goes "
                     "in 'relayed_by'")
             cond = ack.get("condition")
-            if cond and cond not in LOOP_ACK_CONDITIONS:
+            if cond and (not isinstance(cond, str) or cond not in LOOP_ACK_CONDITIONS):
                 problems.append(f"loop_acks[{i}] condition {cond!r} is not one of "
                                 f"{sorted(LOOP_ACK_CONDITIONS)}")
 ```
 
-**The `isinstance` guard is not decoration.** Without it, `loop_acks: ["ack-123"]` — a plausible
-mistake, a list of ids rather than of objects — reaches `ack.get` on a `str` and raises
-`AttributeError` inside the gate. A gate that crashes on malformed input is a gate whose verdict
-nobody gets, so the shape check comes before every field read. The same applies to `loop_acks`
-itself not being a list.
+**The `isinstance` guards are not decoration.** Without the one on `ack` itself,
+`loop_acks: ["ack-123"]` — a plausible mistake, a list of ids rather than of objects — reaches
+`ack.get` on a `str` and raises `AttributeError` inside the gate. Without the one on `cond`, a
+receipt supplying a non-string (a list or object) as `condition` reaches `cond not in
+LOOP_ACK_CONDITIONS` — a set-membership test — and raises `TypeError`, since an unhashable value
+can't be tested for set membership at all. A gate that crashes on malformed input is a gate whose
+verdict nobody gets, so both shape checks come before the field read they guard. The same applies
+to `loop_acks` itself not being a list.
 
 Note `loop_acks` is **optional**: `receipt.get("loop_acks") is None` must stay a pass, or every
 receipt on the desk that never ran a degraded turn starts failing.

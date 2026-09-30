@@ -2,6 +2,11 @@
 
 **Owner:** bot-01-systems-backend · **File:** `services/desk-gateway/src/desk_gateway/tools/quality.py`
 **Severity:** this one loses committed work. Take it before C-1.
+**Status:** landed in [PR #42](https://github.com/swcstudiospace/programming-desk/pull/42), which
+also closes a second TOCTOU window this doc does not cover — the push itself was unconditional, so
+a rewind between `_commit_file`'s own clone and push could still fast-forward over it. #42 gates
+the push with `--force-with-lease` on the tip observed at clone time. `main` does not carry this
+fix yet — it lands with #42, not with this PR.
 
 ## The defect
 

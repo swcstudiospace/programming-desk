@@ -128,6 +128,9 @@ jobs:
           RECEIPT: ${{ steps.receipt.outputs.path }}
         run: python3 ci/gates/check_rollback.py --receipt "$RECEIPT"
 
+      - name: G-7 — Desk integrity
+        run: python3 ci/gates/check_desk_integrity.py --repo .
+
   gate-self-test:
     # The gates are only trustworthy if they still block what they claim to block.
     runs-on: [self-hosted, Linux, X64]

@@ -880,6 +880,32 @@ WORKFLOWS = [
 ]
 
 
+class TestEveryGateIsWired:
+    """A gate script nothing invokes is not a gate.
+
+    The template-sync check cannot catch a gate being dropped, because it compares the two
+    workflow copies to each other: delete a step from both and it stays green. That is not
+    hypothetical — a commit whose subject was only about switching to a self-hosted runner
+    removed the G-7 step from both files, and sync passed.
+    """
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_every_gate_script_is_invoked(self, workflow):
+        scripts = {p.name for p in GATES.glob("check_*.py")}
+        assert scripts, "no gate scripts found — this test is not looking where it thinks"
+
+        text = (REPO_ROOT / workflow).read_text()
+        missing = sorted(s for s in scripts if s not in text)
+
+        assert not missing, (
+            f"{workflow} does not invoke: {', '.join(missing)}. "
+            "Every ci/gates/check_*.py is a required check; a gate the workflow never runs "
+            "blocks nothing, and the template-sync check will not notice because it only "
+            "compares the two copies to each other. Add the step, or delete the script and "
+            "the gate it claims to enforce."
+        )
+
+
 class TestWorkflowShellInjection:
     """A gate that runs attacker-controlled text as shell is worse than no gate.
 

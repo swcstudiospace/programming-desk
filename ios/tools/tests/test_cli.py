@@ -226,8 +226,30 @@ class CliTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertNotIn("App.entitlements", body["entitlements"]["by_target"])
         self.assertEqual(body["entitlements"]["by_target"]["Widget.entitlements"]["removed"], ["keychain-access-groups"])
-        # Flat added/removed stay present for backward compatibility, aggregated across targets.
-        self.assertEqual(body["entitlements"]["removed"], ["keychain-access-groups"])
+        # The key is still present globally (App kept it), so the flat, back-compat
+        # added/removed - which compare the global key sets, not per-target - stay empty.
+        # by_target is what surfaces the per-target loss.
+        self.assertEqual(body["entitlements"]["added"], [])
+        self.assertEqual(body["entitlements"]["removed"], [])
+
+    def test_entitlements_diff_flat_delta_ignores_target_moves(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base"
+            head = Path(tmp) / "head"
+            base.mkdir(); head.mkdir()
+            (base / "App.entitlements").write_bytes(plistlib.dumps({"keychain-access-groups": ["x"]}))
+            (base / "Widget.entitlements").write_bytes(plistlib.dumps({}))
+            (head / "App.entitlements").write_bytes(plistlib.dumps({}))
+            (head / "Widget.entitlements").write_bytes(plistlib.dumps({"keychain-access-groups": ["x"]}))
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        # The key only moved targets; it's present both before and after, so the flat,
+        # global delta must not call it added or removed.
+        self.assertEqual(body["entitlements"]["added"], [])
+        self.assertEqual(body["entitlements"]["removed"], [])
+        self.assertEqual(body["entitlements"]["by_target"]["App.entitlements"]["removed"], ["keychain-access-groups"])
+        self.assertEqual(body["entitlements"]["by_target"]["Widget.entitlements"]["added"], ["keychain-access-groups"])
 
     def test_entitlements_diff_type_change_is_not_equal(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -93,8 +93,8 @@ def _entitlement_delta(a: dict[str, dict], b: dict[str, dict]) -> dict:
         ]
         if added or removed or changed:
             by_target[target] = {"added": added, "removed": removed, "changed": changed}
-    flat_added = sorted({key for t in by_target.values() for key in t["added"]})
-    flat_removed = sorted({key for t in by_target.values() for key in t["removed"]})
+    flat_added = sorted(_flat_keys(b) - _flat_keys(a))
+    flat_removed = sorted(_flat_keys(a) - _flat_keys(b))
     return {"added": flat_added, "removed": flat_removed, "by_target": by_target}
 
 

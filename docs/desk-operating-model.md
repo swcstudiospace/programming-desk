@@ -75,7 +75,9 @@ which is enabled on all seven seat templates. Six points are desk policy rather 
    etag-bearing tool returning no etag. Those are *unknown*, never *none*. Working the repo anyway needs a recorded
    acknowledgement, routed the way approvals already are: a build seat asks LEAD priority false; LEAD
    asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim nested reason and
-   its field path in `unverified`, it covers one turn on one ticket, it is not a g5/g6 `approval_id`,
+   its field path in `unverified` — `substrate.reason`, `recall.reason`, or `recall.results[<bank>].reason`
+   **named with its bank** for a per-bank Hindsight failure, since `pd-desk` and `pd-<seat>` failing are
+   different incidents — it covers one turn on one ticket, it is not a g5/g6 `approval_id`,
    and it is never typed by the seat that needs it. No ack is a blocker, and a reported blocker is a
    finished turn.
 4. **Degradation is signalled in the event payload, never by swapping the event kind.** A degraded

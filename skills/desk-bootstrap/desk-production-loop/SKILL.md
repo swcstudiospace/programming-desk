@@ -118,14 +118,35 @@ Anything else is §3, however full the top level looks. A seat that checks only 
 `reason` will read a substrate outage as a quiet ticket and edit without an ack — the precise hole
 this section is here to close, and `recall.results[].error` is the second door into the same room.
 
-**Why this list is complete for `desk_brief`.** Of the response's fields, only `substrate` and
-`recall` are backed by an upstream that can fail: `loaded_packs` and `intake_queue` come from the
-gateway's own local store (`store.pack_records`, `store.intake_counts` — plain reads of a JSON file,
-no error shape), `reminders` is a static list, and `seat`, `generated_at` and `cached` are computed
-locally. So the three rows above enumerate every way this tool can fail while looking fine, rather
-than the ways found so far. **If a future gateway change adds another upstream-backed field to the
-brief, this table is what has to grow with it** — the failure mode of this section has been a rule
-written against one code path when the gateway had two.
+**What this list covers, and what it cannot.** The three rows above are every failure `desk_brief`
+can **report**: `substrate` and `recall` are its only upstream-backed fields, `reminders` is static,
+and `seat`, `generated_at` and `cached` are computed locally. **If a future gateway change adds
+another upstream-backed field to the brief, this table is what has to grow with it** — a rule written
+against one code path while the gateway had two is the mistake this section has made more than once.
+
+`loaded_packs` and `intake_queue` are a different case, and calling the list "complete" would paper
+over it. They come from the gateway's local store, whose reader swallows the failure:
+
+```python
+def _read(self, name, default):
+    if not path.exists():
+        return default
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return default          # ← a corrupt or unreadable store reads as empty
+```
+
+So those two fields **cannot fail loudly — they fail silently**, which is worse than failing: an
+empty `loaded_packs` or `intake_queue` means *empty or unreadable, indistinguishable*, and every
+check in the table still passes.
+
+The consequence is narrow but real. This is **not** degraded mode — the memory plane is not involved,
+and §3 is about prior decisions being unknown. But **do not claim either field's emptiness as a
+fact**: "no pack is loaded" and "the intake queue is empty" are not things a brief can tell you. Use
+the tool that owns the answer (`desk_roster_status` for LEAD's queue, a pack load/unload call for
+packs), or record it in `unverified` as unread. A seat that reports "queue empty" off a brief whose
+store file was unreadable has invented an observation, which is PD-1 whether or not a gate catches it.
 
 For a substrate `memory_brief` reached through the connector, apply the same discipline to whatever
 its live response uses: find the field that says the upstream failed, and do not accept the envelope
@@ -194,14 +215,28 @@ without a recorded human acknowledgement:
 | Step | What it is |
 |---|---|
 | 1 | Stop before the first edit. Do not retry in a loop — one retry, then it is degraded. |
-| 2 | Ask for the ack the way approvals are already routed: a build seat asks LEAD (priority false); LEAD asks Ove in the 1:1. State the tool, the verbatim nested `reason` (`substrate.reason` or `recall.reason`) and which field carried it, and what you intend to edit. |
+| 2 | Ask for the ack the way approvals are already routed: a build seat asks LEAD (priority false); LEAD asks Ove in the 1:1. State the tool, the verbatim nested `reason` **and the path that carried it**, and what you intend to edit. |
 | 3 | Record the returned ack id in the receipt under `approvals`, with `operation: "degraded-loop: repo work without a memory brief"`, and put the verbatim `reason` plus its field path in `unverified`. |
 | 4 | Act, and emit the **normal** kinds for what happened — `implementation.started`, then `implementation.completed` with the receipt path — each carrying `payload.degraded: true`, `payload.reason` and the ack id. Degradation is a property of the turn, not its outcome (§6). |
 | 5 | Do **not** fire `handoff_to_hermes`. A handoff propagates an unknown memory state into another runtime, where it stops being visible. Hand off only if the ack says so in as many words. |
 
+**There are three places a `reason` can live, and the ask, the receipt and the event must quote the
+one that actually fired:**
+
+| Failure | Quote from | Name it as |
+|---|---|---|
+| Substrate brief | `substrate.reason` | `substrate.reason` |
+| Recall, substrate fallback branch | `recall.reason` | `recall.reason` |
+| Recall, Hindsight branch (per bank) | `recall.results[i].reason` | `recall.results[<bank>].reason`, **with the bank name** |
+
+The per-bank one is the easiest to lose, because the round that added per-bank *detection* (§2.1) is
+not the same thing as per-bank *reporting* — and "recall failed" without the bank and its reason sends
+whoever reads the receipt looking in the wrong plane. Quote the bank: `pd-desk` timing out and
+`pd-<seat>` timing out are different incidents with different blast radius.
+
 If the ack does not come, or is refused, the turn stops and **that** is the `ticket.blocked` case:
-emit it with `payload.reason: "brief_degraded"` and the verbatim brief `reason`. Its consumer is LEAD,
-which is correct for a turn that produced nothing and needs a decision.
+emit it with `payload.reason: "brief_degraded"`, the verbatim `reason` and the path above. Its
+consumer is LEAD, which is correct for a turn that produced nothing and needs a decision.
 
 An ack authorises **one turn** of repo work on **one ticket**. It is not an `approval_id` for a g5
 or g6 tool and does not substitute for one. **Never type an ack id you were not given** — a
@@ -461,6 +496,8 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Failed brief read as successful | Populated response, no top-level `reason`, so no ack was sought | §2.1 — `substrate.error`, `recall.error` and `recall.results[].error` decide, nothing else |
 | Failed Hindsight recall read as successful | `recall.error` absent because that path never sets it; the error sits in `recall.results[i]` | §2.1 — scan every bank entry; one failed bank is degraded |
 | Partial recall worked around | `pd-<seat>` answered, `pd-desk` errored, seat proceeded on its own bank | The shared bank holds the desk's standing decisions; §3 applies |
+| Ack or receipt says "recall failed" with no bank and no reason | Reader searches the wrong plane; the incident is undiagnosable later | §3 — quote `recall.results[<bank>].reason` and name the bank |
+| Empty `loaded_packs` / `intake_queue` claimed as a fact | "No packs loaded" / "queue empty" asserted from a store file that may be unreadable | §2.1 — the store reader returns the default on `OSError`/`JSONDecodeError`; ask the tool that owns the answer or record it unread |
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
 | Degraded work, no ack | No `approvals` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |

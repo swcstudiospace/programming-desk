@@ -49,34 +49,42 @@ memory_brief (+ etag) ──▶ act ──▶ memory_write ──▶ events_emit
 
 The procedure, the tool-name mapping onto the gateway's `desk_*` equivalents, and the failure modes
 are in [`../skills/desk-bootstrap/desk-production-loop/SKILL.md`](../skills/desk-bootstrap/desk-production-loop/SKILL.md),
-which is enabled on all seven seat templates. Five points are desk policy rather than skill detail:
+which is enabled on all seven seat templates. Six points are desk policy rather than skill detail:
 
-1. **No repo work before a brief that succeeded, with its revision marker recorded.** Reading files
-   is fine; editing, committing, branching, pushing, opening a PR, or any `write` tool call waits for
-   the brief. A seat that edits first is re-deciding something already recorded in the memory plane it
-   skipped. The marker goes in the receipt as `brief_etag` — the etag where the tool's contract has
-   one, and otherwise the strongest stamp the response does carry, named. `desk_brief` returns no etag
-   today, so a gateway seat records `desk_brief.generated_at=<value>`. **A successful brief from a
-   tool with no etag field is not degraded**; reading it that way would make a human ack the price of
-   every ordinary turn on the desk.
-2. **Degraded mode needs a human ack.** Degraded means the brief *failed*: `memory_brief` is a `read`
-   and fails open, so an empty brief with a `reason`, a deadline-cut call, an unlisted tool, or an
-   etag-bearing tool that returned no etag is *unknown*, never *none*. Working the repo anyway needs a
-   recorded acknowledgement, routed the way approvals already are: a build seat asks LEAD priority
-   false; LEAD asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim
-   reason in `unverified`, it covers one turn on one ticket, it is not a g5/g6 `approval_id`, and it
-   is never typed by the seat that needs it. No ack is a blocker, and a reported blocker is a
+1. **No repo work before a brief that succeeded, and success is judged on the nested error fields.**
+   Reading files is fine; editing, committing, branching, pushing, opening a PR, or any `write` tool
+   call waits for the brief. A seat that edits first is re-deciding something already recorded in the
+   memory plane it skipped. **A populated response is not a successful brief**: `desk_brief` returns
+   its full shape even when the substrate is unreachable, there is no top-level `reason`, and the
+   failure sits in `substrate.error` or `recall.error`. Those two fields plus "the tool was listed and
+   the call was not deadline-cut" are the whole test. A seat that checks only the envelope reads an
+   outage as a quiet ticket.
+2. **Record what you read, and claim no more than the tool supports.** Where a tool's contract carries
+   an etag, the receipt records `brief_etag` and change detection is real. `desk_brief` carries none,
+   so the receipt records `brief_read_at` (its `generated_at`) **and** `cached`, and the seat states in
+   `unverified` that it could not tell whether the brief changed under it. `generated_at` is a read
+   timestamp, not a revision id: it moves on every fresh call whether or not memory changed, and a
+   cache hit carries the original assembly time for up to five minutes after memory changed — so it is
+   never recorded as `brief_etag` and never diffed. **Absence of an etag field is not degradation**;
+   reading it that way would make a human ack the price of every ordinary turn on the desk.
+3. **Degraded mode needs a human ack.** Degraded means the brief *failed* per point 1 — `substrate.error`
+   or `recall.error` present, the tool unlisted, the call deadline-cut, or an etag-bearing tool
+   returning no etag. Those are *unknown*, never *none*. Working the repo anyway needs a recorded
+   acknowledgement, routed the way approvals already are: a build seat asks LEAD priority false; LEAD
+   asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim nested reason and
+   its field path in `unverified`, it covers one turn on one ticket, it is not a g5/g6 `approval_id`,
+   and it is never typed by the seat that needs it. No ack is a blocker, and a reported blocker is a
    finished turn.
-3. **Degradation is signalled in the event payload, never by swapping the event kind.** A degraded
+4. **Degradation is signalled in the event payload, never by swapping the event kind.** A degraded
    turn that got its ack and finished the work still emits `implementation.completed` with the receipt
    path, plus `payload.degraded: true` and the ack id. `ticket.blocked` is for the turn that *stopped*
    — no ack, or ack refused. `docs/handoff-contracts.md` routes on kind, so a finished turn labelled
    `ticket.blocked` sends LEAD chasing a blocker for work that is sitting ready for review.
-4. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
+5. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
    RAGFlow or Hindsight server (`user-ragflow`, `user-hindsight`, or a direct MCP/HTTP endpoint):
    that path needs a credential the seat must not hold, leaves no event row, and can retain outside
    `pd-<seat>`.
-5. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
+6. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
    a skill — for itself or another seat — until a `skills.approve` capability exists. `skills_propose`
    opens a PR; a proposal is not an installed skill.
 
@@ -90,7 +98,7 @@ the receipt's `unverified`.
 1. **Intake** — goal, constraints, and success criteria are already in the second uplift when the graph ran.
 2. **Ticket** — LEAD writes one concrete ticket per owning seat (see format below).
 3. **Dispatch** — LEAD `SendToAgent` to each seat 1:1 (never vague "please help").
-4. **Implement** — Specialist runs the production loop above: `memory_brief` (+ etag) before the first edit, then executes only assigned work in owned paths, and writes a receipt.
+4. **Implement** — Specialist runs the production loop above: a brief that succeeded on its nested error fields before the first edit, then executes only assigned work in owned paths, and writes a receipt.
 5. **Receipt** — Build seat posts into the Desk labeled `awaiting-review / pending QUALITY` and sends LEAD a priority-false handoff. LEAD polls held messages; they do not wake LEAD by themselves.
 6. **QUALITY** — LEAD requests review 1:1. QUALITY is off-channel and returns status priority false. LEAD relays it into the Desk.
 7. **Consolidate** — LEAD consolidates specialist receipts + QUALITY verdict.
@@ -118,7 +126,7 @@ consolidates — not the implementer.
 - **trackers:** (when a graph exists) Graph ID, Notion Issue/Sub-Issue URLs, Linear issue/sub-issue URLs from the second uplift. Do not paste the entire XML into chat if the packet already lives on the branch; cite it.
 - **success_criteria:**
   - Unit tests for token registration pass (`./gradlew :app:testDebugUnitTest`)
-  - Receipt at `.receipts/bot-03-android/<task_id>.json` with cited commands and `brief_etag`
+  - Receipt at `.receipts/bot-03-android/<task_id>.json` with cited commands and the brief record (`brief_etag`, or `brief_read_at` + `cached`)
   - No owned-path violations (G-1)
   - Production loop run: brief before the first edit, `memory_write` and `events_emit` in the same turn (or a recorded degraded-mode ack)
 - **report_back:**

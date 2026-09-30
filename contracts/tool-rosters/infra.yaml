@@ -1,0 +1,98 @@
+# INFRA roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-05-infrastructure.
+version: 1.0.0
+seat: bot-05-infrastructure
+short: infra
+endpoint: /mcp/infra
+scope: seat:infra
+memory_banks: { own: pd-infra, shared: [pd-desk] }
+core: true
+consumers: [bot-05-infrastructure]
+tools:
+  - name: desk_railway_status
+    kind: read
+    gates: []
+    description: Services, latest deployment and health for the Ultrathink and Agent Substrate Railway projects.
+    backend: infra.railway_status
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        project: { type: string, enum: [ultrathink, agent-substrate, all], default: all }
+
+  - name: desk_railway_logs
+    kind: read
+    gates: []
+    description: Recent deployment logs for one Railway service, bounded and redacted.
+    backend: infra.railway_logs
+    input:
+      type: object
+      additionalProperties: false
+      required: [project, service]
+      properties:
+        project: { type: string, enum: [ultrathink, agent-substrate] }
+        service: { type: string, pattern: "^[A-Za-z0-9 ._-]{1,80}$" }
+        deployment_id: { type: string, maxLength: 80 }
+        lines: { type: integer, minimum: 10, maximum: 500, default: 100 }
+
+  - name: desk_railway_variable_names
+    kind: read
+    gates: []
+    description: Variable names (never values) for one Railway service.
+    backend: infra.railway_variable_names
+    input:
+      type: object
+      additionalProperties: false
+      required: [project, service]
+      properties:
+        project: { type: string, enum: [ultrathink, agent-substrate] }
+        service: { type: string, pattern: "^[A-Za-z0-9 ._-]{1,80}$" }
+
+  - name: desk_railway_redeploy
+    kind: write
+    gates: [g5]
+    description: Redeploy one Railway service. PD-5 - requires rollback_plan, approval_id and the prior deployment id to roll back to.
+    backend: infra.railway_redeploy
+    input:
+      type: object
+      additionalProperties: false
+      required: [project, service, prior_deployment_id, rollback_plan, approval_id]
+      properties:
+        project: { type: string, enum: [ultrathink, agent-substrate] }
+        service: { type: string, pattern: "^[A-Za-z0-9 ._-]{1,80}$" }
+        prior_deployment_id: { type: string, minLength: 6, maxLength: 80 }
+        rollback_plan: { type: string, minLength: 20, maxLength: 4000 }
+        approval_id: { type: string, minLength: 6, maxLength: 120 }
+
+  - name: desk_tailscale_status
+    kind: read
+    gates: []
+    description: Tailnet view from the VPS - forwarders online, mapped ports reachable, this node's tags.
+    backend: infra.tailscale_status
+    input:
+      type: object
+      additionalProperties: false
+      properties: {}
+
+  - name: desk_vps_units
+    kind: read
+    gates: []
+    description: systemd status of the desk-relevant units on the VPS (substrate-*, desk-gateway, vps-agent-bus, grok-claude-cloud).
+    backend: infra.vps_units
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        units:
+          type: array
+          maxItems: 20
+          items: { type: string, pattern: "^[a-z0-9@._-]{2,80}$" }
+
+  - name: desk_db_health
+    kind: read
+    gates: []
+    description: Health of the five data-plane services over the tailnet (Greptime, Timescale, Dragonfly, Hindsight, RAGFlow).
+    backend: infra.db_health
+    input:
+      type: object
+      additionalProperties: false
+      properties: {}

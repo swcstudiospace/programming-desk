@@ -1,0 +1,111 @@
+# QUALITY roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-06-quality-security.
+version: 1.0.0
+seat: bot-06-quality-security
+short: quality
+endpoint: /mcp/quality
+scope: seat:quality
+memory_banks: { own: pd-quality, shared: [pd-desk] }
+core: true
+consumers: [bot-06-quality-security]
+tools:
+  - name: desk_gates_run
+    kind: read
+    gates: []
+    description: Run ci/gates/run_all.py (G-1..G-7) against a ref in a scratch clone. Read-only; returns each gate's exit code and tail.
+    backend: quality.gates_run
+    input:
+      type: object
+      additionalProperties: false
+      required: [ref, bot]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 120 }
+        bot: { type: string, pattern: "^bot-0[0-6]-[a-z-]+$" }
+        base: { type: string, minLength: 1, maxLength: 120, default: origin/main }
+        receipt_path: { type: string, pattern: "^\\.receipts/bot-0[0-6]-[a-z-]+/[A-Za-z0-9._-]+\\.json$" }
+
+  - name: desk_greptile_review
+    kind: write
+    gates: []
+    description: Trigger a Greptile review for a PR, fetch its status, or list its comments with addressed state.
+    backend: quality.greptile_review
+    input:
+      type: object
+      additionalProperties: false
+      required: [action, pr_number]
+      properties:
+        action: { type: string, enum: [trigger, get, comments] }
+        pr_number: { type: integer, minimum: 1 }
+        review_id: { type: string, maxLength: 80 }
+        repo: { type: string, pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" }
+
+  - name: desk_receipt_approve
+    kind: write
+    gates: []
+    description: >-
+      Stamp approved_by on a receipt in a PR branch after review. Refused when the receipt's bot is
+      QUALITY itself (no self-approval) or when G-2 fails on the receipt.
+    backend: quality.receipt_approve
+    input:
+      type: object
+      additionalProperties: false
+      required: [receipt_path, branch]
+      properties:
+        receipt_path: { type: string, pattern: "^\\.receipts/bot-0[0-6]-[a-z-]+/[A-Za-z0-9._-]+\\.json$" }
+        branch: { type: string, minLength: 3, maxLength: 200 }
+        note: { type: string, maxLength: 2000 }
+
+  - name: desk_waiver_record
+    kind: write
+    gates: []
+    description: Record a Greptile waiver receipt under .receipts/bot-06-quality-security/ on the PR branch.
+    backend: quality.waiver_record
+    input:
+      type: object
+      additionalProperties: false
+      required: [pr_number, branch, comment_ids, reason]
+      properties:
+        pr_number: { type: integer, minimum: 1 }
+        branch: { type: string, minLength: 3, maxLength: 200 }
+        comment_ids: { type: array, minItems: 1, maxItems: 50, items: { type: string, maxLength: 80 } }
+        reason: { type: string, minLength: 10, maxLength: 4000 }
+
+  - name: desk_contract_ack_status
+    kind: read
+    gates: []
+    description: Acknowledgement state of a contract change against contract_consumers (G-4).
+    backend: quality.contract_ack_status
+    input:
+      type: object
+      additionalProperties: false
+      required: [change_id]
+      properties:
+        change_id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{2,80}$" }
+
+  - name: desk_supply_chain_check
+    kind: read
+    gates: []
+    description: Licence and known-vulnerability check over lockfile changes between two refs.
+    backend: quality.supply_chain_check
+    input:
+      type: object
+      additionalProperties: false
+      required: [base_ref, head_ref]
+      properties:
+        base_ref: { type: string, minLength: 1, maxLength: 120 }
+        head_ref: { type: string, minLength: 1, maxLength: 120 }
+
+  - name: desk_secret_scan
+    kind: read
+    gates: []
+    description: Run ci/gates/check_secrets.py over a ref (whole tree or given paths).
+    backend: quality.secret_scan
+    input:
+      type: object
+      additionalProperties: false
+      required: [ref]
+      properties:
+        ref: { type: string, minLength: 1, maxLength: 120 }
+        paths:
+          type: array
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 300 }

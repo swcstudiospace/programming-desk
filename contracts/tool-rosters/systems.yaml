@@ -1,0 +1,100 @@
+# SYSTEMS roster: core 8 + 6 = 14. Contract surface (QUALITY); consumer bot-01-systems-backend.
+version: 1.0.0
+seat: bot-01-systems-backend
+short: systems
+endpoint: /mcp/systems
+scope: seat:systems
+memory_banks: { own: pd-systems, shared: [pd-desk] }
+core: true
+consumers: [bot-01-systems-backend]
+tools:
+  - name: desk_index_query
+    kind: read
+    gates: []
+    description: Read-only SQL against the substrate index (TimescaleDB). SELECT and WITH only; rows capped.
+    backend: systems.index_query
+    input:
+      type: object
+      additionalProperties: false
+      required: [sql]
+      properties:
+        sql: { type: string, minLength: 6, maxLength: 4000 }
+        limit: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  - name: desk_events_query
+    kind: read
+    gates: []
+    description: Read-only SQL against the substrate event log (GreptimeDB HTTP SQL). SELECT only; rows capped.
+    backend: systems.events_query
+    input:
+      type: object
+      additionalProperties: false
+      required: [sql]
+      properties:
+        sql: { type: string, minLength: 6, maxLength: 4000 }
+        limit: { type: integer, minimum: 1, maximum: 500, default: 100 }
+
+  - name: desk_cache
+    kind: write
+    gates: []
+    description: Cache get, set or del in the systems namespace of DragonflyDB. Cache semantics only; TTL at most 24 hours.
+    backend: systems.cache
+    input:
+      type: object
+      additionalProperties: false
+      required: [action, key]
+      properties:
+        action: { type: string, enum: [get, set, del] }
+        key: { type: string, pattern: "^[A-Za-z0-9:._-]{1,200}$" }
+        value: { type: string, maxLength: 65536 }
+        ttl_sec: { type: integer, minimum: 1, maximum: 86400, default: 3600 }
+
+  - name: desk_lsp_diagnostics
+    kind: read
+    gates: []
+    description: Diagnostics for one file from the Tier-1 unified LSP broker (tsjs, python, go). Other languages return language_not_tier1.
+    backend: systems.lsp_diagnostics
+    input:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 300 }
+        language: { type: string, enum: [tsjs, python, go, rust] }
+
+  - name: desk_contract_propose
+    kind: write
+    gates: []
+    description: >-
+      Open a contract-change proposal under contracts/ as a branch and draft PR skeleton. QUALITY merges;
+      consumers acknowledge with desk_contract_ack.
+    backend: systems.contract_propose
+    input:
+      type: object
+      additionalProperties: false
+      required: [change_id, surface, summary, breaking, version, consumers_required, body]
+      properties:
+        change_id: { type: string, pattern: "^[a-z0-9][a-z0-9-]{2,80}$" }
+        surface: { type: string, pattern: "^(contracts/|openapi\\.yaml$)[A-Za-z0-9./_-]*$" }
+        summary: { type: string, minLength: 10, maxLength: 1000 }
+        breaking: { type: boolean }
+        version: { type: string, pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$" }
+        migration_note: { type: string, maxLength: 4000 }
+        consumers_required:
+          type: array
+          minItems: 1
+          maxItems: 7
+          items: { type: string, pattern: "^bot-0[0-6]-[a-z-]+$" }
+        body: { type: string, minLength: 1, maxLength: 200000 }
+
+  - name: desk_design_artifact_get
+    kind: read
+    gates: []
+    description: Read a design artifact (design/** or docs/design/**) at origin/main.
+    backend: systems.design_artifact_get
+    input:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string, pattern: "^(design|docs/design)/[A-Za-z0-9./_-]+$" }

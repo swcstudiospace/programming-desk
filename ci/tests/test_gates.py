@@ -274,20 +274,20 @@ class TestG3Secrets:
         return run_gate("check_secrets.py", "--root", str(tmp_path), "--files", name)
 
     @pytest.mark.parametrize("content,label", [
-        ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"',                       "AWS access key"),
-        ('token = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"',    "GitHub token"),
-        ('SLACK = "xoxb-123456789012-1234567890123-abcdefghijkl"', "Slack token"),
-        ('key = "AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567"',      "Google API key"),
-        ('DB = "postgresql://admin:hunter2@db.internal:5432/prod"', "connection string"),
-        ('-----BEGIN RSA PRIVATE KEY-----',                        "private key block"),
-        ('STRIPE = "sk_live_abcdefghijklmnopqrstuvwx"',            "Stripe live key"),
+        ('AWS_KEY = "AKIAIOSFODNN7EXAMPLE"',                       "AWS access key"),  # pragma: allowlist secret — gate fixture
+        ('token = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"',    "GitHub token"),  # pragma: allowlist secret — gate fixture
+        ('SLACK = "xoxb-123456789012-1234567890123-abcdefghijkl"', "Slack token"),  # pragma: allowlist secret — gate fixture
+        ('key = "AIzaSyD-abcdefghijklmnopqrstuvwxyz1234567"',      "Google API key"),  # pragma: allowlist secret — gate fixture
+        ('DB = "postgresql://admin:hunter2@db.internal:5432/prod"', "connection string"),  # pragma: allowlist secret — gate fixture
+        ('-----BEGIN RSA PRIVATE KEY-----',                        "private key block"),  # pragma: allowlist secret — gate fixture
+        ('STRIPE = "sk_live_abcdefghijklmnopqrstuvwx"',            "Stripe live key"),  # pragma: allowlist secret — gate fixture
     ])
     def test_known_secret_formats_blocked(self, tmp_path, content, label):
         r = self._scan(tmp_path, content)
         assert r.returncode == 1, f"{label} should have been caught"
 
     def test_high_entropy_with_secret_name_blocked(self, tmp_path):
-        r = self._scan(tmp_path, 'api_secret = "8Kf3nQ9pL2mX7vB4tR6wY1zA5cD0eG8h"')
+        r = self._scan(tmp_path, 'api_secret = "8Kf3nQ9pL2mX7vB4tR6wY1zA5cD0eG8h"')  # pragma: allowlist secret — gate fixture
         assert r.returncode == 1
         assert "high_entropy" in r.stderr
 
@@ -312,7 +312,7 @@ class TestG3Secrets:
 
     def test_secret_is_redacted_in_output(self, tmp_path):
         """The scanner must not print the secret it found into CI logs."""
-        secret = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"
+        secret = "ghp_016C7f8a9B2c3D4e5F6g7H8i9J0k1L2m3N4o5"  # pragma: allowlist secret — gate fixture
         r = self._scan(tmp_path, f'token = "{secret}"')
         assert r.returncode == 1
         assert secret not in r.stderr, "the gate leaked the secret into its own output"
@@ -527,6 +527,283 @@ class TestG5G6RollbackAndDestructive:
         r = run_gate("check_rollback.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "blast_radius" in r.stderr
+
+
+# ===========================================================================
+# G-7 — desk integrity
+# ===========================================================================
+
+class TestG7DeskIntegrity:
+
+    ROSTERS = REPO_ROOT / "contracts" / "tool-rosters"
+    PACKS = REPO_ROOT / "contracts" / "tool-packs"
+
+    def _desk(self, tmp_path: Path) -> dict[str, Path]:
+        """A desk checkout in tmp: the real rosters and packs, empty prompt and template dirs.
+
+        Each test alters one file so the gate is exercised against the real contract shape
+        rather than a hand-written approximation of it.
+        """
+        import shutil
+        dirs = {
+            "rosters": tmp_path / "rosters",
+            "packs": tmp_path / "packs",
+            "prompts": tmp_path / "prompts",
+            "assembled": tmp_path / "assembled",
+            "templates": tmp_path / "templates",
+        }
+        shutil.copytree(self.ROSTERS, dirs["rosters"])
+        shutil.copytree(self.PACKS, dirs["packs"])
+        for key in ("prompts", "assembled", "templates"):
+            dirs[key].mkdir()
+        return dirs
+
+    def _run(self, tmp_path: Path, dirs: dict[str, Path]) -> subprocess.CompletedProcess:
+        return run_gate(
+            "check_desk_integrity.py", "--repo", str(tmp_path),
+            "--rosters-dir", str(dirs["rosters"]),
+            "--packs-dir", str(dirs["packs"]),
+            "--prompts-dir", str(dirs["prompts"]),
+            "--assembled-dir", str(dirs["assembled"]),
+            "--templates-dir", str(dirs["templates"]),
+        )
+
+    @staticmethod
+    def _edit_yaml(path: Path, mutate) -> None:
+        import yaml
+        doc = yaml.safe_load(path.read_text())
+        mutate(doc)
+        path.write_text(yaml.safe_dump(doc, sort_keys=False))
+
+    @staticmethod
+    def _clone_tool(tools: list, index: int, name: str) -> dict:
+        import copy
+        tool = copy.deepcopy(tools[index])
+        tool["name"] = name
+        return tool
+
+    # --- real contracts ---------------------------------------------------
+
+    def test_real_rosters_and_packs_pass(self, tmp_path):
+        """The committed contracts obey the rules the README states. Prompt and template
+        checks run against empty dirs here: the prompt sources are being moved to
+        placeholders separately, and that migration is not what this test measures."""
+        for name in ("prompts", "assembled", "templates"):
+            (tmp_path / name).mkdir()
+        r = run_gate(
+            "check_desk_integrity.py", "--repo", str(REPO_ROOT),
+            "--rosters-dir", str(self.ROSTERS), "--packs-dir", str(self.PACKS),
+            "--prompts-dir", str(tmp_path / "prompts"),
+            "--assembled-dir", str(tmp_path / "assembled"),
+            "--templates-dir", str(tmp_path / "templates"),
+        )
+        assert r.returncode == 0, r.stderr
+        assert "G-7 PASS" in r.stdout
+        assert "7 rosters, 3 packs" in r.stdout
+
+    def test_fixture_copy_passes(self, tmp_path):
+        """The unaltered fixture passes, so every failure below is caused by its one edit."""
+        dirs = self._desk(tmp_path)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+    # --- rosters ------------------------------------------------------------
+
+    def test_roster_with_nine_tools_blocked(self, tmp_path):
+        """Core 8 + 1 own = 9: below the floor."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "android.yaml",
+                        lambda d: d.update(tools=d["tools"][:1]))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "android.yaml" in r.stderr
+        assert "9 effective tool(s)" in r.stderr
+
+    def test_roster_with_sixteen_tools_blocked(self, tmp_path):
+        """Core 8 + 8 own = 16: past the ceiling."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(
+            dirs["rosters"] / "android.yaml",
+            lambda d: d["tools"].append(self._clone_tool(d["tools"], 0, "desk_play_extra")),
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "16 effective tool(s)" in r.stderr
+
+    def test_g5_tool_without_rollback_plan_blocked(self, tmp_path):
+        """A g5 tool whose schema does not require rollback_plan is a deployment G-5 never sees."""
+        dirs = self._desk(tmp_path)
+
+        def strip(doc):
+            tool = next(t for t in doc["tools"] if t["name"] == "desk_play_staged_rollout")
+            assert "g5" in tool["gates"]
+            tool["input"]["required"].remove("rollback_plan")
+
+        self._edit_yaml(dirs["rosters"] / "android.yaml", strip)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "desk_play_staged_rollout" in r.stderr
+        assert "rollback_plan" in r.stderr
+
+    def test_g6_tool_without_approval_id_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+
+        def strip(doc):
+            tool = next(t for t in doc["tools"] if t["name"] == "desk_play_halt_rollout")
+            tool["input"]["required"].remove("approval_id")
+
+        self._edit_yaml(dirs["rosters"] / "android.yaml", strip)
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "approval_id" in r.stderr
+
+    def test_tool_without_input_schema_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "web.yaml", lambda d: d["tools"][0].pop("input"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "no input schema" in r.stderr
+
+    def test_duplicate_tool_name_across_core_and_seat_blocked(self, tmp_path):
+        """A seat tool named like a core tool would shadow it on the endpoint."""
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "ios.yaml",
+                        lambda d: d["tools"][0].update(name="desk_brief"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "declared twice" in r.stderr
+
+    def test_endpoint_must_match_short_name(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["rosters"] / "infra.yaml", lambda d: d.update(endpoint="/mcp/ops"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "/mcp/infra" in r.stderr
+
+    # --- packs --------------------------------------------------------------
+
+    def test_pack_with_six_tools_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(
+            dirs["packs"] / "kanbanos.yaml",
+            lambda d: d["tools"].append(self._clone_tool(d["tools"], 0, "kanbanos_extra")),
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "kanbanos.yaml" in r.stderr
+        assert "6 tool(s)" in r.stderr
+
+    def test_pack_tool_without_app_prefix_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        self._edit_yaml(dirs["packs"] / "clippyos.yaml",
+                        lambda d: d["tools"][0].update(name="desk_api_smoke"))
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "not prefixed 'clippyos_'" in r.stderr
+
+    # --- prompts ------------------------------------------------------------
+
+    UUID = "4d78b294-1c2e-4f5a-9b8c-0d1e2f3a4b5c"
+
+    def test_prompt_source_with_literal_uuid_blocked(self, tmp_path):
+        """A hardcoded channel id is a desk that cannot be installed for a second team."""
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "bot-03-android.xml").write_text(
+            f"<prompt><channel_id>{self.UUID}</channel_id></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "bot-03-android.xml" in r.stderr
+        assert "literal UUID" in r.stderr
+
+    def test_prompt_source_with_placeholder_passes(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "_shared").mkdir()
+        (dirs["prompts"] / "_shared" / "core-directives.xml").write_text(
+            "<prompt><channel_id>{{DESK_CHANNEL_ID}}</channel_id>"
+            "<agent_uuid>{{SEAT_UUID:ANDROID}}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+        assert "1 prompt files checked" in r.stdout
+
+    def test_assembled_prompt_with_unfilled_placeholder_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["assembled"] / "ANDROID.xml").write_text(
+            "<prompt><agent_uuid>{{SEAT_UUID:ANDROID}}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "ANDROID.xml" in r.stderr
+        assert "unfilled placeholder {{SEAT_UUID:ANDROID}}" in r.stderr
+
+    def test_assembled_alias_under_prompts_is_checked_as_output(self, tmp_path):
+        """prompts/ANDROID.xml is assembled output: a UUID is fine there, a placeholder is not."""
+        dirs = self._desk(tmp_path)
+        (dirs["prompts"] / "ANDROID.xml").write_text(
+            f"<prompt><agent_uuid>{self.UUID}</agent_uuid></prompt>\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+        (dirs["prompts"] / "ANDROID.xml").write_text("<prompt>{{DESK_CHANNEL_ID}}</prompt>\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "unfilled placeholder" in r.stderr
+
+    def test_empty_assembled_prompt_blocked(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["assembled"] / "LEAD.xml").write_text("")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert "empty" in r.stderr
+
+    # --- templates ----------------------------------------------------------
+
+    @pytest.mark.parametrize("content,label", [
+        ("token: ghp_0123456789abcdefghij",                     "GitHub token shape"),  # pragma: allowlist secret — gate fixture
+        ("gateway: http://desk-gateway.railway.internal:8080", "railway.internal"),
+        ("key: sk-abcdefghijklmnopqrstuvwxyz",                  "API key shape"),  # pragma: allowlist secret — gate fixture
+        ("slack: xoxb-000",                                     "Slack token shape"),
+        ("aws: AKIAIOSFODNN7EXAMPLE",                           "AWS access key shape"),  # pragma: allowlist secret — gate fixture
+        ("-----BEGIN OPENSSH PRIVATE KEY-----",                 "key block"),  # pragma: allowlist secret — gate fixture
+        ("host: tailscale-forwarder",                           "tailnet name"),
+        ("url: https://vps.tail1234.ts.net/mcp/lead",           "tailnet domain"),
+        ("ip: 100.101.102.103",                                 "tailnet address"),
+        ("agent: 4d78b294-1c2e-4f5a-9b8c-0d1e2f3a4b5c",         "literal UUID"),
+    ])
+    def test_template_with_forbidden_content_blocked(self, tmp_path, content, label):
+        """Templates are published to every recipient team: nothing in them may point at the
+        desk's own infrastructure or credentials."""
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "android.md").write_text(f"# ANDROID\n\n{content}\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1, f"{label} should have been caught"
+        assert "android.md" in r.stderr
+
+    def test_template_gate_does_not_leak_the_token(self, tmp_path):
+        token = "ghp_0123456789abcdefghij"  # pragma: allowlist secret — gate fixture
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "lead.md").write_text(f"token: {token}\n")
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 1
+        assert token not in r.stderr, "the gate leaked the token into its own output"
+
+    def test_clean_template_passes(self, tmp_path):
+        dirs = self._desk(tmp_path)
+        (dirs["templates"] / "lead.md").write_text(
+            "# LEAD\n\nProgramming lead for the desk. Connect to {{DESK_GATEWAY_URL}}/mcp/lead.\n"
+        )
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+
+    def test_missing_templates_dir_is_skipped_not_failed(self, tmp_path):
+        """The templates are generated later in the rollout; their absence is not a defect."""
+        dirs = self._desk(tmp_path)
+        dirs["templates"].rmdir()
+        r = self._run(tmp_path, dirs)
+        assert r.returncode == 0, r.stderr
+        assert "template check skipped" in r.stdout
 
 
 # ===========================================================================

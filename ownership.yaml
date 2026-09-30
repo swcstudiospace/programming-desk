@@ -72,6 +72,20 @@ bots:
 # ---------------------------------------------------------------------------
 ownership:
 
+  # --- Agent tooling config ----------------------------------------------
+  # Project-scoped MCP server config consumed by Claude Cloud Sessions. It is remote-dev
+  # wiring, not product code, so the root file sits with INFRA. Secrets stay out of it: the
+  # committed config only references ${VAR} placeholders resolved from the session
+  # environment.
+  #
+  # Placed FIRST on purpose. The resolver matches a slash-less pattern by basename at any
+  # depth, and a pattern containing '/' can never match a path with no '/' in it, so there
+  # is no way to spell "root only" for this filename. First position is the next best thing:
+  # the root .mcp.json matches nothing else and stays INFRA, while a future web/.mcp.json or
+  # android/.mcp.json is claimed by its directory rule below, because last match wins.
+  - pattern: ".mcp.json"
+    owner: bot-05-infrastructure
+
   # --- Backend / systems -------------------------------------------------
   - pattern: "services/**"
     owner: bot-01-systems-backend
@@ -148,6 +162,15 @@ ownership:
   - pattern: "docker-compose*.yml"
     owner: bot-05-infrastructure
   - pattern: ".github/workflows/**"
+    owner: bot-05-infrastructure
+  # The distributable gate template. GitHub only reads workflows from the repository
+  # root, so ci/.github/workflows/gates.yml is the copy other repositories seed from
+  # and .github/workflows/gates.yml is the copy that runs. The two must always change
+  # together — .github/workflows/gates-template-sync.yml fails the build if they drift —
+  # so the template belongs to the same bot as the live workflow. Without this rule the
+  # path matches nothing: .github/workflows/** is anchored at the root, so the nested
+  # path was UNOWNED and no bot could touch the template at all.
+  - pattern: "ci/.github/workflows/**"
     owner: bot-05-infrastructure
   - pattern: "scripts/dev/**"
     owner: bot-05-infrastructure
@@ -296,6 +319,29 @@ ownership:
     owner: bot-05-infrastructure
   - pattern: "chains/**"
     owner: bot-05-infrastructure
+
+  # --- Desk v2: gateway, contracts, Grok Bot share (docs/upgrade-plan-desk-v2.md) --
+  # Owned before the paths exist so G-1 never meets an unowned file. **/*.proto stays
+  # the last pattern; none of these directories contain .proto files.
+  - pattern: "services/desk-gateway/**"
+    owner: bot-01-systems-backend
+  - pattern: "infra/desk-gateway/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/railway/**"
+    owner: bot-05-infrastructure
+  - pattern: "infra/tailscale/**"
+    owner: bot-05-infrastructure
+  - pattern: "contracts/tool-rosters/**"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "contracts/tool-packs/**"
+    owner: bot-06-quality-security
+    contract_surface: true
+  - pattern: "grokbot/**"
+    owner: bot-00-programming-lead
+  - pattern: "skills/desk-bootstrap/**"
+    owner: bot-00-programming-lead
+
   # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY
   # contract_surface. Do not duplicate this pattern; validate-manifest rejects duplicates.
   - pattern: "**/*.proto"
@@ -318,6 +364,18 @@ contract_consumers:
     - bot-02-web-edge
     - bot-05-infrastructure
   "openapi.yaml":
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios
+  "contracts/tool-rosters/**":
+    - bot-00-programming-lead
+    - bot-01-systems-backend
+    - bot-02-web-edge
+    - bot-03-android
+    - bot-04-ios
+    - bot-05-infrastructure
+    - bot-06-quality-security
+  "contracts/tool-packs/**":
     - bot-02-web-edge
     - bot-03-android
     - bot-04-ios

@@ -94,6 +94,11 @@ version: 1.4.0
 
 summary: Adds device token registration and a send endpoint.
 
+# Mandatory even when empty. [] asserts no field changed meaning while keeping
+# its name and type — the one break no tool can detect. G-4 rejects the document
+# if this key is absent, on non-breaking changes too.
+semantic_changes: []
+
 consumers_required:
   - bot-02-web-edge
   - bot-03-android

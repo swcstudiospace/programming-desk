@@ -1,0 +1,77 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "greptile-comment-disposition-pr16",
+  "receipt_kind": "greptile_comment_disposition",
+  "recorded_at": "2026-09-30T13:09:28+10:00",
+  "repo": "swcstudiospace/programming-desk",
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/16",
+  "latest_review": {
+    "id": "27959552",
+    "status": "REVIEWING_FILES_WITH_FINDINGS_IN_BODY",
+    "commit": "28c498deed5c1878e820bae73d4e549fa17dd689",
+    "tip_at_disposition": "d1731359fda981fd24b39f3966e97cfb6739e700",
+    "confidence": "0/5",
+    "greptile_says": "plan not ready as implementation guide; 6 P1 + 1 P2 on docs proposal",
+    "retrigger_ids_tip_match": [
+      "27959891",
+      "27959842"
+    ]
+  },
+  "dispositions": [
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409690",
+      "title": "Approval edits another seat's receipt",
+      "severity": "P1",
+      "action": "WAIVED",
+      "waiver": "greptile-p1-waiver-receipt-approve-seat-path-pr16.json",
+      "note": "LEAD ticket authorizes QUALITY approved_by stamps on seat PR branches. Seat owns .receipts/<seat>/** so G-1 with --bot <seat> PASS (proven 2026-09-30 stamp pass on #18-#23). desk_receipt_approve must edit the seat branch path, not QUALITY tree (Path B). Not a docs-merge blocker."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409705",
+      "title": "INFRA cannot own planned railway-tailscale skill",
+      "severity": "P1",
+      "action": "TRACKED_IN_STACK",
+      "note": "Plan assigns skills/platforms/railway-tailscale to INFRA but ownership.yaml on #16/#17 leaves skills/** \u2192 QUALITY. Follow-up: add last-match override owner bot-05-infrastructure before INFRA edits the skill. #17 authored the skill under QUALITY (correct for initial land). Docs PR may merge; fix before INFRA maintenance."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409713",
+      "title": "PR workflow omits G-7",
+      "severity": "P1",
+      "action": "TRACKED_IN_STACK",
+      "note": "Addressed by stack #22 (.github/workflows/gates.yml) and #17 (check_desk_integrity.py + run_all). Plan text is proposal; implementation lands later in stack."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409718",
+      "title": "Memory banks lack team isolation",
+      "severity": "P1",
+      "action": "TRACKED_FOLLOWUP",
+      "note": "Valid multi-tenant design debt. Scope bank selection by registered team id in gateway/Hindsight registration before second-team install. Not a blocker for landing the proposal doc."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409723",
+      "title": "Gateway data path conflicts",
+      "severity": "P1",
+      "action": "TRACKED_IN_STACK",
+      "note": "Clarify in #21 gateway impl / companion substrate docs whether DB access is substrate-mediated or direct forwarder. Proposal ambiguity; SYSTEMS owns resolution in desk-gateway code."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409729",
+      "title": "Cutover skips index verification",
+      "severity": "P1",
+      "action": "TRACKED_FOLLOWUP",
+      "note": "n2 cutover checklist should verify end-to-end index/graph ops before retiring public Timescale proxy. Operational runbook follow-up for INFRA at cutover time."
+    },
+    {
+      "github_discussion": "https://github.com/swcstudiospace/programming-desk/pull/16#discussion_r4139409733",
+      "title": "Prompt check relies on self-report",
+      "severity": "P2",
+      "action": "ACK_LIMITATION",
+      "note": "desk_doctor prompt SHA is Bot-reported until an independent read path exists. Document as Bot-reported in doctor report; do not claim remote verification. Acceptable for v1."
+    }
+  ],
+  "merge_recommendation": "CLEAR_WITH_WAIVERS",
+  "named_waivers": [
+    "greptile-p1-waiver-receipt-approve-seat-path-pr16.json"
+  ],
+  "notes": "PR #16 is docs+ownership proposal only. Greptile P1s are implementation-plan risks tracked into stack #17-#24 / cutover follow-ups. QUALITY did not undraft or merge."
+}

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "hindsight": {
+      "type": "http",
+      "url": "https://hindsight-api-production-014d.up.railway.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${HINDSIGHT_MCP_API_KEY}"
+      }
+    }
+  }
+}

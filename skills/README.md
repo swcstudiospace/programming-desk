@@ -20,9 +20,9 @@ came from the skill or from its application.
 |---|---|---|
 | `gotxcot-uplift` | LEAD | First XML uplift, GoT 5–8, sequential CoT 4–8 steps/node, kickoff, second uplift with URLs |
 | `trackplan-dispatch` | LEAD | Dispatch the second-uplift XML to Cursor Cloud Agent (default) or Hermes |
-| `agent-bus` | LEAD | Lane B Agent Bus dispatch on connected `user-hermes-agent`: health, idempotency, start/wait/get, GitHub verification |
-| `greptile-merge-gate` | QUALITY | Merge-claim Greptile gate. Does not replace G-1…G-6 |
+| `greptile-merge-gate` | QUALITY | Merge-claim Greptile gate. Does not replace G-1…G-6 — the split is in `docs/quality-gates.md` § *Greptile is not a gate* |
 | `verification-receipts` | all | The G-2 artefact. **Always loaded.** |
+| `pack-sync` | 5, 0, all | Refresh the box pack from GitHub `main`. One direction only — the pack never writes back |
 | `contract-first-changes` | 1, 6 | Breaking-change analysis, consumer impact |
 | `code-review` | 6 | Review order, what to flag, what to let go |
 | `debugging` | all | Reproduce → isolate → fix → verify |

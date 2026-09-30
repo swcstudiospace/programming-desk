@@ -189,6 +189,43 @@
       "exit_code": 0,
       "duration_s": 10.5,
       "output_tail": "169 passed (168 pre-existing + 1 new: test_scoped_to_pr_changed_files_not_whole_repo)"
+    },
+    {
+      "cmd": "bash -c 'set -euo pipefail; BASE_REF=nonexistent-ref-xyz; if ! PY_DIFF=$(git diff --name-only --diff-filter=d \"origin/$BASE_REF...HEAD\" -- \"*.py\" 2>&1); then echo FAILED_CLOSED; exit 1; fi'",
+      "exit_code": 1,
+      "duration_s": 0.05,
+      "output_tail": "FAILED_CLOSED — Greptile P1 (security-pr.yml ~L193): the old `mapfile -t PY_FILES < <(git diff ...)` form runs the diff in a process substitution whose exit status `set -e` never observes, so a failing `git diff` (no merge-base, a too-shallow fetch) would silently degrade to an empty PY_FILES array — identical to the legitimate 'PR touched no .py files' skip path, which exits 0. Capturing the diff into PY_DIFF=$(...) first and checking its own exit status explicitly closes that gap: a diff failure now exits 1 with an explicit ::error:: instead of masquerading as a pass.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_bandit_baseline_gate.py -v",
+      "exit_code": 0,
+      "duration_s": 1.5,
+      "output_tail": "7 passed — new ci/security/bandit_baseline_gate.py unit + end-to-end tests: finding identity survives a line-number shift (unrelated edit elsewhere in a changed file no longer re-trips a pre-existing finding), a genuinely new HIGH finding in a changed file still fails, and an empty file list is a clean no-op that never shells out to bandit"
+    },
+    {
+      "cmd": "git worktree add --detach /tmp/bandit_test HEAD && <edit infra/unified-lsp-broker/broker.py in the worktree: insert an unrelated helper function before the WS_GUID/B324 line, shifting it from line 1241 to 1248, without touching the flagged line itself> && python3 ci/security/bandit_baseline_gate.py --base-ref HEAD --ini ci/security/bandit.ini -- infra/unified-lsp-broker/broker.py",
+      "exit_code": 0,
+      "duration_s": 0.8,
+      "output_tail": "Bandit: 1 finding(s) on changed files, all pre-existing at HEAD. Pass. — Greptile P1 (security-pr.yml ~L199) fixed: this reproduces 'a PR edits infra/unified-lsp-broker/broker.py for an unrelated reason' and confirms the pre-existing B324 (now on line 1248, not 1241) no longer blocks it. QUALITY does not own infra/** (ownership.yaml), so a `# nosec` fix at the call site was not an option available to this bot; the chosen approach is a Bandit-baseline-against-base-ref gate (ci/security/bandit_baseline_gate.py), matching Semgrep's --baseline-commit above but implemented by hand since Bandit has no equivalent single flag. Findings are matched by (file, test_id, flagged-line text) rather than line number specifically so this line-shift scenario passes."
+    },
+    {
+      "cmd": "<same worktree, instead adding a second, genuinely new hashlib.sha1() call unrelated to the WS_GUID line> && python3 ci/security/bandit_baseline_gate.py --base-ref HEAD --ini ci/security/bandit.ini -- infra/unified-lsp-broker/broker.py",
+      "exit_code": 1,
+      "duration_s": 0.8,
+      "output_tail": "Bandit: 1 NEW HIGH-severity finding(s) introduced by this PR: ./infra/unified-lsp-broker/broker.py:22 B324 ... — confirms the baseline gate still fails a PR that introduces a genuinely new HIGH finding in a changed legacy file; it only forgives the finding that was already there at the base ref"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json --bot bot-06-quality-security",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-2 PASS — spe-5162-ci-harden-gate: 29 command(s), 29 substantiated claim(s), 8 unverified item(s) — run after removing this receipt's stale 'approved_by is null' unverified-list entry, which contradicted the approved_by/approved_at fields already stamped by bot-00-programming-lead earlier in this PR's history (Greptile P2 4147142698-class receipt-honesty finding)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 12.4,
+      "output_tail": "178 passed (169 pre-existing + 9 new: 2 in test_security_workflows.py for the fail-closed diff check and the baseline-gate invocation, 7 in the new test_bandit_baseline_gate.py)"
     }
   ],
   "claims": [
@@ -313,6 +350,37 @@
     {
       "claim": "The full gate suite (169 tests) still passes after this fix, including the new test asserting Bandit stays diff-scoped rather than regressing to a whole-repo scan",
       "evidence_command_index": 28
+    },
+    {
+      "claim": "Greptile P1 4147142705-class finding on this PR's Bandit step (security-pr.yml ~L193): computing PY_FILES via `mapfile -t PY_FILES < <(git diff ...)` fails OPEN, not closed — if the diff command itself fails, the process substitution's exit status is invisible to the enclosing `set -e` shell, so PY_FILES ends up empty and the step takes the 'no .py files changed, skip' path and passes, indistinguishable from a PR that genuinely touched no Python. Reproduced directly: a git diff against a nonexistent base ref exits 1 and is now caught explicitly before it can be mistaken for an empty-but-successful diff.",
+      "evidence_command_index": 29,
+      "expects_failure": true
+    },
+    {
+      "claim": "Capturing the diff as `PY_DIFF=$(git diff ...)` and checking `if ! PY_DIFF=...; then exit 1; fi` before ever treating its output as a file list closes that gap: a failing diff now hard-fails the job with an explicit ::error:: instead of silently passing",
+      "evidence_command_index": 29,
+      "expects_failure": true
+    },
+    {
+      "claim": "The new ci/security/bandit_baseline_gate.py (and its test suite, ci/tests/test_bandit_baseline_gate.py) behaves correctly on both sides of the finding-identity comparison it exists for: an unrelated edit elsewhere in a file does not manufacture a false 'new' finding, and a genuinely new finding is still caught",
+      "evidence_command_index": 30
+    },
+    {
+      "claim": "Greptile P1 finding on this PR's Bandit step (security-pr.yml ~L199): scoping Bandit to this PR's changed files only prevents a whole-repo scan's collateral damage, but a PR that itself edits infra/unified-lsp-broker/broker.py for a reason unrelated to the WS_GUID/B324 line would still put the whole file back in scope and re-trip that pre-existing HIGH finding, blocking an edit the finding has nothing to do with. QUALITY does not own infra/** (ownership.yaml's infra/** -> bot-05-infrastructure rule), so fixing this with a `# nosec B324` annotation at the call site is not a change this bot can make. The chosen fix is a Bandit-baseline-against-base-ref gate: re-run Bandit against each changed file's content at the base ref and only fail on findings that are new at HEAD, identified by (file, test_id, flagged-line text) so the comparison survives line-number drift from unrelated edits in the same file.",
+      "evidence_command_index": 31
+    },
+    {
+      "claim": "The baseline gate is not a blanket 'ignore findings in already-flagged files' bypass: reproduced in the same worktree scenario, a genuinely new hashlib.sha1() call added alongside the pre-existing one still fails the gate with exit 1, naming exactly the new finding and none of the pre-existing one",
+      "evidence_command_index": 32,
+      "expects_failure": true
+    },
+    {
+      "claim": "This receipt's own 'unverified' list previously said 'G-2 fails on this receipt's own approved_by being null', which was true when written but has been stale and contradictory since bot-00-programming-lead stamped approved_by/approved_at earlier in this PR's history — a receipt-honesty finding in the same class Greptile's review flagged elsewhere in this file for evidence errors. That entry has been removed rather than left to contradict the approved_by field above it; G-2 now passes cleanly against the corrected receipt.",
+      "evidence_command_index": 33
+    },
+    {
+      "claim": "The full gate suite (178 tests: 169 pre-existing + 9 new) passes after this round's three fixes — no regression from the fail-closed diff check, the Bandit baseline gate, or the receipt edit",
+      "evidence_command_index": 34
     }
   ],
   "unverified": [
@@ -321,7 +389,6 @@
     "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif, now SHA-pinned) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox. Per-job security-events: write (moved off the workflow root this round) was checked by parsing the YAML (command 21), not by observing the permission actually apply in a real run.",
     "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch \u2014 that limitation was reported, not worked around further.",
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
-    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
     "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
     "This receipt previously accepted the whole-repo Bandit scan as a known-but-unclosed gap ('zero pre-existing findings today'). That was wrong — infra/unified-lsp-broker/broker.py already had a HIGH finding (B324), and PR #50's own CI failed on it immediately, the same run this fix responds to. The gap is now closed by scoping Bandit to this PR's changed .py files (a computed git-diff file list, not bandit's own -b/--baseline JSON-snapshot mechanism, which needs a stored baseline artifact this workflow doesn't have anywhere to keep). What's still genuinely unverified: whether a PR that changes MANY .py files across unrelated areas could hit bandit's argv length limits passing them all as positional args — not exercised here since this PR only ever touched one.",
     "This receipt's own bandit -r . entry (now corrected) was recorded with the wrong exit code because of `command | tail -N` piping reporting tail's exit status instead of the piped command's — the exact class of evidence error Greptile's review caught elsewhere in an earlier revision of this file. Prompted by finding it, audited every other command in this receipt for the same `| tail` / `| head` pattern: one other command pipes through `| tail -5` (the trivy-action tag listing at index 13), but its exit code was never load-bearing for a pass/fail claim — it's an informational tag listing, not a '0 findings' assertion — so it isn't the same bug. No other instance found."
@@ -333,7 +400,10 @@
     "ci/security/semgrep.yml",
     "ci/security/gitleaks.toml",
     "ci/security/bandit.ini",
+    "ci/security/bandit_baseline_gate.py",
     "ci/security/garak-stub.md",
+    "ci/tests/test_security_workflows.py",
+    "ci/tests/test_bandit_baseline_gate.py",
     "SECURITY.md",
     ".receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json"
   ],

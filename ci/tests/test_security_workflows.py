@@ -102,6 +102,31 @@ class TestBanditBlocks:
         assert "bandit -r ." not in step["run"]
         assert "bandit \"${PY_FILES[@]}\"" in step["run"]
 
+    def test_diff_failure_fails_closed_not_open(self, workflow):
+        # Greptile P1 (PR #50): `mapfile -t PY_FILES < <(git diff ...)` runs the diff in a
+        # process substitution whose exit status `set -e` never sees, so a `git diff` failure
+        # (no merge-base, a too-shallow fetch) would silently look identical to "PR touched no
+        # .py files" and pass. The fix captures the diff into a variable first and checks its
+        # own exit status explicitly before ever treating the result as a file list.
+        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
+        run = step["run"]
+        assert "mapfile -t PY_FILES < <(git diff" not in run
+        assert "if ! PY_DIFF=$(git diff" in run
+        lines = run.splitlines()
+        start = next(i for i, l in enumerate(lines) if "if ! PY_DIFF=$(git diff" in l)
+        end = next(i for i, l in enumerate(lines[start:], start) if l.strip() == "fi")
+        assert any("exit 1" in l for l in lines[start:end])
+
+    def test_baseline_gate_invoked_for_new_vs_preexisting_findings(self, workflow):
+        # Scoping to changed files alone doesn't stop a PR that edits
+        # infra/unified-lsp-broker/broker.py for an unrelated reason from re-tripping its
+        # pre-existing B324 finding. bandit_baseline_gate.py re-scans each changed file at the
+        # base ref and only fails on findings that are NEW at HEAD, so unrelated edits to an
+        # already-flagged file don't block the PR.
+        step = _step(_job(workflow, "bandit"), "Bandit — this PR's changed Python files")
+        assert "ci/security/bandit_baseline_gate.py" in step["run"]
+        assert "--base-ref" in step["run"]
+
 
 class TestTrivyBlocks:
     def test_severity_and_exit_code(self, workflow):

@@ -185,21 +185,50 @@ jobs:
         # diff baseline mode as clean as Semgrep's, so this reproduces the same effect by hand:
         # compute the PR's own changed .py files and scan only those. Confirmed locally: the full
         # repo trips B324 (exit 1); this PR's one changed .py file does not (exit 0).
+        #
+        # The diff computation below fails CLOSED, not open: `PY_DIFF=$(git diff ...)` captures
+        # the command's own exit status (checked explicitly), so a `git diff` failure (e.g. no
+        # merge-base with a shallow fetch) surfaces as a hard gate failure instead of silently
+        # degrading to an empty file list that would look identical to "PR touched no .py files"
+        # and pass. Do not rewrite this as `mapfile -t PY_FILES < <(git diff ...)`: that form runs
+        # the diff in a process substitution whose exit status the enclosing `set -e` shell never
+        # observes, which is exactly the fail-open bug this replaces (Greptile P1, PR #50).
+        #
+        # Scanning only the PR's changed files does not fully solve broker.py's pre-existing
+        # B324: a PR that edits broker.py for an unrelated reason puts the whole file back in
+        # scope and would still trip that legacy finding. QUALITY doesn't own infra/** (see
+        # ownership.yaml), so a `# nosec` fix at the call site isn't this bot's to make. Instead,
+        # ci/security/bandit_baseline_gate.py re-runs Bandit against each changed file's content
+        # at the base ref and only fails on findings that are NEW at HEAD — a Bandit-baseline-
+        # against-base-ref gate, matching what --baseline-commit gives Semgrep above. It matches
+        # findings by (file, test_id, flagged-line text) rather than line number, so unrelated
+        # edits elsewhere in a changed file (which shift line numbers) don't make a pre-existing
+        # finding look new. Confirmed locally (ci/tests/test_bandit_baseline_gate.py and a manual
+        # worktree run): an unrelated edit that shifts broker.py's B324 off its original line
+        # still passes; a genuinely new HIGH finding introduced elsewhere in a changed file still
+        # fails.
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          mapfile -t PY_FILES < <(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- '*.py')
-          if [ "${#PY_FILES[@]}" -eq 0 ]; then
+          if ! PY_DIFF=$(git diff --name-only --diff-filter=d "origin/$BASE_REF...HEAD" -- '*.py'); then
+            echo "::error::git diff failed to compute this PR's changed Python files against origin/$BASE_REF — failing closed instead of treating that as 'no files changed'." >&2
+            exit 1
+          fi
+          if [ -z "$PY_DIFF" ]; then
             echo "No .py files changed by this PR — nothing for Bandit to scan. Skipping."
             echo '{"runs":[{"tool":{"driver":{"name":"Bandit"}},"results":[]}],"version":"2.1.0","$schema":"https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"}' > bandit.sarif
             exit 0
           fi
-          bandit "${PY_FILES[@]}" \
+          mapfile -t PY_FILES <<< "$PY_DIFF"
+          if ! bandit "${PY_FILES[@]}" --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif; then
+            echo "Bandit found findings on this PR's changed files (see the bandit-sarif artifact for the full, unfiltered report). Filtering to new-vs-base-ref findings next."
+          fi
+          python3 ci/security/bandit_baseline_gate.py \
+            --base-ref "origin/$BASE_REF" \
             --ini ci/security/bandit.ini \
-            -lll \
-            -f sarif -o bandit.sarif
+            -- "${PY_FILES[@]}"
 
       - name: Upload SARIF artifact
         if: always()

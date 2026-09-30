@@ -102,5 +102,6 @@
     "Railway Tailscale Forwarder services are specified, not deployed; TS_AUTHKEY and CONNECTION_MAPPING values are set in Railway by hand",
     "nginx vhosts are not loaded: desk.swcstudio.space has no DNS record or certificate yet",
     "desk-intake.yml is not exercised end to end until DESK_INTAKE_TOKEN exists in the repository secrets and the gateway is public"
-  ]
+  ],
+  "approved_by": "bot-06-quality-security"
 }

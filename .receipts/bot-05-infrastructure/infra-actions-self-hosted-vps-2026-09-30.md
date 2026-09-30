@@ -43,21 +43,24 @@ Ove's GO is to bypass hosted billing by running the gates on the org's own VPS r
 | `ci/.github/workflows/gates.yml` | `gates` | `ubuntu-latest` | `[self-hosted, Linux, X64]` |
 | `ci/.github/workflows/gates.yml` | `gate-self-test` | `ubuntu-latest` | `[self-hosted, Linux, X64]` |
 
+Both leading comment blocks also gained the runner prerequisite, in answer to greptile P1
+*Copied gates may never start*. That is the one part of each file the `gates-template-sync`
+job excludes from its comparison, so the bodies stay identical.
+
 No gate logic, no Python version, no step body, no trigger and no `permissions` block moved.
-The distributable template changed in step with the live workflow, so the two stay
-body-identical after their leading comment blocks — which is the only thing the
-`gates-template-sync` job compares.
+Every added or removed content line across both workflow directories is either a `runs-on`
+line or a comment line, checked rather than asserted.
 
 ## Evidence
 
 Nine commands, all recorded with exit codes in the JSON receipt. The ones that carry the
 claims:
 
-- **`DIFF_IS_RUNS_ON_ONLY changed_lines=10`** — diffed against `origin/main` across both
-  workflow directories, every added or removed content line is either the old
-  `ubuntu-latest` line or the new self-hosted line. Five removed, five added. Any other
-  edited line would have tripped the assertion, so "only `runs-on`" is checked rather than
-  asserted.
+- **`DIFF_IS_RUNS_ON_AND_COMMENTS_ONLY changed_lines=31`** — diffed against `origin/main`
+  across both workflow directories, every added or removed content line is either a
+  `runs-on` line (five removed, five added) or a comment line. Anything else lands in `bad`
+  and the assertion fails on a single one, so "nothing executable changed" is checked rather
+  than asserted.
 - **`RUNS_ON_OK jobs=5`** — all three files parse as YAML and every job's `runs-on` is the
   three-label list. No `ubuntu-latest` survives in either workflow directory.
 - **`GATE_BODIES_IDENTICAL lines=131`** — the same comment-block-skipping comparison the
@@ -70,6 +73,66 @@ claims:
 - **G-5/G-6 PASS** — nothing is deployed and nothing destructive runs. This change edits
   three YAML files and touches no live system.
 
+## The bypass works — observed on the runner
+
+Job [`gates` #109735843668](https://github.com/swcstudiospace/programming-desk/actions/runs/36667704256/job/109735843668)
+ran on head `920ce89` and finished in 18 seconds. That log is the strongest evidence here,
+and it retires three of the things the first draft of this receipt could not verify:
+
+- **The runner claimed the job.** The three labels match a real, online runner, so these jobs
+  do not sit queued — the failure mode that would have been worst was ruled out by observation.
+- **`actions/setup-python@v5` resolved 3.12.14 from the runner's own tool cache** at
+  `/opt/actions-runner/_work/_tool/Python/3.12.14/x64`, so it did not have to build Python.
+  `pip install pyyaml` and `actions/checkout@v4` both succeeded.
+- **The gate steps executed in order.** G-1 manifest, G-1 path ownership and the receipt
+  locator all passed, and the locator picked this receipt.
+
+The job's only failure is `G-2 — Verification receipt`, on exactly the line this receipt
+predicts:
+
+```
+G-2 FAIL — .receipts/bot-05-infrastructure/infra-actions-self-hosted-vps-2026-09-30.json
+  - 'approved_by' is missing — work must be reviewed by someone else
+```
+
+Two warnings in that log are worth recording and neither blocks: the Node.js 20 deprecation
+notice for `checkout@v4` and `setup-python@v5`, which is pre-existing and appears on hosted
+runners too; and an `EACCES` stat of `/root/.config/herd-lite/bin/git` during post-job
+cleanup, where the runner falls back to `/usr/bin/git` 2.43.0 and the step succeeds. The
+second one says the runner executes as a user that cannot read part of root's `PATH` — VPS
+tidying, not a gate problem.
+
+## Greptile review — 2 P1 findings
+
+**P1 *Copied gates may never start*
+([thread](https://github.com/swcstudiospace/programming-desk/pull/32#discussion_r4140722524)) — fixed.**
+The template's leading comment block now makes a matching runner an explicit setup
+prerequisite, names the `ubuntu-latest` fallback, and warns that a `runs-on` matching no
+runner *queues* rather than fails. Greptile's other option — keep runner selection
+configurable per consumer — is not available here: the work order requires the template body
+to stay identical to the live workflow and the sync gate enforces it, so the two cannot hold
+different `runs-on` values. The comment block is the only part of the file that gate ignores,
+which makes it the right place for a consumer setup note.
+
+**P1 security *PR code runs on VPS*
+([thread](https://github.com/swcstudiospace/programming-desk/pull/32#discussion_r4140722517)) — valid, not fixed here, escalated to Ove.**
+The finding is correct and not disputed. These jobs check out the pull request head and run
+its `ci/gates/*.py` and `ci/tests/` on a persistent org host, so a pull request author can
+execute arbitrary commands on the VPS before any gate rejects the change, and a
+`contents: read` token does not protect the host.
+
+It is inherent to the decision rather than to this diff — you cannot leave GitHub-hosted
+runners and keep their ephemeral isolation. Every available fix is outside "only `runs-on`":
+
+| Fix | Why not in this PR |
+| --- | --- |
+| Re-register the runner `--ephemeral`, or confine it to a container or throwaway user | VPS-side work; appears in no diff. **This is the recommended one.** |
+| Add `container:` to both jobs | Changes how every gate step executes — the work order forbids it, and it would risk the green path that job #109735843668 just established |
+| Guard on `head.repo.full_name == github.repository` | Leaves a fork's pull request with a required check queued forever — the exact failure mode of the other P1 |
+
+The trade is recorded under [Not verified](#not-verified) and the hardening is documented in
+both comment blocks. Choosing it is Ove's call, not INFRA's.
+
 ## Rollback
 
 Restore `ubuntu-latest` in all five jobs: `git revert` this change's commit, or edit the
@@ -81,23 +144,20 @@ spending limit fails them in about three seconds.
 
 ## Not verified
 
-The full list is in the JSON. The four that matter before anyone calls the gates restored:
+The full list is in the JSON. What matters before anyone calls the gates restored:
 
-1. **No Actions run has executed on the VPS runner from this change.** A runner picking up
-   a job, checking out and completing a gate step was never observed from this container.
-2. **`srv1778002`'s labels were not inspected.** If it does not carry all three of
-   `self-hosted`, `Linux` and `X64`, these jobs *queue* rather than fail — which presents as
-   a required check pending forever, not as an error. Confirm the labels on the runner.
-3. **`actions/setup-python@v5` was not exercised on the VPS.** On a hosted image it resolves
-   3.12 from the pre-seeded tool cache; a self-hosted runner without that cache downloads
-   and builds it, needing build tooling and outbound network. Likewise the unchanged
-   `pip install pyyaml` steps run against whatever Python the runner exposes — an
-   externally-managed system Python would reject a plain `pip install`.
-4. **Persistent-runner posture is Ove's call, not INFRA's.** These workflows check out the
-   pull request head and `pip install` on a runner that reuses its filesystem between jobs.
-   For a private repo with trusted bots that is the accepted trade for having gates at all,
-   but it is a genuine change in blast radius from an ephemeral hosted VM, and nothing here
-   isolates the workspace.
+1. **No gate has been observed *passing* on the VPS** — only failing at G-2 for the expected
+   reason. The steps after G-2 (G-3, G-4, G-5/G-6) have never executed there, because G-2
+   stops the job. They pass in this container, which is not the same environment.
+2. **`gate-self-test` and `sync` were not observed completing.** Only the `gates` job's log
+   was read; the other two were in progress and queued on the same runner.
+3. **Persistent-runner security is accepted and documented, not solved.** See the Greptile
+   section. The runner is not known to be `--ephemeral`, nothing here isolates the workspace,
+   and it reuses its filesystem between jobs so state leaks from one pull request to the next.
+4. **The runner's configuration was never inspected** — this container has no path to the VPS.
+   Not whether it is ephemeral, not which user it runs as, not what else shares the host.
+5. **Whether `srv1778002` is the only runner carrying these three labels is unestablished.**
+   If another org runner matches, gate jobs may land on a host nobody has vetted.
 
 Also: open pull requests **#29** and **#30** are untouched. `pull_request` events read
 workflow files from the *head* ref, so both still request `ubuntu-latest` and keep failing

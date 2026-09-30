@@ -9,6 +9,12 @@
 #
 # The two must not diverge. .github/workflows/gates-template-sync.yml compares everything
 # below this comment block against the template and fails if they drift apart.
+#
+# Both jobs run on the organisation's self-hosted VPS runner, labelled
+# [self-hosted, Linux, X64], because this organisation's GitHub-hosted minutes are blocked by a
+# spending limit and hosted jobs die in seconds without reaching a gate. If that runner goes
+# offline these checks do not fail — they sit queued, which as a required check presents as a
+# pull request pending forever with no error to read. Check the runner before debugging a gate.
 
 name: Quality Gates
 

@@ -1,0 +1,100 @@
+# HTTP contract surface for the Programming Desk. QUALITY-owned (bot-06-quality-security),
+# declared a contract_surface in ownership.yaml, watched by G-4.
+#
+# ---------------------------------------------------------------------------------------
+# This is a STUB. There are no paths yet because the desk serves no HTTP surface yet.
+# ---------------------------------------------------------------------------------------
+#
+# It is committed empty rather than added later, for two reasons:
+#
+#   1. G-4 (ci/gates/check_contracts.py) resolves its watch list from ownership.yaml, and
+#      openapi.yaml is already listed there as a contract surface with three consumers.
+#      Until the file exists, the gate guards a path that cannot be touched — it passes
+#      every run, and a gate that cannot fail is a gate nobody notices has broken.
+#
+#   2. The first endpoint is exactly when the contract-first protocol is most often skipped:
+#      there is no schema to change, so it does not feel like a contract change. With the
+#      document already here, adding a path IS a diff to a watched surface, and G-4 asks for
+#      the change document at the moment it is cheapest to write.
+#
+# Consumers (ownership.yaml → contract_consumers["openapi.yaml"]):
+#   bot-02-web-edge, bot-03-android, bot-04-ios
+#
+# Adding a path:
+#   1. Add it below, with explicit response schemas — not a bare 200 with no body described.
+#   2. Bump `info.version`. Minor for additive, major for breaking.
+#      See skills/contract-first-changes/SKILL.md §1 for what counts as breaking.
+#   3. Write contracts/changes/<change-id>.yaml (start from
+#      contracts/changes/TEMPLATE.yaml.example) and collect the acknowledgements.
+#   4. Verify before pushing:
+#        python3 ci/gates/check_contracts.py --base origin/main \
+#            --change contracts/changes/<change-id>.yaml
+#
+# Never put a credential in this file — not in an example value, not in a server URL, not in
+# a securityScheme default. It is committed, it is public, and G-3 reads it like any other
+# file. Describe the scheme; the value lives in a secret manager. See SECURITY.md §2.
+
+openapi: 3.1.0
+
+info:
+  title: Programming Desk API
+  version: 0.1.0
+  summary: Placeholder HTTP surface. No endpoints are served yet.
+  description: |
+    Reserved contract surface for the Programming Desk.
+
+    No endpoints are defined. A client generated from this document will produce an empty
+    client, which is the correct outcome: there is nothing to call.
+
+    The surface is contract-first. An endpoint appears here, with its consumers'
+    acknowledgements recorded in `contracts/changes/`, before any seat implements it.
+    See `docs/cross-bot-protocol.md`.
+  license:
+    name: UNLICENSED
+
+# No `servers` entry. An empty document with a server URL invites a client to be generated
+# against a host that answers nothing. Add the server alongside the first path.
+
+paths: {}
+
+components:
+  schemas: {}
+
+  responses:
+    # The shared error shape, defined before the first endpoint so that endpoints converge on
+    # one error contract instead of each inventing its own. Changing error codes or their
+    # meaning later is a breaking change — see docs/quality-gates.md, G-4.
+    Error:
+      description: Error response.
+      content:
+        application/problem+json:
+          schema:
+            # RFC 9457 problem details. Chosen over a bespoke envelope because clients and
+            # gateways already understand it, and an error shape is the surface most likely
+            # to be extended by a seat that never read this file.
+            type: object
+            required: [type, title, status]
+            properties:
+              type:
+                type: string
+                format: uri
+                description: URI identifying the problem type.
+                examples: ["about:blank"]
+              title:
+                type: string
+                description: Short, human-readable summary, stable for a given type.
+              status:
+                type: integer
+                description: HTTP status code, repeated for clients that lose it.
+                minimum: 100
+                maximum: 599
+              detail:
+                type: string
+                description: >
+                  Explanation specific to this occurrence. Never include a credential, a
+                  token, an internal hostname or a stack trace — this body reaches the
+                  client.
+              instance:
+                type: string
+                format: uri
+                description: URI identifying this specific occurrence.

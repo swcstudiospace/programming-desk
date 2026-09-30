@@ -1,0 +1,153 @@
+# pre-commit framework configuration — https://pre-commit.com
+#
+# Owned by QUALITY (bot-06-quality-security).
+#
+# This is a STUB. It wires the gate scripts that already exist in ci/gates/ into the
+# pre-commit framework for contributors who use it. It adds no new rule, and it relaxes
+# none: every hook here shells out to a script in this repository, reviewed in this
+# repository's history.
+#
+# ---------------------------------------------------------------------------------------
+# Relationship to ci/hooks/pre-commit
+# ---------------------------------------------------------------------------------------
+# There are two ways to get a pre-commit hook in this repo, and they occupy the same file
+# (.git/hooks/pre-commit):
+#
+#   A. The native hook — no dependencies, the default:
+#          bash ci/hooks/install.sh      # symlinks .git/hooks/pre-commit -> ci/hooks/pre-commit
+#
+#   B. This framework config — needs `pip install pre-commit`:
+#          pre-commit install
+#
+# Installing B over A is safe. pre-commit detects the existing hook, moves it to
+# .git/hooks/pre-commit.legacy, and keeps running it ahead of its own hooks ("migration
+# mode", which it announces). So you end up with the native G-3 scan AND the hooks below;
+# G-3 simply runs twice, which costs milliseconds. `pre-commit install -f` opts out of the
+# chaining and runs only this config — still no loss of coverage, because
+# g3-committed-secrets is the same ci/gates/check_secrets.py scan over the same staged
+# files, failing the commit on the same non-zero exit.
+#
+# Order of preference: whichever you will actually keep installed. B additionally guards
+# ownership.yaml and the gate test suite. Going back to A alone is `pre-commit uninstall`
+# followed by `bash ci/hooks/install.sh`.
+#
+# Never `git commit --no-verify` to get past a hook (PD-3). G-2 rejects a receipt whose
+# commands contain a bypass, so the skip and the completion claim cannot both survive review.
+#
+# ---------------------------------------------------------------------------------------
+# What is deliberately NOT here
+# ---------------------------------------------------------------------------------------
+#   - No third-party hook repositories. Every hook is `repo: local`. A hook repo is code
+#     that runs on every commit on every contributor's machine, at a tag its owner can move
+#     after you reviewed it — see skills/security/supply-chain/SKILL.md.
+#   - No G-2 (receipts) or G-5/G-6 (rollback). They check the receipt for a finished task,
+#     which does not exist yet at commit time. CI is the right place for them.
+#   - No auto-formatters. A hook that rewrites files under you makes the thing you reviewed
+#     and the thing you committed different artefacts.
+#
+# ---------------------------------------------------------------------------------------
+# Known finding: `pre-commit run --all-files` reports G-3 hits in ci/tests/test_gates.py
+# ---------------------------------------------------------------------------------------
+# Those hits are the synthetic fixtures the secret scanner is tested against — fake tokens
+# that exist precisely so G-3 can be proven to still catch them. The scanner is working.
+#
+# They are NOT excluded here, and the exclusion is the wrong fix: an `exclude:` entry turns
+# off detection for a whole path, so a real credential added to that file later would also
+# pass. The repository's own remedy is the one in SECURITY.md §5 — a per-line
+# `# pragma: allowlist secret` with a stated reason, which stays reviewable.
+#
+# That file is owned by bot-01-systems-backend (it matches `**/*.py` with no later override
+# in ownership.yaml), so annotating it is a separate change by its owner, not one QUALITY
+# can make here. Until then, expect the finding on --all-files. It does not affect normal
+# commits: `pre-commit run` scans staged files only, and the native ci/hooks/pre-commit
+# behaves identically today.
+
+minimum_pre_commit_version: "3.2.0"
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+fail_fast: false
+
+repos:
+  - repo: local
+    hooks:
+      # -------------------------------------------------------------------------------
+      # G-3 — committed secrets. The one check that must run before a commit object
+      # exists: after it exists, the credential is disclosed and the response is rotation
+      # rather than deletion. Deliberately the only blocking scan on every commit — a slow
+      # hook is a hook people disable, and a disabled hook catches nothing.
+      # No third-party dependency: check_secrets.py is stdlib-only.
+      # -------------------------------------------------------------------------------
+      - id: g3-committed-secrets
+        name: "G-3 — committed secrets"
+        description: >
+          Scans staged files for credentials. On a hit: if it is real, rotate it before
+          anything else (SECURITY.md §4). If it is a false positive, add
+          '# pragma: allowlist secret' on the line with a reason.
+        entry: python3 ci/gates/check_secrets.py --files
+        language: system
+        types: [file]
+        pass_filenames: true
+        require_serial: false
+
+      # -------------------------------------------------------------------------------
+      # G-1 — manifest self-check. Only when ownership.yaml itself changes. A malformed or
+      # duplicated rule here silently reassigns paths, and the next bot to touch one gets
+      # a G-1 failure it did not cause.
+      # Needs pyyaml, so it runs in an isolated env rather than assuming the interpreter
+      # on PATH has it.
+      # -------------------------------------------------------------------------------
+      - id: g1-ownership-manifest
+        name: "G-1 — ownership manifest self-check"
+        entry: python3 ci/gates/check_ownership.py --validate-manifest
+        language: python
+        additional_dependencies: ["pyyaml"]
+        files: ^ownership\.yaml$
+        pass_filenames: false
+
+      # -------------------------------------------------------------------------------
+      # The gates are only trustworthy if they still block what they claim to block. Runs
+      # only when a gate or its test changes, which is rare enough to afford the seconds.
+      # -------------------------------------------------------------------------------
+      - id: gate-self-test
+        name: "Gate self-test (ci/tests)"
+        entry: python3 -m pytest ci/tests -q
+        language: python
+        additional_dependencies: ["pytest", "pyyaml"]
+        files: ^ci/(gates|tests)/
+        pass_filenames: false
+
+      # -------------------------------------------------------------------------------
+      # G-4 — contract-first pre-flight. MANUAL stage on purpose: it is advisory here and
+      # blocking in CI.
+      #
+      # The commit is not the moment this rule applies. G-4 asks for a change document with
+      # a version, a migration note and an acknowledgement from every consumer — and an
+      # acknowledgement arrives on the pull request, from another bot, after the commit
+      # exists. Blocking the commit would only teach people to pass --no-verify, which is
+      # how you lose G-3 as well.
+      #
+      #     pre-commit run --hook-stage manual g4-contract-preflight --all-files
+      #
+      # It runs through ci/hooks/g4-preflight.sh, which resolves the active change document
+      # from contracts/changes/ and passes it to the gate. Calling the gate directly would
+      # report "no change document supplied" on every run — including runs where the
+      # contributor has written a valid one — so the pre-flight could never report ready.
+      #
+      # The wrapper also fails when contracts/changes/ holds more than one document: the
+      # gate's caller selects one by globbing that directory, so a second, already-merged
+      # document can be picked and validate a change it never described. Archive the merged
+      # one. This is the same rule contracts/changes/README.md states, made executable.
+      #
+      # The blocking run is in CI:
+      #
+      #     python3 ci/gates/check_contracts.py --base origin/main \
+      #         --change contracts/changes/<change-id>.yaml
+      # -------------------------------------------------------------------------------
+      - id: g4-contract-preflight
+        name: "G-4 — contract-first pre-flight (advisory)"
+        entry: ci/hooks/g4-preflight.sh
+        language: python
+        additional_dependencies: ["pyyaml"]
+        files: ^(contracts/|openapi\.yaml$)|\.proto$
+        pass_filenames: true
+        stages: [manual]

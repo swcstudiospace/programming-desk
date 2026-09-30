@@ -1,0 +1,2 @@
+# Change documents for contracts that have already merged.
+# Kept out of the top-level *.yaml glob so CI still resolves exactly one active document.

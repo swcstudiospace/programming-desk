@@ -112,7 +112,15 @@ history. Removing it from the working tree is not remediation.
 ## G-4 — Contract-first changes
 
 **Rule.** A breaking change to a contract surface requires a version bump, a migration note, and
-an acknowledgement from every consumer in `contract_consumers`.
+an acknowledgement from every consumer in `contract_consumers`. Any change, breaking or not,
+requires a change document whose declared surfaces (`surface`, plus an optional `surfaces` list)
+cover every contract-surface file in the diff.
+
+That coverage requirement is what binds a document to a change. Callers select the document by
+globbing `contracts/changes/`, so without it a document left behind after its own change merged
+can be picked up and validate a later one — and a breaking change with no acknowledgements
+passes on the strength of a stale non-breaking record. Archive a merged document; the gate
+refuses it either way.
 
 **Why.** In a platform decomposition, contracts are the only shared surface. A field rename that
 looks trivial in the API repo breaks the iOS client silently, and the break is discovered weeks

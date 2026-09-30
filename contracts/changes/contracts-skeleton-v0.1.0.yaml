@@ -1,0 +1,66 @@
+# Change document for the contract skeleton itself.
+#
+# G-4 watches contracts/** and openapi.yaml. This pull request creates both, so it touches a
+# contract surface and needs a change document — including the one that introduces the
+# directory. Exempting the first change would mean the gate's first live run is also the
+# first time anyone reads its output.
+#
+# Verified with:
+#   python3 ci/gates/check_contracts.py \
+#       --files openapi.yaml contracts/README.md contracts/api/README.md \
+#               contracts/events/README.md contracts/changes/README.md \
+#               contracts/changes/contracts-skeleton-v0.1.0.yaml \
+#       --change contracts/changes/contracts-skeleton-v0.1.0.yaml
+
+change_id: contracts-skeleton-v0.1.0
+proposed_by: bot-06-quality-security
+
+surface: openapi.yaml
+
+# Every other contract-surface path this change touches. G-4 requires the declared surfaces
+# to cover the whole change: an undeclared path means either the wrong change document was
+# selected, or the document is not saying what it changed.
+#
+# Listed one by one rather than as `contracts/**`. A wildcard would satisfy the check while
+# describing nothing, which is the failure the check exists to catch.
+surfaces:
+  - contracts/README.md
+  - contracts/api/README.md          # consumers: WEB, ANDROID, IOS
+  - contracts/events/README.md       # consumers: SYSTEMS, WEB, INFRA
+  - contracts/changes/README.md
+  - contracts/changes/TEMPLATE.yaml.example
+  - contracts/changes/archive/.gitkeep
+
+breaking: false
+version: 0.1.0
+
+summary: >
+  Creates the contract surface as a skeleton. openapi.yaml is an OpenAPI 3.1.0 document with
+  no paths and one shared RFC 9457 error response; contracts/ gets api/, events/ and changes/
+  with the protocol written down. No endpoint, event, field or type is defined, so there is
+  nothing for a consumer to implement against and nothing that can break one.
+
+# Resolved from ownership.yaml → contract_consumers["openapi.yaml"]. Listed explicitly here
+# only to make the reviewed scope legible; the gate resolves the same three.
+consumers_required:
+  - bot-02-web-edge
+  - bot-03-android
+  - bot-04-ios
+
+# Required field. No field changed meaning because no field exists.
+semantic_changes: []
+
+# Empty on purpose, and honest. Acknowledgements are informational for a non-breaking change
+# (a rejection still blocks), and no consumer has been asked, because there is nothing to ask
+# about: an empty `paths` object generates an empty client. Recording an ack that no seat
+# actually gave would be the rubber-stamp failure mode that docs/cross-bot-protocol.md warns
+# about, applied to the very document that introduces the protocol.
+#
+# The first change that adds a real path is where the three acks become load-bearing.
+acknowledgements: []
+
+notes:
+  - "No migration_note: nothing to migrate from. version 0.1.0 is the initial surface."
+  - >
+    A consumer that objects to the skeleton should reject on this pull request rather than
+    ack; the document is amended and re-acked per docs/cross-bot-protocol.md.

@@ -1,0 +1,63 @@
+# Contract change document — copy to contracts/changes/<change-id>.yaml and fill in.
+#
+# Verify before opening the pull request:
+#   python3 ci/gates/check_contracts.py --base origin/main \
+#       --change contracts/changes/<change-id>.yaml
+#
+# Named .example so the CI step that runs `ls -1 contracts/changes/*.yaml | head -n1`
+# never selects this template as a real change document.
+
+# Stable identifier. Used in receipts and in the pull request title.
+change_id: feat-example-v1
+
+# The seat proposing the change — not necessarily the owner of contracts/.
+proposed_by: bot-01-systems-backend
+
+# The path being changed. Must match a pattern in ownership.yaml → contract_consumers,
+# or G-4 fails with "no consumers resolved" rather than guessing who is affected.
+surface: contracts/api/example.yaml
+
+# Any further contract paths this change touches. `surface` plus `surfaces` must cover every
+# contract-surface file in the diff (the change document itself excepted), or G-4 fails and
+# names what is missing. That coverage is what ties this document to this change — a document
+# left active after its change merged declares different paths and can no longer validate a
+# later one. List paths individually; `contracts/**` passes the check while describing nothing.
+# surfaces:
+#   - contracts/api/example-errors.yaml
+
+# See skills/contract-first-changes/SKILL.md §1. The list of breaking changes is longer
+# than people expect: narrowing a type and making an optional field required both count.
+breaking: false
+
+version: 1.1.0
+previous_version: 1.0.0
+
+summary: >
+  One or two sentences. What changed, in terms a consumer can act on.
+
+# Optional: overrides the consumers resolved from ownership.yaml. Prefer letting the
+# manifest resolve them — an inline list is a copy that drifts.
+# consumers_required:
+#   - bot-02-web-edge
+
+# Fields whose MEANING changed while name and type stayed the same. Required — [] if none.
+# Example of one that must be listed: timeout_ms reinterpreted from "per attempt" to
+# "total across retries". Same name, same type, same JSON, every consumer now behaves
+# differently, and nothing detects it.
+semantic_changes: []
+
+# Required when breaking: true. State WHY, not only what — a consumer that understands the
+# reason spots the related cases in its own code that this note did not mention.
+# migration_note: |
+#   ## v2.0 — user_id → account_id
+#   **Breaking.** user_id removed from all account endpoints.
+#   **Why:** the field held an account identifier, not a user identifier.
+#   **Migrate:** replace user_id with account_id. Identical value and type.
+#   **Timeline:** both served since v1.1. v1.x sunsets 2026-12-01.
+
+# An ack is a commitment: "I can build against this." Not "looks fine". A consumer that
+# cannot implement it must set ack: false with the specific blocker.
+acknowledgements:
+  - bot: bot-02-web-edge
+    ack: true
+    note: "Checked the field types; no client change needed for the additive field."

@@ -142,7 +142,12 @@ async def receipt_approve(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
     await repo.fetch()
     ref = f"{repo.remote}/{args['branch']}"
     # C-2: capture the tip sha the receipt bytes were read at; pair with expect_* in _commit_file.
+    # A push is only as tip-conditional as expect_sha is present — an unresolved ref must fail
+    # closed here rather than hand _commit_file a falsy expect_sha, which would skip the TOCTOU
+    # check in _commit_file entirely and let a blind overwrite through.
     read_sha = await repo.head_sha(ref)
+    if read_sha is None:
+        return failure("not_found", f"could not resolve the tip of {ref}")
     text = await repo.show(args["receipt_path"], ref)
     if text is None:
         return failure("not_found", f"{args['receipt_path']} is not on {ref} (receipts are force-added: git add -f)")
@@ -158,7 +163,7 @@ async def receipt_approve(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
     candidate["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if args.get("note"):
         candidate["approval_note"] = redact_text(args["note"])
-    check = await repo.receipt_check(candidate, candidate.get("bot") or "", False, args["receipt_path"])
+    check = await repo.receipt_check(candidate, candidate.get("bot") or "", True, args["receipt_path"])
     if not check.get("ok"):
         return failure(
             "gate_failed",
@@ -316,7 +321,7 @@ async def _commit_file(
         wt = scratch / "wt"
         head = await run_command(["git", "rev-parse", "HEAD"], cwd=str(wt))
         found_sha = head["stdout"].strip()
-        if expect_sha and found_sha != expect_sha:
+        if expect_sha is not None and found_sha != expect_sha:
             return {
                 "pushed": False,
                 "reason": "stale_read",

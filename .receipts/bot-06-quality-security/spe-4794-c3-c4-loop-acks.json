@@ -1,0 +1,88 @@
+{
+  "task_id": "spe-4794-c3-c4-loop-acks",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/spe-4794-c3-c4-loop-acks",
+  "started_at": "2026-09-30T15:45:54Z",
+  "completed_at": "2026-09-30T15:56:50Z",
+  "commands": [
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"G2 or Receipt or receipt or Ownership or G1\" -q",
+      "exit_code": 0,
+      "duration_s": 3.91,
+      "output_tail": "60 passed, 97 deselected in 3.91s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.34,
+      "output_tail": "157 passed in 10.34s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "check_receipt.py (C-3 loop_acks validation) compiles cleanly",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1/G-2 gate unit tests, including the loop_acks-adjacent receipt-selection and ownership cases, pass against this tip",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip (no regression from C-3/C-4)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ownership.yaml manifest is internally valid",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "This receipt path is owned by bot-06-quality-security",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "No secret shapes in the C-3/C-4 changed files",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "This receipt correctly has no approved_by yet, and self-approval remains blocked by G-2 pending an independent reviewer",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "check_rollback.py (G-5/G-6) not exercised here — C-3/C-4 touched only check_receipt.py and the receipt-contract skill doc, no destructive/deploy commands or approvals[] entries are introduced by this change",
+    "check_ownership.py's own unit tests were run against system python3 with pyyaml installed; the repo's default pytest tool install (uv-managed venv) lacks pyyaml and cannot run those tests unmodified — environment gap, not a code issue introduced by C-3/C-4",
+    "CI's exact receipt-selection step (.github/workflows/gates.yml) was not run end-to-end on a runner; only the underlying gate scripts and their unit tests were re-run locally"
+  ],
+  "loop_acks": []
+}

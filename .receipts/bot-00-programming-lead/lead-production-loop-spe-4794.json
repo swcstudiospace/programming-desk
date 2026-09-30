@@ -1,0 +1,185 @@
+{
+  "task_id": "lead-production-loop-spe-4794",
+  "bot": "bot-00-programming-lead",
+  "branch": "claude/spe-4794-production-loop-v4i18e",
+  "started_at": "2026-09-30T06:54:22Z",
+  "completed_at": "2026-09-30T07:48:00Z",
+  "runtime": "claude-cloud",
+  "lane": "A",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "graph_id": "none",
+  "linear": ["SPE-4794", "SPE-4790"],
+  "agent_id": null,
+  "pr_url": null,
+  "brief_etag": null,
+  "change_summary": "SPE-4794: make brief -> act -> memory_write -> events_emit -> handoff_to_hermes the default production turn for every desk seat without waiting on Phase 0.5 code. Adds the LEAD-owned seat skill skills/desk-bootstrap/desk-production-loop/SKILL.md (memory_brief plus its etag required before any repo work; degraded mode needs a recorded human ack; docs and memory only through the substrate or the gateway; skills list/invoke only until skills.approve; handoff_to_hermes signed-packet fields stubbed for SPE-4792 and omitted rather than fabricated), wires it into BASE_SKILLS in scripts/generate-templates.py so all seven regenerated grokbot templates enable it, and documents the loop and the seat defaults in grokbot/README.md, docs/desk-operating-model.md and docs/vps-agent-bus.md.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 13 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.31,
+      "output_tail": "G-3 PASS — 13 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.15,
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "duration_s": 0.14,
+      "output_tail": "generate-templates --check: 7 templates up to date",
+      "note": "Run after python3 scripts/generate-templates.py rewrote the seven templates from the new BASE_SKILLS. Proves the committed templates are the generated ones, not hand edits."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10.66,
+      "output_tail": "157 passed in 10.66s",
+      "note": "pytest was not present in this container; installed with pip install pytest -q before the run. The Quality Gates workflow installs it in the gate-self-test job."
+    },
+    {
+      "cmd": "python3 -c '<content assertions over the changed files: skill frontmatter; memory_brief/memory_write/events_emit/handoff_to_hermes appear in that order in the skill and all four appear in docs/desk-operating-model.md; the etag precondition and brief_etag in both; degraded-mode-needs-a-human-ack in both; the never-type-an-ack-id rule; user-ragflow and user-hindsight named as forbidden in the skill and in grokbot/README.md; skills.approve in skill, operating model and README; the five packet_* stub fields and SPE-4792 in the skill and docs/vps-agent-bus.md; desk-production-loop in the generator and linked from the bootstrap skill; all 7 templates enable the loop skill and none names ragflow/hindsight-api/user-ragflow/user-hindsight; no credential literal in the prose files>'",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "ok: frontmatter, 5-phase order, etag+brief_etag, degraded ack, raw-connector denial, skills.approve, SPE-4792 stub (5 fields), 7/7 templates enable the loop and name no raw server, no credential literal in prose",
+      "note": "The generator source is excluded from the credential-literal sweep only: scripts/generate-templates.py contains the literal '-----BEGIN' as one of its own FORBIDDEN patterns, which matches itself. G-3 (command 2) covers that file."
+    },
+    {
+      "cmd": "git diff --stat origin/main -- ownership.yaml",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "(empty — ownership.yaml is byte-identical to origin/main)",
+      "note": "QUALITY owns ownership.yaml. LEAD did not write the carve-out it would need for a top-level skills/desk-production-loop/ directory; the skill was placed inside LEAD's existing skills/desk-bootstrap/** carve-out instead."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.03,
+      "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
+      "note": "That is the only problem reported. No structural problem, no bypass pattern, no unevidenced claim."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main)",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 14 file(s) within owned paths",
+      "note": "Re-run with this receipt staged. Commands 1 and 2 saw 13 files because they predated it; .receipts/bot-00-programming-lead/** is bot-00's, so the count changes and the verdict does not. The receipt needs git add -f: .gitignore line 5 ignores .receipts/**/*.json, which is how every committed receipt in this repository got there."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
+      "exit_code": 0,
+      "duration_s": 0.33,
+      "output_tail": "G-3 PASS — 14 file(s) scanned, no secrets detected",
+      "note": "Same re-run, this receipt included."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The ownership manifest still validates: 7 bots, 103 rules, no duplicate patterns. It was not modified by this change.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead on every path this branch touches. The new skill resolves to bot-00 through the existing skills/desk-bootstrap/** rule, and the other twelve paths are LEAD's docs, grokbot/** and scripts/generate-templates.py. No path is unowned and none is foreign.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3 reports no secret in any of the thirteen changed files. No token, passphrase, tailnet name, key id or signature value was written — the signed-packet table names field names only.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-7 desk integrity still passes after the template regeneration: 7 rosters, 3 packs, 22 prompt files checked and 7 templates clean. Adding a base skill line introduced no forbidden pattern and no unfilled placeholder.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The seven committed grokbot templates are exactly what scripts/generate-templates.py produces from the new BASE_SKILLS, so the seat-default change is reproducible rather than hand-applied.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The gate self-test suite passes unchanged: 157 tests. The gates themselves were not weakened to accommodate this change.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The skill documents brief -> act -> memory_write -> events_emit -> handoff_to_hermes in that order; memory_brief plus its etag is stated as the precondition for repo work and brief_etag as the receipt field; degraded mode is defined and requires a recorded human ack that the seat never types itself; user-ragflow and user-hindsight are named as forbidden seat paths in both the skill and grokbot/README.md; the skills list/invoke-until-skills.approve rule appears in the skill, the operating model and the pack README; the five reserved packet_* fields and SPE-4792 appear in both the skill and docs/vps-agent-bus.md.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "All seven seat templates now enable desk-production-loop, and no template names a raw RAGFlow or Hindsight server as a seat default.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "ownership.yaml is unchanged from origin/main. The new skill was placed under LEAD's skills/desk-bootstrap/** carve-out precisely so that no ownership rule had to be invented; moving it to skills/desk-production-loop/ is QUALITY's one-line change to make.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-2 fails closed on this receipt while approved_by is empty. That empty field is intentional — LEAD does not self-approve, and the PR stays draft until QUALITY stamps it. It is not a completed approval and not a passing gate.",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-1 passes for bot-00-programming-lead across the complete fourteen-path branch, this receipt included. Nothing crossed a seat boundary: the manifest was not edited, and no QUALITY, INFRA or per-seat path is in the diff.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-3 reports no secret across the complete fourteen-path branch, this receipt included.",
+      "evidence_command_index": 10
+    }
+  ],
+  "unverified": [
+    "The live memory_brief response was never observed in this session — the substrate/Hermes connector is not reachable from this cloud container. The etag is written as a desk requirement, not as a transcribed field name: the skill says to record it under whatever the live response calls it and to name that field in the receipt. If the live tool returns no etag at all, the skill's own degraded-mode rule (§3) is what applies, and the requirement itself then needs a SYSTEMS/substrate ticket rather than a docs fix.",
+    "No memory_brief, memory_write, events_emit, graph_get or handoff_to_hermes call was made. The tool names, kinds and failure semantics are transcribed from contracts/tool-rosters/_core.yaml, docs/upgrade-plan-desk-v2.md §4 and docs/vps-agent-bus.md §2, not from a live call.",
+    "brief_etag on this receipt is null for the same reason: this run could not brief. That is the honest value, and it is also the first case the new skill covers — a LEAD docs turn in a container with no connector is degraded by the skill's own definition.",
+    "The etag is not threaded through the roster schemas. contracts/tool-rosters/_core.yaml gives desk_brief no etag output and desk_memory_retain / desk_event_emit no etag input, and every roster schema is additionalProperties: false, so passing one today would be a validation error. The receipt is the only place it is recorded until QUALITY lands that contract change (G-4). The skill says so explicitly rather than implying the field already flows.",
+    "The five packet_* field names for the signed handoff are provisional placeholders for SPE-4792, which has not landed. They are documented as omit-do-not-send, and no signature, digest or key id was computed or invented. When SPE-4792 ships, its schema wins and the table in the skill §7 and docs/vps-agent-bus.md is the thing to correct.",
+    "skills.approve does not exist as a capability anywhere in this repository. The rule is written as a standing restriction (list and invoke only) plus the condition that would lift it; it is not a claim that such a capability is being built or scheduled.",
+    "No new event kind was minted, so nothing here was verified against a live consumer. The degraded-turn event reuses ticket.blocked with payload.reason brief_degraded, because docs/handoff-contracts.md is QUALITY's contract surface and a dedicated loop.* kind is a G-4 change LEAD cannot make.",
+    "The root .mcp.json still configures the hindsight and ragflow HTTP MCP servers. That file is bot-05-infrastructure's, so this change documents the boundary (Lane A cloud-session tooling, never a desk seat default) instead of editing it. Actually removing or re-scoping those entries is an INFRA ticket and is NOT done by this PR.",
+    "skills/README.md still has no row for desk-production-loop. That file is bot-06-quality-security's; adding the row here would be the same cross-seat edit that PR #4's receipt already recorded as a deliberate G-1 violation. QUALITY adds the row.",
+    "The CI Quality Gates workflow will not attribute this branch. .github/workflows/gates.yml derives the acting bot from the branch prefix and requires ^bot-0[0-6]-[a-z0-9-]+$; this branch is claude/spe-4794-production-loop-v4i18e, so the 'Determine the acting bot' step exits 1 before G-1 runs. The gates recorded above were therefore run locally with --bot bot-00-programming-lead. A re-push under bot-00-programming-lead/spe-4794-production-loop would let CI run them, and needs the dispatcher's go-ahead since the branch name was pinned by the work order.",
+    "Greptile was not run — that is QUALITY's gate, not LEAD's.",
+    "ci/gates/run_all.py was not invoked as a suite; the individual gates relevant to this diff (G-1 manifest, G-1 per-branch, G-3, G-7, G-2) are recorded above.",
+    "pr_url is null at the time this receipt was written; the draft PR is opened from this branch in the same push.",
+    "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval."
+  ],
+  "blockers": [
+    "SPE-4792 (signed handoff packet schema) has not landed, so handoff_to_hermes stays unsigned and the packet fields stay omitted. Documented, not worked around.",
+    "A top-level skills/desk-production-loop/ directory needs one last-match rule in ownership.yaml from QUALITY. Until then the skill lives under skills/desk-bootstrap/desk-production-loop/, and skills/README.md's map row is also QUALITY's to add.",
+    "Threading the brief etag through desk_brief, desk_memory_retain and desk_event_emit is a contracts/tool-rosters/** change, which is QUALITY's contract surface (G-4)."
+  ],
+  "files_changed": [
+    ".receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json",
+    "docs/desk-operating-model.md",
+    "docs/vps-agent-bus.md",
+    "grokbot/README.md",
+    "grokbot/templates/ANDROID.md",
+    "grokbot/templates/INFRA.md",
+    "grokbot/templates/IOS.md",
+    "grokbot/templates/LEAD.md",
+    "grokbot/templates/QUALITY.md",
+    "grokbot/templates/SYSTEMS.md",
+    "grokbot/templates/WEB.md",
+    "scripts/generate-templates.py",
+    "skills/desk-bootstrap/SKILL.md",
+    "skills/desk-bootstrap/desk-production-loop/SKILL.md"
+  ],
+  "contract_changes": [],
+  "deployment": null,
+  "rollback_plan": null,
+  "approvals": [],
+  "approved_by": "",
+  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name."
+}

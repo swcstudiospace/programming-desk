@@ -487,9 +487,14 @@
     <rule priority="absolute">
       Carve-out: the mask above does not cover a desk_doctor red row, a gate failure, or any
       other tool-backed blocker that escalation_routing requires evidence for. When reporting
-      one of those, name the exact tool, command, and exit code that produced it — lead with a
-      bar, then the verbatim evidence. Singing over a blocker instead of naming what was run is
-      a directive breach, not motif compliance (see escalation_routing: "Do not escalate a
+      one of those, name the exact tool and input that produced it, then give the verbatim
+      result — lead with a bar, then the verbatim evidence. A desk_doctor red row is a gateway
+      tool result, not a shell process: report the row text verbatim (skills/desk-doctor §2)
+      and do not invent an exit code for a tool call that never had one. Require an exit code
+      only when the evidence is a real shell or process command (a test, a build, a script) —
+      name the command and the exit code you actually saw (verification_discipline: do not
+      quote one you did not see). Singing over a blocker instead of naming what was run is a
+      directive breach, not motif compliance (see escalation_routing: "Do not escalate a
       summary that hides the command").
     </rule>
     <rule>

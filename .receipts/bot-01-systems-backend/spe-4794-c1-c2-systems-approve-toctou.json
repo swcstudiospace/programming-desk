@@ -1,0 +1,43 @@
+{
+  "task_id": "spe-4794-c1-c2-systems-approve-toctou",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-09-30T15:43:12Z",
+  "completed_at": "2026-09-30T15:43:12Z",
+  "branch": "bot-01-systems-backend/spe-4794-approve-toctou",
+  "summary": "SPE-4794 companion C-2+C-1 on desk_receipt_approve: capture tip via repo.head_sha, gate stamped candidate (C-1), refuse stale_read overwrite in _commit_file (C-2). Does not edit programming-desk #40.",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/src/desk_gateway/tools/quality.py').read())\"",
+      "exit_code": 0,
+      "cwd": "workspace patch verify"
+    },
+    {
+      "cmd": "python3 -c \"compile(open('/workspace/spe4794-systems-companion/quality.py').read(),'quality.py','exec')\"",
+      "exit_code": 0,
+      "cwd": "/workspace/spe4794-systems-companion"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "quality.py parses as Python 3 after C-1+C-2 patch",
+      "evidence": "ast.parse + compile exit 0"
+    },
+    {
+      "claim": "receipt_approve uses await repo.head_sha(ref) (not rev_parse) and gates stamped candidate before commit",
+      "evidence": "diff vs main a43e2089"
+    },
+    {
+      "claim": "_commit_file returns stale_read and leaves branch untouched when expect_sha/expect_content mismatch",
+      "evidence": "code path before write_text"
+    },
+    {
+      "claim": "No edits to programming-desk #40; companion only on bot-01 branch",
+      "evidence": "PR files = quality.py + this receipt"
+    }
+  ],
+  "unverified": [
+    "No live desk_receipt_approve against a scratch branch in this receipt (gateway not exercised on box)",
+    "No pytest unit for stale_read race yet \u2014 follow-up if QUALITY asks"
+  ],
+  "approved_by": ""
+}

@@ -141,6 +141,8 @@ async def receipt_approve(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
         return failure("invalid_args", "branch or receipt_path is not safe")
     await repo.fetch()
     ref = f"{repo.remote}/{args['branch']}"
+    # C-2: capture the tip sha the receipt bytes were read at; pair with expect_* in _commit_file.
+    read_sha = await repo.head_sha(ref)
     text = await repo.show(args["receipt_path"], ref)
     if text is None:
         return failure("not_found", f"{args['receipt_path']} is not on {ref} (receipts are force-added: git add -f)")
@@ -150,14 +152,35 @@ async def receipt_approve(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
         return failure("invalid_receipt", "receipt is not valid JSON")
     if receipt.get("bot") == ctx.bot_id:
         return failure("self_approval", "QUALITY cannot approve a QUALITY receipt")
-    check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
-    if not check.get("ok"):
-        return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", gates=check.get("gates"))
-    receipt["approved_by"] = ctx.bot_id
-    receipt["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    # C-1: gate the post-stamp candidate (unstamped input is the expected first-stamp case).
+    candidate = dict(receipt)
+    candidate["approved_by"] = ctx.bot_id
+    candidate["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     if args.get("note"):
-        receipt["approval_note"] = redact_text(args["note"])
-    push = await _commit_file(ctx, args["branch"], args["receipt_path"], json.dumps(receipt, indent=2) + "\n", f"QUALITY: approve {args['receipt_path']}")
+        candidate["approval_note"] = redact_text(args["note"])
+    check = await repo.receipt_check(candidate, candidate.get("bot") or "", False, args["receipt_path"])
+    if not check.get("ok"):
+        return failure(
+            "gate_failed",
+            "the receipt does not pass G-2/G-3/G-5/G-6 once stamped",
+            gates=check.get("gates"),
+        )
+    receipt = candidate
+    push = await _commit_file(
+        ctx,
+        args["branch"],
+        args["receipt_path"],
+        json.dumps(receipt, indent=2) + "\n",
+        f"QUALITY: approve {args['receipt_path']}",
+        expect_sha=read_sha,
+        expect_content=text,
+    )
+    if not push.get("pushed") and push.get("reason") == "stale_read":
+        return failure(
+            "stale_read",
+            "the branch moved after the receipt was read and gated; re-run the approval against the new tip",
+            push=push,
+        )
     return {"ok": bool(push.get("pushed")), "receipt_path": args["receipt_path"], "approved_by": ctx.bot_id, "push": push}
 
 
@@ -265,7 +288,22 @@ async def secret_scan(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         shutil.rmtree(tree, ignore_errors=True)
 
 
-async def _commit_file(ctx: ToolContext, branch: str, rel_path: str, content: str, message: str) -> dict[str, Any]:
+async def _commit_file(
+    ctx: ToolContext,
+    branch: str,
+    rel_path: str,
+    content: str,
+    message: str,
+    *,
+    expect_sha: str | None = None,
+    expect_content: str | None = None,
+) -> dict[str, Any]:
+    """Commit one file on a branch tip.
+
+    When expect_sha / expect_content are set (receipt_approve C-2), refuse a blind overwrite if the
+    branch tip or the on-disk receipt moved after the caller's read — return stale_read and leave
+    the branch untouched.
+    """
     repo = ctx.services.repo
     scratch = Path(__import__("tempfile").mkdtemp(prefix="desk-approve-"))
     try:
@@ -276,7 +314,22 @@ async def _commit_file(ctx: ToolContext, branch: str, rel_path: str, content: st
         if clone["exit_code"] != 0:
             return {"pushed": False, "reason": redact_text(clone["stderr"][-200:])}
         wt = scratch / "wt"
+        head = await run_command(["git", "rev-parse", "HEAD"], cwd=str(wt))
+        found_sha = head["stdout"].strip()
+        if expect_sha and found_sha != expect_sha:
+            return {
+                "pushed": False,
+                "reason": "stale_read",
+                "expected": expect_sha,
+                "found": found_sha,
+            }
         target = wt / rel_path
+        if expect_content is not None and target.exists() and target.read_text(encoding="utf-8") != expect_content:
+            return {
+                "pushed": False,
+                "reason": "stale_read",
+                "detail": f"{rel_path} changed since it was read",
+            }
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         await run_command(["git", "add", "-f", rel_path], cwd=str(wt))

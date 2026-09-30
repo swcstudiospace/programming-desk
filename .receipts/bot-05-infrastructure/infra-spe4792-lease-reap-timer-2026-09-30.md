@@ -17,6 +17,7 @@ One periodic call to the SYSTEMS-owned `coord_reap_leases` tool on the **loopbac
 | `infra/lease-heartbeat/substrate-lease-reap.timer` | Cadence. Default **45s**, sanctioned band **30–60s** |
 | `infra/lease-heartbeat/substrate-lease-reap.service` | `Type=oneshot`; `ExecStart` is the wrapper below |
 | `infra/lease-heartbeat/substrate-lease-reap.sh` | Runs the call **and checks the result** |
+| `infra/lease-heartbeat/smoke-reap-sse.sh` | Self-contained check for the multiline-SSE case: `bash infra/lease-heartbeat/smoke-reap-sse.sh` |
 
 ## The boundary INFRA does not cross
 
@@ -67,6 +68,11 @@ Both `head -c "$N"` and the Python slice invert on a negative number — on a 10
 `head -c -2000` yields 8000 bytes, not 2000 — so one stray minus sign would have turned the
 journal cap into "log almost everything", on exactly the failing ticks where payloads are
 largest.
+
+**The smoke check is discriminating, not decorative.** Run against the pre-fix wrapper from
+`99028dd` it fails with exit 4 — the exact false-failure the finding described — and passes
+against the fixed one. It starts a throwaway MCP on an ephemeral port, needs no external fixture,
+no network and no secret, and can be re-run by anyone or by CI.
 
 ## Secrets
 

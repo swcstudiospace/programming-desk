@@ -11,7 +11,7 @@
   "pull_request": 38,
   "started_at": "2026-09-30T06:56:00Z",
   "completed_at": "2026-09-30T07:20:00Z",
-  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load. Fifth tip: eight more Greptile findings on #38, all verified real and all fixed — leading zeros breaking the probe's unquoted JSON numbers (durations and ports), an empty target entry from a stray comma vanishing from the scan, EnvironmentFile optional on both units, Persistent= promising a catch-up tick a monotonic timer never delivers, the cron sketch both ignoring LEASE_INTERVAL_S above 60 and sourcing the env file as shell, the cadence invariant missing its TIMEOUT term because OnUnitActiveSec measures from renewal START not finish, and the receipt citing superseded PR #36. Sixth tip: Greptile P1 4142018423 — a failed sweep looked successful because curl --fail-with-body only checks the HTTP status while MCP reports tool failure as HTTP 200 with result.isError or a JSON-RPC error. ExecStart is now an INFRA-owned wrapper, substrate-lease-reap.sh, that parses the response (JSON or SSE) and exits non-zero unless the tool actually ran and succeeded. Seventh tip: two more findings on the wrapper itself — a multiline SSE result made a successful sweep exit 4 (parsed per data: line instead of joining the event's data as the SSE spec requires), and a negative SUBSTRATE_LEASE_REAP_LOG_BYTES inverted the journal cap into near-unbounded output. Both reproduced and fixed.",
+  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load. Fifth tip: eight more Greptile findings on #38, all verified real and all fixed — leading zeros breaking the probe's unquoted JSON numbers (durations and ports), an empty target entry from a stray comma vanishing from the scan, EnvironmentFile optional on both units, Persistent= promising a catch-up tick a monotonic timer never delivers, the cron sketch both ignoring LEASE_INTERVAL_S above 60 and sourcing the env file as shell, the cadence invariant missing its TIMEOUT term because OnUnitActiveSec measures from renewal START not finish, and the receipt citing superseded PR #36. Sixth tip: Greptile P1 4142018423 — a failed sweep looked successful because curl --fail-with-body only checks the HTTP status while MCP reports tool failure as HTTP 200 with result.isError or a JSON-RPC error. ExecStart is now an INFRA-owned wrapper, substrate-lease-reap.sh, that parses the response (JSON or SSE) and exits non-zero unless the tool actually ran and succeeded. Seventh tip: two more findings on the wrapper itself — a multiline SSE result made a successful sweep exit 4 (parsed per data: line instead of joining the event's data as the SSE spec requires), and a negative SUBSTRATE_LEASE_REAP_LOG_BYTES inverted the journal cap into near-unbounded output. Both reproduced and fixed. Added infra/lease-heartbeat/smoke-reap-sse.sh, a self-contained re-runnable check for the multiline-SSE case, which fails against the pre-fix wrapper and passes against the fixed one; the LOG_BYTES constraint is now documented in §6 and the env example.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -376,6 +376,30 @@
       "output_tail": "ok exit=0 | iserror exit=5 | rpcerror exit=5 | sse_ok exit=0 | sse_iserror exit=5 | http500 exit=2 | garbage exit=4 — unchanged"
     },
     {
+      "cmd": "bash -n infra/lease-heartbeat/smoke-reap-sse.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "(no output — syntax clean)"
+    },
+    {
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-sse.sh",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "substrate-lease-reap: swept\nSMOKE PASS: multiline-SSE success parsed, exit 0"
+    },
+    {
+      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > old2.sh && sed 's#./infra/lease-heartbeat/substrate-lease-reap.sh#old2.sh#' infra/lease-heartbeat/smoke-reap-sse.sh | bash",
+      "exit_code": 4,
+      "duration_s": 0.6,
+      "output_tail": "substrate-lease-reap: unparseable response: Expecting property name enclosed in double quotes: line 1 column 2\nSMOKE FAIL: exit 4"
+    },
+    {
+      "cmd": "grep -n 'non-negative integer\\|NON-NEGATIVE INTEGER' infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "LEASE-HEARTBEAT.md and lease-heartbeat.env.example both state the SUBSTRATE_LEASE_REAP_LOG_BYTES constraint and why a negative value inverts the cap"
+    },
+    {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json --bot bot-05-infrastructure --strict",
       "exit_code": 1,
       "duration_s": 0.2,
@@ -642,8 +666,25 @@
       "evidence_command_index": 59
     },
     {
+      "claim": "The new self-contained smoke check is syntactically valid bash.",
+      "evidence_command_index": 60
+    },
+    {
+      "claim": "smoke-reap-sse.sh passes against the fixed wrapper: a successful JSON-RPC result pretty-printed across many data: lines is parsed and the sweep exits 0. It needs no external fixture, no network and no secret.",
+      "evidence_command_index": 61
+    },
+    {
+      "claim": "The smoke check is discriminating rather than tautological: run against the pre-fix wrapper from 99028dd it FAILS with exit 4, the exact false-failure the finding described.",
+      "evidence_command_index": 62,
+      "expects_failure": true
+    },
+    {
+      "claim": "The SUBSTRATE_LEASE_REAP_LOG_BYTES non-negative-integer constraint is documented in both LEASE-HEARTBEAT.md §6 and the env example, with the reason a negative value inverts the cap.",
+      "evidence_command_index": 63
+    },
+    {
       "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
-      "evidence_command_index": 60,
+      "evidence_command_index": 64,
       "expects_failure": true
     }
   ],
@@ -677,7 +718,8 @@
     "infra/lease-heartbeat/substrate-lease-reap.service",
     "infra/lease-heartbeat/substrate-lease-reap.timer",
     "infra/lease-heartbeat/substrate-lease-reap.sh",
-    ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md"
+    ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md",
+    "infra/lease-heartbeat/smoke-reap-sse.sh"
   ],
   "destructive": false,
   "deployment": null,

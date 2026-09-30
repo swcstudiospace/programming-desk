@@ -248,6 +248,23 @@ It understands both a plain JSON body and an SSE (`text/event-stream`) one, sinc
 MCP may answer either way for the same call and a sweeper that understood only one would quietly
 stop checking results the day the server changed framing.
 
+**SSE framing follows the spec, not the common case.** An event's data is *all* of its `data:`
+lines joined with newlines, dispatched at the blank line that ends the event; the optional single
+space after the colon is framing, and `[DONE]` is skipped. Parsing each line on its own works only
+while the server emits compact one-line JSON — the moment it pretty-prints or wraps a long result,
+every line is a fragment, the parse fails, and a **healthy** sweep is reported failed on every
+tick. That is the same "the timer says one thing, reality says another" failure as a missed error,
+just inverted, so it is covered by tests: multiline success and `isError`, no space after the
+colon, no trailing blank line, two events in one response, and a `[DONE]` sentinel.
+
+**`SUBSTRATE_LEASE_REAP_LOG_BYTES` must be a non-negative integer**, and is validated before any
+request is made. The cap is applied by `head -c "$N"` and by a Python slice, and **both invert on
+a negative number** — on a 10000-byte body `head -c -2000` yields 8000 bytes, not 2000 — so one
+stray minus sign would turn the journal cap into "log almost everything", on exactly the failing
+ticks where payloads are largest. Empty means the default (2000); a negative or non-numeric value
+is refused with exit 1 rather than clamped, because a clamp hides an env file that says something
+the operator did not mean.
+
 Failing bodies are logged to the journal, bounded by `SUBSTRATE_LEASE_REAP_LOG_BYTES` — a failing
 sweep is undiagnosable without them, and the request is a fixed no-argument tool call, so the body
 carries no credential of its own. The bearer is still only ever in the curl config file; the

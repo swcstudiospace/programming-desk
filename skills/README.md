@@ -36,6 +36,13 @@ came from the skill or from its application.
 | `platforms/remote-dev-machine` | 5, all | The shared dev box: access and safety |
 | `security/secrets-handling` | 6, all | Detection, rotation, exposure response |
 | `security/supply-chain` | 6 | Dependency provenance, licences, CVEs |
+| `desk-bootstrap` | all | First run from a template: connector, register, prompt install, doctor green |
+| `desk-doctor` | all | `/desk doctor`: reading the integrity report, what repair does and does not do |
+| `desk-gateway` | all | Calling `desk_*` tools: rosters, fail-open/closed, g5/g6 fields, 20 s deadline, 403 |
+| `hindsight-memory` | all | Retain/recall discipline, banks, redaction, weekly reflect |
+| `ragflow-docs` | all | Docs search finds where; the file is the fact. Datasets and citing |
+| `tool-packs` | 2, 3, 4 | Loading and unloading app packs, the 20-tool ceiling, pack authoring |
+| `platforms/railway-tailscale` | 5 | Forwarders per Railway project, ACL tags, VPS cutover, rollback |
 
 ## Authoring rules
 

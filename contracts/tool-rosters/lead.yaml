@@ -1,0 +1,122 @@
+# LEAD roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-00-programming-lead.
+version: 1.0.0
+seat: bot-00-programming-lead
+short: lead
+endpoint: /mcp/lead
+scope: seat:lead
+memory_banks: { own: pd-lead, shared: [pd-desk, pd-lead-reports] }
+core: true
+consumers: [bot-00-programming-lead]
+tools:
+  - name: desk_intake_next
+    kind: write
+    gates: []
+    description: >-
+      Pull the next external work order from the intake queue and claim it for this LEAD. Only the
+      LEAD endpoint serves intake tools. Returns null when the queue is empty.
+    backend: lead.intake_next
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        origin: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
+
+  - name: desk_intake_ack
+    kind: write
+    gates: []
+    description: >-
+      Acknowledge an intake: accepted, rejected, in_progress or done, with the Graph ID and links.
+      The gateway posts the status back to the origin (GitHub issue comment or callback URL).
+    backend: lead.intake_ack
+    input:
+      type: object
+      additionalProperties: false
+      required: [intake_id, status]
+      properties:
+        intake_id: { type: string, pattern: "^in-[a-z0-9]{6,32}$" }
+        status: { type: string, enum: [accepted, rejected, in_progress, done] }
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        message: { type: string, maxLength: 2000 }
+        links: { type: array, maxItems: 20, items: { type: string, format: uri, maxLength: 500 } }
+
+  - name: desk_graph_register
+    kind: write
+    gates: []
+    description: Register a Graph ID in the substrate index (idempotent on graph_id).
+    backend: lead.graph_register
+    input:
+      type: object
+      additionalProperties: false
+      required: [graph_id, title, repo]
+      properties:
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        title: { type: string, minLength: 3, maxLength: 200 }
+        repo: { type: string, pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" }
+        node_count: { type: integer, minimum: 5, maximum: 8 }
+        nodes:
+          type: array
+          maxItems: 8
+          items:
+            type: object
+            additionalProperties: false
+            required: [node_id, title]
+            properties:
+              node_id: { type: string, pattern: "^n[1-8]$" }
+              title: { type: string, maxLength: 200 }
+              linear_id: { type: string, pattern: "^[A-Z]{2,6}-[0-9]+$" }
+              step_count: { type: integer, minimum: 4, maximum: 8 }
+
+  - name: desk_graph_state
+    kind: write
+    gates: []
+    description: Claim, release or complete a graph node; mirrors Linear and the Notion Issue row through the substrate.
+    backend: lead.graph_state
+    input:
+      type: object
+      additionalProperties: false
+      required: [graph_id, node_id, action]
+      properties:
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        node_id: { type: string, pattern: "^n[1-8]$" }
+        action: { type: string, enum: [claim, release, complete] }
+        surface: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
+        note: { type: string, maxLength: 1000 }
+
+  - name: desk_bus_start_job
+    kind: write
+    gates: []
+    description: Start a Lane B job on the VPS agent bus (hermes, muse, grok-build, omp, claude-code). Returns the job id.
+    backend: lead.bus_start_job
+    input:
+      type: object
+      additionalProperties: false
+      required: [runtime, goal]
+      properties:
+        runtime: { type: string, enum: [hermes, muse, grok-build, omp, claude-code] }
+        goal: { type: string, minLength: 10, maxLength: 20000 }
+        provider: { type: string, maxLength: 80 }
+        idempotency_key: { type: string, maxLength: 120 }
+
+  - name: desk_bus_wait_job
+    kind: read
+    gates: []
+    description: Poll a Lane B job until it completes, fails or the timeout elapses.
+    backend: lead.bus_wait_job
+    input:
+      type: object
+      additionalProperties: false
+      required: [job_id]
+      properties:
+        job_id: { type: string, minLength: 6, maxLength: 80 }
+        timeout_sec: { type: integer, minimum: 5, maximum: 600, default: 180 }
+        poll_sec: { type: integer, minimum: 1, maximum: 30, default: 2 }
+
+  - name: desk_roster_status
+    kind: read
+    gates: []
+    description: Seat registrations, channel id, heartbeats, tool counts and last doctor result for this team.
+    backend: lead.roster_status
+    input:
+      type: object
+      additionalProperties: false
+      properties: {}

@@ -1,0 +1,148 @@
+# Shared core roster. Every seat endpoint serves these eight tools in addition to its own.
+# Contract surface (QUALITY). Breaking changes follow G-4; every seat is a consumer.
+#
+# Conventions used by every roster file:
+#   kind:   read  — never mutates a system of record; fails open (empty result + reason)
+#           write — mutates; fails closed
+#   gates:  g5 — deployment-class tool: rollback_plan and approval_id are required inputs
+#           g6 — destructive-class tool: approval_id is required and echoed into the audit event
+#   backend: the gateway module and function that implements the tool
+version: 1.0.0
+surface: contracts/tool-rosters/_core.yaml
+tools:
+  - name: desk_brief
+    kind: read
+    gates: []
+    description: >-
+      Start-of-turn brief for this seat: substrate memory brief for the Graph ID, recall from the
+      seat bank and the shared desk bank, and the seat's open tickets. Cached for five minutes.
+    backend: core.brief
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        task_id: { type: string, maxLength: 120 }
+        refresh: { type: boolean, default: false }
+
+  - name: desk_docs_search
+    kind: read
+    gates: []
+    description: >-
+      Search the desk document datasets (programming-desk, agent-substrate, and the repo named in
+      the ticket) through the substrate docs plane. Returns chunks with source paths and commits.
+    backend: core.docs_search
+    input:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 2, maxLength: 500 }
+        repo: { type: string, pattern: "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)?$" }
+        limit: { type: integer, minimum: 1, maximum: 20, default: 8 }
+
+  - name: desk_memory_retain
+    kind: write
+    gates: []
+    description: >-
+      Retain a decision, verified command, environment fact or gotcha into this seat's memory bank.
+      Refused without a receipt_path or a source URL. Content is redacted before it leaves the gateway.
+    backend: core.memory_retain
+    input:
+      type: object
+      additionalProperties: false
+      required: [content]
+      properties:
+        content: { type: string, minLength: 8, maxLength: 8000 }
+        receipt_path: { type: string, pattern: "^\\.receipts/bot-0[0-6]-[a-z-]+/[A-Za-z0-9._-]+\\.json$" }
+        source: { type: string, format: uri, maxLength: 500 }
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        task_id: { type: string, maxLength: 120 }
+        tags: { type: array, maxItems: 10, items: { type: string, maxLength: 40 } }
+
+  - name: desk_memory_recall
+    kind: read
+    gates: []
+    description: >-
+      Recall from this seat's bank and the shared desk bank (LEAD also reads pd-lead-reports).
+    backend: core.memory_recall
+    input:
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: { type: string, minLength: 2, maxLength: 500 }
+        limit: { type: integer, minimum: 1, maximum: 20, default: 8 }
+        include_shared: { type: boolean, default: true }
+
+  - name: desk_ownership_resolve
+    kind: read
+    gates: []
+    description: >-
+      Resolve repo-relative paths to their owning seat under ownership.yaml at origin/main (last
+      match wins; unowned is reported as such). Run before the first edit.
+    backend: core.ownership_resolve
+    input:
+      type: object
+      additionalProperties: false
+      required: [paths]
+      properties:
+        paths:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: desk_receipt_check
+    kind: read
+    gates: []
+    description: >-
+      Run the G-2, G-3, G-5 and G-6 gate scripts against a receipt without writing anything to git.
+      Returns each gate's exit code and output tail.
+    backend: core.receipt_check
+    input:
+      type: object
+      additionalProperties: false
+      required: [bot]
+      properties:
+        bot: { type: string, pattern: "^bot-0[0-6]-[a-z-]+$" }
+        receipt: { type: object }
+        receipt_path: { type: string, pattern: "^\\.receipts/bot-0[0-6]-[a-z-]+/[A-Za-z0-9._-]+\\.json$" }
+        strict: { type: boolean, default: true }
+
+  - name: desk_event_emit
+    kind: write
+    gates: []
+    description: >-
+      Emit a seat-attributed event to the substrate event log (GreptimeDB). Payloads are redacted
+      and capped at 4 KB.
+    backend: core.event_emit
+    input:
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind: { type: string, pattern: "^[a-z][a-z0-9_.]{2,60}$" }
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        task_id: { type: string, maxLength: 120 }
+        payload: { type: object }
+
+  - name: desk_doctor
+    kind: write
+    gates: []
+    description: >-
+      Desk integrity: check verifies prompt SHA, skills, memory bank, tool roster, connector and
+      roster registration; register records this Bot's agent UUID (and, for LEAD, the channel id);
+      install_prompt returns the assembled prompt for this seat with the roster filled in; repair
+      re-runs install_prompt. Doctor never edits a gate, a receipt or another seat's files.
+    backend: core.doctor
+    input:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [check, register, install_prompt, repair] }
+        agent_uuid: { type: string, pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+        channel_id: { type: string, pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" }
+        prompt_sha256: { type: string, pattern: "^[0-9a-f]{64}$" }
+        installed_skills: { type: array, maxItems: 100, items: { type: string, maxLength: 80 } }

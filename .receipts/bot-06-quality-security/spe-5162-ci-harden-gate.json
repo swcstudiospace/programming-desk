@@ -99,6 +99,24 @@
       "exit_code": 0,
       "duration_s": 1.5,
       "output_tail": "v0.14.0 (zaproxy/action-baseline), v3 (github/codeql-action), v3.3.7 (nuclei), v8.21.2 (gitleaks) all confirmed present — only trivy-action's pin was wrong"
+    },
+    {
+      "cmd": "git clone --depth 1 --branch v0.28.0 https://github.com/aquasecurity/trivy-action.git && grep -n setup-trivy trivy-action/action.yaml",
+      "exit_code": 0,
+      "duration_s": 1.2,
+      "output_tail": "uses: aquasecurity/setup-trivy@v0.2.1 — this tag no longer exists upstream (git ls-remote for aquasecurity/setup-trivy shows only v0.2.6, v0.3.0, v0.3.1), which is the actual root cause PR #50's second CI run hit: 'Unable to resolve action aquasecurity/setup-trivy@v0.2.1'"
+    },
+    {
+      "cmd": "for v in v0.29.0 v0.30.0 v0.31.0 v0.32.0 v0.33.0 v0.33.1 v0.34.0 v0.35.0 v0.36.0; do curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy-action/$v/action.yaml | grep setup-trivy; done",
+      "exit_code": 0,
+      "duration_s": 4.5,
+      "output_tail": "v0.29.0/v0.30.0 pin setup-trivy@v0.2.2 (a tag, same failure mode); v0.31.0 onward pin by commit SHA instead of a tag; v0.36.0 pins 3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6"
+    },
+    {
+      "cmd": "git ls-remote https://github.com/aquasecurity/setup-trivy.git | grep 3fb12ec12f41e471780db15c232d5dd185dcb514",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "3fb12ec12f41e471780db15c232d5dd185dcb514 refs/tags/v0.2.6 — the SHA trivy-action@v0.36.0 pins internally exists and matches a current setup-trivy tag"
     }
   ],
   "claims": [
@@ -163,14 +181,27 @@
     {
       "claim": "Once the trivy-action tag was known to be the only wrong pin, the other three third-party pins used in these two workflows (zaproxy/action-baseline@v0.14.0, github/codeql-action/upload-sarif@v3, the nuclei v3.3.7 release asset) were independently confirmed to exist, closing the gap flagged earlier in unverified",
       "evidence_command_index": 14
+    },
+    {
+      "claim": "aquasecurity/trivy-action@v0.28.0 fails to resolve in GitHub Actions for a second, distinct reason beyond anything guessable from this sandbox alone: that release hardcodes a nested action dependency, aquasecurity/setup-trivy@v0.2.1, whose tag upstream has since deleted (current tags are v0.2.6, v0.3.0, v0.3.1). PR #50's own CI surfaced this ('Unable to resolve action aquasecurity/setup-trivy@v0.2.1') after the first pin fix made v0.28.0 itself resolve.",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "trivy-action v0.29.0/v0.30.0 pin the same nested dependency by another mutable tag (v0.2.2) and would fail the identical way once that tag is deleted; v0.31.0 onward pin it by commit SHA instead, which is immune to upstream tag deletion — v0.36.0 (the newest at the time of checking) is the version chosen for that reason, consistent with SECURITY.md's own 'pin what executes by commit SHA' guidance",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "The commit SHA that trivy-action@v0.36.0 pins its setup-trivy dependency to actually exists upstream and corresponds to the current v0.2.6 tag, so this fix does not just move the same failure to a different tag name",
+      "evidence_command_index": 17
     }
   ],
   "unverified": [
-    "Trivy's filesystem scan itself (the aquasecurity/trivy-action@v0.28.0 step's actual output) was never executed in this sandbox — only that the action tag now resolves. PR #49's own CI (self-hosted runner) is what will actually run it; that run had not completed as of this receipt revision.",
+    "Trivy's filesystem scan itself (the aquasecurity/trivy-action@v0.36.0 step's actual scan output) was never executed in this sandbox — only that the action and its nested setup-trivy dependency now resolve. PR #50's own CI (self-hosted runner) is what will actually run it; whether it passes or finds HIGH+ vulnerabilities had not been observed as of this receipt revision.",
     "The nightly DAST workflow (ZAP baseline via zaproxy/action-baseline@v0.14.0, and the Nuclei binary install/scan) was never executed: there is no STAGING_URL in this sandbox and no live target to scan against. The workflow's skip-when-unconfigured branch is the only path exercised, via reasoning about the job's `if:` condition, not an actual run of security-nightly.yml.",
     "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif@v3) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox.",
-    "This PR was originally opened from branch claude/spe-5162-security-ci-uogcud (this session's default harness branch) and was retargeted to bot-06-quality-security/spe-5162-ci-harden-gate via GitHub's branch-rename endpoint (POST /repos/.../branches/{branch}/rename) rather than a delete+recreate, specifically so the open PR's head followed the rename instead of showing a deleted source branch. That rename API call's success was observed from this session, but the PR's post-rename state (head ref, mergeable_state, whether gates.yml's branch-prefix bot-detection step now resolves bot-06-quality-security correctly) should be re-confirmed by re-reading the PR after the rename lands.",
-    "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner."
+    "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch — that limitation was reported, not worked around further.",
+    "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
+    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve."
   ],
   "files_changed": [
     "ownership.yaml",

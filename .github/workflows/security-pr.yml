@@ -195,7 +195,12 @@ jobs:
           done
 
       - name: Trivy filesystem scan — HIGH+ dependency vulnerabilities
-        uses: aquasecurity/trivy-action@v0.28.0
+        # v0.28.0 (this workflow's first pin) hardcodes aquasecurity/setup-trivy@v0.2.1, a tag
+        # upstream has since deleted — PR #50's own CI caught the resulting "unable to resolve
+        # action" failure. v0.36.0 pins its setup-trivy dependency by commit SHA instead of a
+        # mutable tag (confirmed against the current upstream ref), which is both the fix and
+        # the more correct form per SECURITY.md's own "pin what executes by commit SHA" rule.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .

@@ -27,16 +27,30 @@ def cmd_emu_boot(args: argparse.Namespace) -> int:
     except DeviceUnavailable as exc:
         return _print_skip(str(exc))
     try:
-        subprocess.Popen(argv)  # noqa: S603 — argv list, no shell
-        if args.timeout_sec and args.timeout_sec > 0:
-            # Best-effort wait window; availability is checked via adb separately.
-            time.sleep(min(args.timeout_sec, 1))
-        print(f"emulator started for avd={args.avd}")
-        return 0
+        proc = subprocess.Popen(  # noqa: S603 — argv list, no shell
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
     except FileNotFoundError as exc:
         return _print_skip(f"missing binary: emulator ({exc})")
     except OSError as exc:
         return _print_skip(f"emulator spawn failed: {exc}")
+
+    # Wait out the window checking the process is still alive, instead of an
+    # unconditional 1-second sleep followed by an unconditional success print.
+    # This only catches an immediate bad-AVD/spawn failure, not a full boot —
+    # confirming the device is actually ready needs `adb wait-for-device`,
+    # which can block far longer than a CLI call should.
+    window = args.timeout_sec if args.timeout_sec and args.timeout_sec > 0 else 5
+    deadline = time.monotonic() + window
+    while time.monotonic() < deadline and proc.poll() is None:
+        time.sleep(0.2)
+
+    exit_code = proc.poll()
+    if exit_code is not None:
+        err = (proc.stderr.read() if proc.stderr else "").strip()
+        return _print_skip(f"emulator exited early (code {exit_code}): {err or 'no output'}")
+    print(f"emulator started for avd={args.avd} (pid={proc.pid}, still running after {window}s)")
+    return 0
 
 
 def cmd_adb_devices(args: argparse.Namespace) -> int:
@@ -57,7 +71,10 @@ def cmd_install_apk(args: argparse.Namespace) -> int:
         proc = subprocess.run(argv, capture_output=True, text=True)  # noqa: S603
         if proc.returncode != 0:
             err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
-            return _print_skip(f"install failed: {err}")
+            if adb.is_missing_device_error(err):
+                return _print_skip(f"install skipped: {err}")
+            print(f"error: install failed: {err}", file=sys.stderr)
+            return proc.returncode or 1
         print(proc.stdout.strip() or "install ok")
         return 0
     except DeviceUnavailable as exc:
@@ -86,7 +103,10 @@ def cmd_instrumented_run(args: argparse.Namespace) -> int:
         proc = subprocess.run(argv, capture_output=True, text=True)  # noqa: S603
         if proc.returncode != 0:
             err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
-            return _print_skip(f"instrument failed: {err}")
+            if adb.is_missing_device_error(err):
+                return _print_skip(f"instrument skipped: {err}")
+            print(f"error: instrument failed: {err}", file=sys.stderr)
+            return proc.returncode or 1
         print(proc.stdout.strip() or "instrument ok")
         return 0
     except DeviceUnavailable as exc:
@@ -116,35 +136,47 @@ def cmd_logcat_capture(args: argparse.Namespace) -> int:
         except DeviceUnavailable as exc:
             return _print_skip(str(exc))
     # adb backend
-    argv = adb.logcat_argv(serial=args.serial)
-    if args.dry_run if hasattr(args, "dry_run") else False:
+    timed = bool(args.seconds and args.seconds > 0)
+    if args.dry_run:
+        argv = (
+            adb.logcat_stream_argv(serial=args.serial)
+            if timed
+            else adb.logcat_argv(serial=args.serial)
+        )
         print(" ".join(argv))
         return 0
     try:
         adb.which_or_raise("adb")
-        # Timed capture: run logcat -d once (dump and exit). --seconds is documented
-        # for live capture windows; without a device we still skip cleanly.
-        timeout = float(args.seconds) if args.seconds else None
-        proc = subprocess.run(  # noqa: S603
-            argv,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        text = proc.stdout or ""
-        if out_path:
-            out_path.write_text(text, encoding="utf-8")
-        if proc.returncode != 0:
-            err = (proc.stderr or "").strip() or f"exit {proc.returncode}"
-            return _print_skip(f"logcat failed: {err}")
-        print(text if not out_path else f"wrote {out_path}")
-        return 0
     except DeviceUnavailable as exc:
         return _print_skip(str(exc))
-    except subprocess.TimeoutExpired:
-        return _print_skip("logcat timed out")
-    except FileNotFoundError as exc:
-        return _print_skip(f"missing binary: adb ({exc})")
+    try:
+        if timed:
+            # Stream for the requested window instead of `logcat -d`, which
+            # dumps whatever is already buffered and exits immediately.
+            text, returncode, err = adb.capture_logcat_for(args.seconds, serial=args.serial)
+        else:
+            proc = subprocess.run(  # noqa: S603
+                adb.logcat_argv(serial=args.serial), capture_output=True, text=True
+            )
+            text, returncode, err = proc.stdout or "", proc.returncode, (proc.stderr or "").strip()
+    except DeviceUnavailable as exc:
+        return _print_skip(str(exc))
+
+    if returncode != 0:
+        message = err or f"exit {returncode}"
+        # Failure: report it and leave any existing --out file untouched,
+        # instead of overwriting it with empty/partial capture output.
+        if adb.is_missing_device_error(message):
+            return _print_skip(f"logcat failed: {message}")
+        print(f"error: logcat failed: {message}", file=sys.stderr)
+        return returncode or 1
+
+    if out_path:
+        out_path.write_text(text, encoding="utf-8")
+        print(f"wrote {out_path}")
+    else:
+        print(text)
+    return 0
 
 
 def cmd_screenshot(args: argparse.Namespace) -> int:
@@ -169,7 +201,11 @@ def cmd_screenshot(args: argparse.Namespace) -> int:
         proc = subprocess.run(argv, capture_output=True)  # noqa: S603
         if proc.returncode != 0:
             err = (proc.stderr or b"").decode("utf-8", errors="replace").strip()
-            return _print_skip(f"screencap failed: {err or proc.returncode}")
+            message = err or f"exit {proc.returncode}"
+            if adb.is_missing_device_error(message):
+                return _print_skip(f"screencap skipped: {message}")
+            print(f"error: screencap failed: {message}", file=sys.stderr)
+            return proc.returncode or 1
         if out_path:
             out_path.write_bytes(proc.stdout or b"")
             print(f"wrote {out_path}")
@@ -241,7 +277,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("unit_test", help="Run ./gradlew test or skip")
     p.add_argument("--module", default=None)
-    p.add_argument("--gradle-args", nargs="*", default=[])
+    # REMAINDER, not nargs="*": argparse's "*" stops collecting at the first
+    # token that looks like an option (anything starting with "-"), so
+    # `--gradle-args --offline` rejected --offline as an unknown CLI flag
+    # instead of forwarding it to Gradle. REMAINDER takes everything after
+    # the flag literally, so --gradle-args must be the last option passed.
+    p.add_argument("--gradle-args", nargs=argparse.REMAINDER, default=[])
     p.set_defaults(func=cmd_unit_test)
 
     p = sub.add_parser("instrumented_run", help="adb shell am instrument")
@@ -255,6 +296,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--out", required=True)
     p.add_argument("--seconds", type=int, default=0)
     p.add_argument("--backend", choices=["adb", "metavr"], default="adb")
+    p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_logcat_capture)
 
     p = sub.add_parser("screenshot", help="Screenshot (adb or metavr)")

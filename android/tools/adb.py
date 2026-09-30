@@ -5,12 +5,36 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import threading
+import time
 from dataclasses import asdict, dataclass
 from typing import Sequence
 
 
 class DeviceUnavailable(Exception):
     """Raised when a required binary or connected device is missing."""
+
+
+# Substrings adb prints when a command failed because no device was present,
+# as opposed to a real command failure on a connected device. Anything not
+# matching one of these is treated as a genuine failure, not a skip.
+_MISSING_DEVICE_HINTS = (
+    "no devices/emulators found",
+    "device not found",
+    "device offline",
+    "device unauthorized",
+    "no device",
+)
+
+
+def is_missing_device_error(message: str) -> bool:
+    """True when an adb error message indicates no device was present.
+
+    Used to tell a documented missing-device skip apart from a real command
+    failure on a connected device, which must be reported, not swallowed.
+    """
+    lowered = (message or "").lower()
+    return any(hint in lowered for hint in _MISSING_DEVICE_HINTS)
 
 
 @dataclass(frozen=True)
@@ -124,7 +148,63 @@ def instrument_argv(
 
 
 def logcat_argv(*, serial: str | None = None) -> list[str]:
+    """Dump the current logcat buffer and exit (no timed window)."""
     return build_adb_argv("logcat", "-d", serial=serial)
+
+
+def logcat_stream_argv(*, serial: str | None = None) -> list[str]:
+    """Stream logcat continuously, for a caller-managed capture window."""
+    return build_adb_argv("logcat", serial=serial)
+
+
+def capture_logcat_for(seconds: float, *, serial: str | None = None) -> tuple[str, int, str]:
+    """Stream logcat for `seconds` and return (text, returncode, stderr).
+
+    Unlike `adb logcat -d` (dump-and-exit), this actually records events for
+    the requested window instead of returning whatever was already buffered.
+    returncode is 0 when the window elapsed normally; nonzero only when the
+    adb process itself exited early with an error.
+    """
+    which_or_raise("adb")
+    argv = logcat_stream_argv(serial=serial)
+    try:
+        proc = subprocess.Popen(  # noqa: S603
+            argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+        )
+    except FileNotFoundError as exc:
+        raise DeviceUnavailable("missing binary: adb") from exc
+
+    out_chunks: list[str] = []
+    err_chunks: list[str] = []
+
+    def _drain(pipe, sink: list[str]) -> None:
+        for line in iter(pipe.readline, ""):
+            sink.append(line)
+
+    out_thread = threading.Thread(target=_drain, args=(proc.stdout, out_chunks), daemon=True)
+    err_thread = threading.Thread(target=_drain, args=(proc.stderr, err_chunks), daemon=True)
+    out_thread.start()
+    err_thread.start()
+
+    deadline = time.monotonic() + max(seconds, 0)
+    while time.monotonic() < deadline and proc.poll() is None:
+        time.sleep(0.05)
+
+    early_exit = proc.poll()
+    if early_exit is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        returncode = 0
+    else:
+        returncode = early_exit
+
+    out_thread.join(timeout=1)
+    err_thread.join(timeout=1)
+    return "".join(out_chunks), returncode, "".join(err_chunks).strip()
 
 
 def screenshot_argv(*, serial: str | None = None) -> list[str]:

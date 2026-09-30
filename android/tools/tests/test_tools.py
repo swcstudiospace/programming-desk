@@ -155,5 +155,209 @@ class CliSkipOnMissingBinary(unittest.TestCase):
         self.assertIn("skipped:", out.getvalue())
 
 
+class AdbFailureClassificationTests(unittest.TestCase):
+    """Greptile P1: a real command failure on a connected device must be
+    reported, not swallowed as the documented missing-device skip."""
+
+    def test_missing_device_error_detected(self) -> None:
+        self.assertTrue(adb.is_missing_device_error("error: no devices/emulators found"))
+        self.assertTrue(adb.is_missing_device_error("error: device offline"))
+
+    def test_real_failure_is_not_classified_as_missing_device(self) -> None:
+        self.assertFalse(adb.is_missing_device_error("INSTALL_FAILED_INSUFFICIENT_STORAGE"))
+
+    def test_install_apk_real_failure_is_reported_not_skipped(self) -> None:
+        fake = mock.Mock(returncode=1, stdout="", stderr="Failure [INSTALL_FAILED_INVALID_APK]")
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.cli.subprocess.run", return_value=fake):
+                with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                    code = main(["install_apk", "--apk", "/tmp/app.apk"])
+        self.assertEqual(code, 1)
+        self.assertIn("error: install failed", err.getvalue())
+
+    def test_install_apk_missing_device_still_skips(self) -> None:
+        fake = mock.Mock(returncode=1, stdout="", stderr="error: no devices/emulators found")
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.cli.subprocess.run", return_value=fake):
+                with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+                    code = main(["install_apk", "--apk", "/tmp/app.apk"])
+        self.assertEqual(code, 0)
+        self.assertIn("skipped:", out.getvalue())
+
+    def test_screenshot_real_failure_is_reported_not_skipped(self) -> None:
+        fake = mock.Mock(returncode=1, stdout=b"", stderr=b"screencap: permission denied")
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.cli.subprocess.run", return_value=fake):
+                with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                    code = main(["screenshot", "--out", "/tmp/s.png"])
+        self.assertEqual(code, 1)
+        self.assertIn("error: screencap failed", err.getvalue())
+
+    def test_instrumented_run_real_failure_is_reported_not_skipped(self) -> None:
+        fake = mock.Mock(returncode=1, stdout="", stderr="INSTRUMENTATION_FAILED")
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.cli.subprocess.run", return_value=fake):
+                with mock.patch("sys.stderr", new_callable=io.StringIO) as err:
+                    code = main(["instrumented_run", "--class", "pkg.Test"])
+        self.assertEqual(code, 1)
+        self.assertIn("error: instrument failed", err.getvalue())
+
+
+class LogcatCaptureTests(unittest.TestCase):
+    def test_dry_run_reports_argv(self) -> None:
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            code = main(["logcat_capture", "--out", "/tmp/l.txt", "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().strip(), "adb logcat -d")
+
+    def test_timed_dry_run_uses_streaming_argv(self) -> None:
+        with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+            code = main(
+                ["logcat_capture", "--out", "/tmp/l.txt", "--seconds", "30", "--dry-run"]
+            )
+        self.assertEqual(code, 0)
+        self.assertEqual(out.getvalue().strip(), "adb logcat")
+
+    def test_timed_capture_uses_streaming_window_not_dump(self) -> None:
+        with mock.patch(
+            "android.tools.cli.adb.which_or_raise", return_value="adb"
+        ), mock.patch(
+            "android.tools.cli.adb.capture_logcat_for",
+            return_value=("line1\nline2\n", 0, ""),
+        ) as captured, mock.patch(
+            "sys.stdout", new_callable=io.StringIO
+        ), mock.patch.object(
+            Path, "write_text"
+        ) as write_text:
+            code = main(
+                ["logcat_capture", "--out", "/tmp/l.txt", "--seconds", "5"]
+            )
+        self.assertEqual(code, 0)
+        captured.assert_called_once()
+        self.assertEqual(captured.call_args.args[0], 5)
+        write_text.assert_called_once_with("line1\nline2\n", encoding="utf-8")
+
+    def test_failed_capture_does_not_overwrite_out_file(self) -> None:
+        with mock.patch(
+            "android.tools.cli.adb.which_or_raise", return_value="adb"
+        ), mock.patch(
+            "android.tools.cli.adb.capture_logcat_for",
+            return_value=("", 1, "device offline"),
+        ), mock.patch(
+            "sys.stdout", new_callable=io.StringIO
+        ), mock.patch.object(
+            Path, "write_text"
+        ) as write_text:
+            code = main(["logcat_capture", "--out", "/tmp/l.txt", "--seconds", "5"])
+        self.assertEqual(code, 0)  # missing-device classification -> skip
+        write_text.assert_not_called()
+
+    def test_failed_capture_real_error_is_reported_not_skipped(self) -> None:
+        with mock.patch(
+            "android.tools.cli.adb.which_or_raise", return_value="adb"
+        ), mock.patch(
+            "android.tools.cli.adb.capture_logcat_for",
+            return_value=("", 1, "permission denied"),
+        ), mock.patch(
+            "sys.stderr", new_callable=io.StringIO
+        ) as err, mock.patch.object(
+            Path, "write_text"
+        ) as write_text:
+            code = main(["logcat_capture", "--out", "/tmp/l.txt", "--seconds", "5"])
+        self.assertEqual(code, 1)
+        self.assertIn("error: logcat failed", err.getvalue())
+        write_text.assert_not_called()
+
+
+class GradleModuleTaskTests(unittest.TestCase):
+    def test_module_path_becomes_scoped_project_task(self) -> None:
+        self.assertEqual(gradle.module_test_task("android/app"), ":android:app:test")
+        self.assertEqual(gradle.module_test_task("app"), ":app:test")
+
+    def test_unit_test_passes_single_scoped_task_not_raw_path(self) -> None:
+        captured: dict[str, list[str]] = {}
+
+        def fake_run(argv, **kwargs):
+            captured["argv"] = argv
+            return mock.Mock(returncode=0, stdout="", stderr="")
+
+        with mock.patch(
+            "android.tools.gradle.find_gradlew", return_value=Path("/repo/android/gradlew")
+        ):
+            with mock.patch("android.tools.gradle.subprocess.run", side_effect=fake_run):
+                gradle.unit_test(module="android/app")
+        self.assertEqual(
+            captured["argv"], ["/repo/android/gradlew", ":android:app:test"]
+        )
+
+    def test_gradle_args_with_leading_dash_are_forwarded(self) -> None:
+        with mock.patch("android.tools.gradle.find_gradlew", return_value=None):
+            with mock.patch("sys.stdout", new_callable=io.StringIO):
+                code = main(
+                    ["unit_test", "--gradle-args", "--offline", "--stacktrace"]
+                )
+        self.assertEqual(code, 0)  # still skips cleanly without a wrapper present
+
+
+class MetaVRAutoDetectTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        metavr_bridge.set_device_connected(None)
+
+    def test_auto_detect_true_when_adb_reports_connected_device(self) -> None:
+        fake = mock.Mock(returncode=0, stdout=SAMPLE_DEVICES, stderr="")
+        with mock.patch("android.tools.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.adb.subprocess.run", return_value=fake):
+                metavr_bridge.set_device_connected(None)
+                self.assertTrue(metavr_bridge.is_device_connected())
+
+    def test_auto_detect_false_when_adb_missing(self) -> None:
+        with mock.patch(
+            "android.tools.adb.which_or_raise",
+            side_effect=DeviceUnavailable("missing binary: adb"),
+        ):
+            metavr_bridge.set_device_connected(None)
+            self.assertFalse(metavr_bridge.is_device_connected())
+
+    def test_explicit_override_wins_over_auto_detect(self) -> None:
+        fake = mock.Mock(returncode=0, stdout=SAMPLE_DEVICES, stderr="")
+        with mock.patch("android.tools.adb.which_or_raise", return_value="adb"):
+            with mock.patch("android.tools.adb.subprocess.run", return_value=fake):
+                metavr_bridge.set_device_connected(False)
+                self.assertFalse(metavr_bridge.is_device_connected())
+
+
+class EmuBootReadinessTests(unittest.TestCase):
+    def test_emu_boot_reports_early_exit_as_failure(self) -> None:
+        proc = mock.Mock()
+        proc.poll.return_value = 1
+        proc.stderr = io.StringIO("Failed to find AVD 'missing_avd'\n")
+        proc.pid = 4242
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="emulator"):
+            with mock.patch("android.tools.cli.subprocess.Popen", return_value=proc):
+                with mock.patch("android.tools.cli.time.sleep"):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+                        code = main(
+                            ["emu_boot", "--avd", "missing_avd", "--timeout-sec", "1"]
+                        )
+        self.assertEqual(code, 0)  # skip convention, but reports the real reason
+        self.assertIn("emulator exited early", out.getvalue())
+        self.assertIn("missing_avd", out.getvalue())
+
+    def test_emu_boot_reports_running_process_as_started(self) -> None:
+        proc = mock.Mock()
+        proc.poll.return_value = None
+        proc.pid = 4242
+        with mock.patch("android.tools.cli.adb.which_or_raise", return_value="emulator"):
+            with mock.patch("android.tools.cli.subprocess.Popen", return_value=proc):
+                with mock.patch("android.tools.cli.time.monotonic", side_effect=[0, 0, 10]):
+                    with mock.patch("android.tools.cli.time.sleep"):
+                        with mock.patch("sys.stdout", new_callable=io.StringIO) as out:
+                            code = main(
+                                ["emu_boot", "--avd", "Pixel_7_API_34", "--timeout-sec", "1"]
+                            )
+        self.assertEqual(code, 0)
+        self.assertIn("emulator started", out.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

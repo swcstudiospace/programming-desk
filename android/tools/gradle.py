@@ -32,6 +32,20 @@ def find_gradlew(module: str | None = None, cwd: Path | None = None) -> Path | N
     return None
 
 
+def module_test_task(module: str) -> str:
+    """Convert a filesystem module path into a scoped Gradle test task.
+
+    Gradle project paths are colon-separated, not filesystem paths: the
+    module at `android/app` is project `:android:app`, and its test task is
+    `:android:app:test` — a single task argument, never a bare path passed
+    alongside `test` (which Gradle tries to resolve as a second, unrelated
+    task name and fails).
+    """
+    parts = [p for p in module.strip("/").split("/") if p]
+    project_path = ":" + ":".join(parts) if parts else ""
+    return f"{project_path}:test"
+
+
 def unit_test(
     module: str | None = None,
     gradle_args: list[str] | None = None,
@@ -42,10 +56,8 @@ def unit_test(
     wrapper = find_gradlew(module=module, cwd=cwd)
     if wrapper is None:
         return 0, SKIP_LINE
-    argv = [str(wrapper), "test"]
-    if module:
-        # Pass module as a Gradle project path hint when provided.
-        argv.append(module)
+    task = module_test_task(module) if module else "test"
+    argv = [str(wrapper), task]
     if gradle_args:
         argv.extend(gradle_args)
     proc = subprocess.run(

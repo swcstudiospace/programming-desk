@@ -24,6 +24,8 @@ python -m android.tools <cmd>
 
 Missing binary or no connected device: the library raises `DeviceUnavailable`; the CLI prints `skipped: <reason>` and exits 0 so CI without an emulator is fine. `--dry-run` never spawns and never needs a device.
 
+A command that *does* reach a connected device and fails there (a rejected APK, a failed instrumentation run, a screencap/logcat error) is reported as `error: ...` on a nonzero exit, not silently swallowed as a skip — only the documented no-binary/no-device cases skip with exit 0.
+
 ## MetaVR bridge
 
 `metavr_bridge.py` maps local names to documented MetaVR tool ids only:
@@ -34,7 +36,11 @@ Missing binary or no connected device: the library raises `DeviceUnavailable`; t
 - `ui_tap`
 - `metavr_device`
 
-It does **not** call MCP, the network, or a metavr binary. When no device is connected, `require_device()` raises `DeviceUnavailable` naming the tool id.
+It does **not** call MCP, the network, or a metavr binary. Connection state defaults to auto-detecting a device via `adb devices -l` (a Quest/MetaVR headset in USB debugging mode enumerates like any other adb device); `set_device_connected(True|False)` forces the state for tests or callers that know better. When no device is connected, `require_device()` raises `DeviceUnavailable` naming the tool id.
+
+## Tests
+
+`./android/tools/run_tests.sh` runs this package's suite (`python3 -m unittest android.tools.tests.test_tools`). It is not wired into `.github/workflows/gates.yml` — that file is INFRA-owned (`ownership.yaml`) — so the repo's CI gate does not run it yet; this script is the ANDROID-owned entrypoint for INFRA to call.
 
 ## Ownership note
 

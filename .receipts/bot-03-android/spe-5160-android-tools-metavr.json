@@ -3,10 +3,10 @@
   "bot": "bot-03-android",
   "branch": "bot-03-android/spe-5160-android-tools-metavr",
   "started_at": "2026-09-30T15:56:51Z",
-  "completed_at": "2026-09-30T15:59:18Z",
+  "completed_at": "2026-09-30T15:59:32Z",
   "commands": [
     {
-      "cmd": "python -m unittest android.tools.tests.test_tools -v",
+      "cmd": "python3 -m unittest android.tools.tests.test_tools -v",
       "exit_code": 0,
       "duration_s": 0.104,
       "output_tail": "Ran 14 tests in 0.009s\n\nOK"

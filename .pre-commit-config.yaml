@@ -117,6 +117,20 @@ repos:
         pass_filenames: false
 
       # -------------------------------------------------------------------------------
+      # The pre-flight wrapper decides which change document G-4 validates, and
+      # ci/tests/test_gates.py does not reach it — those tests call check_contracts.py
+      # directly with an explicit --change. Without this, the selection order and the
+      # one-active-document guard could break with every gate test still green.
+      # -------------------------------------------------------------------------------
+      - id: preflight-self-test
+        name: "Pre-flight wrapper self-test (ci/hooks)"
+        entry: bash ci/hooks/g4-preflight.test.sh
+        language: python
+        additional_dependencies: ["pyyaml"]
+        files: ^ci/hooks/
+        pass_filenames: false
+
+      # -------------------------------------------------------------------------------
       # G-4 — contract-first pre-flight. MANUAL stage on purpose: it is advisory here and
       # blocking in CI.
       #

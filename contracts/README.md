@@ -56,7 +56,8 @@ acknowledgement from *every* listed consumer. A **non-breaking** change still ne
 document; acknowledgements are informational, but a rejection blocks.
 
 Both need the declared surfaces (`surface`, plus `surfaces` for anything further) to cover
-every contract-surface file in the diff. That is what ties a document to a change: without it, a
+every contract-surface file in the diff, other than the change document itself and the rest of
+`contracts/changes/`, which is bookkeeping rather than a consumer surface. That is what ties a document to a change: without it, a
 document left in `contracts/changes/` after its own change merged will validate a later,
 unrelated one, because the caller selects a document by globbing the directory.
 

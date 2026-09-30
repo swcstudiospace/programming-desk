@@ -26,40 +26,21 @@ cd "$REPO_ROOT"
 PYTHON="${PYTHON:-python3}"
 GATE="ci/gates/check_contracts.py"
 
-# Selection, in the same order the live workflow uses.
+# The one-active-document guard runs FIRST, and unconditionally.
 #
-# 1. A change document among the files handed to this run. This is the definitive signal:
-#    it is the document THIS change adds, which is what .github/workflows/gates.yml selects
-#    with `git diff --name-only --diff-filter=d ... -- contracts/changes`. It also covers the
-#    archive case — moving a merged document to contracts/changes/archive/ still touches a
-#    contract surface, so the gate wants a document, and the archived copy is the right one.
-# 2. Otherwise the single active document in contracts/changes/.
-#
-# Keeping this in step with the workflow matters more than the few lines it costs: two
-# different rules for choosing a change document is the same class of bug as two workflows
-# drifting apart.
-FROM_DIFF=""
-for f in "$@"; do
-    case "$f" in
-        contracts/changes/*.yaml|contracts/changes/*.yml) FROM_DIFF="$f"; break ;;
-        contracts/changes/*/*.yaml|contracts/changes/*/*.yml) FROM_DIFF="$f"; break ;;
-    esac
-done
-
-if [[ -n "$FROM_DIFF" ]]; then
-    echo "G-4 pre-flight — using change document from this change: $FROM_DIFF"
-    exec "$PYTHON" "$GATE" --files "$@" --change "$FROM_DIFF"
-fi
-
+# It is a statement about the repository, not about how this run picked its document: two
+# active documents means the next caller to glob this directory may validate a change
+# neither describes. Running it only on the fallback path would let a change that supplies
+# its own document sail past an ambiguity it is leaving behind for everyone else.
 shopt -s nullglob
-DOCS=(contracts/changes/*.yaml)
+ACTIVE=(contracts/changes/*.yaml contracts/changes/*.yml)
 shopt -u nullglob
 
-if (( ${#DOCS[@]} > 1 )); then
+if (( ${#ACTIVE[@]} > 1 )); then
     cat >&2 <<MSG
 G-4 pre-flight — more than one active change document in contracts/changes/:
 
-$(printf '    %s\n' "${DOCS[@]}")
+$(printf '    %s\n' "${ACTIVE[@]}")
 
 Whoever invokes the gate picks one by globbing this directory, so two documents means the
 gate may validate a change that neither describes. Exactly one document is active at a time:
@@ -71,10 +52,41 @@ MSG
     exit 1
 fi
 
-if (( ${#DOCS[@]} == 0 )); then
-    # No document. The gate still fails if a contract surface is touched, which is the point.
-    exec "$PYTHON" "$GATE" --files "$@"
+# Selection, in the same order the live workflow uses, with archived history ranked last.
+#
+# 1. An ACTIVE change document among the files handed to this run — the document this change
+#    is proposing. This is what .github/workflows/gates.yml selects with
+#    `git diff --name-only --diff-filter=d ... -- contracts/changes`.
+# 2. An ARCHIVED one among them. Moving a merged document to contracts/changes/archive/
+#    still touches contracts/**, so the gate wants a document and the archived copy is the
+#    only one the change has.
+# 3. Otherwise the single active document already in the tree.
+#
+# The order between 1 and 2 matters: a change that archives the previous document AND
+# proposes a new one contains both, and validating the archived record against the new
+# change would reject a perfectly good pull request.
+#
+# Note these are `case` patterns, not pathname globs — `*` matches `/` here, so
+# contracts/changes/*.yaml would also match contracts/changes/archive/x.yaml. The archive
+# pattern has to be tested first or it can never match.
+FROM_CHANGE_ACTIVE=""
+FROM_CHANGE_ARCHIVED=""
+for f in "$@"; do
+    case "$f" in
+        contracts/changes/archive/*.yaml|contracts/changes/archive/*.yml)
+            [[ -z "$FROM_CHANGE_ARCHIVED" ]] && FROM_CHANGE_ARCHIVED="$f" ;;
+        contracts/changes/*.yaml|contracts/changes/*.yml)
+            [[ -z "$FROM_CHANGE_ACTIVE" ]] && FROM_CHANGE_ACTIVE="$f" ;;
+    esac
+done
+
+CHANGE="${FROM_CHANGE_ACTIVE:-${FROM_CHANGE_ARCHIVED:-${ACTIVE[0]:-}}}"
+
+if [[ -n "$CHANGE" ]]; then
+    echo "G-4 pre-flight — using change document: $CHANGE"
+    exec "$PYTHON" "$GATE" --files "$@" --change "$CHANGE"
 fi
 
-echo "G-4 pre-flight — using the active change document: ${DOCS[0]}"
-exec "$PYTHON" "$GATE" --files "$@" --change "${DOCS[0]}"
+# No document anywhere. The gate still fails if a contract surface is touched, which is
+# the point — this is the fail-closed path, not a skip.
+exec "$PYTHON" "$GATE" --files "$@"

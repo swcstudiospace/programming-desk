@@ -18,7 +18,8 @@ proposed_by: bot-01-systems-backend
 surface: contracts/api/example.yaml
 
 # Any further contract paths this change touches. `surface` plus `surfaces` must cover every
-# contract-surface file in the diff (the change document itself excepted), or G-4 fails and
+# contract-surface file in the diff — except this document and the rest of contracts/changes/,
+# which is protocol bookkeeping rather than a consumer surface — or G-4 fails and
 # names what is missing. That coverage is what ties this document to this change — a document
 # left active after its change merged declares different paths and can no longer validate a
 # later one. List paths individually; `contracts/**` passes the check while describing nothing.

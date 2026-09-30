@@ -159,10 +159,22 @@
       "output_tail": "    contracts/changes/archive/contracts-skeleton-v0.1.0.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
     },
     {
-      "cmd": "python3 -m pytest ci/tests …",
+      "cmd": "python3 -m pytest ci/tests -q",
       "exit_code": 0,
       "duration_s": null,
-      "output_tail": "..................                                                       [100%]\n90 passed in 5.00s"
+      "output_tail": "..................                                                       [100%]\n90 passed in 4.81s"
+    },
+    {
+      "cmd": "bash ci/hooks/g4-preflight.test.sh",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "  ok    two active documents, one supplied -> still refused\n8 passed, 0 failed"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "..................                                                       [100%]\n90 passed in 4.72s"
     }
   ],
   "claims": [
@@ -262,6 +274,14 @@
     {
       "claim": "90 gate self-tests still pass with the resolver change",
       "evidence_command_index": 22
+    },
+    {
+      "claim": "The pre-flight wrapper now has its own test suite — 8 cases covering the selection order, the one-active-document guard both ways round, the archive-only move, and the fail-closed path. Run against the pre-fix wrapper it fails exactly the two cases Greptile reported and no others, so the tests detect those regressions rather than merely accompanying the fix",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "90 gate self-tests still pass with the bookkeeping exclusion in check_contracts.py",
+      "evidence_command_index": 24
     }
   ],
   "unverified": [
@@ -309,6 +329,42 @@
       "verdict": "VALID — reproduced, failed even with a valid change document present",
       "disposition": "FIXED: ci/hooks/g4-preflight.sh resolves and passes the document, and refuses more than one active document.",
       "residual": null
+    },
+    {
+      "id": "4140544602",
+      "priority": "P1",
+      "pr": 28,
+      "title": "Active-document guard is bypassed",
+      "verdict": "VALID — a change supplying its own document skipped the count check entirely",
+      "disposition": "FIXED: the guard runs first and unconditionally. It is a statement about the repository, not about how this run picked its document.",
+      "residual": null
+    },
+    {
+      "id": "4140544606",
+      "priority": "P1",
+      "pr": 28,
+      "title": "Archived document can win selection",
+      "verdict": "VALID — and worse than described: bash `case` patterns match `/`, so contracts/changes/*.yaml already matched archive paths and the archive branch was unreachable",
+      "disposition": "FIXED: an active document in the change outranks an archived one, with the archive pattern tested first so it can match at all. The gate also no longer counts contracts/changes/ toward surface coverage, so archiving the previous document is not something the new one has to declare.",
+      "residual": null
+    },
+    {
+      "id": "4140544612",
+      "priority": "P2",
+      "pr": 28,
+      "title": "Test command cannot be rerun",
+      "verdict": "VALID — the receipt builder truncated long argv to four elements and appended an ellipsis. A command a reader cannot re-run is not evidence, which is the whole point of G-2",
+      "disposition": "FIXED: both truncated entries re-run in full and recorded whole; asserted no ellipsis survives anywhere in commands[].",
+      "residual": null
+    },
+    {
+      "id": "4140544617",
+      "priority": "P2",
+      "pr": 28,
+      "title": "New wrapper branches lack tests",
+      "verdict": "VALID — ci/tests/test_gates.py calls check_contracts.py directly with an explicit --change, so it never reaches the wrapper",
+      "disposition": "FIXED: ci/hooks/g4-preflight.test.sh, in QUALITY's own path rather than bot-01's ci/tests/, wired into pre-commit on ^ci/hooks/. This also closes the 'no regression test for the new rule' gap recorded earlier for the wrapper half.",
+      "residual": "check_contracts.py's surface-coverage rule still has no test in ci/tests/; that file remains bot-01's."
     }
   ],
   "corrections": [

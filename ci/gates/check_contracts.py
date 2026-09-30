@@ -137,9 +137,19 @@ def check_change_doc(doc: dict, manifest: dict, touched: list[str] | None = None
             except OSError:
                 return False
 
+        # contracts/changes/ is the protocol's own bookkeeping — change documents, the
+        # template, the archive — not a surface any consumer builds against. Requiring a
+        # document to declare those paths would mean every change that archives the previous
+        # document, which is the normal flow, has to list the archived file as a surface it
+        # changed. Noise, and it would push people toward a `contracts/**` wildcard that
+        # satisfies the check while describing nothing.
+        def _is_bookkeeping(rel: str) -> bool:
+            return rel == "contracts/changes" or rel.startswith("contracts/changes/")
+
         undeclared = [
             t for t in touched
-            if not _is_change_doc(t) and not any(_surface_match(p, t) for p in surfaces)
+            if not _is_change_doc(t) and not _is_bookkeeping(t)
+            and not any(_surface_match(p, t) for p in surfaces)
         ]
         if undeclared:
             problems.append(

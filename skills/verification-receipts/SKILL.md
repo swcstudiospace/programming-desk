@@ -159,6 +159,15 @@ failing command padded by an unrelated one recorded for something else. With not
 receipt to borrow from, the cited command's own scope is this claim's entire evidence, left to a
 human reviewer (`approved_by`) to judge, the same as any other evidence-matching question.
 
+Being the receipt's only command is necessary but not sufficient: the gate also rejects the two
+shapes of thin evidence that pattern most often. A failure that reads back as the target being
+missing ("no such file or directory", "not found", ...) — in the command's own text or its
+`output_tail` — is not the same fact as "the target was searched and found empty"; "file missing"
+must never stand in for "every value empty". And a command that only tests whether a path exists
+(`test -f`, `[ -e ... ]`, `stat`, a bare `ls`) never inspects content either way, so it cannot back
+a claim about what that content is. Neither check can verify that the command's scope truly covers
+"every"/"all" — that judgment call still belongs to `approved_by`.
+
 ### §3 Matching evidence to claims
 
 The most common G-2 failure is a claim citing a command that does not prove it.

@@ -12,6 +12,7 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 
 from __future__ import annotations
 
+import atexit
 import io
 import json
 import os
@@ -36,6 +37,10 @@ def run_gate(script: str, *args: str) -> subprocess.CompletedProcess:
     )
 
 
+def _has_git() -> bool:
+    return (REPO_ROOT / ".git").exists()
+
+
 def _extract_candidate_gates() -> Path | None:
     """Materialize ci/gates/ as it exists at HEAD — the tip actually proposed for merge —
     into its own directory, independent of whatever sits in the working tree.
@@ -48,8 +53,16 @@ def _extract_candidate_gates() -> Path | None:
     candidate this PR proposes. `git archive HEAD` reads that, never the working tree, so it
     yields the real candidate whether or not an overlay has run.
 
-    Returns None — never raises — when HEAD's history can't be read (no .git/, e.g. a bare
-    source export), so callers can skip cleanly instead of failing collection.
+    Returns None — never raises — when extraction did not produce a candidate, whatever the
+    reason (no .git/, HEAD carries no ci/gates/ at all, a corrupt archive, ...). Callers must
+    NOT treat every None the same way: run_candidate_gate() below tells "no .git/" (a
+    legitimate skip — there is no candidate to distrust) apart from every other cause,
+    because one of those other causes is a PR that deletes or breaks ci/gates/ outright, and
+    a required check must fail on that, not quietly skip it open (Greptile P1, PR #45,
+    "Missing candidate skips gate tests").
+
+    The extracted tree is registered for cleanup at interpreter exit — it is never touched
+    again after test collection, so nothing shorter-lived would run reliably.
     """
     try:
         archive = subprocess.run(
@@ -59,6 +72,7 @@ def _extract_candidate_gates() -> Path | None:
         if archive.returncode != 0 or not archive.stdout:
             return None
         dest = Path(tempfile.mkdtemp(prefix="candidate-gates-"))
+        atexit.register(shutil.rmtree, dest, ignore_errors=True)
         with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
             tar.extractall(dest, filter="data")
         return dest / "ci" / "gates"
@@ -69,14 +83,59 @@ def _extract_candidate_gates() -> Path | None:
 CANDIDATE_GATES = _extract_candidate_gates()
 
 
+def _candidate_gate_unavailable_reason() -> tuple[str, bool]:
+    """Why run_candidate_gate() can't produce a candidate, and whether that is a skip.
+
+    is_skip is True only when there is no .git/ at all (a bare source export has no
+    candidate to distrust in the first place). Every other extraction failure — including
+    HEAD having no ci/gates/ because this change deleted it — returns is_skip=False: the
+    required check must fail rather than pass by skipping (see _extract_candidate_gates).
+    """
+    if not _has_git():
+        return (
+            "no .git/ present; cannot extract the candidate gate (e.g. a bare source export)",
+            True,
+        )
+    return (
+        "candidate gate extraction from HEAD failed even though .git/ is present (for "
+        "example: this change deletes or breaks ci/gates/) — a required check must not "
+        "silently skip when it cannot prove the candidate gate is safe; see "
+        "_extract_candidate_gates()",
+        False,
+    )
+
+
+def _probe_network_isolation() -> bool:
+    """True if this host can run a child in a fresh, unprivileged network namespace with no
+    route to anywhere. Probed once at collection time; run_candidate_gate() refuses to
+    execute PR-controlled gate code at all when this is False (Greptile P1, PR #45, "PR code
+    runs on shared runner") rather than falling back to running it unisolated — resource
+    limits alone do not stop a malicious gate script from exfiltrating data over the network
+    on a shared self-hosted runner.
+    """
+    if shutil.which("unshare") is None:
+        return False
+    try:
+        probe = subprocess.run(
+            ["unshare", "-r", "-n", "--", "true"],
+            capture_output=True, timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return probe.returncode == 0
+
+
+NETWORK_ISOLATION_AVAILABLE = _probe_network_isolation()
+
+
 def _sandbox_limits() -> None:
     """preexec_fn for run_candidate_gate(): bound CPU, memory and process count before the
     candidate script gets control. Runs in the child, after fork and before exec.
 
     Each limit is best-effort: a host whose existing hard limit already sits below what we
     ask for would otherwise turn a defense-in-depth measure into a hard crash of the whole
-    job. The cwd/env isolation in run_candidate_gate() is the primary control; these bound
-    a runaway process rather than gate whether the sandbox runs at all.
+    job. The cwd/env isolation and network namespace in run_candidate_gate() are the primary
+    controls; these bound a runaway process rather than gate whether the sandbox runs at all.
     """
     import resource
 
@@ -97,19 +156,45 @@ def run_candidate_gate(script: str, *args: str) -> subprocess.CompletedProcess:
     Unlike run_gate(), this never reads the working tree's (possibly base-overlaid) copy: it
     runs the exact candidate this PR proposes to merge, so new or changed gate behaviour is
     exercised for real by this required check instead of silently skipping until after merge.
-    The trust the base overlay withholds is bounded here rather than granted outright — a
-    scratch cwd that is not the real checkout, a stripped environment, and CPU/memory/process
-    ceilings with a hard wall-clock timeout. This does not isolate the network; a stronger
-    sandbox (container, network namespace) is an infra-owned follow-up if one is ever needed.
 
-    Skips (does not fail) when CANDIDATE_GATES could not be extracted, e.g. no .git/ present.
+    Trust model: this still executes attacker-controlled Python on a shared self-hosted
+    runner, so isolation is a precondition, not a best-effort extra. Before anything runs:
+    the candidate is a scratch extraction of HEAD, never the real checkout (a script cannot
+    reach the actual PR working tree or its history); it runs in a throwaway cwd with a
+    stripped environment (no repo secrets, no GITHUB_TOKEN); it is wrapped in a fresh
+    unprivileged network namespace with no route to anywhere, so it cannot exfiltrate
+    anything or reach internal services; and it is bounded by CPU/memory/process-count
+    limits and a hard wall-clock timeout. Filesystem isolation stops at "not the real
+    checkout" — this does not chroot or mount-namespace the child, so it can still read
+    whatever the runner's normal file permissions allow. Closing that gap needs a
+    container or mount-namespace sandbox, which is an infra-owned follow-up; until then,
+    the runner must not keep secrets or credentials in files readable by the job's user.
+
+    Fails (does not skip) when the network namespace can't be created (see
+    _probe_network_isolation) or when candidate extraction failed for any reason other than
+    "no .git/" (see _candidate_gate_unavailable_reason) — a required check must not pass by
+    quietly skipping the one thing it exists to verify.
     """
     if CANDIDATE_GATES is None:
-        pytest.skip("git history for HEAD is unavailable; cannot extract the candidate gate")
+        message, is_skip = _candidate_gate_unavailable_reason()
+        if is_skip:
+            pytest.skip(message)
+        pytest.fail(message)
+
+    if not NETWORK_ISOLATION_AVAILABLE:
+        pytest.fail(
+            "cannot create an unprivileged network namespace (unshare -r -n) on this host — "
+            "refusing to run PR-controlled ci/gates/ code from HEAD without it. A self-hosted "
+            "runner is shared infrastructure; resource limits alone do not stop a malicious "
+            "gate script from reaching the network. Enable unprivileged user+network "
+            "namespaces on the runner (kernel.unprivileged_userns_clone=1) to unblock this "
+            "required check."
+        )
+
     workdir = Path(tempfile.mkdtemp(prefix="gate-sandbox-"))
     try:
         return subprocess.run(
-            [sys.executable, str(CANDIDATE_GATES / script), *args],
+            ["unshare", "-r", "-n", "--", sys.executable, str(CANDIDATE_GATES / script), *args],
             capture_output=True, text=True, cwd=workdir,
             env={"PATH": os.environ.get("PATH", ""), "HOME": str(workdir)},
             timeout=30,
@@ -404,6 +489,102 @@ class TestG2Receipts:
         )
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_missing_target_is_not_exhaustive_evidence(self, tmp_path):
+        """A "file missing" failure is not "every value is empty" — same claim text as the
+        valid case above, but the command never got to look at content because the target
+        didn't exist. Being the receipt's only command is necessary but not sufficient
+        (Greptile P1, PR #45, "Thin evidence passes strict validation").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "cat .env.example", "exit_code": 1,
+                 "output_tail": "cat: .env.example: No such file or directory"},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "missing" in r.stderr.lower()
+
+    def test_expects_failure_existence_check_is_not_exhaustive_evidence(self, tmp_path):
+        """Testing whether a path exists proves nothing about the content inside it, however
+        confidently the claim is worded (Greptile P1, PR #45, "Thin evidence passes strict
+        validation").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "exist" in r.stderr.lower()
+
+
+# ===========================================================================
+# Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)
+# ===========================================================================
+
+class TestCandidateGateTrust:
+    """The infrastructure these tests use to exercise a PR's own gate changes pre-merge is
+    itself security-sensitive: it runs attacker-controlled Python on a shared self-hosted
+    runner. These tests hold that infrastructure to the same fail-closed standard as the
+    gates it runs (Greptile P1, PR #45, "PR code runs on shared runner" and "Missing
+    candidate skips gate tests").
+    """
+
+    def test_missing_candidate_fails_closed_when_git_present(self):
+        """This repo checkout has .git/, so a missing candidate here can only mean
+        extraction itself failed (e.g. HEAD has no ci/gates/) — that must fail the required
+        check, not skip it open for a PR that deletes ci/gates/.
+        """
+        assert _has_git()
+        message, is_skip = _candidate_gate_unavailable_reason()
+        assert is_skip is False
+        assert "must not" in message
+
+    def test_network_isolation_probe_is_a_clean_bool(self):
+        result = _probe_network_isolation()
+        assert isinstance(result, bool)
+
+    def test_run_candidate_gate_fails_closed_without_network_isolation(self, monkeypatch):
+        """When the host can't provide network isolation, run_candidate_gate() must refuse
+        to execute the candidate at all rather than silently falling back to running it
+        unisolated.
+        """
+        if CANDIDATE_GATES is None:
+            pytest.skip("no candidate extracted in this environment")
+        monkeypatch.setattr(sys.modules[__name__], "NETWORK_ISOLATION_AVAILABLE", False)
+        with pytest.raises(pytest.fail.Exception):
+            run_candidate_gate("check_receipt.py", "--receipt", "/dev/null")
+
+    def test_extract_candidate_gates_registers_cleanup(self, monkeypatch):
+        """The tree _extract_candidate_gates() materializes under a fresh tempdir must not
+        leak — it is registered for cleanup at interpreter exit.
+        """
+        if not _has_git():
+            pytest.skip("no .git/ present; cannot extract the candidate gate")
+        registered = []
+        monkeypatch.setattr(
+            atexit, "register", lambda func, *a, **k: registered.append((func, a, k))
+        )
+        result = _extract_candidate_gates()
+        try:
+            assert result is not None
+            assert any(func is shutil.rmtree for func, *_ in registered)
+        finally:
+            if result is not None:
+                shutil.rmtree(result.parent.parent, ignore_errors=True)
 
 
 # ===========================================================================

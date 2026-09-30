@@ -66,6 +66,23 @@ EXHAUSTIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A failure that reads back as "the target could not be found" is not the same evidence as
+# "the target was searched, end to end, and found empty" — "file missing" must not stand in
+# for "every value empty" (Greptile P1, PR #45, "Thin evidence passes strict validation").
+MISSING_TARGET_RE = re.compile(
+    r"no such file or directory|cannot access|does not exist\b|\bnot found\b"
+    r"|filenotfounderror|\benoent\b",
+    re.IGNORECASE,
+)
+
+# A command that only tests whether a path exists (test -e/-f, [ -e/-f ], stat, a bare ls)
+# never looks at content, so it cannot be the "whole scope searched" evidence an exhaustive
+# content claim needs, however its exit code lands.
+EXISTENCE_ONLY_RE = re.compile(
+    r"^\s*(?:test\s+-[a-z]\s|\[\s+-[a-z]\s|stat\s|ls\s+[^|;&]*$)",
+    re.IGNORECASE,
+)
+
 
 class ReceiptError(Exception):
     pass
@@ -207,6 +224,35 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                         "its cited command must be the receipt's only command for this to "
                         "pass under --strict"
                     )
+                else:
+                    # Being the receipt's only command clears the padding concern above,
+                    # but proves nothing by itself about WHY the command failed. A claim
+                    # that "every value is empty" needs a failure that came from searching
+                    # the content and finding nothing, not from the target being absent —
+                    # those are different facts, and only a human (approved_by) can judge
+                    # whether the command's own scope truly covers "every"/"all". This gate
+                    # can at least catch the two shapes of thin evidence that pattern most
+                    # often: a missing-target error, and a command that only checks
+                    # existence and never looks at content either way.
+                    cmd_text = str(cited.get("cmd", "")) if isinstance(cited, dict) else ""
+                    output_tail = (
+                        str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
+                    )
+                    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(cmd_text):
+                        problems.append(
+                            f"claim[{i}] {text!r} sets expects_failure and asserts "
+                            f"exhaustiveness, but command[{idx}]'s evidence reads as the "
+                            "target being missing (\"no such file\", \"not found\", ...), "
+                            "not as a search that covered the claim's whole scope and found "
+                            "nothing — a missing target proves nothing about the content the "
+                            "claim describes"
+                        )
+                    elif EXISTENCE_ONLY_RE.search(cmd_text):
+                        problems.append(
+                            f"claim[{i}] {text!r} asserts exhaustiveness over content, but "
+                            f"command[{idx}] ({cmd_text!r}) only tests whether a path exists "
+                            "— that proves nothing about the content inside it"
+                        )
             elif len(commands) < 2:
                 problems.append(
                     f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "

@@ -1,0 +1,168 @@
+{
+  "task_id": "spe-5162-ci-harden-gate",
+  "bot": "bot-06-quality-security",
+  "approved_by": null,
+  "branch": "claude/spe-5162-security-ci-uogcud",
+  "started_at": "2026-09-30T15:55:00Z",
+  "completed_at": "2026-09-30T16:05:00Z",
+  "runtime": "claude-cloud",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 105 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 8 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 8 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; [yaml.safe_load(open(f)) for f in ['.github/workflows/security-pr.yml','.github/workflows/security-nightly.yml','ci/security/semgrep.yml']]\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "no exception — all three YAML files parse"
+    },
+    {
+      "cmd": "python3 -c \"import tomllib; tomllib.load(open('ci/security/gitleaks.toml','rb'))\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "no exception — gitleaks.toml parses"
+    },
+    {
+      "cmd": "pip install bandit bandit-sarif-formatter && bandit -r services ci --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 3.5,
+      "output_tail": "[formatter] INFO SARIF output written to file: bandit.sarif — 0 HIGH-severity findings"
+    },
+    {
+      "cmd": "pip install semgrep && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error services ci",
+      "exit_code": 0,
+      "duration_s": 14.2,
+      "output_tail": "Ran 58 rules on 38 files: 0 findings."
+    },
+    {
+      "cmd": "curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz && tar xzf gitleaks.tar.gz gitleaks && ./gitleaks detect --source . --config ci/security/gitleaks.toml --log-opts=\"origin/main..HEAD\" --report-format sarif --report-path gitleaks.sarif -v",
+      "exit_code": 0,
+      "duration_s": 2.1,
+      "output_tail": "1 commits scanned. no leaks found"
+    },
+    {
+      "cmd": "./gitleaks detect --source . --config ci/security/gitleaks.toml --no-git --report-format json --report-path gitleaks-full.json -v",
+      "exit_code": 1,
+      "duration_s": 0.4,
+      "output_tail": "leaks found: 12 (all in ci/tests/test_gates.py and services/desk-gateway/tests/test_units.py — pre-existing G-3 fixtures marked 'pragma: allowlist secret' for the repo's own scanner, not this PR's diff)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "mapfile -t REQ_FILES < <(git ls-files -- 'services/**/requirements*.txt' 'ci/**/requirements*.txt'); echo count=${#REQ_FILES[@]}",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "count=0 — no requirements*.txt in the repo today, confirming the workflow's skip branch is the live path, not dead code"
+    },
+    {
+      "cmd": "pip-audit -r services/desk-gateway/pyproject.toml",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "ERROR:pip_audit._cli:requirement file ... contains invalid specifier at line 1 — confirms pip-audit cannot read this repo's uv-managed pyproject.toml, hence Trivy fs is the SCA path for it, not pip-audit",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "pip install pytest && python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.6,
+      "output_tail": "157 passed in 9.56s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml still validates with no duplicate pattern after adding the two QUALITY overrides, and every new path this change adds (workflows, ci/security/**, SECURITY.md, ownership.yaml itself, the receipt) resolves to bot-06-quality-security under G-1",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Running G-1 exactly as the work order's own verify command specifies (--bot bot-06-quality-security --base origin/main) passes for this branch's full diff against main",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The repository's own secret scanner (G-3) finds nothing in this change's 8 changed files",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Both new workflow files and the semgrep config are syntactically valid YAML",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The gitleaks config is valid TOML",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Bandit runs clean (0 HIGH-severity findings, exit 0) against services/ and ci/ using the committed bandit.ini and the -lll flag the workflow uses, and produces a valid SARIF file via bandit-sarif-formatter",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Semgrep runs clean (0 findings, exit 0) against services/ and ci/ using the committed semgrep.yml combined with the registry's p/security-audit and p/secrets packs, with the exact flags (--severity ERROR --error) the workflow uses",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Gitleaks, scoped to only this PR's own commit range (origin/main..HEAD) as the workflow does, finds no leaks in the actual new commit — the config's ${VAR}-reference and comment text (which use words like 'secret', 'token', 'api_key') does not trigger a false positive on itself",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "A full-repository, all-history gitleaks scan (not what the workflow runs) does hit 12 pre-existing findings, all inside the G-3 gate's own intentional fake-secret test fixtures on main — this is exactly why the workflow scopes gitleaks to the PR's commit range instead of the whole tree, and confirms that choice is load-bearing rather than cosmetic",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "There are zero requirements*.txt files under services/ or ci/ today, so the PR workflow's pip-audit step takes its 'skip gracefully, exit 0' branch on the very next PR that runs it, not an untested branch",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "pip-audit cannot parse this repo's uv-managed services/desk-gateway/pyproject.toml as a requirements file, which is why the workflow relies on Trivy's filesystem scan (not pip-audit) as the SCA path for that manifest",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-7 desk integrity is unaffected by this change",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The full existing gate test suite (157 tests) still passes after this change — no regression in ci/gates/ behavior from the ownership.yaml edit",
+      "evidence_command_index": 12
+    }
+  ],
+  "unverified": [
+    "Trivy's filesystem scan (aquasecurity/trivy-action@0.28.0) was never executed in this sandbox: this session's GitHub API access is scoped to swcstudiospace/programming-desk only, and probing several trivy release tags directly (github.com/aquasecurity/trivy/releases/download/...) returned 404 for every version tried, so the binary itself could not be fetched here. The self-hosted runner that actually executes the workflow is a separate environment and is expected to have full internet access, but that has not been observed running.",
+    "The nightly DAST workflow (ZAP baseline via zaproxy/action-baseline@v0.14.0, and the Nuclei binary install/scan) was never executed: there is no STAGING_URL in this sandbox and no live target to scan against. The workflow's skip-when-unconfigured branch is the only path exercised, via reasoning about the job's `if:` condition, not an actual run of security-nightly.yml.",
+    "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif@v3) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox.",
+    "gates.yml's 'Determine the acting bot' step derives the bot id from the branch name prefix (regex ^bot-0[0-6]-[a-z0-9-]+$) and this PR's branch is claude/spe-5162-security-ci-uogcud, not a bot-06-quality-security/... branch — so that specific CI step would fail bot attribution for this PR as opened. This is a known, flagged mismatch between the work order's requested branch name and this session's harness-mandated branch; see the closing question to Grok Bot.",
+    "The pinned third-party action/tag versions in the two new workflows (gitleaks release v8.21.2 — confirmed downloadable and runnable in this sandbox; aquasecurity/trivy-action@0.28.0, zaproxy/action-baseline@v0.14.0, github/codeql-action/upload-sarif@v3, nuclei v3.3.7 — not independently confirmed to exist/resolve from this sandbox's restricted network access) have not all been checked against the GitHub Marketplace/release history from here.",
+    "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner."
+  ],
+  "files_changed": [
+    "ownership.yaml",
+    ".github/workflows/security-pr.yml",
+    ".github/workflows/security-nightly.yml",
+    "ci/security/semgrep.yml",
+    "ci/security/gitleaks.toml",
+    "ci/security/bandit.ini",
+    "ci/security/garak-stub.md",
+    "SECURITY.md",
+    ".receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this commit. Nothing is deployed: the two new workflows only take effect on the next matching GitHub event (a pull_request for security-pr.yml, the daily schedule or a manual dispatch for security-nightly.yml) and neither has run yet, so there is no running state or external resource to unwind — removing the files returns CI to its pre-SPE-5162 gate set. The ownership.yaml addition is two lines; removing them returns ci/security/** and .github/workflows/security-*.yml to falling under the broader INFRA .github/workflows/** rule with no other rule affected."
+}

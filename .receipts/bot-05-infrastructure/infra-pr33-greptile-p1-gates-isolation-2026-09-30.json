@@ -1,0 +1,51 @@
+{
+  "task_id": "infra-pr33-greptile-p1-gates-isolation-2026-09-30",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-00-programming-lead/desk-v2-stack-land-on-main",
+  "pull_request": 33,
+  "started_at": "2026-09-30T04:45:00Z",
+  "completed_at": "2026-09-30T04:46:25Z",
+  "summary": "Fix Greptile security P1 4140823500: PR jobs overlay trusted ci/gates from base ref before execution on self-hosted runner. Intake pad note includes title+URL (4140823516 polish). railway_redeploy prior_deployment_id (4140823531) deferred \u2014 services/desk-gateway/** owned by SYSTEMS.",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "python3 -c body-equality-check live vs template gates.yml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "body equal after inject"
+    },
+    {
+      "cmd": "rg 'Use trusted gate scripts' .github/workflows/gates.yml ci/.github/workflows/gates.yml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "present in both"
+    }
+  ],
+  "claims": [
+    "On pull_request, gates and gate-self-test overlay ci/gates/ from origin/$BASE_REF before running python against those modules",
+    "Live and template workflow bodies remain identical after the change",
+    "desk-intake short-body pad note includes title and issue URL; pad never replaces requester text"
+  ],
+  "unverified": [
+    "railway_redeploy prior_deployment_id compare (4140823531) \u2014 SYSTEMS ownership of services/desk-gateway/**; LEAD to re-ticket SYSTEMS",
+    "Ephemeral/isolation hardening of the self-hosted runner itself remains a separate follow-up",
+    "Greptile tip_match CLEAR not yet re-polled"
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    "ci/.github/workflows/gates.yml",
+    ".github/workflows/desk-intake.yml",
+    ".receipts/bot-05-infrastructure/infra-pr33-greptile-p1-gates-isolation-2026-09-30.json",
+    ".receipts/bot-05-infrastructure/infra-pr33-greptile-p1-gates-isolation-2026-09-30.md"
+  ],
+  "destructive": false,
+  "secrets_committed": false,
+  "p1s_addressed": [
+    "4140823500",
+    "4140823516"
+  ],
+  "p1s_deferred": [
+    "4140823531"
+  ]
+}

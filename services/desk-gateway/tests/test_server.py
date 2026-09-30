@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import secrets
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -323,3 +324,150 @@ async def test_contract_propose_will_not_write_through_a_symlink_in_the_tree(
     assert out["is_error"] is True, out
     assert out["error"] == "invalid_surface", out
     assert secret.read_text() == "original\n", "the write escaped through the symlink"
+
+
+# ---------------------------------------------------------------------------
+# desk_gates_run — the code the gates are
+#
+# The ref is a branch from any seat and the gateway runs as root, so which copy of
+# ci/gates/ runs is the whole security property. Asserted on the invocation and on
+# markers the poisoned copies would have left, not on the tool's verdict: a run that
+# failed for an unrelated reason looks the same in the verdict.
+# ---------------------------------------------------------------------------
+
+POISON = """\
+import pathlib, sys
+pathlib.Path(%r).write_text("executed")
+print("G-1 PASS — nothing was checked")
+sys.exit(0)
+"""
+
+
+def _poisoned_tree(tmp_path, repo_root):
+    """An export whose ci/gates/ would own the gateway if it were executed."""
+    tree = tmp_path / "poisoned-tree"
+    gates = tree / "ci" / "gates"
+    gates.mkdir(parents=True)
+    (tree / "ownership.yaml").write_text((repo_root / "ownership.yaml").read_text())
+    markers = {}
+    for name in ("check_ownership.py", "check_secrets.py", "check_contracts.py",
+                 "check_receipt.py", "check_rollback.py", "check_desk_integrity.py",
+                 # Not a gate: Python puts the script's own directory first on sys.path, so a
+                 # module the gates import is as good as the gates themselves.
+                 "yaml.py"):
+        markers[name] = tmp_path / f"marker-{name}"
+        (gates / name).write_text(POISON % str(markers[name]))
+    return tree, markers
+
+
+def _record_scripts(monkeypatch):
+    """Capture the bytes of every Python script the gateway execs, at exec time.
+
+    The scripts run from a scratch root that is removed when the call returns, so the check
+    has to happen while it exists. Recorded rather than intercepted: the real command still
+    runs, so this cannot pass by preventing the gates from running at all.
+    """
+    from desk_gateway import repo as repo_mod
+
+    invoked: list[tuple[str, bytes]] = []
+    real = repo_mod.run_command
+
+    async def recording(argv, **kwargs):
+        if len(argv) > 1 and argv[1].endswith(".py"):
+            invoked.append((argv[1], Path(argv[1]).read_bytes()))
+        return await real(argv, **kwargs)
+
+    monkeypatch.setattr(repo_mod, "run_command", recording)
+    return invoked
+
+
+def _assert_trusted(invoked, tree, repo_root, expected: set[str]):
+    assert {Path(p).name for p, _ in invoked} >= expected, sorted(Path(p).name for p, _ in invoked)
+    for path, body in invoked:
+        name = Path(path).name
+        assert not path.startswith(str(tree)), f"{name} was executed out of the export: {path}"
+        assert body == (repo_root / "ci" / "gates" / name).read_bytes(), \
+            f"{name} was executed, but it was not the gateway's own copy of the gate"
+
+
+async def test_gates_run_never_executes_the_gates_in_the_exported_ref(rpc, monkeypatch, tmp_path):
+    from tests.conftest import REPO
+    from desk_gateway.repo import Repo
+
+    tree, markers = _poisoned_tree(tmp_path, REPO)
+    invoked = _record_scripts(monkeypatch)
+
+    async def fake_export(self, ref):        # noqa: ARG001 — signature must match
+        return tree
+
+    monkeypatch.setattr(Repo, "export", fake_export)
+
+    out = await rpc.call("quality", "desk_gates_run", {"ref": "HEAD", "base": "HEAD", "bot": "bot-01-systems-backend"})
+    assert out["is_error"] is False, out
+
+    executed = sorted(name for name, marker in markers.items() if marker.exists())
+    assert not executed, f"the exported ref's {executed} ran as the gateway"
+    _assert_trusted(invoked, tree, REPO, {
+        "check_ownership.py", "check_secrets.py", "check_contracts.py", "check_desk_integrity.py",
+    })
+
+
+async def test_secret_scan_never_executes_the_gate_in_the_exported_ref(rpc, monkeypatch, tmp_path):
+    from tests.conftest import REPO
+    from desk_gateway.repo import Repo
+
+    tree, markers = _poisoned_tree(tmp_path, REPO)
+    invoked = _record_scripts(monkeypatch)
+
+    async def fake_export(self, ref):        # noqa: ARG001 — signature must match
+        return tree
+
+    monkeypatch.setattr(Repo, "export", fake_export)
+
+    out = await rpc.call("quality", "desk_secret_scan", {"ref": "HEAD"})
+
+    executed = sorted(name for name, marker in markers.items() if marker.exists())
+    assert not executed, f"the exported ref's {executed} ran as the gateway"
+    _assert_trusted(invoked, tree, REPO, {"check_secrets.py"})
+    # The poisoned scripts are still in the tree as data, and check_secrets scanned them.
+    assert out["files"] >= len(markers), out
+
+
+async def test_gates_run_will_not_report_ok_when_a_required_gate_never_ran(rpc):
+    """An incomplete run is not a green one.
+
+    ok is what a merge claim quotes. G-2 and G-5/G-6 read the verification receipt, which
+    only the caller can point at, so a run without one has to say so rather than report
+    every gate it did happen to run as a pass.
+    """
+    out = await rpc.call("quality", "desk_gates_run", {"ref": "HEAD", "base": "HEAD", "bot": "bot-01-systems-backend"})
+    assert out["is_error"] is False, out
+    assert out["ok"] is False, out
+    assert set(out["skipped"]) == {"G-2 receipt", "G-5/G-6 rollback"}, out["skipped"]
+    assert "never ran" in out["verdict"], out["verdict"]
+    # G-4 was never wired at all: a contract change could be claimed clear by a run that
+    # never looked at contract surfaces.
+    assert out["gates"]["G-4 contracts"]["exit_code"] == 0, out["gates"]["G-4 contracts"]
+    assert out["gates"]["G-7 desk integrity"]["exit_code"] == 0, out["gates"]["G-7 desk integrity"]
+
+
+async def test_gates_run_runs_the_receipt_gates_when_given_one(rpc):
+    """The other half: with a receipt, G-1..G-7 all run and none is skipped."""
+    out = await rpc.call("quality", "desk_gates_run", {
+        "ref": "HEAD",
+        "base": "HEAD",
+        "bot": "bot-01-systems-backend",
+        "receipt_path": ".receipts/bot-01-systems-backend/desk-v2-gateway.json",
+    })
+    assert out["skipped"] == {}, out["skipped"]
+    assert {"G-1 manifest", "G-1 ownership", "G-2 receipt", "G-3 secrets",
+            "G-4 contracts", "G-5/G-6 rollback", "G-7 desk integrity"} <= set(out["gates"]), sorted(out["gates"])
+    assert out["ok"] is (out["failed"] == []), out
+
+
+async def test_gates_run_refuses_a_receipt_path_that_escapes_the_tree(rpc):
+    out = await rpc.call("quality", "desk_gates_run", {
+        "ref": "HEAD", "bot": "bot-01-systems-backend",
+        "receipt_path": ".receipts/bot-01-systems-backend/../../../etc/passwd",
+    })
+    assert out["is_error"] is True and out["error"] == "invalid_args", out

@@ -47,6 +47,10 @@ class Settings:
     repo_dir: Path = Path("/root/src/repos/programming-desk")
     repo_remote: str = "origin"
     repo_branch: str = "main"
+    # Account the gate subprocesses are dropped to. Empty means they inherit the gateway's own
+    # (root on the VPS): the gates only ever read the export, but a gate is still a program
+    # reading attacker-supplied data, so a deployment that can spare an account should name one.
+    gate_user: str = ""
     log_level: str = "INFO"
     seat_passphrases: dict[str, str] = field(default_factory=dict)
     intake_tokens: dict[str, str] = field(default_factory=dict)
@@ -136,6 +140,7 @@ class Settings:
             repo_dir=Path(_env("DESK_REPO_DIR", "/root/src/repos/programming-desk")),
             repo_remote=_env("DESK_REPO_REMOTE", "origin"),
             repo_branch=_env("DESK_REPO_BRANCH", "main"),
+            gate_user=_env("DESK_GATE_USER"),
             log_level=_env("LOG_LEVEL", "INFO").upper(),
             seat_passphrases={k: v for k, v in passphrases.items() if v},
             intake_tokens=intake,

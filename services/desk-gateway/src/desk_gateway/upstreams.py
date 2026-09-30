@@ -6,10 +6,13 @@ writes come back the same way so a tool can fail closed. Secrets never appear in
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import os
 import re
 import shlex
+import signal
 import time
 from typing import Any
 
@@ -562,20 +565,44 @@ class AppStoreConnect:
 
 
 async def _terminate(proc: asyncio.subprocess.Process) -> None:
-    """Stop a child and reap it, so it cannot outlive the call that started it."""
-    if proc.returncode is not None:
-        return
-    try:
-        proc.kill()
-    except ProcessLookupError:          # already gone between the check and the signal
-        pass
-    try:
-        await asyncio.wait_for(proc.wait(), 5)
-    except asyncio.TimeoutError:        # unkillable child; nothing further to do here
-        pass
+    """Stop a child and reap it, so it cannot outlive the call that started it.
+
+    Signals the whole process group, because the commands here start their own children: a
+    gate runs git, and killing only the gate leaves git behind holding an index lock. TERM
+    first so git can drop that lock, then KILL. The group exists because run_command starts
+    each child in its own session.
+    """
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        if proc.returncode is not None:
+            return
+        try:
+            os.killpg(os.getpgid(proc.pid), sig)
+        except (ProcessLookupError, PermissionError, OSError):   # gone, or not ours to signal
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill() if sig == signal.SIGKILL else proc.terminate()
+        try:
+            await asyncio.wait_for(proc.wait(), 3)
+            return
+        except asyncio.TimeoutError:    # still there: fall through to KILL, then give up
+            continue
 
 
-async def run_command(argv: list[str], *, cwd: str | None = None, timeout: float = 15.0, input_text: str | None = None, max_out: int = 6000) -> dict[str, Any]:
+async def run_command(
+    argv: list[str],
+    *,
+    cwd: str | None = None,
+    timeout: float = 15.0,
+    input_text: str | None = None,
+    max_out: int = 6000,
+    run_as: tuple[int, int] | None = None,
+) -> dict[str, Any]:
+    """Run a command and return its exit code and (redacted) output.
+
+    `run_as` is a (uid, gid) the child is dropped to before exec. Dropping needs the gateway
+    to be root, so a failure to apply it is reported as a failed command rather than ignored:
+    a gate that was meant to run unprivileged must not quietly run as root instead.
+    """
+    creds: dict[str, Any] = {"user": run_as[0], "group": run_as[1], "extra_groups": []} if run_as else {}
     try:
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -583,9 +610,14 @@ async def run_command(argv: list[str], *, cwd: str | None = None, timeout: float
             stdin=asyncio.subprocess.PIPE if input_text is not None else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            start_new_session=True,  # its own process group, so a timeout can kill the tree
+            **creds,
         )
     except FileNotFoundError:
         return {"exit_code": 127, "stdout": "", "stderr": f"{argv[0]}: not found", "cmd": shlex.join(argv)}
+    except (PermissionError, OSError, ValueError) as exc:
+        detail = f" as uid {run_as[0]}" if run_as else ""
+        return {"exit_code": 126, "stdout": "", "stderr": f"{argv[0]}: could not start{detail}: {redact_text(str(exc))[:200]}", "cmd": shlex.join(argv)}
     try:
         out, err = await asyncio.wait_for(
             proc.communicate(input_text.encode() if input_text is not None else None), timeout

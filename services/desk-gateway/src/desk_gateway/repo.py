@@ -2,14 +2,20 @@
 
 Nothing here writes to the working tree of the checkout. Refs are exported into a scratch
 directory with `git archive` when a gate needs a tree; the checkout itself is never switched.
+
+An exported ref is *data*. The gates that inspect it are code, and they run as the gateway —
+so they come from the checkout the gateway was installed with, never from the tree under
+review. `trusted_gate_root()` builds the directory those gates run in.
 """
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import re
 import shutil
+import sys
 import tarfile
 import tempfile
 from io import BytesIO
@@ -36,10 +42,20 @@ class Repo:
         self.dir = Path(settings.repo_dir)
         self.remote = settings.repo_remote
         self.branch = settings.repo_branch
+        self.gate_user = settings.gate_user
 
     @property
     def available(self) -> bool:
         return (self.dir / ".git").exists() or (self.dir / "ownership.yaml").exists()
+
+    @property
+    def gates_dir(self) -> Path:
+        """The only gate implementations the gateway will execute: its own installed copy."""
+        return self.dir / "ci" / "gates"
+
+    @property
+    def gates_available(self) -> bool:
+        return self.gates_dir.is_dir() and any(self.gates_dir.glob("check_*.py"))
 
     @property
     def main_ref(self) -> str:
@@ -107,6 +123,83 @@ class Repo:
             tar.extractall(scratch, filter="data")
         return scratch
 
+    def trusted_gate_root(self, tree: Path) -> Path:
+        """A scratch checkout-shaped root that gates run in. The caller removes it.
+
+        `<root>/ci/gates/` holds a copy of the gateway's own gate scripts. Every other
+        top-level entry is a symlink to the exported tree, so a gate's defaults — which are
+        all relative to `Path(__file__).parents[2]` — read the ref under review as data while
+        the code that reads it is the gateway's.
+
+        Running `python3 ci/gates/check_x.py` inside the export instead, as this used to, ran
+        whatever that ref put there: the ref is a pull request branch from any seat, the
+        gateway runs as root, and Python also puts the script's own directory first on
+        sys.path, so a `yaml.py` dropped next to the gate was enough even without touching
+        the gate itself.
+        """
+        root = Path(tempfile.mkdtemp(prefix="desk-trusted-"))
+        self._mirror(tree, root, skip="ci")
+        ci = root / "ci"
+        ci.mkdir()
+        if (tree / "ci").is_dir():
+            self._mirror(tree / "ci", ci, skip="gates")
+        gates = ci / "gates"
+        gates.mkdir()
+        for script in sorted(self.gates_dir.glob("*.py")):
+            shutil.copyfile(script, gates / script.name)
+        self._relax_for_child(root, tree)
+        return root
+
+    def _relax_for_child(self, *paths: Path) -> None:
+        """mkdtemp is 0700; a gate dropped to another account still has to read the tree."""
+        if not self.gate_user:
+            return
+        for path in paths:
+            with contextlib.suppress(OSError):
+                path.chmod(0o755)
+
+    @staticmethod
+    def _mirror(src: Path, dst: Path, *, skip: str) -> None:
+        for child in sorted(src.iterdir()):
+            if child.name == skip:
+                continue
+            (dst / child.name).symlink_to(child, target_is_directory=child.is_dir())
+
+    def child_credentials(self) -> tuple[int, int] | None:
+        """(uid, gid) for gate children, when DESK_GATE_USER names an account.
+
+        Unset by default: dropping privileges needs the gateway to be root and the account to
+        be able to read the scratch trees, which is a deployment decision. When it is set and
+        cannot be applied, run_command reports the gate as failed rather than running it as
+        root anyway.
+        """
+        if not self.gate_user:
+            return None
+        import pwd
+
+        try:
+            entry = pwd.getpwnam(self.gate_user)
+        except KeyError:
+            return (-1, -1)  # no such account: run_command turns this into exit 126
+        return (entry.pw_uid, entry.pw_gid)
+
+    async def run_trusted_gate(self, root: Path, script: str, args: list[str], timeout: float = 60.0) -> dict[str, Any]:
+        """Run one gate from `root` (built by trusted_gate_root) with the tree passed as data."""
+        gate = root / "ci" / "gates" / script
+        if not gate.is_file():
+            return {
+                "exit_code": 126,
+                "stdout": "",
+                "stderr": f"{script} is not installed with the gateway; the gate did not run",
+                "cmd": script,
+            }
+        return await run_command(
+            [sys.executable or "python3", str(gate), *args],
+            cwd=str(root),
+            timeout=timeout,
+            run_as=self.child_credentials(),
+        )
+
     def gate_module(self, name: str) -> Any:
         path = self.dir / "ci" / "gates" / f"{name}.py"
         spec = importlib.util.spec_from_file_location(f"desk_gate_{name}", path)
@@ -125,8 +218,17 @@ class Repo:
         return yaml.safe_load(text)
 
     async def run_gate(self, script: str, args: list[str], cwd: Path | None = None, timeout: float = 60.0) -> dict[str, Any]:
-        gate = self.dir / "ci" / "gates" / script
-        return await run_command(["python3", str(gate), *args], cwd=str(cwd or self.dir), timeout=timeout)
+        """Run a gate over data the gateway itself produced (a receipt it just wrote).
+
+        The script and the working directory are both the gateway's own checkout. For a gate
+        that has to see an exported ref, use trusted_gate_root() + run_trusted_gate().
+        """
+        return await run_command(
+            [sys.executable or "python3", str(self.gates_dir / script), *args],
+            cwd=str(cwd or self.dir),
+            timeout=timeout,
+            run_as=self.child_credentials(),
+        )
 
     async def receipt_check(self, receipt: dict[str, Any], bot: str, strict: bool, receipt_path: str | None) -> dict[str, Any]:
         scratch = Path(tempfile.mkdtemp(prefix="desk-receipt-"))
@@ -135,6 +237,7 @@ class Repo:
             target = scratch / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+            self._relax_for_child(scratch, target.parent)
             results = {}
             argv = ["--receipt", str(target), "--bot", bot]
             if strict:

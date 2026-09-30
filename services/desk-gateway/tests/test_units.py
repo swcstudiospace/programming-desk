@@ -263,3 +263,49 @@ def test_settings_env_name_discovery_still_matches_config():
                      "PLAY_ACCESS_TOKEN", "ASC_PRIVATE_KEY_PATH",  # pragma: allowlist secret (env var names, no values)
                      "HINDSIGHT_API_KEY"):
         assert expected in names, f"{expected} is no longer discovered; it would leak"
+
+
+def _alive(pid: int) -> bool:
+    import os
+
+    try:
+        os.kill(pid, 0)
+    except (ProcessLookupError, PermissionError):
+        return False
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False
+    return stat.split(") ", 1)[1].split()[0] != "Z"  # a zombie has been killed, just not reaped
+
+
+async def test_run_command_kills_the_whole_tree_when_it_times_out(tmp_path: Path):
+    """A timeout has to end the command, not just stop waiting for it.
+
+    Returning exit 124 without killing left the child running with the pipes it had been
+    given: a gate that hangs cost a process and two file descriptors per call, and its own
+    children — git, above all, holding an index lock — outlived even that.
+    """
+    import asyncio
+    import os
+
+    from desk_gateway.upstreams import run_command
+
+    pidfile = tmp_path / "pids"
+    result = await run_command(
+        ["bash", "-c", f"(echo $$ >> {pidfile}; exec sleep 60) & echo $$ >> {pidfile}; sleep 60"],
+        timeout=1,
+    )
+    assert result["exit_code"] == 124 and "timed out" in result["stderr"]
+
+    pids = [int(line) for line in pidfile.read_text().split()]
+    assert len(pids) == 2, "the test's own child never started"
+    assert not _alive(pids[1]), "the command itself is still running"
+
+    for _ in range(30):                     # the grandchild is reparented; give it a moment
+        if not any(_alive(pid) for pid in pids):
+            break
+        await asyncio.sleep(0.1)
+    alive = [pid for pid in pids if _alive(pid)]
+    assert not alive, f"{len(alive)} process(es) outlived the timeout"
+    assert os.getpid() not in pids

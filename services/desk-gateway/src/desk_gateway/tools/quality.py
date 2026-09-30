@@ -17,36 +17,99 @@ from desk_gateway.upstreams import run_command
 LOCKFILES = ("package-lock.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock", "uv.lock", "poetry.lock", "Cargo.lock", "Package.resolved", "gradle.lockfile", "requirements.txt", "deno.lock")
 
 
+MERGE_GATES = ("G-1 manifest", "G-1 ownership", "G-2 receipt", "G-3 secrets", "G-4 contracts", "G-5/G-6 rollback", "G-7 desk integrity")
+
+
 async def gates_run(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Run G-1..G-7 against a ref, with the gateway's own gate scripts.
+
+    Two things this must not do. It must not execute code out of the ref — the ref is a branch
+    from any seat and the gateway runs privileged, so the gates come from the gateway's install
+    and the export goes in as --repo, --root, --manifest and file lists. And it must not report
+    ok on a partial run: a caller quoting this tool for a merge claim reads ok as "G-1..G-7
+    passed", so a gate that did not run keeps ok false and is named in `skipped`.
+    """
     repo = ctx.services.repo
     if not repo.available:
         return failure("not_configured", "repo checkout is not available to the gateway")
+    if not repo.gates_available:
+        return failure("not_configured", f"no gate scripts in {repo.gates_dir}; the gateway will not run gates out of the ref under review")
     if not (safe_ref(args["ref"]) and safe_ref(args.get("base") or "origin/main")):
         return failure("invalid_args", "ref or base is not a safe git ref")
+    receipt_path = args.get("receipt_path")
+    if receipt_path and not safe_path(receipt_path):
+        return failure("invalid_args", "receipt_path is not a safe repo-relative path")
     await repo.fetch()
     tree = await repo.export(args["ref"])
     if tree is None:
         return failure("not_found", f"ref {args['ref']} could not be exported")
+    root: Path | None = None
     try:
-        results: dict[str, Any] = {}
-        results["G-1 manifest"] = await run_command(["python3", "ci/gates/check_ownership.py", "--validate-manifest"], cwd=str(tree), timeout=60)
+        root = repo.trusted_gate_root(tree)
+        manifest = str(tree / "ownership.yaml")
         changed = await repo.diff_names(args.get("base") or repo.main_ref, args["ref"])
-        if changed:
-            results["G-1 ownership"] = await run_command(["python3", "ci/gates/check_ownership.py", "--bot", args["bot"], "--files", *changed], cwd=str(tree), timeout=60)
-            results["G-3 secrets"] = await run_command(["python3", "ci/gates/check_secrets.py", "--files", *[c for c in changed if (tree / c).is_file()]], cwd=str(tree), timeout=120)
-        if args.get("receipt_path") and (tree / args["receipt_path"]).is_file():
-            results["G-2 receipt"] = await run_command(["python3", "ci/gates/check_receipt.py", "--receipt", args["receipt_path"], "--bot", args["bot"], "--strict"], cwd=str(tree), timeout=60)
-            results["G-5/G-6 rollback"] = await run_command(["python3", "ci/gates/check_rollback.py", "--receipt", args["receipt_path"]], cwd=str(tree), timeout=60)
-        if (tree / "ci" / "gates" / "check_desk_integrity.py").is_file():
-            results["G-7 desk integrity"] = await run_command(["python3", "ci/gates/check_desk_integrity.py", "--repo", "."], cwd=str(tree), timeout=120)
+        results: dict[str, Any] = {}
+        skipped: dict[str, str] = {}
+
+        results["G-1 manifest"] = await repo.run_trusted_gate(root, "check_ownership.py", ["--validate-manifest", "--manifest", manifest])
+        # Run the per-file gates even with an empty diff: each prints its own PASS for "no
+        # files", which is a gate that ran. Skipping them left `ok` true for a run in which
+        # nothing was checked at all.
+        results["G-1 ownership"] = await repo.run_trusted_gate(root, "check_ownership.py", ["--bot", args["bot"], "--manifest", manifest, "--files", *changed])
+        results["G-3 secrets"] = await repo.run_trusted_gate(root, "check_secrets.py", ["--root", str(tree), "--files", *[c for c in changed if (tree / c).is_file()]], timeout=120)
+        results["G-4 contracts"] = await repo.run_trusted_gate(root, "check_contracts.py", ["--manifest", manifest, "--files", *changed, *_change_doc_args(root, tree, changed)])
+
+        if receipt_path and (tree / receipt_path).is_file():
+            results["G-2 receipt"] = await repo.run_trusted_gate(root, "check_receipt.py", ["--receipt", str(tree / receipt_path), "--bot", args["bot"], "--strict"])
+            results["G-5/G-6 rollback"] = await repo.run_trusted_gate(root, "check_rollback.py", ["--receipt", str(tree / receipt_path)])
+        else:
+            reason = (
+                f"receipt_path {receipt_path} is not a file on {args['ref']}" if receipt_path
+                else "no receipt_path was given; G-2 and G-5/G-6 read the verification receipt this change adds"
+            )
+            skipped["G-2 receipt"] = reason
+            skipped["G-5/G-6 rollback"] = reason
+
+        results["G-7 desk integrity"] = await repo.run_trusted_gate(root, "check_desk_integrity.py", ["--repo", str(tree)], timeout=120)
+
+        failed = sorted(name for name, r in results.items() if r["exit_code"] != 0)
+        missing = sorted(set(MERGE_GATES) - set(results))
         return {
             "ref": args["ref"],
             "changed_files": changed,
-            "ok": all(r["exit_code"] == 0 for r in results.values()),
-            "gates": {k: {"exit_code": v["exit_code"], "output": (v["stdout"] + v["stderr"])[-2500:]} for k, v in results.items()},
+            "ok": not failed and not missing,
+            "gates": {
+                k: {"exit_code": v["exit_code"], "cmd": redact_text(v["cmd"]), "output": (v["stdout"] + v["stderr"])[-2500:]}
+                for k, v in results.items()
+            },
+            "failed": failed,
+            "skipped": skipped,
+            "verdict": "G-1..G-7 all ran and passed" if not failed and not missing else _verdict(failed, missing),
         }
     finally:
+        if root is not None:
+            shutil.rmtree(root, ignore_errors=True)
         shutil.rmtree(tree, ignore_errors=True)
+
+
+def _verdict(failed: list[str], missing: list[str]) -> str:
+    parts = []
+    if failed:
+        parts.append(f"failed: {', '.join(failed)}")
+    if missing:
+        parts.append(f"never ran: {', '.join(missing)} — this run does not clear a merge claim")
+    return "; ".join(parts)
+
+
+def _change_doc_args(root: Path, tree: Path, changed: list[str]) -> list[str]:
+    """--change for the document THIS change adds, the selector ci/gates uses in the workflow.
+
+    Given through `root` rather than `tree`: G-4 compares the document against the diff by
+    resolved path, relative to the gate's own repo root, and a path that resolves elsewhere
+    makes the document look like an undeclared surface of itself.
+    """
+    doc = next((c for c in sorted(changed) if c.startswith("contracts/changes/") and c.endswith((".yaml", ".yml"))), None)
+    return ["--change", str(root / doc)] if doc and (tree / doc).is_file() else []
 
 
 async def greptile_review(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
@@ -173,19 +236,32 @@ async def secret_scan(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     repo = ctx.services.repo
     if not repo.available:
         return failure("not_configured", "repo checkout is not available to the gateway")
+    if not repo.gates_available:
+        return failure("not_configured", f"no gate scripts in {repo.gates_dir}; the gateway will not run check_secrets.py out of the ref being scanned")
     if not safe_ref(args["ref"]):
         return failure("invalid_args", "ref is not safe")
     await repo.fetch()
     tree = await repo.export(args["ref"])
     if tree is None:
         return failure("not_found", f"ref {args['ref']} could not be exported")
+    root: Path | None = None
     try:
+        root = repo.trusted_gate_root(tree)
         paths = [p for p in (args.get("paths") or []) if safe_path(p) and (tree / p).is_file()]
         if not paths:
             paths = [str(p.relative_to(tree)) for p in tree.rglob("*") if p.is_file() and ".git" not in p.parts][:2000]
-        result = await run_command(["python3", "ci/gates/check_secrets.py", "--files", *paths], cwd=str(tree), timeout=120)
-        return {"ok": result["exit_code"] == 0, "gate": "G-3", "files": len(paths), "output": result["stdout"][-3000:]}
+        result = await repo.run_trusted_gate(root, "check_secrets.py", ["--root", str(tree), "--files", *paths], timeout=120)
+        # A finding prints on stderr: returning stdout alone reported a fail with no detail.
+        return {
+            "ok": result["exit_code"] == 0,
+            "gate": "G-3",
+            "files": len(paths),
+            "cmd": redact_text(result["cmd"]),
+            "output": (result["stdout"] + result["stderr"])[-3000:],
+        }
     finally:
+        if root is not None:
+            shutil.rmtree(root, ignore_errors=True)
         shutil.rmtree(tree, ignore_errors=True)
 
 

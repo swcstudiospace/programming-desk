@@ -33,14 +33,18 @@ Do not use to skip review, waive comments without a receipt, or treat a queued t
 | Addressed in code with a follow-up commit, or explicitly waived | Allowed only with a **waiver receipt** |
 | Greptile `FAILED`, `SKIPPED`, or unavailable | Do not silently skip. Record `unverified` or a blocker. LEAD escalates. |
 
-**Waiver receipt** (under `.receipts/` or a PR comment linked from the receipt): who waived, which comment ids, why, and that QUALITY acknowledged. Waiver is reviewable. Ignoring Greptile is not.
+**Waiving requires an explicit instruction from Ove.** QUALITY records and acknowledges a waiver; it does not author one on its own judgement, and neither does LEAD or the implementing seat. "Cosmetic", "pre-existing" or "out of scope" is an argument to put to Ove, not grounds to waive.
+
+**Waiver receipt** (under `.receipts/` or a PR comment linked from the receipt): that Ove instructed it and where, which comment ids, why, that QUALITY acknowledged, what the waiver does not cover, and the head commit the review ran on. Waiver is reviewable. Ignoring Greptile is not.
+
+Greptile and G-1…G-6 are different systems with different failure modes: `docs/quality-gates.md` § *Greptile is not a gate* has the side-by-side, the merge-claim truth table, and the waiver rules.
 
 ## Checklist (QUALITY)
 
 - [ ] Review triggered for this PR number, not a different repo
 - [ ] Terminal status recorded (`COMPLETED` / `FAILED` / `SKIPPED`)
-- [ ] Every unaddressed comment either blocks or has a waiver receipt
-- [ ] G-1…G-6 still required. Greptile does not replace them
+- [ ] Every unaddressed comment either blocks or has a waiver receipt naming Ove's instruction
+- [ ] G-1…G-6 still required. Greptile does not replace them (`docs/quality-gates.md`)
 - [ ] Verdict names the PR URL and the Greptile status
 - [ ] No self-approval of QUALITY's own gate changes
 

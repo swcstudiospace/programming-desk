@@ -107,5 +107,6 @@
     "G-7 prompt checks on this branch alone: the other seats' prompt sources are still v1.0 with literal ids until their PRs land, so the full check_desk_integrity run is not green here (it is at the top of the stack)",
     "assemble-prompts.sh --check is stale on this branch by design; assembled outputs are regenerated in the final QUALITY PR",
     "Consumer acknowledgements are recorded through desk_contract_ack once the gateway is public; the change document ships with none"
-  ]
+  ],
+  "approved_by": "human:Oveshen Govender"
 }

@@ -26,6 +26,31 @@ cd "$REPO_ROOT"
 PYTHON="${PYTHON:-python3}"
 GATE="ci/gates/check_contracts.py"
 
+# Selection, in the same order the live workflow uses.
+#
+# 1. A change document among the files handed to this run. This is the definitive signal:
+#    it is the document THIS change adds, which is what .github/workflows/gates.yml selects
+#    with `git diff --name-only --diff-filter=d ... -- contracts/changes`. It also covers the
+#    archive case — moving a merged document to contracts/changes/archive/ still touches a
+#    contract surface, so the gate wants a document, and the archived copy is the right one.
+# 2. Otherwise the single active document in contracts/changes/.
+#
+# Keeping this in step with the workflow matters more than the few lines it costs: two
+# different rules for choosing a change document is the same class of bug as two workflows
+# drifting apart.
+FROM_DIFF=""
+for f in "$@"; do
+    case "$f" in
+        contracts/changes/*.yaml|contracts/changes/*.yml) FROM_DIFF="$f"; break ;;
+        contracts/changes/*/*.yaml|contracts/changes/*/*.yml) FROM_DIFF="$f"; break ;;
+    esac
+done
+
+if [[ -n "$FROM_DIFF" ]]; then
+    echo "G-4 pre-flight — using change document from this change: $FROM_DIFF"
+    exec "$PYTHON" "$GATE" --files "$@" --change "$FROM_DIFF"
+fi
+
 shopt -s nullglob
 DOCS=(contracts/changes/*.yaml)
 shopt -u nullglob
@@ -51,5 +76,5 @@ if (( ${#DOCS[@]} == 0 )); then
     exec "$PYTHON" "$GATE" --files "$@"
 fi
 
-echo "G-4 pre-flight — using change document: ${DOCS[0]}"
+echo "G-4 pre-flight — using the active change document: ${DOCS[0]}"
 exec "$PYTHON" "$GATE" --files "$@" --change "${DOCS[0]}"

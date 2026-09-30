@@ -302,6 +302,14 @@ ownership:
     owner: bot-06-quality-security
     contract_surface: true
 
+  # --- Agent tooling config (root) ---------------------------------------
+  # Project-scoped MCP server config consumed by Claude Cloud Sessions. It is remote-dev
+  # wiring, not product code, so it sits with INFRA. Secrets stay out of the file: the
+  # committed config only references ${VAR} placeholders resolved from the session
+  # environment. Placed last so no earlier directory or language glob can claim it.
+  - pattern: ".mcp.json"
+    owner: bot-05-infrastructure
+
 # ---------------------------------------------------------------------------
 # Consumers of each contract surface.
 # A breaking change to a contract requires an acknowledgement from every listed consumer

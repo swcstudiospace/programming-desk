@@ -89,9 +89,10 @@
       "output_tail": "[('androidmetavr_logcat_capture', 'write'), ('androidmetavr_screenshot', 'write'), ('androidmetavr_ui_dump', 'write'), ('androidmetavr_ui_tap', 'write')]"
     },
     {
-      "cmd": "python3 ci/gates/check_desk_integrity.py (re-run after Greptile findings 4147620213/4147620203-driven fixes)",
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
       "exit_code": 0,
-      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked"
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked",
+      "note": "Re-run after the fixes for Greptile findings 4147620213/4147620203; command is identical to index 0's and is executable as written."
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files skills/tool-packs/SKILL.md contracts/tool-packs/androidmetavr.yaml",
@@ -109,9 +110,10 @@
       "output_tail": "G-4 PASS — spe-5160-android-local-tools-v1.1.0: non-breaking, v1.0.0, 0 acknowledgement(s)"
     },
     {
-      "cmd": "python3 -m pytest ci/tests -q (re-run after the SKILL.md and androidmetavr.yaml fixes)",
+      "cmd": "python3 -m pytest ci/tests -q",
       "exit_code": 0,
-      "output_tail": "157 passed in 12.02s"
+      "output_tail": "157 passed in 12.02s",
+      "note": "Re-run after the SKILL.md and androidmetavr.yaml fixes; command is executable as written (a scratch venv with pyyaml+pytest was used, per the note on command index 9)."
     }
   ],
   "claims": [

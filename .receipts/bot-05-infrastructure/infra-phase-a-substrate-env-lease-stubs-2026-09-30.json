@@ -8,10 +8,10 @@
     "SPE-4793",
     "SPE-4792"
   ],
-  "pull_request": 36,
+  "pull_request": 38,
   "started_at": "2026-09-30T06:56:00Z",
   "completed_at": "2026-09-30T07:20:00Z",
-  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change.",
+  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -184,6 +184,54 @@
       "output_tail": "bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0  (prefix 'bot-05-infrastructure' matches the gates regex ^bot-0[0-6]-[a-z0-9-]+$)"
     },
     {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "systemd-analyze verify substrate-lease-reap.service substrate-lease-reap.timer",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "(no output — both units verify clean)"
+    },
+    {
+      "cmd": "grep -nE 'Bearer|token|TOKEN|password' infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — neither unit contains a credential, a token name or a Bearer literal)"
+    },
+    {
+      "cmd": "grep -nE '^(SUBSTRATE_MCP_URL|SUBSTRATE_LEASE_REAP_[A-Z_]+)=' infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "51:SUBSTRATE_MCP_URL=\n55:SUBSTRATE_LEASE_REAP_INTERVAL_SEC=\n57:SUBSTRATE_LEASE_REAP_TIMEOUT_SEC=\n62:SUBSTRATE_LEASE_REAP_CURL_CONFIG=\n63:SUBSTRATE_LEASE_REAP_REQUEST="
+    },
+    {
+      "cmd": "grep -nE '^[A-Z_]+=.+' infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — every value in the heartbeat env example is still empty, names only)"
+    },
+    {
+      "cmd": "grep -nE '^(OnUnitActiveSec|OnBootSec|Persistent)=' infra/lease-heartbeat/substrate-lease-reap.timer",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "24:OnBootSec=60\n27:OnUnitActiveSec=45\n35:Persistent=false"
+    },
+    {
+      "cmd": "python3 -c 'parse the ```json block in LEASE-HEARTBEAT.md as the documented coord_reap_leases request body'",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "parsed: {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"coord_reap_leases\",\"arguments\":{}}} | tool: coord_reap_leases | args: {}"
+    },
+    {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json --bot bot-05-infrastructure --strict",
       "exit_code": 1,
       "duration_s": 0.2,
@@ -310,8 +358,42 @@
       "evidence_command_index": 27
     },
     {
+      "claim": "The two new sweeper units and the docs they change stay inside bot-05-infrastructure ownership.",
+      "evidence_command_index": 28
+    },
+    {
+      "claim": "G-3 finds no secret in the sweeper units or the updated env example.",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Both sweeper units verify clean under systemd-analyze, so the ExecStart line continuations and Timer stanza parse as systemd intends.",
+      "evidence_command_index": 30
+    },
+    {
+      "claim": "Neither sweeper unit contains a credential, a token name or a Bearer literal: the bearer is reached through a root-only curl config file named by SUBSTRATE_LEASE_REAP_CURL_CONFIG, so it never reaches a command line visible in ps or systemctl show.",
+      "evidence_command_index": 31,
+      "expects_failure": true
+    },
+    {
+      "claim": "All five sweeper env names are present: SUBSTRATE_MCP_URL, SUBSTRATE_LEASE_REAP_INTERVAL_SEC, SUBSTRATE_LEASE_REAP_TIMEOUT_SEC, SUBSTRATE_LEASE_REAP_CURL_CONFIG, SUBSTRATE_LEASE_REAP_REQUEST.",
+      "evidence_command_index": 32
+    },
+    {
+      "claim": "The heartbeat env example remains names-only after the addition — every value is still empty.",
+      "evidence_command_index": 33,
+      "expects_failure": true
+    },
+    {
+      "claim": "The sweeper timer carries the documented 45s default, within the sanctioned 30-60s band, and is deliberately not Persistent.",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "The coord_reap_leases request body documented in LEASE-HEARTBEAT.md parses as JSON and names the tool with no arguments.",
+      "evidence_command_index": 35
+    },
+    {
       "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
-      "evidence_command_index": 28,
+      "evidence_command_index": 36,
       "expects_failure": true
     }
   ],
@@ -324,7 +406,9 @@
     "LEASE_TTL_S and LEASE_INTERVAL_S values, and the renew subcommand's exit-code contract, are open on SYSTEMS (DRIFT-SCAN.md §5, LEASE-HEARTBEAT.md §5)",
     "approved_by stays null until QUALITY reviews; G-2 fails closed on that field by design",
     "The cadence invariant now includes the jitter term (INTERVAL + JITTER <= TTL/3) and all three unit literals are generated at install time — but no installer exists yet to enforce it, so the guarantee is documented, not executed",
-    "Quality Gates has not yet been observed passing on the renamed bot-05-infrastructure/* branch — the rename satisfies the acting-bot regex locally, but only a CI run proves the remaining gates green"
+    "Quality Gates has not yet been observed passing on the renamed bot-05-infrastructure/* branch — the rename satisfies the acting-bot regex locally, but only a CI run proves the remaining gates green",
+    "The sweeper is not installed and has never been run against a live substrate-mcp: coord_reap_leases has not been called, so neither the tool name, its argument shape, nor its response on a sweep with nothing to reap is confirmed (LEASE-HEARTBEAT.md §5 asks SYSTEMS for all three)",
+    "systemd-analyze verify parses the sweeper units but does not execute them; the ${...} expansions in ExecStart are unresolved because no EnvironmentFile exists on this host"
   ],
   "files_changed": [
     "infra/substrate/SUBSTRATE-ENV.md",
@@ -337,7 +421,9 @@
     "infra/lease-heartbeat/desk-lease-heartbeat.timer",
     "infra/lease-heartbeat/drift-probe.sh",
     ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json",
-    ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.md"
+    ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.md",
+    "infra/lease-heartbeat/substrate-lease-reap.service",
+    "infra/lease-heartbeat/substrate-lease-reap.timer"
   ],
   "destructive": false,
   "deployment": null,

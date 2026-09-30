@@ -40,6 +40,8 @@ and it is why the cadence invariant in §3 is not a tuning preference.
 |---|---|
 | `desk-lease-heartbeat.service` | `Type=oneshot` renewal unit. **Stub**: `ExecStart` names a SYSTEMS entrypoint that does not exist yet |
 | `desk-lease-heartbeat.timer` | `OnUnitActiveSec` timer driving the service. The literal interval is a placeholder, generated from `LEASE_INTERVAL_S` at install time |
+| `substrate-lease-reap.service` | `Type=oneshot` **sweeper**: one call to the SYSTEMS-owned `coord_reap_leases` tool on the local substrate-mcp. **Stub** — see §6 |
+| `substrate-lease-reap.timer` | Drives the sweeper. Default 45s, permitted 30–60s |
 | `lease-heartbeat.env.example` | Every variable the unit reads, names only, all values empty |
 | `drift-probe.sh` | Runnable, read-only, credential-free reachability + git-tip probe |
 | `DRIFT-SCAN.md` | What INFRA feeds `coord.drift_scan(repo)` and what it refuses to assert |
@@ -139,6 +141,92 @@ What INFRA needs back, and is blocked on before this can be installed:
 
 - The `services/desk-lease-heartbeat` entrypoint and its `renew` subcommand's exit-code contract
   (which exit codes mean "retry next tick" versus "lease lost, stop claiming it").
-- Values for `LEASE_TTL_S` and `LEASE_INTERVAL_S`.
+- Values for `LEASE_TTL_S`, `LEASE_INTERVAL_S` and `LEASE_JITTER_S`.
 - Whether a lost lease should leave the timer running (INFRA's assumption: yes — it keeps trying
   and reports; stopping the timer means a recovered host never re-announces itself).
+
+For the §6 sweeper specifically:
+
+- Confirmation of the tool name `coord_reap_leases` and that it takes no arguments, plus whether a
+  sweep with nothing to reap returns 2xx (INFRA's assumption: yes — `--fail-with-body` makes any
+  non-2xx a unit failure, so a "nothing to do" that answered 4xx would page on every quiet tick).
+- Whether a CLI entrypoint for it is coming; if so `ExecStart` becomes that command and both
+  installer-written files in §6 disappear.
+- The substrate bearer for this unit, minted separately from the heartbeat's and the gateway's.
+
+## 6. The lease sweeper — `substrate-lease-reap.{service,timer}`
+
+**Renewal keeps a lease alive; reaping releases one whose holder stopped renewing.** The heartbeat
+above is the first half. This is the second: a periodic call to the SYSTEMS-owned
+`coord_reap_leases` tool on the local `substrate-mcp`, so an expired lease is actually released
+rather than merely being past its TTL.
+
+> **On-demand reaping is retained and stays SYSTEMS'.** The MCP tool is the primary path: whatever
+> asks for a claim reaps first, and under normal load nothing here ever has work to do. **This
+> timer is a sweeper for quiet load** — the case where no seat calls the tool for a while and an
+> expired lease would sit unreleased until someone happened to want it. It is a backstop, not a
+> replacement, and it must never become the thing the system relies on.
+
+**INFRA schedules the call; it does not implement the reap.** Which lease is expired, and the
+compare-and-set that releases it, live behind that tool next to the claim schema — §1's rule, for
+§1's reason. A sweeper that decided expiry for itself would be the second implementation of claim
+CAS, which is how one ticket ends up claimed twice.
+
+One sweeper **per host**, not per seat: the tool reaps every expired lease in one call, so seven
+copies would be six identical no-ops.
+
+### Cadence
+
+Default **45s**, permitted **30–60s**, from `SUBSTRATE_LEASE_REAP_INTERVAL_SEC`. Unlike the
+heartbeat's interval this is **not** bound to `LEASE_TTL_S`: the sweeper renews nothing, so a
+missed tick delays a release rather than losing a lease. Past 60s an expired lease can sit long
+enough that a seat waiting on the claim notices, which is the delay the sweeper exists to prevent.
+
+### The two files the installer writes, and why they are files
+
+`ExecStart` carries **no secret**, and neither does any `Environment=` line. A bearer on a command
+line is visible in `ps` and in `systemctl show` to every local user, so it goes in a file that only
+root can read:
+
+`/etc/desk-lease-heartbeat/reap.curlrc` — `root:root 0600`, named by
+`SUBSTRATE_LEASE_REAP_CURL_CONFIG`:
+
+```
+# value filled by the installer from the substrate bearer minted for this unit; never committed
+header = "Authorization: Bearer <token>"
+```
+
+`/etc/desk-lease-heartbeat/reap-request.json` — the JSON-RPC body, named by
+`SUBSTRATE_LEASE_REAP_REQUEST`. It holds no credential, so it is an ordinary `0644` file:
+
+```json
+{"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+ "params": {"name": "coord_reap_leases", "arguments": {}}}
+```
+
+It is a file rather than an inline `--data` argument for a duller reason too: systemd treats `%`
+specially in `ExecStart` and does no shell quoting, so inline JSON is a quoting trap that only
+shows up the first time an argument grows.
+
+If SYSTEMS ships a CLI entrypoint for the tool, `ExecStart` becomes that command and both files go
+away. The curl form is the documented equivalent, not a preference.
+
+### Env names (names only, as everywhere)
+
+`SUBSTRATE_MCP_URL` (loopback — `http://127.0.0.1:7410/mcp`; never a tailnet or public host, since
+a sweeper able to reach another host's substrate is a sweeper able to reap another desk),
+`SUBSTRATE_LEASE_REAP_INTERVAL_SEC`, `SUBSTRATE_LEASE_REAP_TIMEOUT_SEC`,
+`SUBSTRATE_LEASE_REAP_CURL_CONFIG`, `SUBSTRATE_LEASE_REAP_REQUEST`.
+
+The `_SEC` suffix matches the SPE-4792 ticket's spelling while the heartbeat above uses `_S`. Same
+unit, two spellings, both deliberate — neither is a typo to fix in place.
+
+### Install (same standing as §4: not yet)
+
+`substrate-lease-reap` depends only on the `coord_reap_leases` tool existing on the local
+substrate, so it can be installed **before** the heartbeat's `services/**` entrypoint lands. It
+still is not installed here, and the same installer rules apply: write the env file once at
+`0600`, generate `OnUnitActiveSec` from `SUBSTRATE_LEASE_REAP_INTERVAL_SEC` and `TimeoutStartSec`
+from `SUBSTRATE_LEASE_REAP_TIMEOUT_SEC`, refuse an interval outside 30–60, `systemctl enable --now`
+the **timer**, and put the manual tick's exit code in the receipt.
+

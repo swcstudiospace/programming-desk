@@ -1,7 +1,7 @@
 # INFRA — Phase A half: substrate env placement + lease/drift install stubs
 
 - **Run:** `20260930T065532Z-29e26e2b` · **Tickets:** SPE-4789, SPE-4793 (env placement, docs), SPE-4792 (lease heartbeat / drift_scan support)
-- **Branch:** `bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0` (renamed from `claude/*` so G-1 can attribute the change) · **PR:** #36 (draft, hold)
+- **Branch:** `bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0` (renamed from `claude/*` so G-1 can attribute the change) · **PR:** #38 (draft, hold) — supersedes #36, closed by the head-branch rename
 - **Approved by:** *null until QUALITY*
 - **Status:** docs and stubs. **Nothing installed, nothing restarted, no live env file edited.**
 
@@ -65,6 +65,27 @@ with exit 0. New fields: `remote_checked` on the tip probe, `targets_unattempted
 **The same defect existed in the reachability probe and Greptile had not flagged it** — a probe
 that could not start reported `"reachable": false` for every target, turning one typo in the env
 file into "the whole substrate is down". Fixed in the same pass.
+
+## Fourth tip — lease sweeper unit sketch (LEAD GO)
+
+`substrate-lease-reap.service` (oneshot) + `.timer`: one periodic call to the SYSTEMS-owned
+`coord_reap_leases` tool on the loopback `substrate-mcp`, so a dead holder's lease is still
+released on a quiet desk. Default **45s**, sanctioned band **30–60s**.
+
+**On-demand reaping through the MCP tool is retained and stays SYSTEMS'** — the timer is a sweeper
+for quiet load, a backstop and not the path the system relies on. INFRA schedules the call and
+does not implement the reap: expiry and the compare-and-set that releases a lease stay behind the
+tool, next to the claim schema, for the §1 reason.
+
+**No secret in either unit.** The bearer lives in a `root:root 0600` curl config file named by
+`SUBSTRATE_LEASE_REAP_CURL_CONFIG`, never on a command line — a command line is readable in `ps`
+and `systemctl show` by any local user. Env names added (values empty, as everywhere):
+`SUBSTRATE_MCP_URL`, `SUBSTRATE_LEASE_REAP_INTERVAL_SEC`, `SUBSTRATE_LEASE_REAP_TIMEOUT_SEC`,
+`SUBSTRATE_LEASE_REAP_CURL_CONFIG`, `SUBSTRATE_LEASE_REAP_REQUEST`.
+
+Both units verify clean under `systemd-analyze`. Still not installed, and `coord_reap_leases` has
+never been called — the tool name, its argument shape and its response when there is nothing to
+reap are all open questions for SYSTEMS (§5).
 
 ## For QUALITY / LEAD
 

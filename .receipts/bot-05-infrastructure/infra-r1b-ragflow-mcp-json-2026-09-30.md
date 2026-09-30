@@ -9,6 +9,6 @@ Add `ragflow` HTTP MCP server to `.mcp.json` with `${RAGFLOW_MCP_API_KEY}`.
 Self-hosted Actions runner migration lives only on draft PR #32.
 
 ## QUALITY
-`approved_by` deliberately absent until QUALITY stamps.
+`approved_by: bot-06-quality-security` — CLEAR_WITH_WAIVERS Path B tip stamp (LEAD ticket 2026-09-30, base tip 89ef894). Prefer Ove merge after #32.
 
 No secrets committed.

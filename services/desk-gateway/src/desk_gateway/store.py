@@ -160,20 +160,33 @@ class Store:
         asks LEAD to call again, and only a record written before the post tells that second
         call a comment may already exist. Keyed per ack rather than per intake, so a later
         ack on the same intake is its own delivery.
+
+        `attempted` keeps `first_at` from the first attempt for this ack, because that is the
+        moment a recovery lookup has to search from — refreshing it on every attempt would
+        move the window past the comment it is looking for. A state that means nothing was
+        sent drops it, so the next attempt is a first attempt again rather than inheriting a
+        search window for a post that never happened.
         """
         with self._lock:
             queue = self._read("intake", [])
             for record in queue:
                 if record["intake_id"] == intake_id:
                     deliveries = record.get("ack_deliveries") or {}
-                    deliveries[key] = {"state": state, "at": _now()}
+                    entry = deliveries.get(key) or {}
+                    now = _now()
+                    if state == "attempted":
+                        deliveries[key] = {"state": state, "at": now, "first_at": entry.get("first_at") or now}
+                    elif state == "delivered":
+                        deliveries[key] = {**entry, "state": state, "at": now}
+                    else:
+                        deliveries[key] = {"state": state, "at": now}
                     record["ack_deliveries"] = deliveries
                     self._write("intake", queue)
                     return record
             return None
 
-    def intake_delivery_state(self, record: dict[str, Any], key: str) -> str | None:
-        return ((record.get("ack_deliveries") or {}).get(key) or {}).get("state")
+    def intake_delivery_get(self, record: dict[str, Any], key: str) -> dict[str, Any]:
+        return ((record.get("ack_deliveries") or {}).get(key) or {})
 
     def intake_ack(self, intake_id: str, ack: dict[str, Any]) -> dict[str, Any] | None:
         with self._lock:

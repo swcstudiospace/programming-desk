@@ -43,9 +43,39 @@ environment. `_find_service` returns that environment's deployment, so `railway_
 chosen environment is `not_found` naming it, not a silent read of another environment;
 `deployment_id` passed explicitly still reads whatever it names.
 
+## Greptile P1s on the first commit
+
+Three P1s were raised against the ack fix above, all valid, all fixed in the second commit:
+
+- **4141224505 — long threads blocked recovery.** GitHub lists issue comments oldest-first and
+  will not reverse them, so a lookup starting at the beginning spent its whole page budget on
+  the oldest comments and never reached the reply. That stranded the intake: every retry read
+  unknown, refused to post, and never advanced. The lookup now carries a `since` window
+  anchored a day before the first attempt for that ack, so the thread's length stops mattering.
+  `Store.intake_delivery` keeps `first_at` across attempts for exactly this reason, and drops it
+  for a state meaning nothing was sent.
+- **4141224477 — concurrent acks could both post.** The delivery record was read before the
+  post and written after it, so two calls for the same reply could both read a pre-post state —
+  the second one's lookup finding nothing precisely because the first one's comment had not
+  landed yet. Acks are now serialised per intake+ack and the record is re-read inside that lock.
+- **4141224494 — an unknown outcome advanced the intake.** With an attempt recorded and the
+  GitHub token gone, the lookup could not say whether the reply landed, and the code still let
+  the intake advance — marking it acknowledged on the chance that it had. Any lookup that
+  cannot answer, unconfigured included, now fails closed with `notify_unknown`.
+
 ## Verification
 
-`uv run pytest -q` in `services/desk-gateway`: **96 passed**, exit 0.
+`uv run pytest -q` in `services/desk-gateway`: **99 passed**, exit 0.
+
+Each P1 fix has its own negative control: dropping the `since` window strands the intake at
+`notify_unknown`; removing the per-ack lock posts two identical comments; restoring the
+`not_configured` early return advances the intake on an unreadable outcome.
+
+The GitHub fake is wired under `HttpUpstream.request` rather than over `GitHub`'s methods, so
+the real `comment_on_issue` and `find_issue_comment` run and the paging and `since` window are
+exercised rather than assumed.
+
+Earlier round, first commit only: `uv run pytest -q` → 96 passed, exit 0.
 
 Both fixes have negative controls: reverting `tools/lead.py` and `tools/infra.py` to `dcac9c0`
 and re-running the new tests fails with `the retry posted the reply a second time` and

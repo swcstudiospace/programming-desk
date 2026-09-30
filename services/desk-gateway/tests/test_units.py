@@ -130,15 +130,28 @@ def test_store_records_ack_delivery_separately_from_the_advance(tmp_path: Path):
     created = store.intake_create({"origin": "github", "title": "t", "ask": "do the thing"})
     intake_id = created["intake_id"]
 
-    assert store.intake_delivery_state(created, "accepted:abc") is None
+    assert store.intake_delivery_get(created, "accepted:abc") == {}
     store.intake_delivery(intake_id, "accepted:abc", "attempted")
-    assert store.intake_delivery_state(store.intake_get(intake_id), "accepted:abc") == "attempted"
-    store.intake_delivery(intake_id, "accepted:abc", "delivered")
+    first = store.intake_delivery_get(store.intake_get(intake_id), "accepted:abc")
+    assert first["state"] == "attempted" and first["first_at"] == first["at"]
 
+    # A second attempt keeps first_at: it is the moment a recovery lookup searches from, and
+    # moving it forward would move the window past the comment it is looking for.
+    store.intake_delivery(intake_id, "accepted:abc", "attempted")
+    second = store.intake_delivery_get(store.intake_get(intake_id), "accepted:abc")
+    assert second["first_at"] == first["first_at"]
+
+    store.intake_delivery(intake_id, "accepted:abc", "delivered")
     reread = store.intake_get(intake_id)
-    assert store.intake_delivery_state(reread, "accepted:abc") == "delivered"
-    assert store.intake_delivery_state(reread, "done:xyz") is None
+    assert store.intake_delivery_get(reread, "accepted:abc")["state"] == "delivered"
+    assert store.intake_delivery_get(reread, "done:xyz") == {}
     assert store.intake_delivery("in-nosuchintake", "accepted:abc", "attempted") is None
+
+    # Nothing was sent, so the next attempt is a first attempt again rather than inheriting a
+    # search window for a post that never happened.
+    store.intake_delivery(intake_id, "done:xyz", "attempted")
+    store.intake_delivery(intake_id, "done:xyz", "unconfigured")
+    assert "first_at" not in store.intake_delivery_get(store.intake_get(intake_id), "done:xyz")
 
 
 def test_store_intake_idempotency_is_scoped_by_origin(tmp_path: Path):

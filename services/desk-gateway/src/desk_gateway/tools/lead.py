@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import hashlib
 import json
 import re
+from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any
 
 from desk_gateway.config import SEAT_LABEL, SEATS
@@ -12,6 +16,13 @@ from desk_gateway.tools import ToolContext, failure
 from desk_gateway.upstreams import NOT_CONFIGURED
 
 GITHUB_ISSUE = re.compile(r"^https://github\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/issues/(\d+)$")
+
+# How far before the first attempt a recovery lookup starts reading; see _lookup_since.
+ACK_LOOKUP_SKEW_SEC = 86400.0
+
+# One lock per intake+ack, with a use count so the entries do not outlive their acks.
+_ACK_LOCKS: dict[str, asyncio.Lock] = {}
+_ACK_LOCK_USERS: dict[str, int] = {}
 
 
 async def intake_next(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
@@ -80,67 +91,127 @@ async def _reply_once(
       write itself fails, nothing was posted and there is nothing to duplicate.
     * `attempted` — an earlier call posted, or died trying, and the issue is the record of
       which. Found means it was delivered; genuinely absent means the post never landed and
-      may go out again. Unknown — a lookup that errored, or a thread longer than the page
-      budget — must not post, because an unknown is exactly the case that double-posts.
+      may go out again. Unknown — a lookup that errored, one that could not read far enough,
+      or a gateway with no GitHub token left to ask with — must neither post nor advance: the
+      reply may be on the issue, which makes posting a duplicate, and it may not be, which
+      makes advancing a claim that a requester was told something nobody told them.
     * `delivered` — skip the post; the caller still finishes the advance.
 
     Keyed on the ack's content, so a retry of the same ack is suppressed while a deliberately
     different ack (a later status, a new message) is a new reply.
+
+    All of it runs under a per-ack lock, and the record is re-read inside that lock. Two acks
+    for the same reply in flight together would otherwise both read a state from before either
+    had posted — the second one's lookup finding nothing because the first one's comment had
+    not landed yet — and both would post. The lock is process-local, which is the same scope
+    the store's own writes are serialised in.
     """
     link, repo, number = callback
     key, marker = _delivery_marker(args)
-    prior = svc.store.intake_delivery_state(record, key)
+    intake_id = record["intake_id"]
 
-    if prior == "delivered":
-        return {"delivered": True, "reason": "the reply for this ack was already posted",
-                "target": link, "posted": False}, None
+    async with _ack_lock(f"{intake_id}:{key}"):
+        # Re-read: a concurrent ack for this same reply may have posted it while this call
+        # waited for the lock, and the record read before the lock would not say so.
+        current = svc.store.intake_get(intake_id) or record
+        entry = svc.store.intake_delivery_get(current, key)
+        prior = entry.get("state")
 
-    if prior == "attempted":
-        seen = await svc.github.find_issue_comment(repo, number, marker)
-        if seen.get("found"):
-            svc.store.intake_delivery(record["intake_id"], key, "delivered")
-            return {"delivered": True, "reason": "an earlier call already posted this reply",
+        if prior == "delivered":
+            return {"delivered": True, "reason": "the reply for this ack was already posted",
                     "target": link, "posted": False}, None
-        if seen.get("error") == NOT_CONFIGURED:
-            return {"delivered": False, "reason": seen.get("reason"), "target": link,
-                    "error": NOT_CONFIGURED, "posted": False}, None
-        if seen.get("error") or not seen.get("complete"):
-            reason = seen.get("reason") or f"the thread on {link} is longer than this check reads"
-            notify = {"delivered": False, "reason": reason, "target": link,
-                      "error": seen.get("error"), "posted": False}
-            return notify, failure(
-                "notify_unknown",
-                f"an earlier desk_intake_ack posted, or tried to post, the reply to {link}, and "
-                f"whether it landed cannot be read back: {reason}. Posting again could duplicate "
-                f"it, so intake {args['intake_id']} stays {record.get('state')} rather than "
-                f"{args['status']}; check {link} and ack again once GitHub can be read.",
-                intake=record,
-                notify=notify,
-            )
-    else:
-        svc.store.intake_delivery(record["intake_id"], key, "attempted")
 
-    result = await svc.github.comment_on_issue(repo, number, _ack_comment(args, marker))
-    notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
-              "target": link, "error": result.get("error"), "posted": bool(result.get("ok"))}
-    if notify["delivered"]:
-        svc.store.intake_delivery(record["intake_id"], key, "delivered")
-        return notify, None
-    if notify.get("error") == NOT_CONFIGURED:
-        # Nothing was sent and nothing can be, so the attempt marker would be a lie that costs
-        # a later ack a pointless lookup. Neither branch above matches this state, so an ack
-        # on a gateway that has since been given a token starts over and posts.
-        svc.store.intake_delivery(record["intake_id"], key, "unconfigured")
-        return notify, None
-    return notify, failure(
-        "notify_failed",
-        f"the reply to {link} was not posted: "
-        f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
-        f"The requester has not been told, so intake {args['intake_id']} stays "
-        f"{record.get('state')} rather than {args['status']}; call desk_intake_ack again.",
-        intake=record,
-        notify=notify,
-    )
+        if prior == "attempted":
+            seen = await svc.github.find_issue_comment(
+                repo, number, marker, since=_lookup_since(entry.get("first_at"))
+            )
+            if seen.get("found"):
+                svc.store.intake_delivery(intake_id, key, "delivered")
+                return {"delivered": True, "reason": "an earlier call already posted this reply",
+                        "target": link, "posted": False}, None
+            if seen.get("error") or not seen.get("complete"):
+                reason = seen.get("reason") or f"the thread on {link} could not be read far enough"
+                notify = {"delivered": False, "reason": reason, "target": link,
+                          "error": seen.get("error"), "posted": False}
+                return notify, failure(
+                    "notify_unknown",
+                    f"an earlier desk_intake_ack posted, or tried to post, the reply to {link}, and "
+                    f"whether it landed cannot be read back: {reason}. Posting again could duplicate "
+                    f"it and advancing could claim a reply nobody received, so intake {intake_id} "
+                    f"stays {current.get('state')} rather than {args['status']}; check {link} and "
+                    "ack again once GitHub can be read.",
+                    intake=current,
+                    notify=notify,
+                )
+        else:
+            svc.store.intake_delivery(intake_id, key, "attempted")
+
+        result = await svc.github.comment_on_issue(repo, number, _ack_comment(args, marker))
+        notify = {"delivered": bool(result.get("ok")), "reason": result.get("reason"),
+                  "target": link, "error": result.get("error"), "posted": bool(result.get("ok"))}
+        if notify["delivered"]:
+            svc.store.intake_delivery(intake_id, key, "delivered")
+            return notify, None
+        if notify.get("error") == NOT_CONFIGURED:
+            # Nothing was sent and nothing can be, so an attempt marker would be a lie: it
+            # would send a later ack looking for a comment that was never written, and strand
+            # the intake if that lookup could not answer. Neither branch above matches this
+            # state, so an ack on a gateway that has since been given a token starts over.
+            svc.store.intake_delivery(intake_id, key, "unconfigured")
+            return notify, None
+        return notify, failure(
+            "notify_failed",
+            f"the reply to {link} was not posted: "
+            f"{notify.get('reason') or notify.get('error') or 'unknown error'}. "
+            f"The requester has not been told, so intake {intake_id} stays "
+            f"{current.get('state')} rather than {args['status']}; call desk_intake_ack again.",
+            intake=current,
+            notify=notify,
+        )
+
+
+@contextlib.asynccontextmanager
+async def _ack_lock(lock_key: str) -> AsyncIterator[None]:
+    """Serialise the acks that would post the same reply, and only those.
+
+    One lock per intake+ack rather than one for the tool: acks for different intakes have
+    nothing to say to each other, and holding a single lock across a GitHub round trip would
+    queue all of them behind the slowest. Entries are dropped once nobody holds or wants one,
+    so a long-lived gateway does not accumulate a lock per ack it has ever answered.
+
+    Process-local, which is the same scope Store serialises its own writes in — a second
+    gateway process sharing the data directory is outside what either guards, and there the
+    durable marker and the lookup against the issue are what stand between a retry and a
+    duplicate.
+    """
+    lock = _ACK_LOCKS.setdefault(lock_key, asyncio.Lock())
+    _ACK_LOCK_USERS[lock_key] = _ACK_LOCK_USERS.get(lock_key, 0) + 1
+    try:
+        async with lock:
+            yield
+    finally:
+        _ACK_LOCK_USERS[lock_key] -= 1
+        if _ACK_LOCK_USERS[lock_key] <= 0:
+            _ACK_LOCK_USERS.pop(lock_key, None)
+            _ACK_LOCKS.pop(lock_key, None)
+
+
+def _lookup_since(first_at: float | None) -> str | None:
+    """The `since` window for a recovery lookup: shortly before the first attempt for this ack.
+
+    Without one, the lookup reads the thread from its oldest comment and gives up after a
+    bounded number of pages, so on a thread already longer than that budget it could never
+    reach the reply it is looking for — and a reply that cannot be found is treated as
+    unknown, which strands the intake with no way to recover by asking again.
+
+    Widened by a day because `since` is compared against GitHub's clock rather than this
+    gateway's: a window that started even slightly too late would miss the comment and read
+    as proof it was never posted, which is the one mistake here that duplicates a reply.
+    """
+    if not first_at:
+        return None
+    moment = datetime.fromtimestamp(float(first_at) - ACK_LOOKUP_SKEW_SEC, tz=timezone.utc)
+    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _delivery_marker(args: dict[str, Any]) -> tuple[str, str]:

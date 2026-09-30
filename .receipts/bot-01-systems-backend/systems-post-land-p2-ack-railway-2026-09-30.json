@@ -5,15 +5,15 @@
   "pull_request": null,
   "started_at": "2026-09-30T05:40:00Z",
   "completed_at": "2026-09-30T06:35:00Z",
-  "summary": "Post-land P2s in services/desk-gateway, on main @ dcac9c0. desk_intake_ack delivers the origin reply at most once per ack: a write-ahead delivery marker in the intake record plus the same marker embedded in the comment body, so a store failure after a successful comment cannot buy a second comment on the retry (4141126604). desk_railway_status scopes latest_deployment to one environment — production when the project has one, else the single/first listed — names that environment, and _find_service returns that environment's deployment so railway_logs and the railway_redeploy staleness check both act on the environment they report (4141126611).",
+  "summary": "Post-land P2s in services/desk-gateway, on main @ dcac9c0. desk_intake_ack delivers the origin reply at most once per ack: a write-ahead delivery marker in the intake record plus the same marker embedded in the comment body, so a store failure after a successful comment cannot buy a second comment on the retry (4141126604). desk_railway_status scopes latest_deployment to one environment — production when the project has one, else the single/first listed — names that environment, and _find_service returns that environment's deployment so railway_logs and the railway_redeploy staleness check both act on the environment they report (4141126611). Second commit answers the three Greptile P1s on the first: the recovery lookup carries a `since` window anchored to the first attempt so a thread longer than the page budget cannot strand the intake (4141224505); acks for the same reply are serialised per ack and re-read the record inside that lock, so two calls in flight together cannot both post (4141224477); and a lookup that cannot answer, an unconfigured gateway included, now refuses to advance rather than marking an intake acknowledged on the chance the reply landed (4141224494).",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
     {
-      "cmd": "uv run pytest -q  (services/desk-gateway)",
+      "cmd": "uv run pytest -q  (services/desk-gateway, after the Greptile P1 fixes)",
       "exit_code": 0,
-      "duration_s": 11.4,
-      "output_tail": "96 passed in 11.42s"
+      "duration_s": 12.7,
+      "output_tail": "99 passed in 12.68s"
     },
     {
       "cmd": "negative control: git checkout dcac9c0 -- tools/lead.py tools/infra.py, then uv run pytest -q -k \"does_not_repost or reads_the_issue or unreadable_issue or different_ack\"",
@@ -44,6 +44,30 @@
       "exit_code": 0,
       "duration_s": 10.6,
       "output_tail": "157 passed in 10.55s"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224505): drop the `since` window from the recovery lookup, then uv run pytest -q -k longer_than_the_page_budget",
+      "exit_code": 1,
+      "duration_s": 1.3,
+      "output_tail": "E AssertionError: the reply is on the issue, but the lookup could not read far enough to see it, so the intake is stranded — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224477): remove the per-ack lock and the re-read it protects, then uv run pytest -q -k concurrent_intake_acks",
+      "exit_code": 1,
+      "duration_s": 1.4,
+      "output_tail": "E AssertionError: both calls posted: [...two identical ack comments...] assert 2 == 1 — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224494): restore the not_configured early return in the lookup path, then uv run pytest -q -k no_token",
+      "exit_code": 1,
+      "duration_s": 1.1,
+      "output_tail": "E AssertionError: {'is_error': False, 'ok': True, ... 'error': 'not_configured'} assert (False is True) — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main  &&  python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "G-4 PASS — no contract surfaces touched / G-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
     }
   ],
   "claims": [
@@ -64,8 +88,25 @@
       "evidence_command_index": 0
     },
     {
-      "claim": "Store.intake_delivery is a write of its own, keyed per ack, and returns None for an unknown intake_id; the delivery state survives being re-read from disk",
+      "claim": "Store.intake_delivery is a write of its own, keyed per ack, and returns None for an unknown intake_id; the delivery state survives being re-read from disk. An `attempted` write keeps first_at from the first attempt, and a state meaning nothing was sent drops it so the next attempt is a first attempt again",
       "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224505: the recovery lookup carries a `since` window anchored a day before the first attempt, so on an issue seeded with 600 older comments — past the lookup's 5x100 page budget — the retry still finds its marker on the first page and does not repost. Asserted on the query parameters the real GitHub.find_issue_comment sent",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224477: two desk_intake_ack calls for the same ack issued concurrently, with the POST held open 200ms to force the overlap, post exactly one comment; one reports posted:true and the other posted:false, and both report delivered:true",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224494: with an attempt recorded and the GitHub token then gone, the ack returns notify_unknown with notify.error not_configured, posts nothing, and leaves the intake claimed rather than advancing it. The carve-out for a reply that was never attempted on an unconfigured gateway is unchanged",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Each of the three P1 fixes has its own negative control: removing the `since` window strands the intake at notify_unknown, removing the per-ack lock posts two identical comments, and restoring the not_configured early return advances the intake on an unreadable outcome",
+      "evidence_command_index": 6,
+      "expects_failure": true
     },
     {
       "claim": "Both negative controls show these tests failing against the code on main @ dcac9c0, so they are keyed on the defects rather than merely green. The duplicate-comment assertion is the one that fires first",
@@ -99,8 +140,11 @@
   ],
   "unverified": [
     "No gateway was deployed or restarted; all evidence is from the unit suite in services/desk-gateway plus the repo gate scripts run locally",
-    "No upstream was contacted: GitHub and Railway are stubbed in the tests and the gateway holds no credentials here. In particular GitHub's issue-comment listing was not exercised against the real API, so the pagination and per_page behaviour of GitHub.find_issue_comment is unverified beyond its own contract",
-    "find_issue_comment walks at most 5 pages of 100 comments oldest-first. A thread longer than that returns complete:false, which the ack treats as unknown and refuses to post on — correct but untested against a real thread of that length",
+    "No upstream was contacted. GitHub is stubbed at the HTTP boundary, so the real comment_on_issue and find_issue_comment run against a fake that implements paging and the `since` filter as documented — but GitHub's own behaviour for those parameters on the issue-comments endpoint is not verified against the live API. In particular `since` is documented as filtering on last-updated time; if it behaved otherwise the recovery lookup's window would be wrong",
+    "The per-ack lock is process-local, matching the scope Store serialises its writes in. Two gateway processes sharing one data directory are outside what either guards; there the durable marker and the lookup are the only defence, and that configuration is untested",
+    "The recovery window is widened by 24h against clock skew between this gateway and GitHub. Skew larger than that would narrow the window past the comment and could produce a duplicate; no clock-skew scenario was tested",
+    "Delivery records written by the first commit of this branch carry no first_at, so a recovery lookup for one of those falls back to reading the thread from its start — the pre-fix behaviour. Only relevant to an intake acked between the two commits, which is no deployed gateway",
+    "find_issue_comment walks at most 5 pages of 100 comments within the `since` window. A window that somehow held more than 500 comments returns complete:false, which the ack treats as unknown and refuses to post on — correct but untested at that volume",
     "The ack idempotency key is a digest of the ack arguments, so a retry that deliberately changes the message is a new delivery and posts again. That is the intended trade-off against suppressing a second legitimate reply; it is asserted for a different status, not for a reworded retry of the same status",
     "Whether Railway can return service instances with no environments listed on the project is unknown; that case falls back to the single environment in deployments, and to no deployment when several are present"
   ],
@@ -116,7 +160,11 @@
   ],
   "destructive": false,
   "secrets_committed": false,
-  "p1s_addressed": [],
+  "p1s_addressed": [
+    "4141224505",
+    "4141224477",
+    "4141224494"
+  ],
   "p2s_addressed": [
     "4141126604",
     "4141126611"

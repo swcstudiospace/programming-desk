@@ -309,3 +309,25 @@ async def test_run_command_kills_the_whole_tree_when_it_times_out(tmp_path: Path
     alive = [pid for pid in pids if _alive(pid)]
     assert not alive, f"{len(alive)} process(es) outlived the timeout"
     assert os.getpid() not in pids
+
+
+@pytest.mark.parametrize("existing,expected", [
+    # The release being staged replaces the one that carried its version code, and nothing else.
+    ([{"versionCodes": ["7"], "status": "completed"}],
+     [{"versionCodes": ["7"], "status": "completed"}, "STAGED"]),
+    ([{"versionCodes": ["9"], "status": "inProgress"}], ["STAGED"]),
+    ([{"versionCodes": ["7"], "status": "completed"}, {"versionCodes": ["9"], "status": "inProgress"}],
+     [{"versionCodes": ["7"], "status": "completed"}, "STAGED"]),
+    # A version code belongs to one release only, so it leaves the others.
+    ([{"versionCodes": ["7", "9"], "status": "completed"}],
+     [{"versionCodes": ["7"], "status": "completed"}, "STAGED"]),
+    # Nothing on the track yet, and a release the API gave us with no version codes at all.
+    ([], ["STAGED"]),
+    ([{"name": "notes", "status": "draft"}], [{"name": "notes", "status": "draft"}, "STAGED"]),
+])
+def test_merge_release_never_drops_a_release_it_was_handed(existing, expected):
+    from desk_gateway.tools.mobile import _merge_release
+
+    staged = {"versionCodes": ["9"], "status": "inProgress", "userFraction": 0.1}
+    merged = _merge_release([dict(e) for e in existing], staged, "9")
+    assert merged == [staged if e == "STAGED" else e for e in expected]

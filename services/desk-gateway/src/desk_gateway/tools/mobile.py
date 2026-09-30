@@ -40,17 +40,61 @@ async def play_staged_rollout(ctx: ToolContext, args: dict[str, Any]) -> dict[st
     if edit.get("error"):
         return failure(edit["error"], edit.get("reason", "edit failed"))
     edit_id = (edit.get("body") or {}).get("id")
+    # A track update is a PUT: whatever it sends *is* the track afterwards. Sending only the
+    # release being staged therefore deleted every other release on it — the completed release
+    # serving the remaining users among them, which takes the app down for them rather than
+    # rolling anything out. Read the track first and put the existing releases back.
+    current = await play.track(args["package_name"], edit_id, args["track"])
+    if current.get("error"):
+        return failure(current["error"], current.get("reason", "track read failed; refusing to write a track we have not read"))
+    existing = [r for r in ((current.get("body") or {}).get("releases") or []) if isinstance(r, dict)]
     status = "inProgress" if fraction < 1.0 else "completed"
     release: dict[str, Any] = {"versionCodes": [str(args["version_code"])], "status": status}
     if fraction < 1.0:
         release["userFraction"] = fraction
-    result = await play.update_track(args["package_name"], edit_id, args["track"], {"track": args["track"], "releases": [release]})
+    releases = _merge_release(existing, release, str(args["version_code"]))
+    result = await play.update_track(args["package_name"], edit_id, args["track"], {"track": args["track"], "releases": releases})
     if result.get("error"):
         return failure(result["error"], result.get("reason", "track update failed"))
     commit = await play.commit(args["package_name"], edit_id)
     if commit.get("error"):
         return failure(commit["error"], commit.get("reason", "commit failed"))
-    return {"ok": True, "approval_id": args["approval_id"], "halt_threshold": args["halt_threshold"], "release": release, "edit_id": edit_id}
+    return {
+        "ok": True,
+        "approval_id": args["approval_id"],
+        "halt_threshold": args["halt_threshold"],
+        "release": release,
+        "releases": releases,
+        "preserved_releases": [r.get("name") or r.get("versionCodes") for r in releases if r is not release],
+        "edit_id": edit_id,
+    }
+
+
+def _merge_release(existing: list[dict[str, Any]], release: dict[str, Any], version_code: str) -> list[dict[str, Any]]:
+    """The track's releases with `release` put in place of the one carrying `version_code`.
+
+    A version code may appear in only one release on a track, so it is removed from the others;
+    a release left with none of its own is the one this call replaces. Order is preserved, and
+    a release the API gave us with no versionCodes at all (a draft, a rollout by name) is
+    passed back untouched — this function never drops a release it was handed.
+    """
+    merged: list[dict[str, Any]] = []
+    placed = False
+    for entry in existing:
+        codes = [str(c) for c in (entry.get("versionCodes") or [])]
+        if not codes:
+            merged.append(entry)
+            continue
+        kept = [c for c in codes if c != version_code]
+        if not kept:
+            if not placed:
+                merged.append(release)
+                placed = True
+            continue
+        merged.append({**entry, "versionCodes": kept})
+    if not placed:
+        merged.append(release)
+    return merged
 
 
 async def play_halt_rollout(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:

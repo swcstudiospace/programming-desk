@@ -539,3 +539,133 @@ async def test_intake_ack_advances_once_the_reply_is_posted(client, rpc, monkeyp
     assert out["ok"] is True and out["intake"]["state"] == "accepted", out
     assert out["notify"]["delivered"] is True
     assert "ut-abc123-deadbeef" in posted[0] and intake_id in posted[0]
+
+
+# ---------------------------------------------------------------------------
+# desk_play_staged_rollout — a track update is a PUT
+# ---------------------------------------------------------------------------
+
+async def _ok(body):
+    return {"ok": True, "body": body}
+
+
+def _configure_upstreams(monkeypatch):
+    """Make the HTTP upstreams look configured without a token anywhere near the test."""
+    from desk_gateway.upstreams import HttpUpstream
+
+    monkeypatch.setattr(HttpUpstream, "configured", property(lambda self: True))
+
+
+ROLLOUT = {
+    "package_name": "space.swcstudio.desklanes",
+    "track": "production",
+    "version_code": 1207,
+    "user_fraction": 0.1,
+    "halt_threshold": "crash-free sessions under 99.5% in 1h",
+    "rollback_plan": "halt the rollout; version code 1204 stays live for the rest",
+    "approval_id": "APR-2026-0930-07",
+}
+
+MULTI_RELEASE_TRACK = {
+    "track": "production",
+    "releases": [
+        {"name": "1204 live", "versionCodes": ["1204"], "status": "completed"},
+        {"name": "1180 legacy", "versionCodes": ["1180", "1181"], "status": "completed"},
+        {"name": "draft notes only", "status": "draft"},
+    ],
+}
+
+
+async def test_play_staged_rollout_keeps_the_releases_already_on_the_track(rpc, monkeypatch):
+    """The PUT replaces the track, so it has to carry what was already there.
+
+    Sending only the release being staged deleted every other release on the track — the
+    completed one still serving the 90% of users this rollout is not for among them. That is
+    not a rollout, it is an outage for everybody who was not picked.
+    """
+    from desk_gateway.upstreams import PlayConsole
+
+    sent = {}
+
+    async def fake_edit(self, package_name):
+        return {"ok": True, "body": {"id": "edit-1"}}
+
+    async def fake_track(self, package_name, edit_id, track):
+        return {"ok": True, "body": MULTI_RELEASE_TRACK}
+
+    async def fake_update(self, package_name, edit_id, track, body):
+        sent.update(body)
+        return {"ok": True, "body": body}
+
+    async def fake_commit(self, package_name, edit_id):
+        return {"ok": True, "body": {"id": edit_id}}
+
+    _configure_upstreams(monkeypatch)
+    monkeypatch.setattr(PlayConsole, "edit", fake_edit)
+    monkeypatch.setattr(PlayConsole, "track", fake_track)
+    monkeypatch.setattr(PlayConsole, "update_track", fake_update)
+    monkeypatch.setattr(PlayConsole, "commit", fake_commit)
+
+    out = await rpc.call("android", "desk_play_staged_rollout", ROLLOUT)
+    assert out["ok"] is True, out
+
+    by_code = {tuple(r.get("versionCodes") or []): r for r in sent["releases"]}
+    assert ("1204",) in by_code, sent["releases"]
+    assert ("1180", "1181") in by_code, sent["releases"]
+    assert by_code[("1204",)]["status"] == "completed"
+    assert any(r.get("status") == "draft" for r in sent["releases"]), "a release with no version codes was dropped"
+    staged = by_code[("1207",)]
+    assert staged["status"] == "inProgress" and staged["userFraction"] == 0.1
+    assert len(sent["releases"]) == 4, sent["releases"]
+
+
+async def test_play_staged_rollout_replaces_only_the_release_for_this_version(rpc, monkeypatch):
+    """Advancing a rollout updates its own release; a version code lives in exactly one."""
+    from desk_gateway.upstreams import PlayConsole
+
+    sent = {}
+    track = {"track": "production", "releases": [
+        {"versionCodes": ["1204"], "status": "completed"},
+        {"versionCodes": ["1207"], "status": "inProgress", "userFraction": 0.05},
+    ]}
+
+    monkeypatch.setattr(PlayConsole, "edit", lambda self, p: _ok({"id": "edit-1"}))
+    monkeypatch.setattr(PlayConsole, "track", lambda self, p, e, t: _ok(track))
+    monkeypatch.setattr(PlayConsole, "commit", lambda self, p, e: _ok({"id": e}))
+
+    async def fake_update(self, package_name, edit_id, track_name, body):
+        sent.update(body)
+        return {"ok": True, "body": body}
+
+    monkeypatch.setattr(PlayConsole, "update_track", fake_update)
+    _configure_upstreams(monkeypatch)
+
+    out = await rpc.call("android", "desk_play_staged_rollout", {**ROLLOUT, "user_fraction": 0.5})
+    assert out["ok"] is True, out
+    assert len(sent["releases"]) == 2, sent["releases"]
+    staged = next(r for r in sent["releases"] if r.get("versionCodes") == ["1207"])
+    assert staged["userFraction"] == 0.5 and staged["status"] == "inProgress"
+    assert {"versionCodes": ["1204"], "status": "completed"} in sent["releases"]
+
+
+async def test_play_staged_rollout_will_not_write_a_track_it_could_not_read(rpc, monkeypatch):
+    """Preserving releases is only possible if the read succeeded; otherwise fail closed."""
+    from desk_gateway.upstreams import PlayConsole
+
+    writes = []
+    monkeypatch.setattr(PlayConsole, "edit", lambda self, p: _ok({"id": "edit-1"}))
+
+    async def fake_track(self, package_name, edit_id, track):
+        return {"error": "upstream_error", "reason": "play returned HTTP 500"}
+
+    async def fake_update(self, package_name, edit_id, track_name, body):
+        writes.append(body)
+        return {"ok": True, "body": body}
+
+    monkeypatch.setattr(PlayConsole, "track", fake_track)
+    monkeypatch.setattr(PlayConsole, "update_track", fake_update)
+    _configure_upstreams(monkeypatch)
+
+    out = await rpc.call("android", "desk_play_staged_rollout", ROLLOUT)
+    assert out["is_error"] is True and out["error"] == "upstream_error", out
+    assert writes == [], "the track was written without being read"

@@ -7,7 +7,7 @@
 **Density on this graph:** 5 GoT nodes × 4 CoT steps (5 Linear issues + 20 sub-issues). The second-uplift `<ISSUES>` block has no `<TRACKER_GAPS>` child.  
 **Status:** Operator procedure for one docs-only pipeline smoke. A draft PR is the GitHub outcome. This document does not claim Greptile clean, a QUALITY verdict, or merge.
 
-Policy: `docs/gotxcot-cloud-pipeline.md`. GitHub source of truth and lanes: `docs/github-sot-orchestration.md`. Procedure: `skills/gotxcot-uplift`, then `skills/trackplan-dispatch`. Lane B tool names are below. `skills/agent-bus` and `docs/vps-agent-bus.md` are cited by the operator packet and are **not** files on `main` in this checkout (`git ls-tree -r --name-only origin/main` has neither path). Do not invent their contents.
+Policy: `docs/gotxcot-cloud-pipeline.md`. GitHub source of truth and lanes: `docs/github-sot-orchestration.md`. Procedure: `skills/gotxcot-uplift`, then `skills/trackplan-dispatch`. Lane B tool names are below, and the Lane B control plane now has its own pages: [`vps-agent-bus.md`](./vps-agent-bus.md) (tools, stop rules, honest gaps) and `skills/agent-bus` (dispatch procedure). Both are LEAD-owned per `ownership.yaml`. They describe the HTTP Agent Bus on connected `user-hermes-agent` only — stdio `user-hermes` stays uninstalled.
 
 ---
 
@@ -137,13 +137,13 @@ Separately, Hermes MCP exposes these tools (descriptors read while authoring thi
 | `agent_bus_get_job` | One job snapshot (`GET /v1/jobs/{id}`). | required `job_id` |
 | `agent_bus_wait_job` | Poll until `completed`, `failed`, `error`, or timeout. | required `job_id`; `timeout_sec` default 180 (max 600); `poll_sec` default 2 |
 
-`agent_bus_start_job` reports that the public `wss` URL needs `BUS_TOKEN` and that the token is **not** included in the tool result. Do not paste `BUS_TOKEN` or any other credential into this runbook, the PR body, a receipt, or a work packet. `docs/vps-agent-bus.md` is the operator-named place for env file locations; that file is not in this repo, so this runbook does not invent a path, host, or port. Call the MCP tools. Do not substitute `curl` against an undocumented bus URL.
+`agent_bus_start_job` reports that the public `wss` URL needs `BUS_TOKEN` and that the token is **not** included in the tool result. Do not paste `BUS_TOKEN` or any other credential into this runbook, the PR body, a receipt, or a work packet. `docs/vps-agent-bus.md` now exists and is the control-plane reference for this lane; it deliberately records no env file path, host, or port, and neither does this runbook. Call the MCP tools. Do not substitute `curl` against an undocumented bus URL.
 
 If the tool is missing, unauthenticated, or errors: **stop**. Record the blocker in the Lead receipt. Do not invent an SSH coding handoff. SSH to the VPS is INFRA-owned ops (`docs/github-sot-orchestration.md`). Do not claim Hermes picked up the job without a tool result or a GitHub draft PR.
 
 Passing `graphId` as `idempotency_key` is optional on the descriptor. This runbook does not claim the server dedupes on it. `skills/trackplan-dispatch` still forbids a second launch of the same `graphId` without an explicit operator request.
 
-`skills/agent-bus` is the operator-named skill path for this lane. It is not in the tree. Until it lands, Lane B procedure in-repo is this section plus `skills/trackplan-dispatch` Lane B and `docs/github-sot-orchestration.md` §5.
+`skills/agent-bus` is the skill path for this lane and it is now in the tree. Use [`../skills/agent-bus/SKILL.md`](../skills/agent-bus/SKILL.md) as the Lane B procedure and [`vps-agent-bus.md`](./vps-agent-bus.md) as the control-plane reference; this section stays as the runbook's inline summary, with `skills/trackplan-dispatch` Lane B and `docs/github-sot-orchestration.md` §5 as the surrounding policy. The skill adds two rules this section does not: record the `jobId` in the receipt as soon as `agent_bus_start_job` returns, and do not treat `idempotency_key` as retry protection.
 
 ---
 
@@ -214,8 +214,8 @@ G-1 for `bot-00-programming-lead` on `docs/intake-e2e-runbook.md` **passes**. Do
 | Path | Owner | This smoke |
 |---|---|---|
 | `docs/intake-e2e-runbook.md` | `bot-00-programming-lead` via last-match override (`7fd7248`) | In scope. G-1 PASS for bot-00. |
-| `docs/vps-agent-bus.md` | `bot-00-programming-lead` via last-match override (`7fd7248`) | Pattern kept. File is not on this branch. Do not narrow the rule. |
-| `skills/agent-bus/**` | `bot-00-programming-lead` via last-match override (`7fd7248`) | Pattern kept. Directory is not on this branch. Do not narrow the rule. |
+| `docs/vps-agent-bus.md` | `bot-00-programming-lead` via last-match override (`7fd7248`) | Pattern kept, and the file now exists. Do not narrow the rule. |
+| `skills/agent-bus/**` | `bot-00-programming-lead` via last-match override (`7fd7248`) | Pattern kept, and the directory now exists. Do not narrow the rule. |
 | `.receipts/bot-00-programming-lead/**` | `bot-00-programming-lead` | In scope. |
 | `skills/gotxcot-uplift/**`, `skills/trackplan-dispatch/**` | `bot-00-programming-lead` | Cited, not edited. |
 | `skills/greptile-merge-gate/**` | `bot-06-quality-security` | Not edited. |
@@ -295,7 +295,7 @@ Sub-issues (4 per node):
 
 - Live page fetches of the Notion and Linear URLs above were not re-run while writing this file. The map is a copy of the supplied `<ISSUES>` block.
 - `agent_bus_health`, `agent_bus_start_job`, `agent_bus_get_job`, and `agent_bus_wait_job` were not invoked. No Lane B job id exists for this graph in this receipt.
-- `skills/agent-bus` and `docs/vps-agent-bus.md` are not on `origin/main`. Env file location for `BUS_TOKEN` is therefore not documented here.
+- `skills/agent-bus` and `docs/vps-agent-bus.md` now exist and carry the Lane B procedure and control plane. Neither they nor this runbook document an env file location for `BUS_TOKEN`: the token is not part of any tool result and the desk does not hold it.
 - Greptile review 26348840 completed at `becec09` with confidence 3/5. That is not a clean review and not a merge claim. This follow-up does not re-trigger Greptile.
 - `approved_by` on the Lead receipt is `bot-06-quality-security`, set by QUALITY. LEAD did not self-approve. The P2 ownership-scope waive receipt is `.receipts/bot-06-quality-security/greptile-p2-waiver-ownership-scope-pr4.json`.
 - G-1 for `bot-00-programming-lead` on `docs/intake-e2e-runbook.md` passes under the `7fd7248` carve-out. The pre-carve-out FOREIGN result is historical only.

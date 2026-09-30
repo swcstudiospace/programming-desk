@@ -85,9 +85,20 @@ claims:
 
 ## The bypass works — observed on the runner
 
-Job [`gates` #109735843668](https://github.com/swcstudiospace/programming-desk/actions/runs/36667704256/job/109735843668)
-ran on head `920ce89` and finished in 18 seconds. That log is the strongest evidence here,
-and it retires three of the things the first draft of this receipt could not verify:
+All three workflow jobs have now run on the VPS against the merge head `570037a`. **Two pass
+and one fails on the single predicted line** — this is the strongest evidence in the receipt,
+and it is observation rather than inference:
+
+| Job | Result | What it settles |
+| --- | --- | --- |
+| [`gate-self-test`](https://github.com/swcstudiospace/programming-desk/actions/runs/36668189217/job/109737294940) | **success** (18s) | The full 90-test gate suite passes on the VPS, not just in this container. `pip install pyyaml pytest` succeeded against the runner's Python, so it is not an externally-managed system Python that would reject a plain `pip install`. |
+| [`sync`](https://github.com/swcstudiospace/programming-desk/actions/runs/36668189235/job/109737295372) | **success** (12s) | The template-sync gate passes in CI, confirming the live and template bodies are still identical after both comment blocks grew. |
+| [`gates`](https://github.com/swcstudiospace/programming-desk/actions/runs/36668189217/job/109737295103) | failure (18s) | Fails only at `G-2 — Verification receipt`, on `approved_by`. Everything before it passes on the runner. |
+
+The first observed run, job
+[#109735843668](https://github.com/swcstudiospace/programming-desk/actions/runs/36667704256/job/109735843668)
+on head `920ce89`, is what retired the three things the first draft of this receipt could not
+verify:
 
 - **The runner claimed the job.** The three labels match a real, online runner, so these jobs
   do not sit queued — the failure mode that would have been worst was ruled out by observation.
@@ -156,26 +167,25 @@ spending limit fails them in about three seconds.
 
 The full list is in the JSON. What matters before anyone calls the gates restored:
 
-1. **No gate has been observed *passing* on the VPS** — only failing at G-2 for the expected
-   reason. The steps after G-2 (G-3, G-4, G-5/G-6) have never executed there, because G-2
-   stops the job. They pass in this container, which is not the same environment.
-2. **`gate-self-test` and `sync` were not observed completing.** Only the `gates` job's log
-   was read; the other two were in progress and queued on the same runner.
-3. **Persistent-runner security is accepted and documented, not solved.** See the Greptile
+1. **The gate steps after G-2 have never executed on the VPS** — G-3, G-4 and G-5/G-6, because
+   G-2 stops the job before reaching them. They pass in this container, which is not the same
+   environment. Everything *before* G-2 is confirmed on the runner, and `gate-self-test` and
+   `sync` pass there outright, so this is the only remaining gap in the `gates` job.
+2. **Persistent-runner security is accepted and documented, not solved.** See the Greptile
    section. The runner is not known to be `--ephemeral`, nothing here isolates the workspace,
    and it reuses its filesystem between jobs so state leaks from one pull request to the next.
-4. **The runner's configuration was never inspected** — this container has no path to the VPS.
+3. **The runner's configuration was never inspected** — this container has no path to the VPS.
    Not whether it is ephemeral, not which user it runs as, not what else shares the host.
-5. **Whether `srv1778002` is the only runner carrying these three labels is unestablished.**
+4. **Whether `srv1778002` is the only runner carrying these three labels is unestablished.**
    If another org runner matches, gate jobs may land on a host nobody has vetted. The
    registration reportedly also carries an `ai-cluster` label these workflows do not request,
    so the label set is broader than the three used here and nothing pins these jobs to this
    host specifically.
-6. **Throughput is a real regression and was not considered.** One runner serves this
+5. **Throughput is a real regression and was not considered.** One runner serves this
    repository serially, so concurrent pull requests queue behind whichever job holds it where
    hosted jobs would have run in parallel. With three open pull requests already wanting
    gates, one slow or hung job delays every other pull request's required checks.
-7. **The billing problem itself is untouched.** This routes around the exhausted spending
+6. **The billing problem itself is untouched.** This routes around the exhausted spending
    limit rather than fixing it, so any workflow still on `ubuntu-latest` keeps failing in
    seconds.
 

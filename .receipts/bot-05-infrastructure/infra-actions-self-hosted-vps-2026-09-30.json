@@ -17,7 +17,33 @@
     "labels_requested": ["self-hosted", "Linux", "X64"],
     "why": "Hosted ubuntu-latest jobs fail in roughly 3 seconds with a spending-limit annotation, so no gate reaches its first step. The VPS runner is org-level and unmetered by GitHub billing.",
     "runner_state_observed_from_this_run": true,
-    "ci_run": {
+    "ci_runs_on_head_570037a": {
+      "note": "All three workflow jobs ran on the VPS runner against the merge head 570037a. Two pass, one fails on the single predicted line. This is the strongest evidence in this receipt and it is observation, not inference.",
+      "gate-self-test": {
+        "job_id": 109737294940,
+        "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/36668189217/job/109737294940",
+        "conclusion": "success",
+        "duration_s": 18,
+        "what_it_proves": "The whole gate test suite — 90 tests — passes on the VPS runner, not just in this container. It also retires the pip concern outright: 'pip install pyyaml pytest' succeeded against the runner's Python, so the runner does not expose an externally-managed system Python that would reject a plain pip install."
+      },
+      "sync": {
+        "job_id": 109737295372,
+        "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/36668189235/job/109737295372",
+        "conclusion": "success",
+        "duration_s": 12,
+        "what_it_proves": "The gates-template-sync gate passes on the runner, confirming in CI what command 3 asserts locally: the live workflow and its template are still body-identical after both leading comment blocks grew."
+      },
+      "gates": {
+        "job_id": 109737295103,
+        "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/36668189217/job/109737295103",
+        "conclusion": "failure",
+        "duration_s": 18,
+        "failing_step": "G-2 — Verification receipt",
+        "failing_output": "G-2 FAIL — .receipts/bot-05-infrastructure/infra-actions-self-hosted-vps-2026-09-30.json / - 'approved_by' is missing — work must be reviewed by someone else",
+        "what_it_proves": "Re-confirmed on the merge head: the job's only failure is approved_by. Everything before it — checkout, setup-python, pip install, G-1 manifest, G-1 path ownership, the receipt locator — passes on the runner."
+      }
+    },
+    "ci_run_first_observed": {
       "job": "gates",
       "job_id": 109735843668,
       "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/36667704256/job/109735843668",
@@ -160,8 +186,7 @@
     ]
   },
   "unverified": [
-    "The gate-self-test and sync jobs were not observed completing. Only the 'gates' job's log was read (see evidence.ci_run); at the time of writing gate-self-test was in_progress and sync was queued on the same runner.",
-    "No gate has been observed passing on the VPS runner — only failing at G-2 for the expected reason. The steps after G-2 (G-3 committed secrets, G-4 contract-first, G-5/G-6 rollback) have never executed there, because G-2 stops the job. They pass locally in this container, which is not the same environment.",
+    "The gate steps after G-2 — G-3 committed secrets, G-4 contract-first, G-5/G-6 rollback — have never executed on the VPS runner, because G-2 stops the job before them. They pass locally in this container, which is not the same environment. Everything before G-2 is confirmed on the runner, and gate-self-test and sync pass there outright, so this is the only remaining gap in the gates job.",
     "Persistent-runner security is accepted rather than solved, and only documented. greptile P1 is right that a pull request author can run arbitrary code on the VPS via ci/gates/*.py or ci/tests/ before any gate rejects them. Nothing in this change isolates the workspace, the runner is not known to be --ephemeral, and the runner reuses its filesystem between jobs so state leaks from one pull request to the next. For a private repo whose pull requests all come from trusted bots this is the accepted price of having gates at all, but it is a real change in blast radius and it is Ove's decision to keep or reverse.",
     "The runner's own configuration was not inspected from this container, which has no path to the VPS: not whether it is --ephemeral, not which user it runs as, not what else shares the host. The EACCES on /root/.config/herd-lite/bin/git during cleanup suggests the runner user cannot stat part of root's PATH, which is cosmetic here but indicates the host has unrelated tooling installed.",
     "Whether srv1778002 is the only runner carrying these three labels is not established. If another runner in the org matches, gate jobs may land on a host nobody has vetted. A parallel run reports the registration also carries an 'ai-cluster' label, which these workflows do not request — so the label set is broader than the three used here, and nothing pins these jobs to this host specifically.",

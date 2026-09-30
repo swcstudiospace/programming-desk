@@ -112,12 +112,27 @@ class TestBanditBlocks:
         assert "baseline_ec" in baseline_step["run"]
         assert "exit 1" in baseline_step["run"]
 
-    def test_informational_sarif_step_does_not_gate(self, workflow):
-        # The gating decision lives entirely in the baseline-compared JSON step; the unfiltered
-        # SARIF step is for artifact/code-scanning visibility only and must not be able to fail
-        # the job (bandit -b is incompatible with -f sarif, so this step can't baseline-filter).
+    def test_baseline_worktree_path_is_unique_per_run(self, workflow):
+        # A fixed path (e.g. /tmp/bandit-baseline) collides across runs on the shared self-hosted
+        # runner: a cancelled/crashed run leaves it registered, and the next PR's `git worktree
+        # add` fails before Bandit scans anything — confirmed locally (exit 128, "already
+        # exists"). RUNNER_TEMP plus this run's own id+attempt makes collision structurally
+        # impossible regardless of whether runner-level cleanup between jobs happened.
+        baseline_step = _step(_job(workflow, "bandit"), "Bandit baseline")
+        assert "RUNNER_TEMP" in baseline_step["run"]
+        assert "GITHUB_RUN_ID" in baseline_step["run"]
+        assert "GITHUB_RUN_ATTEMPT" in baseline_step["run"]
+        assert "/tmp/bandit-baseline\"" not in baseline_step["run"]
+
+    def test_sarif_artifact_built_from_the_baselined_results(self, workflow):
+        # bandit -b is incompatible with -f sarif (confirmed), so a naive fix re-runs bandit
+        # unfiltered for the SARIF — which repeats the pre-existing broker.py finding on every
+        # PR's report regardless of whether that PR passed, confirmed live on PR #50 as making
+        # the artifact useless for spotting what a PR introduced. The SARIF must instead be
+        # converted from the same bandit.json the gating step already produced.
         sarif_step = _step(_job(workflow, "bandit"), "Bandit — SARIF artifact")
-        assert sarif_step.get("continue-on-error") is True
+        assert "bandit_json_to_sarif.py" in sarif_step["run"]
+        assert "bandit -r ." not in sarif_step["run"]
 
 
 class TestTrivyBlocks:

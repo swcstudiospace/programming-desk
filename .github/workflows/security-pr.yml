@@ -196,12 +196,21 @@ jobs:
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin "$BASE_REF"
-          git worktree add --detach /tmp/bandit-baseline "origin/$BASE_REF"
+          # A fixed path (e.g. /tmp/bandit-baseline) collides across runs on this self-hosted
+          # runner, which reuses its filesystem between jobs: a cancelled or crashed run can
+          # leave the worktree registered, and `git worktree add` on the next PR then fails
+          # before Bandit scans anything — confirmed locally (`fatal: already exists`, exit
+          # 128), leaving an unrelated PR's security check red until someone cleans it up
+          # manually. RUNNER_TEMP plus this run's own id+attempt makes the path unique per run,
+          # so no later run can ever collide with a leftover from an earlier one, whether or not
+          # runner-level cleanup between jobs happened.
+          WORKTREE_DIR="${RUNNER_TEMP}/bandit-baseline-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git worktree add --detach "$WORKTREE_DIR" "origin/$BASE_REF"
           set +e
-          (cd /tmp/bandit-baseline && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
+          (cd "$WORKTREE_DIR" && bandit -r . --ini "$GITHUB_WORKSPACE/ci/security/bandit.ini" -lll -f json -o "$GITHUB_WORKSPACE/bandit-baseline.json")
           baseline_ec=$?
           set -e
-          git worktree remove --force /tmp/bandit-baseline
+          git worktree remove --force "$WORKTREE_DIR"
           # 0 = clean, 1 = findings — both are a successful baseline scan. Anything else (bad
           # args, a crash) means the baseline itself can't be trusted, so fail closed rather
           # than silently comparing against an empty or missing snapshot.
@@ -225,19 +234,16 @@ jobs:
             -lll \
             -f json -o bandit.json
 
-      - name: Bandit — SARIF artifact (informational, whole repo, unfiltered)
-        # Separate from the gating decision above: -b is incompatible with -f sarif, so this
-        # produces the human/code-scanning-readable report without baselining. It may list the
-        # pre-existing broker.py finding too; that's fine — continue-on-error, not `|| true`, so
-        # the exemption is visible in the YAML rather than hidden inside a shell one-liner. The
-        # previous step already made the pass/fail call; this step exists only for the artifact.
+      - name: Bandit — SARIF artifact from the same baselined results
+        # -b is incompatible with -f sarif (confirmed), so the SARIF artifact can't come from a
+        # single bandit invocation alongside the baseline. Re-running bandit unfiltered for the
+        # SARIF would repeat the pre-existing broker.py finding on every PR's report regardless
+        # of whether that PR passed or failed — confirmed live on PR #50, and reported as making
+        # the artifact useless for spotting what a PR actually introduced. Converting the
+        # already-baselined bandit.json from the previous step instead means the SARIF artifact
+        # always matches exactly what gated the PR: new findings only, nothing pre-existing.
         if: always()
-        continue-on-error: true
-        run: |
-          bandit -r . \
-            --ini ci/security/bandit.ini \
-            -lll \
-            -f sarif -o bandit.sarif
+        run: python3 ci/security/bandit_json_to_sarif.py bandit.json bandit.sarif
 
       - name: Upload SARIF artifact
         if: always()

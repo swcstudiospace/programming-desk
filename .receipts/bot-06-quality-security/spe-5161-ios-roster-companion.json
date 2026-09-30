@@ -3,19 +3,13 @@
   "bot": "bot-06-quality-security",
   "branch": "bot-06-quality-security/spe-5161-ios-roster-companion",
   "started_at": "2026-09-30T16:03:53Z",
-  "completed_at": "2026-09-30T17:25:18Z",
+  "completed_at": "2026-09-30T17:44:20Z",
   "commands": [
     {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-rosters/ios.yaml'))\"",
+      "cmd": "python3 -c \"import yaml; [yaml.safe_load(open(f)) for f in ['contracts/tool-rosters/ios.yaml','contracts/tool-packs/ios-local.yaml','contracts/tool-packs/ios-metavr.yaml','contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml']]\"",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "no exception; 15 own tools parsed, 7 pre-existing + 8 new desk_ios_* entries"
-    },
-    {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml'))\"",
-      "exit_code": 0,
-      "duration_s": 0.1,
-      "output_tail": "no exception"
+      "output_tail": "no exception; all 4 touched YAML files parse"
     },
     {
       "cmd": "git diff --name-only origin/main...HEAD -- ios/",
@@ -33,7 +27,7 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-1 PASS — bot-06-quality-security: 2 file(s) within owned paths\n  NOTE: 2 contract surface file(s) touched — G-4 applies:\n    contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml\n    contracts/tool-rosters/ios.yaml"
+      "output_tail": "G-1 PASS — bot-06-quality-security: 5 file(s) within owned paths\n  NOTE: 4 contract surface file(s) touched — G-4 applies:\n    contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml\n    contracts/tool-packs/ios-local.yaml\n    contracts/tool-packs/ios-metavr.yaml\n    contracts/tool-rosters/ios.yaml"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml",
@@ -43,19 +37,19 @@
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
-      "exit_code": 1,
+      "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "  - contracts/tool-rosters/ios.yaml: 23 effective tool(s) (15 own + 8 core) — must be within [10, 15]\n  See contracts/README.md and docs/upgrade-plan-desk-v2.md §11\nG-7 FAIL — desk integrity: 1 problem(s)"
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked"
     },
     {
       "cmd": "python3 -m pytest ci/tests -q",
-      "exit_code": 1,
-      "duration_s": 13.5,
-      "output_tail": "FAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_real_rosters_and_packs_pass\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_fixture_copy_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_prompt_source_with_placeholder_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_assembled_alias_under_prompts_is_checked_as_output\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_clean_template_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_missing_templates_dir_is_skipped_not_failed\n6 failed, 151 passed in 13.51s"
+      "exit_code": 0,
+      "duration_s": 10.4,
+      "output_tail": "157 passed in 10.06s"
     },
     {
       "cmd": "PYTHONPATH=services/desk-gateway/src python3 -c \"from desk_gateway.tools import resolve; resolve('ios.plist_lint')\"",
-      "exit_code": 0,
+      "exit_code": 1,
       "duration_s": 0.3,
       "output_tail": "ModuleNotFoundError: No module named 'desk_gateway.tools.ios'"
     },
@@ -64,63 +58,52 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "services/desk-gateway/src/desk_gateway/rosters.py:25:    def read_only(self) -> bool:\nservices/desk-gateway/src/desk_gateway/server.py:102:                annotations={\"readOnlyHint\": spec.read_only, \"destructiveHint\": \"g6\" in spec.gates},\nservices/desk-gateway/src/desk_gateway/server.py:140:        if error and spec.read_only and \"results\" not in payload and \"rows\" not in payload:\nservices/desk-gateway/src/desk_gateway/server.py:145:        return _result(redact_value(payload), is_error=bool(error) and not spec.read_only)"
-    },
-    {
-      "cmd": "python3 -c \"error='backend_missing'; print('read_only=True ->', bool(error) and not True); print('read_only=False ->', bool(error) and not False)\"",
-      "exit_code": 0,
-      "duration_s": 0.0,
-      "output_tail": "read_only=True -> False\nread_only=False -> True"
     }
   ],
   "claims": [
     {
-      "claim": "contracts/tool-rosters/ios.yaml is valid YAML",
+      "claim": "contracts/tool-rosters/ios.yaml, the two new pack files, and the change document are valid YAML",
       "evidence_command_index": 0
     },
     {
-      "claim": "the change document contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml parses",
+      "claim": "no file under ios/** is touched by this branch (PR #48 tip 7dfb11e is untouched)",
       "evidence_command_index": 1
     },
     {
-      "claim": "no file under ios/** is touched by this branch (PR #48 tip 7dfb11e is untouched)",
+      "claim": "ownership.yaml manifest is internally valid",
       "evidence_command_index": 2
     },
     {
-      "claim": "ownership.yaml manifest is internally valid",
+      "claim": "G-1: all 5 changed paths (ios.yaml, the two new pack files, the change document, and the ci/tests fixture update) are owned by bot-06-quality-security",
       "evidence_command_index": 3
     },
     {
-      "claim": "G-1: both changed paths (the roster and the change document) are owned by bot-06-quality-security",
+      "claim": "G-4: the roster/pack change ships with a non-breaking v1.1.0 change document declaring both touched contract surfaces (contracts/tool-rosters/ios.yaml and contracts/tool-packs/**), with consumers auto-resolved from ownership.yaml and no rejections",
       "evidence_command_index": 4
     },
     {
-      "claim": "G-4: the roster change ships with a non-breaking v1.1.0 change document covering its only contract surface, with consumers auto-resolved from ownership.yaml and no rejections",
+      "claim": "G-7 now PASSES: ios.yaml is back to 7 own tools (7 + 8 core = 15, at but not over ROSTER_MAX_TOOLS), the 8 desk_ios_* tools moved into contracts/tool-packs/ios-local.yaml (5 tools, app ioslocal) and contracts/tool-packs/ios-metavr.yaml (3 tools, app iosmetavr), and both new pack files pass check_pack (tool count, app-prefix, schema shape)",
       "evidence_command_index": 5
     },
     {
-      "claim": "KNOWN BLOCKER: G-7 fails closed on this branch because ios.yaml now carries 23 effective tools (15 own + 8 core) against ROSTER_MAX_TOOLS=15. This is disclosed, not hidden — the roster header and the change document both name it. Fix (split desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise the ceiling in ci/gates/check_desk_integrity.py) is out of the 3-file scope given for this task and is not attempted here.",
-      "evidence_command_index": 6,
-      "expects_failure": true
+      "claim": "the full gate test suite passes, including the six G-7 structural cases that were failing on tip d7be5f2 for the single root cause (ios.yaml over ROSTER_MAX_TOOLS); one fixture assertion (test_real_rosters_and_packs_pass) was updated from a literal '3 packs' to '5 packs' to match the two new pack files, no other test was changed",
+      "evidence_command_index": 6
     },
     {
-      "claim": "the gate test suite's only failures on this branch are the six G-7 cases that assert the real rosters/packs/prompts pass structural checks, all failing for the same single root cause above (ios.yaml over ROSTER_MAX_TOOLS); no other test regressed",
+      "claim": "SECOND KNOWN BLOCKER (raised by Greptile review on PR #54, reproduced directly here): the 8 tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() does importlib.import_module(f\"desk_gateway.tools.{module_name}\") (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 tools raises ModuleNotFoundError. server.py's dispatch() only special-cases TimeoutError and LookupError before its broad except Exception, so this is NOT the {\"error\": \"backend_missing\"} path (that's for a missing function in an existing module) — it surfaces as {\"error\": \"internal\", \"reason\": \"ModuleNotFoundError while running <tool>\"}. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml), not QUALITY, so adding that module is out of this change's ownership and scope. Disclosed in the roster header, both pack files, and the change document.",
       "evidence_command_index": 7,
       "expects_failure": true
     },
     {
-      "claim": "SECOND KNOWN BLOCKER, raised by Greptile review on PR #54 and reproduced here: the 8 new tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() imports `desk_gateway.tools.<prefix>` (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 new tools raises ModuleNotFoundError even once G-7 capacity is fixed. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml line 327), not QUALITY, so adding that module is out of this change's ownership and 3-file scope. Now disclosed in the roster header and the change document.",
+      "claim": "kind: read/write is not cosmetic: server.py's call_tool() sets is_error=bool(error) and not spec.read_only (server.py:145), so a read-kind tool's backend failure (a ModuleNotFoundError today, a real I/O failure once ios.py exists) reports to the MCP caller as a non-error result. ioslocal_snapshot_diff, iosmetavr_device_screenshot and iosmetavr_ui_dump write an out artifact, so they are kind: write in both new packs so their failures surface as real MCP errors; ioslocal_plist_lint, ioslocal_entitlements_scan and ioslocal_xcodebuild_receipt stay kind: read (pure parse, no output artifact).",
       "evidence_command_index": 8
-    },
-    {
-      "claim": "FIX APPLIED after a Greptile correction of my own earlier (wrong) reply: I had checked for a nonexistent `SeatRoster.is_read` and found no call sites, and concluded the kind:read/write distinction had no runtime effect. That was a bad grep, not a fact about the code — the real property is `ToolSpec.read_only` (rosters.py:25), and server.py's call_tool() DOES branch on it twice: readOnlyHint in list_tools(), and is_error=bool(error) and not spec.read_only in call_tool() (server.py:145). A read-kind tool's backend failure is therefore reported to the MCP caller as a non-error result. desk_ios_snapshot_diff, desk_ios_device_screenshot and desk_ios_ui_dump write an `out` artifact, so their kind was changed from read to write in this receipt's branch so their failures surface as real MCP errors; desk_ios_plist_lint, desk_ios_entitlements_scan and desk_ios_xcodebuild_receipt stay read (pure parse, no output artifact, fail-open is the intended behavior per _core.yaml's documented read/write convention).",
-      "evidence_command_index": 9
     }
   ],
   "unverified": [
-    "The G-7 capacity conflict is documented, not resolved. No tool-pack file was added and ROSTER_MAX_TOOLS was not raised; both are candidate fixes named in the change document and left for a follow-up change, per this task's 3-file scope.",
     "The backend-resolution gap (ios.* has no desk_gateway/tools/ios.py) is documented, not resolved. Adding that module is bot-01-systems-backend's path (ownership.yaml); not attempted here.",
-    "Runtime behavior of the 8 new desk_ios_* tools (dispatch to services/desk-gateway, actual ios.plist_lint/ios.entitlements_scan/etc. backends) is not exercised end-to-end here beyond confirming the resolve() failure above — this change adds only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
-    "desk_contract_ack acknowledgements from the 7 auto-resolved consumers (bot-00 through bot-06) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
-    "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review."
+    "Runtime behavior of the 8 tools beyond the resolve()-level ModuleNotFoundError above is not exercised end-to-end — this change defines/relocates only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
+    "desk_contract_ack acknowledgements from the auto-resolved consumers of contracts/tool-rosters/** (7 bots) and contracts/tool-packs/** (bot-02-web-edge, bot-03-android, bot-04-ios) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
+    "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review.",
+    "iosmetavr_ui_tap's x/y device-point coordinate contract (added here so the tool says where to tap) was written from the review finding that the prior schema had no target, not re-derived from the PR #48 CLI's actual ui_tap argument shape — bot-04-ios should confirm x/y matches what the underlying MetaVR ui_tap executable expects before any consumer depends on it."
   ]
 }

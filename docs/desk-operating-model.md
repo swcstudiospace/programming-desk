@@ -56,9 +56,12 @@ which is enabled on all seven seat templates. Six points are desk policy rather 
    call waits for the brief. A seat that edits first is re-deciding something already recorded in the
    memory plane it skipped. **A populated response is not a successful brief**: `desk_brief` returns
    its full shape even when the substrate is unreachable, there is no top-level `reason`, and the
-   failure sits in `substrate.error` or `recall.error`. Those two fields plus "the tool was listed and
-   the call was not deadline-cut" are the whole test. A seat that checks only the envelope reads an
-   outage as a quiet ticket.
+   failure sits in `substrate.error`, in `recall.error`, **or per bank in `recall.results[].error`** —
+   with Hindsight configured the gateway loops the banks and returns early, so `recall.error` is never
+   set and a dead bank is only visible inside `results[]`. All three, plus "the tool was listed and the
+   call was not deadline-cut", are the whole test, and **one failed bank is enough**: losing `pd-desk`
+   means the brief cannot tell the seat what the desk already decided. A seat that checks only the
+   envelope, or only `recall.error`, reads an outage as a quiet ticket.
 2. **Record what you read, and claim no more than the tool supports.** Where a tool's contract carries
    an etag, the receipt records `brief_etag` and change detection is real. `desk_brief` carries none,
    so the receipt records `brief_read_at` (its `generated_at`) **and** `cached`, and the seat states in
@@ -67,9 +70,9 @@ which is enabled on all seven seat templates. Six points are desk policy rather 
    cache hit carries the original assembly time for up to five minutes after memory changed — so it is
    never recorded as `brief_etag` and never diffed. **Absence of an etag field is not degradation**;
    reading it that way would make a human ack the price of every ordinary turn on the desk.
-3. **Degraded mode needs a human ack.** Degraded means the brief *failed* per point 1 — `substrate.error`
-   or `recall.error` present, the tool unlisted, the call deadline-cut, or an etag-bearing tool
-   returning no etag. Those are *unknown*, never *none*. Working the repo anyway needs a recorded
+3. **Degraded mode needs a human ack.** Degraded means the brief *failed* per point 1 — `substrate.error`,
+   `recall.error` or any `recall.results[].error` present, the tool unlisted, the call deadline-cut, or an
+   etag-bearing tool returning no etag. Those are *unknown*, never *none*. Working the repo anyway needs a recorded
    acknowledgement, routed the way approvals already are: a build seat asks LEAD priority false; LEAD
    asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim nested reason and
    its field path in `unverified`, it covers one turn on one ticket, it is not a g5/g6 `approval_id`,
@@ -98,7 +101,7 @@ the receipt's `unverified`.
 1. **Intake** — goal, constraints, and success criteria are already in the second uplift when the graph ran.
 2. **Ticket** — LEAD writes one concrete ticket per owning seat (see format below).
 3. **Dispatch** — LEAD `SendToAgent` to each seat 1:1 (never vague "please help").
-4. **Implement** — Specialist runs the production loop above: a brief that succeeded on its nested error fields before the first edit, then executes only assigned work in owned paths, and writes a receipt.
+4. **Implement** — Specialist runs the production loop above: a brief that succeeded on all of its nested error fields (including per-bank `recall.results[]`) before the first edit, then executes only assigned work in owned paths, and writes a receipt.
 5. **Receipt** — Build seat posts into the Desk labeled `awaiting-review / pending QUALITY` and sends LEAD a priority-false handoff. LEAD polls held messages; they do not wake LEAD by themselves.
 6. **QUALITY** — LEAD requests review 1:1. QUALITY is off-channel and returns status priority false. LEAD relays it into the Desk.
 7. **Consolidate** — LEAD consolidates specialist receipts + QUALITY verdict.

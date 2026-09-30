@@ -41,7 +41,8 @@ Ticket in hand. About to touch the repo?
 ├─ Did it succeed?  Check the NESTED error     NO ──▶ DEGRADED. Human ack or stop. §3
 │  │  fields, not the top level — §2.1.                (a populated response is not a
 │  │  desk_brief: substrate.error absent AND            successful one)
-│  │  recall.error absent AND tool was
+│  │  recall.error absent AND no
+│  │  recall.results[].error AND tool was
 │  │  listed AND not deadline-cut.
 │  │ YES
 ├─ Recorded what you read in the receipt?      NO ──▶ Record it, then act. §2.2
@@ -105,12 +106,17 @@ level down.
 | Check | Where it comes from |
 |---|---|
 | `substrate.error` is absent | `core.brief` caches the result only `if not substrate.get("error")` — that is the gateway's own test for whether the brief was real. `upstreams.SubstrateClient.brief` returns `{error: UPSTREAM_ERROR, reason: …}` on an HTTP error or a ≥400, and `not_configured("substrate")` when no credential is set |
-| `recall.error` is absent | `core.memory_recall` sets `error` and `reason` on the recall object when the memory plane is unreachable. Recall dead means prior decisions are invisible, which is the condition §3 exists for even when the substrate brief itself is fine |
+| `recall.error` is absent **and** no entry in `recall.results[]` carries an `error` | **Two code paths, two shapes — check both.** With Hindsight configured, `core.memory_recall` loops the banks, appends `{bank, **hit}` per bank and **returns early**, so a failed bank lands in `recall.results[i].error` and `recall.error` is never set. Only on the substrate fallback does it set `recall.error` / `recall.reason`. Recall dead means prior decisions are invisible, which is the §3 condition even when the substrate brief itself is fine |
 | The tool was listed, and the call was not cut by the 20 s deadline | `skills/desk-gateway` §1, §4 |
+
+**One failed bank is enough.** `recall.results[]` has one entry per bank — your own `pd-<seat>` plus
+the shared `pd-desk` — and the shared bank is where team-wide standing decisions live. A response
+where `pd-<seat>` answered and `pd-desk` returned `{error: upstream_timeout, …}` is a brief that
+cannot tell you what the desk already decided, so it is §3, not a partial success to work around.
 
 Anything else is §3, however full the top level looks. A seat that checks only for a top-level
 `reason` will read a substrate outage as a quiet ticket and edit without an ack — the precise hole
-this section is here to close.
+this section is here to close, and `recall.results[].error` is the second door into the same room.
 
 For a substrate `memory_brief` reached through the connector, apply the same discipline to whatever
 its live response uses: find the field that says the upstream failed, and do not accept the envelope
@@ -168,7 +174,8 @@ rather than raised. For `desk_brief` the response stays fully populated and the 
 looks, at the top level, exactly like a ticket nobody has touched.
 
 **Degraded mode is the brief failing, per §2.1** — `substrate.error` present, `recall.error` present,
-the tool not listed, the call cut by the 20 s deadline, or an etag-bearing tool returning no etag. It
+**any `recall.results[].error` present**, the tool not listed, the call cut by the 20 s deadline, or an
+etag-bearing tool returning no etag. It
 is **not** a successful brief from a tool that has no etag field (§2.3), and it is **not** a cache hit.
 Neither of those is a failure, and treating them as one makes an ack the price of every ordinary turn.
 
@@ -333,7 +340,8 @@ Rules that already bind, before the schema exists:
 |---|---|
 | Edit before a brief that succeeded, without a recorded ack | §2, §3 — the decision may already exist and you cannot see it |
 | Treat a successful brief as degraded because the tool has no etag field | §2.3 — that reading makes a human ack the price of every ordinary turn |
-| Read the envelope as the answer — top-level fields present, so "it worked" | §2.1 — `desk_brief` returns a full object on failure; the verdict is `substrate.error` / `recall.error` |
+| Read the envelope as the answer — top-level fields present, so "it worked" | §2.1 — `desk_brief` returns a full object on failure; the verdict is `substrate.error`, `recall.error` **and** every `recall.results[].error` |
+| Check `recall.error` only | §2.1 — with Hindsight configured that field is never set; failures are reported per bank in `recall.results[]` |
 | Record `generated_at` as `brief_etag`, or diff it | §2.2 — it is a read timestamp; it moves on every fresh call and freezes for five minutes on a cache hit |
 | Retry a failed brief in a loop | One retry, then degraded. The audit log fills with the same refusal |
 | Treat an empty brief as "nothing known" | It fails open. Empty plus a `reason` is *unknown* |
@@ -356,7 +364,9 @@ Rules that already bind, before the schema exists:
 desk_brief {graph_id: "ut-…", task_id: "intake-ack-idempotent"}
   → {seat, generated_at: 1790761742.31, cached: false,
      substrate: {ok: true, brief: "…"},          ← no .error  ✔ §2.1
-     recall: {banks: ["pd-systems","pd-desk"], results: [ … ]},   ← no .error  ✔ §2.1
+     recall: {banks: ["pd-systems","pd-desk"],
+              results: [{bank: "pd-systems", ok: true, …},
+                        {bank: "pd-desk",    ok: true, …}]},  ← no .error on EITHER bank ✔ §2.1
      loaded_packs, intake_queue, reminders}
     Brief SUCCEEDED. recall shows a 2026-09-24 decision on the ack path.
 receipt stub: task_id, brief_read_at: 1790761742.31, cached: false   ← §2.2 row 2, NOT brief_etag
@@ -439,7 +449,9 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Mode | Symptom | Fix |
 |---|---|---|
 | Edit before the brief | Receipt records no brief at all; work contradicts a recorded decision | Brief first. It is the precondition, not a courtesy |
-| Failed brief read as successful | Populated response, no top-level `reason`, so no ack was sought | §2.1 — `substrate.error` and `recall.error` decide, nothing else |
+| Failed brief read as successful | Populated response, no top-level `reason`, so no ack was sought | §2.1 — `substrate.error`, `recall.error` and `recall.results[].error` decide, nothing else |
+| Failed Hindsight recall read as successful | `recall.error` absent because that path never sets it; the error sits in `recall.results[i]` | §2.1 — scan every bank entry; one failed bank is degraded |
+| Partial recall worked around | `pd-<seat>` answered, `pd-desk` errored, seat proceeded on its own bank | The shared bank holds the desk's standing decisions; §3 applies |
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
 | Degraded work, no ack | No `approvals` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |
@@ -464,7 +476,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Rule | Gate or directive | Why |
 |---|---|---|
 | A brief that succeeded per §2.1 before repo work, what it returned recorded per §2.2; ack recorded otherwise | G-2, PD-1 | Acting on unknown memory state is claiming without observing |
-| Success is judged on the nested error fields, never on the envelope | G-2, PD-1 | A fail-open read returns a full object; the top level cannot tell you it failed |
+| Success is judged on every nested error field, never on the envelope | G-2, PD-1 | A fail-open read returns a full object; the top level cannot tell you it failed, and one code path reports per bank |
 | No staleness claim the tool cannot support | PD-1, PD-6 | `generated_at` is when you read, not what you read; the gap goes in `unverified` |
 | Degradation goes in the payload, never in the event kind | G-4 | The catalogue routes on kind; a misrouted turn is a blocker nobody owns or work nobody reviews |
 | `memory_write` refused without `receipt_path` or `source` | G-2 | Memory is downstream of verification, never a substitute |

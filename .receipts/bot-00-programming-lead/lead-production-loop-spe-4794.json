@@ -3,7 +3,7 @@
   "bot": "bot-00-programming-lead",
   "branch": "claude/spe-4794-production-loop-v4i18e",
   "started_at": "2026-09-30T06:54:22Z",
-  "completed_at": "2026-09-30T09:20:00Z",
+  "completed_at": "2026-09-30T09:52:00Z",
   "runtime": "claude-cloud",
   "lane": "A",
   "repo": "https://github.com/swcstudiospace/programming-desk",
@@ -171,6 +171,33 @@
       "duration_s": 0.5,
       "output_tail": "G-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected",
       "note": "With verify.sh and this receipt staged. skills/desk-bootstrap/** is bot-00's, so the new script is LEAD's to add; no .py was created, because **/*.py resolves to bot-01."
+    },
+    {
+      "cmd": "grep -n 'class Hindsight' -A 25 services/desk-gateway/src/desk_gateway/upstreams.py; grep -n 'async def request' -A 22 services/desk-gateway/src/desk_gateway/upstreams.py; sed -n 106,122p services/desk-gateway/src/desk_gateway/tools/core.py",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "Hindsight.recall -> HttpUpstream.request, which returns {error: UPSTREAM_TIMEOUT|UPSTREAM_ERROR, reason} or not_configured on failure. core.memory_recall, when svc.hindsight.http.configured: for bank in banks -> out['results'].append({'bank': bank, **hit}) -> RETURN EARLY. recall.error is only ever set on the substrate-fallback branch (via.get('error')).",
+      "note": "Greptile P1 4142053939 verified true. With Hindsight configured, a failed recall is reported per bank in recall.results[i].error and recall.error is never set, so the round-2 success test (substrate.error + recall.error) passed a dead memory plane as a successful brief."
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, raw-connector denial, skills.approve, 5 packet fields, 7/7 templates, no stale wording, no credential literal",
+      "note": "Extended with round-3 assertions: the per-bank field in both files, the one-failed-bank rule in both, and the early-return reason."
+    },
+    {
+      "cmd": "cp skills/desk-bootstrap/desk-production-loop/SKILL.md /tmp/SKILL3.bak && python3 -c \"from pathlib import Path; p=Path('skills/desk-bootstrap/desk-production-loop/SKILL.md'); p.write_text(p.read_text().replace('**One failed bank is enough.**','A failed bank is tolerable.',1))\" && bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 1,
+      "duration_s": 0.08,
+      "output_tail": "FAIL: R3 one-bank rule skill",
+      "note": "Negative control for the round-3 assertion specifically. Restored from /tmp/SKILL3.bak immediately; the check is green again and the file diff is the round-3 edit only."
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q && python3 ci/gates/check_ownership.py --validate-manifest && python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files $(git diff --name-only --cached origin/main) && python3 ci/gates/check_secrets.py --files $(git diff --name-only --cached origin/main)",
+      "exit_code": 0,
+      "duration_s": 12.2,
+      "output_tail": "generate-templates --check: 7 templates up to date\n7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked\n157 passed in 10.11s\nG-1 manifest OK — 7 bots, 103 rules\nG-1 PASS — bot-00-programming-lead: 15 file(s) within owned paths\nG-3 PASS — 15 file(s) scanned, no secrets detected"
     }
   ],
   "claims": [
@@ -271,6 +298,23 @@
     {
       "claim": "G-1 and G-3 pass for bot-00-programming-lead across all fifteen paths including the new verify.sh. No .py file was added, because **/*.py resolves to bot-01-systems-backend.",
       "evidence_command_index": 22
+    },
+    {
+      "claim": "Greptile P1 4142053939 was a real defect and is fixed. core.memory_recall has two branches with two failure shapes: with Hindsight configured it appends {bank, **hit} per bank and returns early, so a failed bank appears only in recall.results[i].error and recall.error is never set; recall.error belongs to the substrate-fallback branch alone. The §2.1 test now requires substrate.error absent AND recall.error absent AND no recall.results[].error, states that one failed bank is enough because pd-desk holds the desk's standing decisions, and the same correction is in docs/desk-operating-model.md point 1, point 3, the Lane C step, the L1 tree, §3, the never-table, three failure-mode rows and the gate mapping.",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "verify.sh now asserts the round-3 rule in both files and still passes.",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "The round-3 assertion is itself capable of failing: removing the one-failed-bank rule makes the check exit 1 and name it.",
+      "evidence_command_index": 25,
+      "expects_failure": true
+    },
+    {
+      "claim": "The round-3 fix weakened nothing: templates regenerate identically, G-7 passes, the 157 gate tests pass, the manifest validates, and G-1/G-3 pass on all fifteen paths.",
+      "evidence_command_index": 26
     }
   ],
   "unverified": [
@@ -291,7 +335,8 @@
     "The Greptile fixes are documentation-level and were verified by content assertions plus the repo's own gates, not by running a seat through the loop against a live gateway. Whether a seat actually follows the corrected §3 and §6 is observable only once the loop runs on a real ticket.",
     "Whether the substrate memory_brief reached through the Hermes connector nests its upstream failure the same way desk_brief does is unverified — the connector was not reachable. The skill therefore states the rule concretely for desk_brief (substrate.error / recall.error, verified from the gateway source) and, for memory_brief, tells the seat to find the field that says the upstream failed rather than accept the envelope. That instruction is a discipline, not a transcribed field name.",
     "verify.sh asserts that the rules are PRESENT in the prose and that superseded wording is gone. It cannot assert that the rules are correct, or that a seat follows them. Two review rounds have now corrected rules that the earlier version of this check would have passed, which is the honest measure of its limits.",
-    "The PR body was rewritten for head 7f3a69c after both review rounds, because the original body still described the superseded rules (etag-before-repo-work, 'no etag -> degraded', 11 commands, 14 files) that rounds 1 and 2 corrected. The round-by-round table in the body is the record of what changed; a reviewer reading only the first version of the body would have been misled about what this PR asserts."
+    "The PR body was rewritten for head 7f3a69c after both review rounds, because the original body still described the superseded rules (etag-before-repo-work, 'no etag -> degraded', 11 commands, 14 files) that rounds 1 and 2 corrected. The round-by-round table in the body is the record of what changed; a reviewer reading only the first version of the body would have been misled about what this PR asserts.",
+    "The per-bank recall rule is read from the gateway source (core.memory_recall's two branches and HttpUpstream.request's failure shape), not from an observed desk_brief response — the connector is unreachable from this container. The exact key inside each recall.results[] entry is whatever HttpUpstream.request returns, which is 'error' plus 'reason'; if a future Hindsight adapter nests it differently, §2.1 is the thing to correct."
   ],
   "blockers": [
     "SPE-4792 (signed handoff packet schema) has not landed, so handoff_to_hermes stays unsigned and the packet fields stay omitted. Documented, not worked around.",
@@ -410,5 +455,18 @@
       "title": "Re-scope or remove the raw hindsight / ragflow HTTP MCP servers in the root .mcp.json",
       "why_not_here": ".mcp.json is INFRA's. It is Lane A cloud-session tooling rather than a desk seat default; this PR documents the boundary instead of editing it."
     }
-  ]
+  ],
+  "greptile_round_3": {
+    "reviewed_head": "dc0ad8bc92e219838e7d6acaac889b6c0680d4ae",
+    "findings": [
+      {
+        "id": 4142053939,
+        "severity": "P1",
+        "path": "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+        "title": "Hindsight failures look successful",
+        "disposition": "valid — fixed in this push (§2.1 covers recall.results[].error)"
+      }
+    ],
+    "note": "Third consecutive round to find a real hole in the same success test. Round 1 tightened the trigger off the missing etag; round 2 found the test reading the envelope; round 3 found it reading only one of the two shapes the gateway uses for recall failures. The rule is now written against both code branches rather than against the one the reviewer last pointed at."
+  }
 }

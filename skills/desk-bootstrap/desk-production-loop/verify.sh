@@ -38,6 +38,13 @@ need("A populated response is not a successful brief" in fS,"R2a envelope rule s
 need("A populated response is not a successful brief" in fD,"R2a envelope rule doc")
 need("There is no top-level `reason`. Do not look for one." in fS,"R2a no top-level reason")
 for f in ("substrate.error","recall.error"): need(f in S and f in D,"R2a field "+f)
+# round 3 — per-bank recall failures: the Hindsight path never sets recall.error
+need("recall.results[].error" in S,"R3 per-bank field skill")
+need("recall.results[].error" in D,"R3 per-bank field doc")
+need("One failed bank is enough" in fS,"R3 one-bank rule skill")
+need("one failed bank is enough" in fD.lower(),"R3 one-bank rule doc")
+need("returns early" in fS and "returns early" in fD,"R3 early-return reason")
+need("recall.error is never set" in fD or "recall.error` is never set" in fD,"R3 doc never-set")
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")
 need("read timestamp, not a revision id" in fD,"R2b doc")
@@ -72,5 +79,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, raw-connector denial, skills.approve, 5 packet fields, 7/7 templates, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, raw-connector denial, skills.approve, 5 packet fields, 7/7 templates, no stale wording, no credential literal")
 PY

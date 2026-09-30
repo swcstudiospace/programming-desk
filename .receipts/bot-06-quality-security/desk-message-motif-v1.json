@@ -1,0 +1,116 @@
+{
+  "task_id": "desk-message-motif-v1",
+  "bot": "bot-06-quality-security",
+  "approved_by": "bot-00-programming-lead",
+  "approved_at": "2026-09-30T17:08:51Z",
+  "branch": "bot-06-quality-security/desk-message-motif-v1",
+  "started_at": "2026-09-30T16:06:36Z",
+  "completed_at": "2026-09-30T16:10:12Z",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('prompts/_shared/core-directives.xml')\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "XML OK"
+    },
+    {
+      "cmd": "bash scripts/assemble-prompts.sh",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "wrote prompts-assembled/QUALITY.xml\nwrote prompts/QUALITY.xml"
+    },
+    {
+      "cmd": "bash scripts/assemble-prompts.sh --check",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "assemble-prompts --check: 7 seats up to date (roster spectrumwebco.json, version 2026-09-30)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 15 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS \u2014 15 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "prompts/_shared/core-directives.xml: literal UUID at line(s) 540 \u2014 use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\nG-7 FAIL \u2014 desk integrity: 1 problem(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 13.9,
+      "output_tail": "........................................................................ [ 45%]\n........................................................................ [ 91%]\n.............                                                            [100%]\n157 passed in 13.90s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "core-directives.xml bumped 1.1 -> 1.2 and is well-formed XML",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk_message_motif block inserted after desk_channel_discipline exactly as specified, XML-safe",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "prompts-assembled/* and prompts/{SEAT}.xml regenerated from the updated shared source",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Assembled prompts are exactly what assemble-prompts.sh produces from the committed sources and roster",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ownership.yaml validates (every path resolves to exactly one bot)",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1: every changed path in this branch (vs origin/main) is owned by bot-06-quality-security",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-3: no committed secret shapes in the diff against origin/main",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-4: no contract surface is touched",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-7 initially failed on a literal-UUID shape inside the desk_message_motif <bad> example (illustrative agent id); fixed by removing the dashes so the example still reads as a raw pasted id without matching the hardcoded-channel/roster-id check, then re-verified green",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Gate test suite passes at the top of the stack",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "The updated core-directives.xml/prompts-assembled output has not yet been installed into the seven live seats (desk_doctor install_prompt runs from origin/main once this PR merges)."
+  ]
+}

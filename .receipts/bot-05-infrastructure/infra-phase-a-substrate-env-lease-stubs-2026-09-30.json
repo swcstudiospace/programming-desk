@@ -136,10 +136,10 @@
       "output_tail": "desk-lease-heartbeat.service:28:# PLACEHOLDER — generate from LEASE_TIMEOUT_S at install time\ndesk-lease-heartbeat.service:33:TimeoutStartSec=30\ndesk-lease-heartbeat.timer:13:#     OnUnitActiveSec + RandomizedDelaySec  <=  LEASE_TTL_S / 3\ndesk-lease-heartbeat.timer:26:# PLACEHOLDER — generate from LEASE_INTERVAL_S at install time.\ndesk-lease-heartbeat.timer:27:OnUnitActiveSec=60\ndesk-lease-heartbeat.timer:28:# PLACEHOLDER — generate from LEASE_JITTER_S.\ndesk-lease-heartbeat.timer:30:RandomizedDelaySec=5"
     },
     {
-      "cmd": "git show 76fd388:infra/lease-heartbeat/drift-probe.sh > old.sh && DRIFT_PROBE_TIMEOUT_S=abc bash old.sh reach 127.0.0.1:1 | python3 -c 'json.load(sys.stdin)'",
-      "exit_code": 0,
+      "cmd": "git show 76fd388:infra/lease-heartbeat/drift-probe.sh > /tmp/probe-76fd388.sh && DRIFT_PROBE_TIMEOUT_S=abc bash /tmp/probe-76fd388.sh reach 127.0.0.1:1 | python3 -c 'import json,sys; json.load(sys.stdin)'",
+      "exit_code": 1,
       "duration_s": 0.1,
-      "output_tail": "JSON PARSE FAILED: Expecting value: line 1 column 73 (char 72)   [old script exit=0]"
+      "output_tail": "json.decoder.JSONDecodeError: Expecting value — the pre-fix probe emitted timeout_s:abc, which is not parseable JSON, while exiting 0 itself"
     },
     {
       "cmd": "DRIFT_PROBE_TIMEOUT_S=abc ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
@@ -148,16 +148,16 @@
       "output_tail": "{\"probe\":\"config\",\"ok\":false,\"error\":\"DRIFT_PROBE_TIMEOUT_S must be a number of seconds, with no unit suffix (e.g. 5 or 2.5), got: abc\"}"
     },
     {
-      "cmd": "PATH=<shim with a timeout that exits 127> DRIFT_GIT_REMOTE=origin ./infra/lease-heartbeat/drift-probe.sh tip",
+      "cmd": "mkdir -p /tmp/shim && printf '#!/bin/sh\\nexit 127\\n' > /tmp/shim/timeout && chmod +x /tmp/shim/timeout && PATH=/tmp/shim:$PATH DRIFT_GIT_REMOTE=origin bash infra/lease-heartbeat/drift-probe.sh tip",
       "exit_code": 3,
       "duration_s": 0.1,
-      "output_tail": "ok=False remote_checked=False"
+      "output_tail": "{\"probe\":\"git_tip\",...,\"ok\":false,...,\"remote_checked\":false,...,\"note\":\"ls-remote could not be started (exit 127)\"}"
     },
     {
-      "cmd": "PATH=<shim with a timeout that exits 127> ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "cmd": "PATH=/tmp/shim:$PATH bash infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
       "exit_code": 3,
       "duration_s": 0.05,
-      "output_tail": "ok=False unattempted=1 reachable=False probed=False"
+      "output_tail": "{\"probe\":\"reachability\",...,\"probed\":false,...,\"targets_unattempted\":1,\"ok\":false}"
     },
     {
       "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all",
@@ -292,22 +292,22 @@
       "output_tail": "top ok=True | tip ok=True remote_checked=True relation=ahead / reach ok=True req=2 malformed=0 unattempted=0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
     },
     {
-      "cmd": "curl --fail-with-body --silent --show-error --config <curlrc> --data @<request> http://127.0.0.1:8300/mcp  # fake MCP returning HTTP 200 with result.isError=true",
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-iserror.sh",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "curl exit=0 — the bare form treats a failed tool as a successful sweep, which is exactly what systemd would have recorded"
+      "output_tail": "bare curl --fail-with-body exit=0   (0 = systemd would record a SUCCESSFUL sweep)\nsubstrate-lease-reap.sh    exit=5   (5 = tool failure, unit fails)"
     },
     {
-      "cmd": "SUBSTRATE_MCP_URL=http://127.0.0.1:8300/mcp ./infra/lease-heartbeat/substrate-lease-reap.sh  # same fake response",
-      "exit_code": 5,
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-iserror.sh",
+      "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "substrate-lease-reap: tool reported isError"
+      "output_tail": "the same run: the wrapper exits 5 where the bare form exits 0; the script itself exits 0 only when that distinction holds"
     },
     {
-      "cmd": "for mode in ok iserror rpcerror sse_ok sse_iserror http500 garbage; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done  # against a local fake MCP server in each response shape",
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-matrix.sh",
       "exit_code": 0,
       "duration_s": 3.0,
-      "output_tail": "ok exit=0 swept | iserror exit=5 tool reported isError | rpcerror exit=5 JSON-RPC error -32601 | sse_ok exit=0 swept | sse_iserror exit=5 tool reported isError | http500 exit=2 HTTP 500 | garbage exit=4 unparseable response"
+      "output_tail": "ok exit=0 ok | iserror exit=5 ok | rpcerror exit=5 ok | sse_ok exit=0 ok | sse_multiline exit=0 ok | sse_iserror exit=5 ok | http500 exit=2 ok | garbage exit=4 ok\nMATRIX PASS: 8/8 response shapes mapped to the expected exit code"
     },
     {
       "cmd": "SUBSTRATE_MCP_URL=http://127.0.0.1:1/mcp ./infra/lease-heartbeat/substrate-lease-reap.sh  # nothing listening",
@@ -340,22 +340,22 @@
       "output_tail": ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md"
     },
     {
-      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > old-reap.sh && SUBSTRATE_MCP_URL=<fake multiline-SSE success> bash old-reap.sh",
+      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > /tmp/reap-99028dd.sh && REAP_WRAPPER=/tmp/reap-99028dd.sh bash infra/lease-heartbeat/smoke-reap-sse.sh",
       "exit_code": 4,
       "duration_s": 0.3,
-      "output_tail": "exit=4 unparseable — a SUCCESSFUL sweep reported as a failure, on every tick, because each data: line was parsed as standalone JSON"
+      "output_tail": "substrate-lease-reap: unparseable response: Expecting property name enclosed in double quotes: line 1 column 2 (char 1)\nSMOKE FAIL: wrapper exited 4 on a successful multiline-SSE result"
     },
     {
-      "cmd": "SUBSTRATE_MCP_URL=<fake multiline-SSE success> ./infra/lease-heartbeat/substrate-lease-reap.sh",
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-sse.sh",
       "exit_code": 0,
       "duration_s": 0.3,
-      "output_tail": "substrate-lease-reap: swept"
+      "output_tail": "substrate-lease-reap: swept\nSMOKE PASS: multiline-SSE success parsed, exit 0"
     },
     {
-      "cmd": "for mode in sse_multiline_ok sse_multiline_err sse_nospace sse_no_trailing sse_two_events sse_done plain; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done",
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-matrix.sh",
       "exit_code": 0,
       "duration_s": 3.0,
-      "output_tail": "sse_multiline_ok exit=0 swept | sse_multiline_err exit=5 isError | sse_nospace exit=0 | sse_no_trailing exit=0 | sse_two_events exit=5 isError | sse_done exit=0 | plain exit=0"
+      "output_tail": "the SSE rows are the framing coverage: sse_ok (one-line data:), sse_multiline (result split over many data: lines) and sse_iserror (multiline isError) all map as expected"
     },
     {
       "cmd": "head -c 2000 big.txt | wc -c ; head -c -2000 big.txt | wc -c  # 10000-byte body",
@@ -370,10 +370,10 @@
       "output_tail": "substrate-lease-reap: SUBSTRATE_LEASE_REAP_LOG_BYTES must be a non-negative integer, got: -5"
     },
     {
-      "cmd": "for mode in ok iserror rpcerror sse_ok sse_iserror http500 garbage; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done  # regression after both fixes",
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-matrix.sh",
       "exit_code": 0,
       "duration_s": 3.0,
-      "output_tail": "ok exit=0 | iserror exit=5 | rpcerror exit=5 | sse_ok exit=0 | sse_iserror exit=5 | http500 exit=2 | garbage exit=4 — unchanged"
+      "output_tail": "MATRIX PASS: 8/8 — the original response-shape mapping is unchanged after the SSE and LOG_BYTES fixes"
     },
     {
       "cmd": "bash -n infra/lease-heartbeat/smoke-reap-sse.sh",
@@ -388,10 +388,10 @@
       "output_tail": "substrate-lease-reap: swept\nSMOKE PASS: multiline-SSE success parsed, exit 0"
     },
     {
-      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > old2.sh && sed 's#./infra/lease-heartbeat/substrate-lease-reap.sh#old2.sh#' infra/lease-heartbeat/smoke-reap-sse.sh | bash",
-      "exit_code": 4,
+      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > /tmp/reap-99028dd.sh && REAP_WRAPPER=/tmp/reap-99028dd.sh bash infra/lease-heartbeat/smoke-reap-matrix.sh",
+      "exit_code": 1,
       "duration_s": 0.6,
-      "output_tail": "substrate-lease-reap: unparseable response: Expecting property name enclosed in double quotes: line 1 column 2\nSMOKE FAIL: exit 4"
+      "output_tail": "sse_multiline exit=4 EXPECTED 0 | sse_iserror exit=4 EXPECTED 5 | every other row ok\nMATRIX FAIL — the pre-fix wrapper also misreported a genuine multiline isError as unparseable"
     },
     {
       "cmd": "grep -n 'non-negative integer\\|NON-NEGATIVE INTEGER' infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
@@ -492,7 +492,8 @@
     },
     {
       "claim": "Greptile P1 4141898005 confirmed, and worse than reported: on the pushed tip an invalid DRIFT_PROBE_TIMEOUT_S also produced UNPARSEABLE JSON (timeout_s:abc emitted unquoted) while still exiting 0.",
-      "evidence_command_index": 20
+      "evidence_command_index": 20,
+      "expects_failure": true
     },
     {
       "claim": "Root cause fixed at the source: both *_TIMEOUT_S values are validated before any probe runs, and a bad one stops the run with a config object and exit 3 instead of a misleading result.",
@@ -610,8 +611,7 @@
     },
     {
       "claim": "The wrapper fails that same response, so the unit now fails when the tool reports failure.",
-      "evidence_command_index": 47,
-      "expects_failure": true
+      "evidence_command_index": 47
     },
     {
       "claim": "substrate-lease-reap.sh distinguishes all seven MCP response shapes tested — plain-JSON success, result.isError, JSON-RPC error, SSE success, SSE isError, HTTP 500 and an unparseable body — with a distinct exit code per class, over both JSON and SSE framing.",
@@ -719,7 +719,9 @@
     "infra/lease-heartbeat/substrate-lease-reap.timer",
     "infra/lease-heartbeat/substrate-lease-reap.sh",
     ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md",
-    "infra/lease-heartbeat/smoke-reap-sse.sh"
+    "infra/lease-heartbeat/smoke-reap-sse.sh",
+    "infra/lease-heartbeat/smoke-reap-matrix.sh",
+    "infra/lease-heartbeat/smoke-reap-iserror.sh"
   ],
   "destructive": false,
   "deployment": null,

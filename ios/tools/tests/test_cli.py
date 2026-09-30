@@ -109,6 +109,74 @@ class CliTests(unittest.TestCase):
         self.assertIn("plist_lint", proc.stdout)
         self.assertIn("ui_tap", proc.stdout)
 
+    def test_ui_tap_requires_target(self):
+        result = wrap("ui_tap", "serial-1", "/tmp/out.png", which=lambda _name: None)
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["exit_code"], 2)
+        self.assertFalse(result["invoked"])
+
+    def test_ui_tap_passes_target_through(self):
+        result = wrap(
+            "ui_tap", "serial-1", "/tmp/out.png", target="login.button",
+            which=lambda _name: "/usr/bin/ui_tap",
+            runner=lambda argv, **_k: subprocess.CompletedProcess(argv, 0, "", ""),
+        )
+        self.assertEqual(result["status"], "recorded")
+        self.assertIn("--target", result["argv"])
+        self.assertIn("login.button", result["argv"])
+
+    def test_xcodebuild_log_any_failed_banner_fails(self):
+        parsed = parse_log(
+            "** TEST FAILED **\n"
+            "xcodebuild -scheme Desk clean\n"
+            "** BUILD SUCCEEDED **\n",
+            "fixture.log",
+        )
+        self.assertEqual(parsed["status"], "failed")
+        self.assertTrue(parsed["any_failed"])
+        self.assertEqual(parsed["banner_count"], 2)
+
+    def test_snapshot_diff_single_files_with_different_names(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            before = Path(tmp) / "recorded_shot.png"
+            after = Path(tmp) / "candidate_shot.png"
+            out = Path(tmp) / "diff.json"
+            before.write_bytes(b"one")
+            after.write_bytes(b"two")
+            proc = run("snapshot_diff", "--before", str(before), "--after", str(after), "--out", str(out))
+            body = json.loads(out.read_text())
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(body["status"], "changed")
+        self.assertEqual(len(body["changed"]), 1)
+        self.assertEqual(body["added"], [])
+        self.assertEqual(body["removed"], [])
+
+    def test_entitlements_scan_flags_blank_usage(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "Info.plist"
+            path.write_bytes(plistlib.dumps({"NSCameraUsageDescription": " "}))
+            proc = run("entitlements_scan", "--path", str(tmp))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(body["status"], "failed")
+        self.assertEqual(body["usage_findings"][0]["key"], "NSCameraUsageDescription")
+
+    def test_entitlements_diff_flags_value_change(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base"
+            head = Path(tmp) / "head"
+            base.mkdir(); head.mkdir()
+            (base / "App.entitlements").write_bytes(plistlib.dumps({"aps-environment": "development"}))
+            (head / "App.entitlements").write_bytes(plistlib.dumps({"aps-environment": "production"}))
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(body["entitlements"], {"added": [], "removed": []})
+        change = body["entitlements_value_changes"][0]
+        self.assertEqual(change["key"], "aps-environment")
+        self.assertEqual(change["before"], "development")
+        self.assertEqual(change["after"], "production")
+
 
 if __name__ == "__main__":
     unittest.main()

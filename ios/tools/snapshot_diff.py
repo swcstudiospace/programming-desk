@@ -31,7 +31,7 @@ def _digest(path: Path) -> dict:
 
 def _index(path: Path) -> dict[str, dict]:
     if path.is_file():
-        return {path.name: _digest(path)}
+        return {".": _digest(path)}
     if not path.is_dir():
         raise FileNotFoundError(path)
     out = {}

@@ -26,7 +26,11 @@ def _add_metavr(sub, name: str) -> None:
     parser = sub.add_parser(name)
     parser.add_argument("--serial", required=True)
     parser.add_argument("--out", required=True)
-    parser.set_defaults(func=lambda args, cmd=name: metavr_wrap(cmd, args.serial, args.out))
+    if name == "ui_tap":
+        parser.add_argument("--target", required=True)
+        parser.set_defaults(func=lambda args, cmd=name: metavr_wrap(cmd, args.serial, args.out, target=args.target))
+    else:
+        parser.set_defaults(func=lambda args, cmd=name: metavr_wrap(cmd, args.serial, args.out))
 
 
 def build_parser() -> argparse.ArgumentParser:

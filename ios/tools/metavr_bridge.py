@@ -14,13 +14,17 @@ COMMANDS = ("device_screenshot", "ui_dump", "ui_tap")
 SKIP_MISSING = 3
 
 
-def wrap(command: str, serial: str, out: str, which=shutil.which, runner=subprocess.run) -> dict:
+def wrap(command: str, serial: str, out: str, target: str | None = None, which=shutil.which, runner=subprocess.run) -> dict:
     if command not in COMMANDS:
         return {"status": "error", "reason": f"unknown MetaVR command {command}", "exit_code": 2, "invoked": False}
     if not serial or not out:
         return {"status": "error", "reason": "--serial and --out are required", "exit_code": 2, "invoked": False}
+    if command == "ui_tap" and not target:
+        return {"status": "error", "reason": "--target is required for ui_tap", "exit_code": 2, "invoked": False}
     binary = which(command)
     argv = [binary or command, "--serial", serial, "--out", out]
+    if target:
+        argv += ["--target", target]
     if not binary:
         return {
             "status": "skipped",

@@ -144,19 +144,19 @@ def test_store_intake_idempotency_is_scoped_by_origin(tmp_path: Path):
     "/etc/passwd",
     "contracts/ok/../../../../tmp/escaped.yaml",
 ])
-def test_contract_surface_cannot_escape_the_proposal_tree(surface: str):
-    """The roster pattern for `surface` allows '.' and '/', so it accepts '..'.
+def test_safe_path_rejects_the_escaping_surfaces(surface: str):
+    """Unit-level check on the guard itself.
 
-    contract_propose joins the surface onto the export tree and writes it before any gate
-    runs, and the unit runs as root — so an unchecked surface is an arbitrary root-owned
-    file write. safe_path is the guard; this asserts it actually rejects the escapes.
+    Whether contract_propose actually *calls* it is a separate question, covered
+    end-to-end by test_contract_propose_* in test_server.py. Both layers are needed:
+    this one localises a change to the pattern, those catch the guard being dropped.
     """
     from desk_gateway.repo import safe_path
     assert not safe_path(surface), f"{surface!r} would be joined onto the proposal tree"
 
 
 @pytest.mark.parametrize("surface", ["contracts/api/notifications.yaml", "openapi.yaml"])
-def test_legitimate_contract_surface_is_still_accepted(surface: str):
+def test_safe_path_still_accepts_legitimate_surfaces(surface: str):
     from desk_gateway.repo import safe_path
     assert safe_path(surface)
 

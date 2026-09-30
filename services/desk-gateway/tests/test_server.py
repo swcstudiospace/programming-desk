@@ -249,3 +249,77 @@ async def test_oauth_dcr_pkce_consent_and_seat_scope(client, rpc):
     assert resp.status_code == 403
     refreshed = await client.post("/token", data={"grant_type": "refresh_token", "refresh_token": body["refresh_token"], "client_id": client_id})
     assert refreshed.status_code == 200 and "seat:android" in refreshed.json()["scope"]
+
+
+# ---------------------------------------------------------------------------
+# contract_propose — the file-write path
+#
+# The surface arrives from the caller and is joined onto the export tree, and the
+# unit runs as root, so the guards on that join are security-critical. Exercised
+# through the endpoint rather than by asserting on safe_path: a unit test of the
+# helper stays green if the handler stops calling it, which is the regression that
+# actually matters here.
+# ---------------------------------------------------------------------------
+
+PROPOSAL = {
+    "change_id": "traversal-guard-v1",
+    "summary": "exercise the contract_propose surface guard",
+    "breaking": False,
+    "version": "1.0.0",
+    "consumers_required": ["bot-02-web-edge"],
+    "body": "openapi: 3.1.0\ninfo:\n  title: guard\n",
+}
+
+
+@pytest.mark.parametrize("surface", [
+    "contracts/../../../tmp/desk-gateway-escape.yaml",
+    "contracts/../../root/.ssh/authorized_keys",
+    "contracts/ok/../../../../tmp/desk-gateway-escape.yaml",
+])
+async def test_contract_propose_refuses_a_surface_that_escapes_the_tree(rpc, surface):
+    """The roster pattern admits '..', so the handler is the only thing standing here."""
+    out = await rpc.call("systems", "desk_contract_propose", {**PROPOSAL, "surface": surface})
+    assert out["is_error"] is True, f"{surface!r} was accepted: {out}"
+    assert out["error"] == "invalid_surface", out
+
+
+async def test_contract_propose_accepts_a_legitimate_surface(rpc):
+    """The refusals above would be satisfied by a handler that rejected everything."""
+    out = await rpc.call("systems", "desk_contract_propose",
+                         {**PROPOSAL, "surface": "contracts/api/guard-probe.yaml"})
+    assert out["is_error"] is False, out
+    assert out["proposal"]["surface"] == "contracts/api/guard-probe.yaml"
+    assert out["proposal"]["proposed_by"] == "bot-01-systems-backend"
+
+
+async def test_contract_propose_will_not_write_through_a_symlink_in_the_tree(
+        rpc, monkeypatch, tmp_path):
+    """Second guard: safe_path sees a clean relative path, the symlink still escapes.
+
+    The export tree is built by git, so a symlink cannot be planted in it from outside
+    — export is substituted here to produce one. Asserts the outside file is untouched,
+    not merely that the call failed, since a refusal for some other reason would look
+    the same.
+    """
+    from desk_gateway.repo import Repo
+
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "authorized_keys"
+    secret.write_text("original\n")
+
+    tree = tmp_path / "tree"
+    (tree / "contracts").mkdir(parents=True)
+    (tree / "contracts" / "api").symlink_to(outside, target_is_directory=True)
+
+    async def fake_export(self, ref):        # noqa: ARG001 — signature must match
+        return tree
+
+    monkeypatch.setattr(Repo, "export", fake_export)
+
+    out = await rpc.call("systems", "desk_contract_propose",
+                         {**PROPOSAL, "surface": "contracts/api/authorized_keys"})
+
+    assert out["is_error"] is True, out
+    assert out["error"] == "invalid_surface", out
+    assert secret.read_text() == "original\n", "the write escaped through the symlink"

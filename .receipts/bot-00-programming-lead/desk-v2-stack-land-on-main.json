@@ -206,8 +206,8 @@
     {
       "cmd": "cd services/desk-gateway && pytest tests/ -q   # after the four fixes",
       "exit_code": 0,
-      "duration_s": 5.2,
-      "output_tail": "47 passed in 5.21s"
+      "duration_s": 6.1,
+      "output_tail": "52 passed in 6.11s"
     },
     {
       "cmd": "git show HEAD:services/desk-gateway/src/desk_gateway/store.py > store.py && pytest tests/test_units.py -k origin -q",
@@ -220,6 +220,30 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "in title=500 ask=30000 -> out title=200 (<=200) ask=20000 (<=20000)"
+    },
+    {
+      "cmd": "cd services/desk-gateway && pytest tests/test_server.py -q -k contract_propose   # through the MCP endpoint, not the helper",
+      "exit_code": 0,
+      "duration_s": 1.6,
+      "output_tail": "5 passed, 25 deselected in 1.61s"
+    },
+    {
+      "cmd": "# control A: delete the safe_path call from contract_propose, keep the containment check\npytest tests/test_server.py -q -k contract_propose",
+      "exit_code": 0,
+      "duration_s": 1.9,
+      "output_tail": "5 passed, 25 deselected — the containment check covers the same '..' payloads, so the two guards are genuinely redundant here"
+    },
+    {
+      "cmd": "# control B: keep safe_path, delete the containment check\npytest tests/test_server.py -q -k contract_propose",
+      "exit_code": 1,
+      "duration_s": 1.5,
+      "output_tail": "FAILED test_contract_propose_will_not_write_through_a_symlink_in_the_tree\n1 failed, 4 passed — safe_path sees a clean relative path, so only containment stops the symlink"
+    },
+    {
+      "cmd": "# control C: delete BOTH guards, i.e. the handler as it arrived from PR #22\npytest tests/test_server.py -q -k contract_propose",
+      "exit_code": 1,
+      "duration_s": 2.2,
+      "output_tail": "FAILED ...refuses_a_surface_that_escapes_the_tree[contracts/../../../tmp/desk-gateway-escape.yaml]\nFAILED ...refuses_a_surface_that_escapes_the_tree[contracts/../../root/.ssh/authorized_keys]\nFAILED ...refuses_a_surface_that_escapes_the_tree[contracts/ok/../../../../tmp/desk-gateway-escape.yaml]\nFAILED ...will_not_write_through_a_symlink_in_the_tree\n4 failed, 1 passed — the one pass is the legitimate-surface test, as it should be"
     }
   ],
   "claims": [
@@ -311,7 +335,7 @@
       "evidence_command_index": 22
     },
     {
-      "claim": "Four Greptile findings fixed and the gateway suite still green at 47 tests (40 + 7 new covering the traversal payloads, the legitimate surfaces, and origin-scoped intake idempotency)",
+      "claim": "Four Greptile findings fixed and the gateway suite green at 52 tests (40 + 12: the traversal guard through the handler, the symlink case, the legitimate surface, safe_path at unit level, and origin-scoped intake)",
       "evidence_command_index": 23
     },
     {
@@ -330,6 +354,24 @@
     {
       "claim": "The injection tests now run the shipped step extracted from the workflow YAML rather than a transcribed copy. Proven against Greptile's own scenario: with the anchored pattern left in the file as a comment and an unanchored match governing, the text-presence check still passes while the behavioural tests fail on all five injection payloads. The copy-based version could not have caught that",
       "evidence_command_index": 18,
+      "expects_failure": true
+    },
+    {
+      "claim": "The traversal regression tests now exercise contract_propose through the MCP endpoint rather than asserting on safe_path, so they observe the handler's behaviour and not the helper's. The symlink case substitutes repo.export to produce a tree git could not build, and asserts the outside file is byte-unchanged rather than only that the call failed",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "Guard attribution, established by removing each in turn: safe_path alone can be removed without failing a test, because the containment check refuses the same '..' payloads — that is defense in depth, not missing coverage. safe_path remains as the cheap early rejection every other repo-path tool in the gateway uses",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "The containment check is the guard the symlink case depends on: removing it alone fails that test and only that test, because safe_path sees 'contracts/api/authorized_keys' as a clean relative path",
+      "evidence_command_index": 28,
+      "expects_failure": true
+    },
+    {
+      "claim": "The tests are not vacuous: against the handler as PR #22 shipped it, with both guards absent, 4 of the 5 fail — all three escape payloads and the symlink. This is the control that matters, and the one the previous safe_path-only tests would have passed",
+      "evidence_command_index": 29,
       "expects_failure": true
     }
   ],
@@ -361,7 +403,7 @@
       "title": ".github/workflows/desk-intake.yml, new from PR #22, audited for the same class",
       "verdict": "CLEAN. It declares `permissions: {}`, passes attacker-controlled issue title, body and author login through env: rather than interpolating them, and builds its JSON with `jq -n --arg`, which cannot be escaped out of. `set -euo pipefail` is set.",
       "disposition": "No change made.",
-      "residual": "The intake token is passed as `-H \"Authorization: Bearer $DESK_INTAKE_TOKEN\"` on the curl argv, which is readable from /proc on a shared runner. Negligible on an ephemeral GitHub-hosted runner and not a P1; left for INFRA rather than changed here, since it is outside what this landing needs to fix and would edit an INFRA-owned file."
+      "residual": "None open. Regression-tested through the handler: three escape payloads and a symlinked target, all refused, with the outside file verified unchanged. Verified non-vacuous by removing both guards and watching 4 of 5 fail, and each guard's distinct role established by removing them one at a time."
     },
     {
       "id": "4140571384",
@@ -413,6 +455,7 @@
     "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix.",
     "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through.",
     "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did.",
-    "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage."
+    "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage.",
+    "Greptile caught the same mistake twice in this PR, in two different files: a test that asserts on a helper rather than on the code path that calls it. The workflow-injection tests ran a copy of the bot-resolution script; the traversal tests asserted safe_path directly and would have passed against a handler that never called it. Both now execute the real path. The pattern worth remembering: when a fix is 'call the existing guard', the test has to prove the call happens, because the guard itself was never broken."
   ]
 }

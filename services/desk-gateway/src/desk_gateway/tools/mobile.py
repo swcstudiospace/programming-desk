@@ -114,17 +114,28 @@ async def lint_baseline_diff(ctx: ToolContext, args: dict[str, Any]) -> dict[str
     }
 
 
+async def _resolve_app_id(asc: Any, bundle_id: str) -> tuple[str | None, dict[str, Any] | None]:
+    """App Store Connect id for a bundle id. Returns (app_id, error) — exactly one is set.
+
+    Every version lookup must be scoped to an app: versionString is unique only within one
+    app, so filtering on it alone can resolve to a different app's release entirely.
+    """
+    apps = await asc.request("GET", "/apps", params={"filter[bundleId]": bundle_id, "limit": 1})
+    if apps.get("error"):
+        return None, apps
+    data = (apps.get("body") or {}).get("data") or []
+    if not data:
+        return None, failure("not_found", "no app with that bundle id")
+    return data[0]["id"], None
+
+
 async def testflight_status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     asc = ctx.services.asc.client()
     if not asc.configured:
         return {"builds": [], **failure("not_configured", "App Store Connect key is not configured on the gateway (or PyJWT is missing)")}
-    apps = await asc.request("GET", "/apps", params={"filter[bundleId]": args["bundle_id"], "limit": 1})
-    if apps.get("error"):
-        return {"builds": [], **apps}
-    data = (apps.get("body") or {}).get("data") or []
-    if not data:
-        return {"builds": [], **failure("not_found", "no app with that bundle id")}
-    app_id = data[0]["id"]
+    app_id, error = await _resolve_app_id(asc, args["bundle_id"])
+    if error is not None:
+        return {"builds": [], **error}
     params: dict[str, Any] = {"filter[app]": app_id, "sort": "-uploadedDate", "limit": 10}
     if args.get("build"):
         params["filter[version]"] = args["build"]
@@ -142,12 +153,15 @@ async def appstore_phased_release(ctx: ToolContext, args: dict[str, Any]) -> dic
     asc = ctx.services.asc.client()
     if not asc.configured:
         return failure("not_configured", "App Store Connect key is not configured on the gateway")
-    versions = await asc.request("GET", "/appStoreVersions", params={"filter[versionString]": args["version"], "limit": 1})
+    app_id, error = await _resolve_app_id(asc, args["bundle_id"])
+    if error is not None:
+        return error
+    versions = await asc.request("GET", "/appStoreVersions", params={"filter[app]": app_id, "filter[versionString]": args["version"], "limit": 1})
     if versions.get("error"):
         return failure(versions["error"], versions.get("reason", "version lookup failed"))
     data = (versions.get("body") or {}).get("data") or []
     if not data:
-        return failure("not_found", "no App Store version with that string")
+        return failure("not_found", "no App Store version with that string for that bundle id")
     version_id = data[0]["id"]
     body = {"data": {"type": "appStoreVersionPhasedReleases", "attributes": {"phasedReleaseState": "ACTIVE"}, "relationships": {"appStoreVersion": {"data": {"type": "appStoreVersions", "id": version_id}}}}}
     result = await asc.request("POST", "/appStoreVersionPhasedReleases", json=body)
@@ -160,7 +174,10 @@ async def appstore_pause_release(ctx: ToolContext, args: dict[str, Any]) -> dict
     asc = ctx.services.asc.client()
     if not asc.configured:
         return failure("not_configured", "App Store Connect key is not configured on the gateway")
-    versions = await asc.request("GET", "/appStoreVersions", params={"filter[versionString]": args["version"], "include": "appStoreVersionPhasedRelease", "limit": 1})
+    app_id, error = await _resolve_app_id(asc, args["bundle_id"])
+    if error is not None:
+        return error
+    versions = await asc.request("GET", "/appStoreVersions", params={"filter[app]": app_id, "filter[versionString]": args["version"], "include": "appStoreVersionPhasedRelease", "limit": 1})
     if versions.get("error"):
         return failure(versions["error"], versions.get("reason", "version lookup failed"))
     included = (versions.get("body") or {}).get("included") or []

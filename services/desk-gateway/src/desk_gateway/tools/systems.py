@@ -73,6 +73,13 @@ async def lsp_diagnostics(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
 async def contract_propose(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     if contains_secret(args["body"]):
         return failure("secret_refused", "proposal body contains a credential shape")
+    # The roster pattern for `surface` allows '.' and '/', so it accepts
+    # contracts/../../../etc/passwd. The path is joined onto the export tree and written
+    # before any gate runs, and the unit runs as root — so without this the tool is an
+    # arbitrary root-owned file write. safe_path is the same guard every other repo-path
+    # tool here uses; it refuses '..' and a leading '/'.
+    if not safe_path(args["surface"]):
+        return failure("invalid_surface", "surface must be a relative path with no '..' segment")
     repo = ctx.services.repo
     if not repo.available:
         return failure("not_configured", "repo checkout is not available to the gateway")
@@ -84,6 +91,10 @@ async def contract_propose(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
     try:
         surface = Path(args["surface"])
         target = tree / surface
+        # Belt and braces behind safe_path: resolve and require the result to stay inside
+        # the export tree, so a symlink in the tree cannot redirect the write either.
+        if not target.resolve().is_relative_to(tree.resolve()):
+            return failure("invalid_surface", "surface resolves outside the proposal tree")
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(args["body"], encoding="utf-8")
         proposal = {

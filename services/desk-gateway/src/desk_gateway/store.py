@@ -110,8 +110,14 @@ class Store:
             queue = self._read("intake", [])
             key = item.get("idempotency_key")
             if key:
+                # Scoped by origin: intake tokens authenticate separate origins, and each
+                # builds its own keys (the GitHub workflow uses github:<repo>:<issue>).
+                # Deduplicating on the key alone lets one origin's key swallow another's
+                # request — the second caller gets the first's intake_id and is told it was
+                # accepted, while its own ask is never queued.
                 for existing in queue:
-                    if existing.get("idempotency_key") == key:
+                    if (existing.get("origin") == item.get("origin")
+                            and existing.get("idempotency_key") == key):
                         return existing
             record = {
                 "intake_id": "in-" + secrets.token_hex(6),

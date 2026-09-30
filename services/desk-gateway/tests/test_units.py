@@ -119,6 +119,48 @@ def test_store_intake_is_idempotent_and_claimable(tmp_path: Path):
     assert acked["state"] == "accepted" and acked["graph_id"] == "ut-abc-deadbeef"
 
 
+def test_store_intake_idempotency_is_scoped_by_origin(tmp_path: Path):
+    """Two origins may pick the same key; neither may swallow the other's request.
+
+    Intake tokens authenticate separate origins and each builds its own keys, so a
+    collision is expected rather than exceptional. Deduplicating on the key alone told
+    the second caller it had been accepted while queueing nothing.
+    """
+    store = Store(tmp_path)
+    gh = store.intake_create({"origin": "github", "title": "t", "ask": "do the thing", "idempotency_key": "shared"})
+    slack = store.intake_create({"origin": "slack", "title": "t", "ask": "do another thing", "idempotency_key": "shared"})
+    assert gh["intake_id"] != slack["intake_id"]
+    assert store.intake_counts() == {"queued": 2}
+
+    # Still idempotent within one origin.
+    again = store.intake_create({"origin": "github", "title": "t", "ask": "do the thing", "idempotency_key": "shared"})
+    assert again["intake_id"] == gh["intake_id"]
+    assert store.intake_counts() == {"queued": 2}
+
+
+@pytest.mark.parametrize("surface", [
+    "contracts/../../../etc/passwd",
+    "contracts/../../root/.ssh/authorized_keys",
+    "/etc/passwd",
+    "contracts/ok/../../../../tmp/escaped.yaml",
+])
+def test_contract_surface_cannot_escape_the_proposal_tree(surface: str):
+    """The roster pattern for `surface` allows '.' and '/', so it accepts '..'.
+
+    contract_propose joins the surface onto the export tree and writes it before any gate
+    runs, and the unit runs as root — so an unchecked surface is an arbitrary root-owned
+    file write. safe_path is the guard; this asserts it actually rejects the escapes.
+    """
+    from desk_gateway.repo import safe_path
+    assert not safe_path(surface), f"{surface!r} would be joined onto the proposal tree"
+
+
+@pytest.mark.parametrize("surface", ["contracts/api/notifications.yaml", "openapi.yaml"])
+def test_legitimate_contract_surface_is_still_accepted(surface: str):
+    from desk_gateway.repo import safe_path
+    assert safe_path(surface)
+
+
 def test_store_roster_and_packs(tmp_path: Path):
     store = Store(tmp_path)
     store.register_seat("ios", agent_uuid="a2d933ec-c6cf-43b7-a060-bec226475fb6", channel_id=None, tool_count=15)

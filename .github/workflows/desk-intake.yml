@@ -31,11 +31,23 @@ jobs:
             echo "::error::DESK_INTAKE_TOKEN secret is not set on this repository"
             exit 1
           fi
+          # /v1/intake caps title at 200 characters and ask at 20000. An issue longer than
+          # either would be rejected with a 400 and LEAD would never see it, so truncate
+          # here and say so in the text rather than dropping the intake. jq counts
+          # characters, which is what the gateway's maxLength counts too.
           jq -n \
             --arg title "$ISSUE_TITLE" --arg ask "$ISSUE_BODY" --arg url "$ISSUE_URL" \
             --arg by "$ISSUE_USER" --arg key "$IDEMPOTENCY_KEY" \
-            '{origin: "github", title: $title, ask: $ask, links: [$url],
-              requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json
+            '
+            def clip($limit; $note):
+              if (. | length) > $limit
+              then (.[0:$limit - ($note | length)] + $note)
+              else . end;
+            {origin: "github",
+             title: ($title | clip(200; "…")),
+             ask: ($ask | clip(20000; "\n\n[truncated — see the issue for the full text]")),
+             links: [$url],
+             requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json
           curl --fail-with-body -sS --max-time 30 \
             -X POST https://desk.swcstudio.space/v1/intake \
             -H "Authorization: Bearer $DESK_INTAKE_TOKEN" \

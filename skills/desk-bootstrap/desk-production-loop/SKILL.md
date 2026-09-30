@@ -1106,10 +1106,12 @@ is QUALITY's, per `docs/cross-bot-protocol.md`).
 
 **Smoke coverage.** `fixtures/lease-cas-drift-smoke.py` proves exclusivity (two concurrent
 `graph_claim` calls on one node, live, against a real substrate-mcp) when `DESK_LEASE_SMOKE_LIVE`,
-`SUBSTRATE_URL` and `SUBSTRATE_TOKEN` are all configured, and skips cleanly with a printed reason
-otherwise. It does not attempt the expired-lease or tip/event-disagreement cases: neither a
-heartbeat tool nor `coord_drift_scan` exists to exercise, and asserting against an invented
-drift-kind name would be worse than not asserting at all.
+`SUBSTRATE_URL` and `SUBSTRATE_TOKEN` are all configured. Only `DESK_LEASE_SMOKE_LIVE` unset skips
+cleanly; once that opt-in is set, a missing `SUBSTRATE_URL`/`SUBSTRATE_TOKEN` or any other broken
+precondition fails (exit 1) rather than skipping, so a partially configured live run cannot report
+the same clean exit as one that never asked to run. It does not attempt the expired-lease or
+tip/event-disagreement cases: neither a heartbeat tool nor `coord_drift_scan` exists to exercise,
+and asserting against an invented drift-kind name would be worse than not asserting at all.
 
 **Escalated to LEAD, not patched here.** Per this ticket's own instruction, a blocking gap in
 `agent-substrate` is SYSTEMS'/LEAD's to close, never a reason for this seat to invent a signature or

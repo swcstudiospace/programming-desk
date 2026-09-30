@@ -17,11 +17,13 @@ runs off ambient credentials alone: `services/desk-gateway/tests/conftest.py` de
 tests from ambient upstream env vars for the same reason, and this script follows that convention
 by requiring an explicit opt-in on top of the credential.
 
-Requires ALL of the following, or the run skips cleanly — exit 0, reason printed, never a silent
-pass and never a hang. Once `DESK_LEASE_SMOKE_LIVE=1` is set, every other precondition failure
-(missing `SUBSTRATE_URL`, an unimportable gateway package, `Substrate.configured` still false) is a
-**FAIL** (exit 1), not a skip: a run that explicitly asked to go live and could not must not report
-the same clean exit as a run that never asked to run at all.
+Requires ALL of the following. Only `DESK_LEASE_SMOKE_LIVE` unset is a clean **SKIP** (exit 0,
+reason printed, never a silent pass and never a hang) — that is the sole "never asked to run at
+all" case. Once `DESK_LEASE_SMOKE_LIVE=1` is set, every other missing or broken precondition
+(`SUBSTRATE_URL`, `SUBSTRATE_TOKEN`, an unimportable gateway package, `Substrate.configured` still
+false, or any unexpected exception in the live body) is a **FAIL** (exit 1), never a skip: a run
+that explicitly asked to go live and could not must not report the same clean exit as a run that
+never asked to run at all.
 
     DESK_LEASE_SMOKE_LIVE=1     explicit opt-in; the other two vars alone are not enough
     SUBSTRATE_URL               e.g. http://127.0.0.1:7410 -- must be set explicitly. Settings

@@ -12,10 +12,13 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 
 from __future__ import annotations
 
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
 from pathlib import Path
 
@@ -31,6 +34,89 @@ def run_gate(script: str, *args: str) -> subprocess.CompletedProcess:
         [sys.executable, str(GATES / script), *args],
         capture_output=True, text=True, cwd=REPO_ROOT,
     )
+
+
+def _extract_candidate_gates() -> Path | None:
+    """Materialize ci/gates/ as it exists at HEAD — the tip actually proposed for merge —
+    into its own directory, independent of whatever sits in the working tree.
+
+    gate-self-test overlays the *working tree* copy of ci/gates/ with the base ref's version
+    before this suite runs (Greptile P1 4140823500), so a gate change this PR makes is
+    invisible to run_gate() until the PR has already merged (Greptile P1, PR #45,
+    "CI skips new gate tests"). `git checkout <base> -- ci/gates/` rewrites the working tree
+    and the index; it does not touch HEAD, so HEAD's own commit object still holds the exact
+    candidate this PR proposes. `git archive HEAD` reads that, never the working tree, so it
+    yields the real candidate whether or not an overlay has run.
+
+    Returns None — never raises — when HEAD's history can't be read (no .git/, e.g. a bare
+    source export), so callers can skip cleanly instead of failing collection.
+    """
+    try:
+        archive = subprocess.run(
+            ["git", "archive", "--format=tar", "HEAD", "--", "ci/gates"],
+            capture_output=True, cwd=REPO_ROOT,
+        )
+        if archive.returncode != 0 or not archive.stdout:
+            return None
+        dest = Path(tempfile.mkdtemp(prefix="candidate-gates-"))
+        with tarfile.open(fileobj=io.BytesIO(archive.stdout)) as tar:
+            tar.extractall(dest, filter="data")
+        return dest / "ci" / "gates"
+    except (OSError, subprocess.SubprocessError, tarfile.TarError):
+        return None
+
+
+CANDIDATE_GATES = _extract_candidate_gates()
+
+
+def _sandbox_limits() -> None:
+    """preexec_fn for run_candidate_gate(): bound CPU, memory and process count before the
+    candidate script gets control. Runs in the child, after fork and before exec.
+
+    Each limit is best-effort: a host whose existing hard limit already sits below what we
+    ask for would otherwise turn a defense-in-depth measure into a hard crash of the whole
+    job. The cwd/env isolation in run_candidate_gate() is the primary control; these bound
+    a runaway process rather than gate whether the sandbox runs at all.
+    """
+    import resource
+
+    for limit, value in (
+        (resource.RLIMIT_CPU, (20, 20)),
+        (resource.RLIMIT_AS, (1024 * 1024 * 1024,) * 2),
+        (resource.RLIMIT_NPROC, (64, 64)),
+    ):
+        try:
+            resource.setrlimit(limit, value)
+        except (ValueError, OSError):
+            pass
+
+
+def run_candidate_gate(script: str, *args: str) -> subprocess.CompletedProcess:
+    """Run a gate script from the untouched PR-tip candidate — sandboxed, not trusted.
+
+    Unlike run_gate(), this never reads the working tree's (possibly base-overlaid) copy: it
+    runs the exact candidate this PR proposes to merge, so new or changed gate behaviour is
+    exercised for real by this required check instead of silently skipping until after merge.
+    The trust the base overlay withholds is bounded here rather than granted outright — a
+    scratch cwd that is not the real checkout, a stripped environment, and CPU/memory/process
+    ceilings with a hard wall-clock timeout. This does not isolate the network; a stronger
+    sandbox (container, network namespace) is an infra-owned follow-up if one is ever needed.
+
+    Skips (does not fail) when CANDIDATE_GATES could not be extracted, e.g. no .git/ present.
+    """
+    if CANDIDATE_GATES is None:
+        pytest.skip("git history for HEAD is unavailable; cannot extract the candidate gate")
+    workdir = Path(tempfile.mkdtemp(prefix="gate-sandbox-"))
+    try:
+        return subprocess.run(
+            [sys.executable, str(CANDIDATE_GATES / script), *args],
+            capture_output=True, text=True, cwd=workdir,
+            env={"PATH": os.environ.get("PATH", ""), "HOME": str(workdir)},
+            timeout=30,
+            preexec_fn=_sandbox_limits if os.name == "posix" else None,
+        )
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
 
 
 def _receipt_dict(**overrides) -> dict:
@@ -55,44 +141,6 @@ def write_receipt(tmp_path: Path, **overrides) -> Path:
     path = tmp_path / "receipt.json"
     path.write_text(json.dumps(_receipt_dict(**overrides)))
     return path
-
-
-def _probe_receipt_problems(*, strict: bool = False, **receipt_overrides) -> str:
-    """Run the shipped check_receipt.py against a throwaway receipt; return its stderr.
-
-    Used only to feature-detect whether ci/gates/check_receipt.py, as it currently sits on
-    disk, already carries a given fix — never to assert real gate behaviour, which the
-    tests below do directly against run_gate(). Needed because gate-self-test (CI) overlays
-    ci/gates/ from the PR base ref before this suite runs (Greptile P1 4140823500): a PR
-    that adds or changes receipt validation sees its own new behaviour here only once that
-    base ref carries it too — normally, once the PR has merged.
-    """
-    with tempfile.TemporaryDirectory() as td:
-        path = Path(td) / "receipt.json"
-        path.write_text(json.dumps(_receipt_dict(**receipt_overrides)))
-        args = ["--receipt", str(path)] + (["--strict"] if strict else [])
-        return run_gate("check_receipt.py", *args).stderr
-
-
-def _gate_supports_loop_acks() -> bool:
-    """True once ci/gates/check_receipt.py, as currently on disk, validates loop_acks."""
-    stderr = _probe_receipt_problems(loop_acks=None)
-    return "loop_acks" in stderr and "must be a list" in stderr
-
-
-def _gate_flags_expects_failure_exhaustiveness() -> bool:
-    """True once check_receipt.py stops letting a receipt-wide command count waive
-    --strict's exhaustiveness check for an expects_failure claim (Greptile P1, PR #45)."""
-    stderr = _probe_receipt_problems(
-        strict=True,
-        commands=[
-            {"cmd": "pytest tests/test_x.py", "exit_code": 1},
-            {"cmd": "pytest tests/", "exit_code": 0},
-        ],
-        claims=[{"claim": "confirmed every case fails", "evidence_command_index": 0,
-                 "expects_failure": True}],
-    )
-    return "exhaustive" in stderr.lower()
 
 
 # ===========================================================================
@@ -311,13 +359,13 @@ class TestG2Receipts:
         dodge --strict. This claim is evidenced by exactly one command that was expected
         to fail — reproduction evidence for the bug it names, never exhaustive evidence —
         regardless of how many other commands (e.g. the fix that follows it) the receipt
-        records for other claims."""
-        if not _gate_flags_expects_failure_exhaustiveness():
-            pytest.skip(
-                "ci/gates/check_receipt.py at the pinned base ref predates this fix — "
-                "gate-self-test overlays ci/gates/ from the PR base ref (Greptile P1 "
-                "4140823500), so this activates once that ref carries it"
-            )
+        records for other claims.
+
+        Runs against the candidate (run_candidate_gate), not the working tree (run_gate):
+        gate-self-test overlays ci/gates/ with the base ref on pull requests (Greptile P1
+        4140823500), and this fix is new in this PR (Greptile P1, PR #45, "New tests fail in
+        CI"). See run_candidate_gate() for how this is kept safe to run pre-merge.
+        """
         p = write_receipt(
             tmp_path,
             commands=[
@@ -329,7 +377,7 @@ class TestG2Receipts:
                  "expects_failure": True},
             ],
         )
-        r = run_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 1
         assert "exhaustive" in r.stderr.lower()
 
@@ -352,56 +400,54 @@ def valid_ack(**overrides) -> dict:
     return ack
 
 
-@pytest.mark.skipif(
-    not _gate_supports_loop_acks(),
-    reason=(
-        "ci/gates/check_receipt.py at the pinned base ref predates loop_acks validation — "
-        "gate-self-test overlays ci/gates/ from the PR base ref (Greptile P1 4140823500), "
-        "so this class activates once that ref carries the feature (normally: after merge)"
-    ),
-)
 class TestG2LoopAcks:
+    """loop_acks validation is new in this PR, so every test here runs against the candidate
+    (run_candidate_gate), not the working tree (run_gate): gate-self-test overlays ci/gates/
+    with the base ref on pull requests (Greptile P1 4140823500), and the base ref predates
+    this feature (Greptile P1, PR #45, "CI skips new gate tests"). See run_candidate_gate()
+    for how this is kept safe to run pre-merge.
+    """
 
     def test_omitted_loop_acks_passes(self, tmp_path):
         """A receipt for a turn that never went degraded need not carry the field at all."""
-        r = run_gate("check_receipt.py", "--receipt", str(write_receipt(tmp_path)))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(write_receipt(tmp_path)))
         assert r.returncode == 0, r.stderr
 
     def test_empty_loop_acks_passes(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 0, r.stderr
 
     def test_valid_loop_ack_passes(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[valid_ack()])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 0, r.stderr
 
     def test_null_loop_acks_blocked(self, tmp_path):
         """An explicit null is a different shape from omitting the field and must not be
         read the same way — it is a malformed field, not 'no ack'."""
         p = write_receipt(tmp_path, loop_acks=None)
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "must be a list" in r.stderr
         assert "do not set it to null" in r.stderr
 
     def test_non_list_loop_acks_blocked(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks={"condition": "brief_degraded"})
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "must be a list" in r.stderr
 
     def test_non_dict_entries_blocked(self, tmp_path):
         """A list of strings must fail cleanly rather than crash on attribute access."""
         p = write_receipt(tmp_path, loop_acks=["brief_degraded"])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "must be an object" in r.stderr
 
     def test_missing_ack_fields_blocked(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[{"condition": "brief_degraded"}])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "is missing" in r.stderr
 
@@ -410,32 +456,32 @@ class TestG2LoopAcks:
         """A truthy non-string value must not dodge the missing-field check (it is truthy)
         and then dodge the seat-name check (it does not look like a seat)."""
         p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by=granter)])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "must be a string naming a person" in r.stderr
 
     def test_human_granted_by_seat_blocked(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="bot-01-systems-backend")])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "is a seat, not a human" in r.stderr
 
     def test_human_granted_by_desk_connector_blocked(self, tmp_path):
         """`desk-<seat>` is a documented OAuth connector name, not a person."""
         p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="desk-lead")])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "is a seat, not a human" in r.stderr
 
     def test_invalid_condition_blocked(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[valid_ack(condition="not-a-real-condition")])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "is not one of" in r.stderr
 
     def test_scope_non_string_blocked(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=["test-task"])])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "scope must be a string" in r.stderr
 
@@ -443,13 +489,13 @@ class TestG2LoopAcks:
     def test_scope_unbound_from_task_blocked(self, tmp_path, scope):
         """A scope naming another ticket, or a blanket scope, must not authorise this turn."""
         p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=scope)])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 1
         assert "does not name this receipt's task_id" in r.stderr
 
     def test_scope_bound_to_task_passes(self, tmp_path):
         p = write_receipt(tmp_path, loop_acks=[valid_ack(scope="one turn, ticket test-task")])
-        r = run_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 0, r.stderr
 
 

@@ -98,6 +98,28 @@ EXISTENCE_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A claim about a path's ABSENCE ("no longer exists", "was removed") is a different claim
+# from one about its CONTENT ("every value is empty") — only the latter needs a search of
+# what is inside the target. When the claim itself is about existence, an existence probe's
+# exit code IS the whole claim's evidence, so EXISTENCE_ONLY_RE below must not reject it
+# (Greptile P1, PR #45, "Valid absence evidence rejected").
+ABSENCE_CLAIM_RE = re.compile(
+    r"\b(?:exists?|absent|removed|deleted|gone|not present|no longer (?:exists?|present))\b",
+    re.IGNORECASE,
+)
+
+# `test -f X && grep ... X` short-circuits on a missing X before the search clause ever
+# runs, leaving the exact same exit code as "X exists but the search found nothing" — exit
+# code alone cannot tell the two apart (Greptile P1, PR #45, "Missing file passes content
+# claim"). Only captured output can: a search tool that actually ran and printed something
+# (e.g. `grep -c` always prints a count, even "0") is evidence the chain reached it; a
+# short-circuited chain prints nothing at all. Anchored to the START of the command (not
+# end-to-end like EXISTENCE_ONLY_RE above), since a content search is chained on after it.
+COMPOUND_EXISTENCE_GATE_RE = re.compile(
+    r"^\s*(?:test\s+-[a-z]\s+\S+|\[\s+-[a-z]\s+\S+\s+\])\s*&&",
+    re.IGNORECASE,
+)
+
 
 class ReceiptError(Exception):
     pass
@@ -265,10 +287,25 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                             "claim describes"
                         )
                     elif EXISTENCE_ONLY_RE.search(cmd_text):
+                        if not ABSENCE_CLAIM_RE.search(text):
+                            problems.append(
+                                f"claim[{i}] {text!r} asserts exhaustiveness over content, "
+                                f"but command[{idx}] ({cmd_text!r}) only tests whether a "
+                                "path exists — that proves nothing about the content "
+                                "inside it"
+                            )
+                        # else: the claim is about the path's absence, not its content —
+                        # the existence probe's exit code is direct, sufficient evidence.
+                    elif COMPOUND_EXISTENCE_GATE_RE.match(cmd_text) and not output_tail.strip():
                         problems.append(
-                            f"claim[{i}] {text!r} asserts exhaustiveness over content, but "
-                            f"command[{idx}] ({cmd_text!r}) only tests whether a path exists "
-                            "— that proves nothing about the content inside it"
+                            f"claim[{i}] {text!r} asserts exhaustiveness via a command that "
+                            f"chains a content search after an existence check "
+                            f"({cmd_text!r}) with no captured output — the existence check "
+                            "failing would short-circuit the chain and produce this exact "
+                            "same exit code without the search ever running. Record "
+                            "output_tail evidence that the search itself executed (e.g. a "
+                            "`grep -c` count), or cite the existence check and the search "
+                            "as separate commands"
                         )
             elif len(commands) < 2:
                 problems.append(

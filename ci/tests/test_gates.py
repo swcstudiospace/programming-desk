@@ -13,6 +13,7 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 from __future__ import annotations
 
 import atexit
+import importlib.util
 import io
 import json
 import os
@@ -211,6 +212,42 @@ def run_candidate_gate(script: str, *args: str) -> subprocess.CompletedProcess:
         )
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _load_candidate_check_receipt():
+    """Import the true HEAD candidate's check_receipt.py directly, in-process — no subprocess,
+    no network namespace, so nothing here can be skipped by _probe_network_isolation().
+
+    run_candidate_gate() is deliberately fail-closed: it refuses to exec candidate CLI code,
+    with attacker-controlled argv, unsandboxed, so on a host without `unshare -n` it SKIPS
+    rather than run unisolated. That is the right call for a full CLI invocation — but if the
+    only tests exercising this PR's new G-2 strict-evidence logic went through
+    run_candidate_gate(), that skip would take the required gate-self-test job green on any
+    host that simply lacks kernel support for unprivileged namespaces, without the PR's own
+    changes ever having run (Greptile P1, PR #45, "Candidate gate tests skip").
+
+    The gap closes here by importing the module instead of exec'ing it as a script: the only
+    function this helper's callers use is check_receipt.check(), which is pure — it takes a
+    dict and returns a list of strings, with no file, network, or subprocess I/O of its own
+    (the one function in the module that touches the filesystem, load(), is never called
+    here). Module import does run the candidate's top-level statements (constant
+    definitions, regex compiles, function defs — check_receipt.py has no other top-level
+    side effects), which is a materially smaller trust footprint than handing it a CLI
+    invocation with argv it fully controls, and it needs no namespace, so it is never skipped
+    for lacking one. The required job cannot go green while this PR's strict-evidence logic
+    is untested, on any host, sandboxed or not.
+    """
+    if CANDIDATE_GATES is None:
+        message, is_skip = _candidate_gate_unavailable_reason()
+        if is_skip:
+            pytest.skip(message)
+        pytest.fail(message)
+    spec = importlib.util.spec_from_file_location(
+        "candidate_check_receipt", CANDIDATE_GATES / "check_receipt.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _receipt_dict(**overrides) -> dict:
@@ -562,7 +599,30 @@ class TestG2Receipts:
     def test_expects_failure_compound_content_search_is_exhaustive_evidence(self, tmp_path):
         """`test -f X && grep ... X` fails when X exists but the grep finds nothing — that is
         a real content search, not a bare existence check, even though it starts with one
-        (Greptile P1, PR #45, "Compound content searches rejected").
+        (Greptile P1, PR #45, "Compound content searches rejected"). `output_tail: "0"` is
+        what a real `grep -c` prints when it actually ran and matched nothing — that captured
+        output is what distinguishes this from the short-circuited case below.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                 "exit_code": 1, "output_tail": "0"},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_compound_missing_file_is_not_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep ... X` also fails when X does not exist at all — the chain
+        short-circuits on the existence check and the grep clause never runs, leaving the
+        exact same exit code as the case above with none of the evidence. Without captured
+        output showing the search itself ran, this must not pass as exhaustive content
+        evidence (Greptile P1, PR #45, "Missing file passes content claim").
         """
         p = write_receipt(
             tmp_path,
@@ -576,7 +636,104 @@ class TestG2Receipts:
             ],
         )
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "no captured output" in r.stderr
+
+    def test_expects_failure_absence_claim_accepts_bare_existence_check(self, tmp_path):
+        """A claim that a path is ABSENT — not a claim about its content — is directly
+        evidenced by a failing `test -f`: the exit code itself is the whole claim. This must
+        not be rejected the same way a content claim on a bare existence check is (Greptile
+        P1, PR #45, "Valid absence evidence rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config/legacy.yml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every legacy config path has been removed",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
+
+
+# ===========================================================================
+# G-2 strict-evidence logic, in-process (never skips for lacking a network namespace)
+# ===========================================================================
+
+class TestG2StrictEvidenceInProcess:
+    """Parallel, required coverage of the same strict-evidence assertions as the
+    run_candidate_gate()-based tests above, run through _load_candidate_check_receipt()
+    instead — see that helper's docstring for why this avoids ever skipping on a host
+    without `unshare -n`. This class carries no coverage the tests above lack; it exists so
+    the required job still exercises this PR's G-2 changes when the sandboxed suite above
+    has to skip (Greptile P1, PR #45, "Candidate gate tests skip").
+    """
+
+    def _check(self, **overrides) -> list[str]:
+        module = _load_candidate_check_receipt()
+        return module.check(_receipt_dict(**overrides), None, strict=True)
+
+    def test_expects_failure_alone_can_satisfy_strict_exhaustiveness(self):
+        problems = self._check(
+            commands=[{"cmd": "grep -c '=[^=]' .env.example", "exit_code": 1}],
+            claims=[{"claim": "every value in .env.example is still empty",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert problems == []
+
+    def test_expects_failure_missing_target_is_not_exhaustive_evidence(self):
+        problems = self._check(
+            commands=[{"cmd": "cat .env.example", "exit_code": 1,
+                       "output_tail": "cat: .env.example: No such file or directory"}],
+            claims=[{"claim": "every value in .env.example is still empty",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert any("missing" in p.lower() for p in problems), problems
+
+    def test_expects_failure_existence_check_is_not_exhaustive_evidence(self):
+        problems = self._check(
+            commands=[{"cmd": "test -f .env.example", "exit_code": 1}],
+            claims=[{"claim": "every value in .env.example is still empty",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert any("exist" in p.lower() for p in problems), problems
+
+    def test_expects_failure_compound_content_search_is_exhaustive_evidence(self):
+        problems = self._check(
+            commands=[{"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                       "exit_code": 1, "output_tail": "0"}],
+            claims=[{"claim": "every value in .env.example is still empty",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert problems == []
+
+    def test_expects_failure_compound_missing_file_is_not_exhaustive_evidence(self):
+        """Same compound command, no captured output — the short-circuited-on-missing-file
+        case this PR's hard-fix adds (Greptile P1, PR #45, "Missing file passes content
+        claim"). Covered in-process so it is never left untested by a namespace skip.
+        """
+        problems = self._check(
+            commands=[{"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                       "exit_code": 1}],
+            claims=[{"claim": "every value in .env.example is still empty",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert any("no captured output" in p for p in problems), problems
+
+    def test_expects_failure_absence_claim_accepts_bare_existence_check(self):
+        """This PR's hard-fix for absence claims (Greptile P1, PR #45, "Valid absence
+        evidence rejected"), covered in-process so it is never left untested by a namespace
+        skip.
+        """
+        problems = self._check(
+            commands=[{"cmd": "test -f config/legacy.yml", "exit_code": 1}],
+            claims=[{"claim": "every legacy config path has been removed",
+                     "evidence_command_index": 0, "expects_failure": True}],
+        )
+        assert problems == []
 
 
 # ===========================================================================

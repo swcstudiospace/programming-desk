@@ -58,7 +58,7 @@ jobs:
                      | pad(3; " "; "(see GitHub issue)")
                      | clip(200; "…")),
              ask: ($ask
-                   | pad(10; "\n\n"; "No further detail was given on the issue; see the link for context.")
+                   | pad(10; "\n\n"; "No further detail was given. Title: \($title) · \($url)")
                    | clip(20000; "\n\n[truncated — see the issue for the full text]")),
              links: [$url],
              requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json

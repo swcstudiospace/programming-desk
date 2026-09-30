@@ -9,7 +9,10 @@
 #
 # The two must not diverge. .github/workflows/gates-template-sync.yml compares everything
 # below this comment block against the template and fails if they drift apart.
-
+#
+# Trust model (Greptile P1 4140823500): on pull_request, both jobs overlay ci/gates/
+# from the PR base ref before any python3 ci/gates or pytest import of those modules.
+# The PR tree is data only for gate script execution on the shared self-hosted runner.
 name: Quality Gates
 
 on:
@@ -32,6 +35,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0          # gates diff against the base ref
+
+      - name: Use trusted gate scripts from base ref
+        # Greptile P1 4140823500 / security: never execute PR-controlled ci/gates/*.py on the
+        # shared self-hosted runner. Overlay gate implementations from the PR base (main);
+        # the checked-out PR tree remains the data under test (diffs, receipts, paths).
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git checkout "origin/$BASE_REF" -- ci/gates/
+          echo "Trusted ci/gates overlay from origin/$BASE_REF"
+          ls ci/gates/
 
       - uses: actions/setup-python@v5
         with:
@@ -178,6 +193,16 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
+      - name: Use trusted gate scripts from base ref
+        if: github.event_name == 'pull_request'
+        # Same trust rule as the gates job: PR-authored gate modules must not run here.
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git checkout "origin/$BASE_REF" -- ci/gates/
+          echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

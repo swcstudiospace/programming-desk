@@ -29,8 +29,7 @@
   ],
   "unverified": [
     "Claude Cloud Session env still needs RAGFLOW_MCP_API_KEY before tools appear in cloud sessions",
-    "Org GitHub-hosted Actions billing still blocks ubuntu-latest checks on this PR until #32 merges or billing is fixed",
-    "approved_by left absent until QUALITY stamps (G-2 may fail until then \u2014 intentional per Greptile P1)"
+    "Org GitHub-hosted Actions billing still blocks ubuntu-latest checks on this PR until #32 merges or billing is fixed"
   ],
   "files_changed": [
     ".mcp.json",
@@ -42,5 +41,7 @@
   "approvals": [],
   "approval_requested_from": "bot-06-quality-security",
   "destructive": false,
-  "secrets_committed": false
+  "secrets_committed": false,
+  "approved_by": "bot-06-quality-security",
+  "approval_note": "QUALITY CLEAR_WITH_WAIVERS Path B tip stamp @ 89ef894 per LEAD ticket 2026-09-30. Prior absence intentional until QUALITY stamped. Prefer Ove merge after #32 (self-hosted). No secrets."
 }

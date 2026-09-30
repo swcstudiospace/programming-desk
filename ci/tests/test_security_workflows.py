@@ -14,6 +14,8 @@ HIGH+ and still contains no bypass, which is the one thing a diff review can sil
 
 from __future__ import annotations
 
+import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -21,6 +23,14 @@ import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "security-pr.yml"
+BANDIT_SARIF_CONVERTER = REPO_ROOT / "ci" / "security" / "bandit_json_to_sarif.py"
+
+
+def _load_converter():
+    spec = importlib.util.spec_from_file_location("bandit_json_to_sarif", BANDIT_SARIF_CONVERTER)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 # Same bypass patterns G-2 (ci/gates/check_receipt.py) rejects in a receipt's commands — a
 # workflow step that masks its own exit code is the same failure in a different file.
@@ -184,3 +194,39 @@ class TestPermissionsScoping:
                 assert job.get("permissions", {}).get("security-events") == "write", (
                     f"job {job_name!r} uploads SARIF but doesn't declare security-events: write"
                 )
+
+
+class TestBanditSarifConverter:
+    """ci/security/bandit_json_to_sarif.py — converts the baselined bandit.json into SARIF."""
+
+    def _convert(self, tmp_path, bandit_results):
+        converter = _load_converter()
+        src = tmp_path / "bandit.json"
+        dst = tmp_path / "bandit.sarif"
+        src.write_text(json.dumps({"results": bandit_results}))
+        converter.convert(str(src), str(dst))
+        return json.loads(dst.read_text())
+
+    def test_empty_results_produce_valid_empty_sarif(self, tmp_path):
+        sarif = self._convert(tmp_path, [])
+        assert sarif["runs"][0]["results"] == []
+
+    def test_normal_filename_round_trips_unchanged(self, tmp_path):
+        sarif = self._convert(tmp_path, [{
+            "test_id": "B324", "test_name": "hashlib", "issue_severity": "HIGH",
+            "issue_text": "weak hash", "filename": "./ci/tests/example.py", "line_number": 3,
+        }])
+        uri = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        assert uri == "./ci/tests/example.py"
+
+    def test_filename_with_hash_and_space_is_percent_encoded(self, tmp_path):
+        # A raw '#' in a SARIF artifactLocation.uri is read as a fragment separator, and a raw
+        # space makes the URI invalid outright — confirmed via a Greptile finding on PR #50.
+        sarif = self._convert(tmp_path, [{
+            "test_id": "B324", "test_name": "hashlib", "issue_severity": "HIGH",
+            "issue_text": "weak hash", "filename": "./weird file#name.py", "line_number": 5,
+        }])
+        uri = sarif["runs"][0]["results"][0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+        assert "#" not in uri
+        assert " " not in uri
+        assert uri == "./weird%20file%23name.py"

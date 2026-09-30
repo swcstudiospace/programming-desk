@@ -264,6 +264,31 @@
       "exit_code": 0,
       "duration_s": 10.1,
       "output_tail": "172 passed — TestBanditBlocks now also asserts the worktree path includes RUNNER_TEMP/GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT (not the old fixed /tmp/bandit-baseline) and that the SARIF step calls bandit_json_to_sarif.py rather than re-running bandit -r ."
+    },
+    {
+      "cmd": "python3 -c \"from urllib.parse import quote; print(quote('./ci/tests/weird file#name.py', safe='/'))\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "./ci/tests/weird%20file%23name.py — confirms quote(..., safe='/') percent-encodes '#' and space while preserving path separators, before wiring it into the converter"
+    },
+    {
+      "cmd": "fabricate a bandit-json-shaped result with filename './weird file#name.py', run it through ci/security/bandit_json_to_sarif.py, assert the emitted artifactLocation.uri contains no raw '#' or space",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "encoded uri: ./weird%20file%23name.py — the fix as actually wired into the committed script, not just the standalone quote() call above"
+    },
+    {
+      "cmd": "sed -i 's/quote(r\\[\"filename\"\\], safe=\"\\/\")/r[\"filename\"]/' ci/security/bandit_json_to_sarif.py && python3 -m pytest ci/tests/test_security_workflows.py::TestBanditSarifConverter::test_filename_with_hash_and_space_is_percent_encoded -v; cp <backup> ci/security/bandit_json_to_sarif.py",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "AssertionError: assert '#' not in './weird file#name.py' — proves the new regression test actually catches the exact bug it's named for (raw filename written unencoded) rather than being a tautology. File restored from backup immediately after.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.5,
+      "output_tail": "175 passed — 3 new tests in TestBanditSarifConverter (empty results, normal filename round-trips unchanged, filename with # and space gets percent-encoded)"
     }
   ],
   "claims": [
@@ -440,6 +465,23 @@
     {
       "claim": "The full gate suite (172 tests) passes with both the unique worktree path and the JSON-to-SARIF conversion in place, including new regression-guard assertions for each",
       "evidence_command_index": 40
+    },
+    {
+      "claim": "urllib.parse.quote(..., safe='/') percent-encodes both '#' (a SARIF URI fragment separator) and a literal space (which makes a URI invalid outright) while leaving '/' alone, which is exactly the encoding a filename-as-SARIF-URI needs",
+      "evidence_command_index": 41
+    },
+    {
+      "claim": "The fix as actually wired into ci/security/bandit_json_to_sarif.py (not just the standalone quote() call) correctly percent-encodes a filename containing both '#' and a space",
+      "evidence_command_index": 42
+    },
+    {
+      "claim": "The new regression test is not a tautology: reverting the fix (writing the raw filename instead of the quoted one) makes test_filename_with_hash_and_space_is_percent_encoded fail with exactly the bug it's named for, proving the test can actually catch this regression before the file was restored from backup",
+      "evidence_command_index": 43,
+      "expects_failure": true
+    },
+    {
+      "claim": "The full gate suite (175 tests: 172 pre-existing + 3 new in TestBanditSarifConverter) passes with the URI-encoding fix in place",
+      "evidence_command_index": 44
     }
   ],
   "unverified": [

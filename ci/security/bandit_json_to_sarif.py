@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import sys
+from urllib.parse import quote
 
 SEVERITY_TO_LEVEL = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note"}
 
@@ -34,7 +35,10 @@ def convert(json_path: str, sarif_path: str) -> None:
             "message": {"text": r.get("issue_text", "")},
             "locations": [{
                 "physicalLocation": {
-                    "artifactLocation": {"uri": r["filename"]},
+                    # SARIF artifactLocation.uri is a URI, not a bare path: a literal '#' would
+                    # be read as a fragment separator and a literal space makes the URI invalid
+                    # outright — quote() percent-encodes both, keeping '/' as a path separator.
+                    "artifactLocation": {"uri": quote(r["filename"], safe="/")},
                     "region": {"startLine": r.get("line_number", 1)},
                 }
             }],

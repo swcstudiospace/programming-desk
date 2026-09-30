@@ -49,47 +49,80 @@ memory_brief (+ etag) ──▶ act ──▶ memory_write ──▶ events_emit
 
 The procedure, the tool-name mapping onto the gateway's `desk_*` equivalents, and the failure modes
 are in [`../skills/desk-bootstrap/desk-production-loop/SKILL.md`](../skills/desk-bootstrap/desk-production-loop/SKILL.md),
-which is enabled on all seven seat templates. Six points are desk policy rather than skill detail:
+which is enabled on all seven seat templates. Eight points are desk policy rather than skill detail:
 
-1. **No repo work before a brief that succeeded, and success is judged on the nested error fields.**
-   Reading files is fine; editing, committing, branching, pushing, opening a PR, or any `write` tool
-   call waits for the brief. A seat that edits first is re-deciding something already recorded in the
-   memory plane it skipped. **A populated response is not a successful brief**: `desk_brief` returns
-   its full shape even when the substrate is unreachable, there is no top-level `reason`, and the
-   failure sits in `substrate.error`, in `recall.error`, **or per bank in `recall.results[].error`** —
-   with Hindsight configured the gateway loops the banks and returns early, so `recall.error` is never
-   set and a dead bank is only visible inside `results[]`. All three, plus "the tool was listed and the
-   call was not deadline-cut", are the whole test, and **one failed bank is enough**: losing `pd-desk`
-   means the brief cannot tell the seat what the desk already decided. A seat that checks only the
-   envelope, or only `recall.error`, reads an outage as a quiet ticket.
+1. **No repo work before a brief that succeeded, and success is judged in two steps.** Reading files
+   is fine; editing, committing, branching, pushing, opening a PR, or any `write` tool call waits for
+   the brief. A seat that edits first is re-deciding something already recorded in the memory plane it
+   skipped. A failed brief arrives in **one of two shapes** and the check that catches one is blind to
+   the other, so classify before judging. **Shape A — the call never ran:** the gateway hands back a
+   sparse object with a **top-level `error` and a top-level `reason`** (`unknown_tool`, `deadline`,
+   `forbidden`, `invalid_args`, `secret_refused`, `backend_missing`, `internal`) and no `substrate` or
+   `recall` field to inspect. **Shape B — the call ran and buried the failure.** **A populated response
+   is not a successful brief**: `desk_brief` returns its full shape even when the substrate is
+   unreachable, sets no top-level `reason` there, and the failure sits in `substrate.error`, in
+   `recall.error`, **or per bank in `recall.results[].error`** — with Hindsight configured the gateway
+   loops the banks and returns early, so `recall.error` is never set and a dead bank is only visible
+   inside `results[]`. The top-level `error` key is the discriminator, and **one failed bank is enough**:
+   losing `pd-desk` means the brief cannot tell the seat what the desk already decided. A seat that
+   checks only the envelope, or only `recall.error`, reads an outage as a quiet ticket; a seat that goes
+   straight to `substrate.error` reads `undefined` for a brief that was never run.
 2. **Record what you read, and claim no more than the tool supports.** Where a tool's contract carries
    an etag, the receipt records `brief_etag` and change detection is real. `desk_brief` carries none,
    so the receipt records `brief_read_at` (its `generated_at`) **and** `cached`, and the seat states in
    `unverified` that it could not tell whether the brief changed under it. `generated_at` is a read
    timestamp, not a revision id: it moves on every fresh call whether or not memory changed, and a
    cache hit carries the original assembly time for up to five minutes after memory changed — so it is
-   never recorded as `brief_etag` and never diffed. **Absence of an etag field is not degradation**;
-   reading it that way would make a human ack the price of every ordinary turn on the desk.
-3. **Degraded mode needs a human ack.** Degraded means the brief *failed* per point 1 — `substrate.error`,
-   `recall.error` or any `recall.results[].error` present, the tool unlisted, the call deadline-cut, or an
-   etag-bearing tool returning no etag. Those are *unknown*, never *none*. Working the repo anyway needs a recorded
-   acknowledgement, routed the way approvals already are: a build seat asks LEAD priority false; LEAD
-   asks Ove in the 1:1. The ack id goes in the receipt's `approvals` with the verbatim nested reason and
-   its field path in `unverified` — `substrate.reason`, `recall.reason`, or `recall.results[<bank>].reason`
-   **named with its bank** for a per-bank Hindsight failure, since `pd-desk` and `pd-<seat>` failing are
-   different incidents — it covers one turn on one ticket, it is not a g5/g6 `approval_id`,
-   and it is never typed by the seat that needs it. No ack is a blocker, and a reported blocker is a
-   finished turn.
-4. **Degradation is signalled in the event payload, never by swapping the event kind.** A degraded
-   turn that got its ack and finished the work still emits `implementation.completed` with the receipt
-   path, plus `payload.degraded: true` and the ack id. `ticket.blocked` is for the turn that *stopped*
-   — no ack, or ack refused. `docs/handoff-contracts.md` routes on kind, so a finished turn labelled
-   `ticket.blocked` sends LEAD chasing a blocker for work that is sitting ready for review.
-5. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
+   never recorded as `brief_etag` and never diffed. `cached` is added only on a cache hit and the fresh
+   path never sets the key, so **an absent `cached` means `false`** — not an incomplete brief, and not a
+   value to record as though the response carried it. **Absence of an etag field is not an upstream
+   failure** — reporting it as one describes an outage that did not happen — **but it is not a licence
+   to edit either**: see point 3.
+3. **Degraded mode needs a human ack, and there are two conditions.** The first is the brief *failing*
+   per point 1, in either shape — blocker code `brief_degraded`. The second is a brief that **succeeded
+   and carries no revision marker**, which is every `desk_brief` seat today because the roster exposes
+   no etag — blocker code `brief_no_revision_marker`. Both are *unknown*, never *none*, and in both the
+   repo work needs a recorded acknowledgement with the `operation` string for its condition
+   (`degraded-loop: repo work without a memory brief`, or `…on a brief with no revision marker`). A read
+   timestamp is not a substitute for the marker: **no seat proceeds to an edit on `generated_at` and
+   `cached` alone.** Acks route the way approvals already do: a build seat asks LEAD priority false;
+   LEAD asks Ove in the 1:1. The ack id goes in the receipt's `approvals`, and the verbatim reason plus
+   its field path in `unverified` — the **top-level `reason`, with its `error` code**, for Shape A, and
+   `substrate.reason`, `recall.reason` or `recall.results[<bank>].reason` **named with its bank** for a
+   per-bank Hindsight failure, since `pd-desk` and `pd-<seat>` failing are different incidents. An ack
+   covers one turn on one ticket, it is not a g5/g6 `approval_id`, and it is never typed by the seat
+   that needs it. No ack is a blocker, and a reported blocker is a finished turn. The second condition
+   retires when QUALITY lands the etag (G-4); until then the ack volume is the cost of the gap, and the
+   silent alternative is the defect.
+4. **Degradation is signalled in the event payload, never by swapping the event kind** — and with one
+   payload field per meaning. A degraded turn that got its ack and finished the work still emits
+   `implementation.completed` with the receipt path, plus `payload.degraded: true`, `payload.blocker`
+   (the desk code), `payload.upstream_reason` (the verbatim string, where there is one),
+   `payload.reason_path` (the field it came from) and the ack id. A single `payload.reason` cannot hold
+   the code and the diagnostic at once, so it holds neither reliably. `ticket.blocked` is for the turn
+   that *stopped* — no ack, or ack refused — and a finished turn labelled `ticket.blocked` sends LEAD
+   chasing a blocker for work that is sitting ready for review.
+5. **The gateway does not preserve the catalogue kind, and the desk records that as a gap.**
+   `desk_event_emit` writes every event with top-level `kind: "note"` and puts the kind it was given in
+   `payload.event` (plus the `summary` string), so on the gateway path **`payload.event` is the routing
+   field and the top-level `kind` carries no type at all**. Seats still pass the catalogue kind — it is
+   what lands there — and never claim an emission routed to a consumer. The gateway also injects
+   `seat`, `event` and `task_id` into every payload and merges the seat's keys over them, so a payload
+   must not set those three. Closing the gap is QUALITY's contract change (G-4): either a `kind`
+   passthrough, or `docs/handoff-contracts.md` stating that the gateway path routes on `payload.event`.
+6. **A memory write is not atomic, and `ok: true` is not proof.** `desk_memory_retain` writes to
+   Hindsight and to the substrate and reports each in `results`, but returns `ok` if **either** plane
+   accepted — so `ok: true` can mean the fact is in one plane and missing from the other. Seats read
+   `results` per plane and record a partial write in `unverified` rather than claiming "retained". An
+   error is not proof nothing was written either: only the local refusals (`evidence_required`,
+   `secret_refused`) return before any upstream call, while a timeout can follow an upstream commit.
+   The roster accepts no idempotency key, so an uncertain outcome is recalled before it is retried, at
+   most once, and a possible duplicate is stated.
+7. **Docs and memory only through the substrate or the gateway.** No seat default calls a raw
    RAGFlow or Hindsight server (`user-ragflow`, `user-hindsight`, or a direct MCP/HTTP endpoint):
    that path needs a credential the seat must not hold, leaves no event row, and can retain outside
    `pd-<seat>`.
-6. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
+8. **Skills are listed and invoked only.** A seat does not install, enable, edit, publish or approve
    a skill — for itself or another seat — until a `skills.approve` capability exists. `skills_propose`
    opens a PR; a proposal is not an installed skill.
 
@@ -103,7 +136,7 @@ the receipt's `unverified`.
 1. **Intake** — goal, constraints, and success criteria are already in the second uplift when the graph ran.
 2. **Ticket** — LEAD writes one concrete ticket per owning seat (see format below).
 3. **Dispatch** — LEAD `SendToAgent` to each seat 1:1 (never vague "please help").
-4. **Implement** — Specialist runs the production loop above: a brief that succeeded on all of its nested error fields (including per-bank `recall.results[]`) before the first edit, then executes only assigned work in owned paths, and writes a receipt.
+4. **Implement** — Specialist runs the production loop above: a brief that succeeded on all of its nested error fields (including per-bank `recall.results[]`) before the first edit, plus a revision marker or a recorded degraded-mode ack, then executes only assigned work in owned paths, and writes a receipt.
 5. **Receipt** — Build seat posts into the Desk labeled `awaiting-review / pending QUALITY` and sends LEAD a priority-false handoff. LEAD polls held messages; they do not wake LEAD by themselves.
 6. **QUALITY** — LEAD requests review 1:1. QUALITY is off-channel and returns status priority false. LEAD relays it into the Desk.
 7. **Consolidate** — LEAD consolidates specialist receipts + QUALITY verdict.
@@ -133,7 +166,7 @@ consolidates — not the implementer.
   - Unit tests for token registration pass (`./gradlew :app:testDebugUnitTest`)
   - Receipt at `.receipts/bot-03-android/<task_id>.json` with cited commands and the brief record (`brief_etag`, or `brief_read_at` + `cached`)
   - No owned-path violations (G-1)
-  - Production loop run: brief before the first edit, `memory_write` and `events_emit` in the same turn (or a recorded degraded-mode ack)
+  - Production loop run: brief before the first edit with a revision marker or a recorded degraded-mode ack, `memory_write` and `events_emit` in the same turn, per-plane retain outcome recorded
 - **report_back:**
   - Receipt path
   - Summary of files changed

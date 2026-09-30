@@ -1152,6 +1152,38 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "cannot be what makes this claim exhaustive" in r.stderr
 
+    def test_expects_failure_ordinary_parent_path_sibling_is_intentionally_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f dir/../config.yaml` must NOT corroborate a compound gated on
+        plain `config.yaml`, even when `dir` really is an ordinary directory with no symlink
+        anywhere in sight (Greptile P1, PR #45 round 11, "Valid parent paths rejected"). This
+        is the direct, INTENTIONAL cost of round 10's fix, not a separate bug to close: the
+        gate compares `commands[].cmd` as plain text with no filesystem to check `dir`
+        against, so it cannot tell this case apart from the round-10 security case (`test -f
+        config` vs. a compound gated on `test -e link/../config`, where `link` IS a symlink).
+        Any rule that collapsed `X/../Y` only when `X` is provably not a symlink would need to
+        resolve `X` against a live filesystem — which this gate must not do, since
+        `commands[].cmd` is self-reported text, evaluated independently of whenever (and on
+        whatever machine) the commands actually ran. So the choice is binary, not tunable per
+        case, and this gate keeps the sound side for both: `dir/../config.yaml` never equals
+        `config.yaml`, regardless of what `dir` actually is.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f dir/../config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
     def test_expects_failure_symlink_unsafe_dotdot_sibling_is_not_corroboration(
         self, tmp_path
     ):

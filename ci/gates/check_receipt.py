@@ -150,6 +150,25 @@ def _safe_normpath(path: str) -> str:
     plain target it was trying to impersonate. `.` components and empty components are always
     safe to drop regardless of symlinks: removing a redundant `./` or a doubled `/` never
     changes what the path resolves to.
+
+    This IS intentionally overbroad in the safe direction, and round 11 confirmed there is no
+    narrower fix: an honest `test -f dir/../config.yaml` sibling, where `dir` really is an
+    ordinary directory, no longer corroborates a compound gated on plain `config.yaml` either
+    (Greptile P1, PR #45 round 11, "Valid parent paths rejected"). That is deliberate, not an
+    oversight — collapsing `X/../Y` only "when X is provably not a symlink" needs to actually
+    resolve `X` against a live filesystem, which this gate does not have and must not acquire:
+    `commands[].cmd` is self-reported text, checked independently of (and often long after,
+    possibly on a different machine from) whenever the commands actually ran, so "the
+    filesystem right now" is not evidence about what `X` was at receipt-writing time. Two
+    narrower rules were considered and rejected as unsound: (1) collapsing only when both
+    sides of the comparison already carry the identical unresolved `../` prefix verbatim —
+    this never actually helps the reported case, since the gate's own path (`config.yaml`)
+    carries no such prefix at all, so the two strings still would not match; (2) collapsing
+    based on some syntactic heuristic for "looks like an ordinary directory" (e.g. no symlink-
+    suggestive name) — there is no such heuristic, since a symlink can be named anything a
+    real directory can. With neither option sound, the choice stays binary — collapse `..`
+    past a named component always (unsound: the round-10 P1 above) or never (sound, but
+    strictly more conservative) — and this gate keeps the sound side.
     """
     is_absolute = path.startswith("/")
     kept = [part for part in path.split("/") if part not in ("", ".")]

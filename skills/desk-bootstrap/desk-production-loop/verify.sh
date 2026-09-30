@@ -45,6 +45,8 @@ need("One failed bank is enough" in fS,"R3 one-bank rule skill")
 need("one failed bank is enough" in fD.lower(),"R3 one-bank rule doc")
 need("returns early" in fS and "returns early" in fD,"R3 early-return reason")
 need("recall.error is never set" in fD or "recall.error` is never set" in fD,"R3 doc never-set")
+need("Why this list is complete for `desk_brief`" in fS,"R3 exhaustiveness note")
+need("this table is what has to grow with it" in fS,"R3 growth rule")
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")
 need("read timestamp, not a revision id" in fD,"R2b doc")

@@ -118,6 +118,15 @@ Anything else is §3, however full the top level looks. A seat that checks only 
 `reason` will read a substrate outage as a quiet ticket and edit without an ack — the precise hole
 this section is here to close, and `recall.results[].error` is the second door into the same room.
 
+**Why this list is complete for `desk_brief`.** Of the response's fields, only `substrate` and
+`recall` are backed by an upstream that can fail: `loaded_packs` and `intake_queue` come from the
+gateway's own local store (`store.pack_records`, `store.intake_counts` — plain reads of a JSON file,
+no error shape), `reminders` is a static list, and `seat`, `generated_at` and `cached` are computed
+locally. So the three rows above enumerate every way this tool can fail while looking fine, rather
+than the ways found so far. **If a future gateway change adds another upstream-backed field to the
+brief, this table is what has to grow with it** — the failure mode of this section has been a rule
+written against one code path when the gateway had two.
+
 For a substrate `memory_brief` reached through the connector, apply the same discipline to whatever
 its live response uses: find the field that says the upstream failed, and do not accept the envelope
 as the answer.

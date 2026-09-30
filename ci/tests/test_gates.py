@@ -648,11 +648,35 @@ class TestG2Receipts:
     def test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence(
         self, tmp_path
     ):
-        """The same quiet-grep compound as above, but now paired with a second, independent
+        """The same quiet-grep compound as above, but now preceded by a separate, independent
         command that proves .env.example actually existed (a bare `test -f` that itself
-        exited 0) — that sibling evidence is what a real, fully-executed quiet no-match
-        needs to be trusted, and resolves the ambiguity the previous test blocks on
-        (Greptile P1, PR #45, "Missing file passes quiet-grep check").
+        exited 0, recorded BEFORE the quiet search) — that sibling evidence is what a real,
+        fully-executed quiet no-match needs to be trusted, and resolves the ambiguity the
+        previous test blocks on (Greptile P1, PR #45, "Missing file passes quiet-grep
+        check").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example", "exit_code": 0},
+                {"cmd": "test -f .env.example && grep -q '=[^=]' .env.example",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_later_sibling_is_still_padding(self, tmp_path):
+        """The same sibling existence check as above, but recorded AFTER the quiet search
+        instead of before it, must NOT corroborate it. A `test -f X` that exits 0 later in
+        the receipt only proves X exists now — X could have been created after the quiet
+        search ran and found nothing, which is exactly the ambiguity the sibling-evidence
+        exception exists to resolve, not launder (Greptile P1, PR #45, "Later check
+        validates earlier search").
         """
         p = write_receipt(
             tmp_path,
@@ -667,7 +691,54 @@ class TestG2Receipts:
             ],
         )
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
-        assert r.returncode == 0, r.stderr
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling existence check on a DIFFERENT path that merely contains the quiet
+        search's target as a substring (`config.yaml.bak` next to `config.yaml`) must not
+        corroborate it — corroboration requires the exact path token, not a substring match
+        (Greptile P1, PR #45, "Unrelated checks confirm missing files").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml.bak", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q 'legacy_flag' config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration(self, tmp_path):
+        """A sibling `test -n PATH` (string-non-empty test) must not corroborate a quiet
+        search even though it names the exact path — `-n` tests a STRING's emptiness, not
+        whether a file exists, so it is not a real file-existence probe (Greptile P1, PR
+        #45, "Unrelated checks confirm missing files").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -n config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q 'legacy_flag' config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
 
     def test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding(self, tmp_path):
         """A second command that has nothing to do with confirming the cited command's

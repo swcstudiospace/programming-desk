@@ -152,26 +152,40 @@ actually failed. It asserts "this was supposed to fail", not "ignore the exit co
 Under `--strict`, an `expects_failure` claim worded exhaustively ("every value is still empty") can
 pass — a search that exits non-zero exactly when it finds nothing across its whole target is
 reproduction evidence and total coverage at once — but only when its cited command is the receipt's
-only command. The moment the receipt records anything else (the fix that follows a reproduction,
-say), that claim is rejected: other commands elsewhere cannot make THIS claim any more exhaustive,
-so their presence is only ever a sign of the original bypass this check exists to catch — a narrow,
-failing command padded by an unrelated one recorded for something else. With nothing else in the
-receipt to borrow from, the cited command's own scope is this claim's entire evidence, left to a
-human reviewer (`approved_by`) to judge, the same as any other evidence-matching question.
+only command, evidence-wise. The moment the receipt records anything else (the fix that follows a
+reproduction, say), that claim is rejected: other commands elsewhere cannot make THIS claim any more
+exhaustive, so their presence is only ever a sign of the original bypass this check exists to catch —
+a narrow, failing command padded by an unrelated one recorded for something else. With nothing else
+in the receipt to borrow from, the cited command's own scope is this claim's entire evidence, left to
+a human reviewer (`approved_by`) to judge, the same as any other evidence-matching question.
 
-Being the receipt's only command is necessary but not sufficient: the gate also rejects the two
-shapes of thin evidence that pattern most often. A failure that reads back as the target being
-missing ("no such file or directory", "not found", ...) — in `output_tail`, or in the command's own
-text outside any quoted argument — is not the same fact as "the target was searched and found
-empty"; "file missing" must never stand in for "every value empty". A quoted argument is exempted
-from that command-text check because it is what the command searches *for*, not a report of what
-happened: `grep -c "not found" build.log` exiting 1 means the phrase is nowhere in the file, which
-is exhaustive negative evidence, not a missing-target error. And a command that *only* tests
-whether a path exists (`test -f X`, `[ -e X ]`, `stat X`, a bare `ls X`, and nothing chained after
-it) never inspects content either way, so it cannot back a claim about what that content is — but a
-real content search chained onto one, like `test -f X && grep ... X`, is judged on the whole
-command, not just its existence-checking prefix. Neither check can verify that the command's scope
-truly covers "every"/"all" — that judgment call still belongs to `approved_by`.
+**One specific shape of "something else" is not padding: a quiet-search sibling existence check.**
+`test -f X && grep -q PATTERN X` (or `--quiet`) prints nothing whether it matches or finds nothing —
+that silence is indistinguishable from `test -f X` failing and the chain short-circuiting before
+grep ever runs, so on its own this compound cannot back an exhaustive claim at all. To use one, add a
+**second command, recorded earlier in `commands`,** that tests the exact same path and itself exits
+0 — a bare `test -f X` or `[ -e X ]`, nothing chained after it. That sibling is the one command this
+gate does not count as padding, because it is the only thing that can prove X was actually there when
+the quiet search ran. Get either part wrong and the gate still rejects it: a sibling recorded AFTER
+the quiet search only proves X exists *now*, not that it did when the search ran (it could have been
+created in between), and a sibling naming a different path — even one that merely contains the target
+as a substring, like `config.yaml.bak` next to `config.yaml` — proves nothing about the target at all.
+A `test -n X` sibling doesn't count either: `-n` tests whether a *string* is non-empty, not whether a
+file exists, so it says nothing about the filesystem no matter what its operand is.
+
+Being the receipt's only command (or paired only with that one preceding sibling) is necessary but
+not sufficient: the gate also rejects the two shapes of thin evidence that pattern most often. A
+failure that reads back as the target being missing ("no such file or directory", "not found", ...) —
+in `output_tail`, or in the command's own text outside any quoted argument — is not the same fact as
+"the target was searched and found empty"; "file missing" must never stand in for "every value
+empty". A quoted argument is exempted from that command-text check because it is what the command
+searches *for*, not a report of what happened: `grep -c "not found" build.log` exiting 1 means the
+phrase is nowhere in the file, which is exhaustive negative evidence, not a missing-target error. And
+a command that *only* tests whether a path exists (`test -f X`, `[ -e X ]`, `stat X`, a bare `ls X`,
+and nothing chained after it) never inspects content either way, so it cannot back a claim about what
+that content is — but a real content search chained onto one, like `test -f X && grep ... X`, is
+judged on the whole command, not just its existence-checking prefix. Neither check can verify that
+the command's scope truly covers "every"/"all" — that judgment call still belongs to `approved_by`.
 
 ### §3 Matching evidence to claims
 

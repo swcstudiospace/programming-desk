@@ -98,6 +98,18 @@ EXISTENCE_ONLY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# The narrower probe used specifically to corroborate a quiet-search sibling (see
+# _is_positive_existence_check below). Restricted to `-f`/`-e` — the only `test`/`[` flags
+# that actually test FILE existence — because `test -n`/`-z` test whether a STRING is
+# non-empty/empty, not whether a path exists on disk; a command like `test -n config.yaml`
+# has nothing to do with the filesystem even though it names the path as its operand
+# (Greptile P1, PR #45, "Unrelated checks confirm missing files"). Captures the exact path
+# token so the caller can require equality rather than substring containment.
+FILE_EXISTENCE_PROBE_RE = re.compile(
+    r"^\s*(?:test\s+-[fe]\s+(?P<path1>\S+)|\[\s+-[fe]\s+(?P<path2>\S+)\s+\])\s*$",
+    re.IGNORECASE,
+)
+
 # A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
 # a different claim from one about its CONTENT ("the deprecated token was removed from
 # config.yaml") — only the latter needs a search of what is inside the target, and an
@@ -138,40 +150,52 @@ COMPOUND_EXISTENCE_GATE_RE = re.compile(
 # from `test -f X` failing and the chain short-circuiting before grep ever ran — both leave
 # the same non-zero exit code and the same empty output (Greptile P1, PR #45, "Missing file
 # passes quiet-grep check"). Exit code plus output_tail alone cannot resolve that ambiguity,
-# so a quiet-search chain needs independent proof the file existed: a separate command in
-# the receipt that tests the same path and exits 0 (see _confirmed_by_sibling_existence_check
-# below). Without that sibling evidence, a quiet-grep compound is rejected as content proof,
-# same as the unquiet case above (Greptile P1, PR #45, "Silent searches fail validation" —
-# superseded: accepting a bare quiet-grep chain on its own exit code let a missing file pass
-# as a quiet no-match).
+# so a quiet-search chain needs independent proof the file existed: a separate, EARLIER
+# command in the receipt that tests the exact same path and exits 0 (see
+# _confirmed_by_sibling_existence_check below). Without that sibling evidence, a quiet-grep
+# compound is rejected as content proof, same as the unquiet case above (Greptile P1, PR #45,
+# "Silent searches fail validation" — superseded: accepting a bare quiet-grep chain on its own
+# exit code let a missing file pass as a quiet no-match).
 SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet\b)")
 
 
 def _is_positive_existence_check(cmd: dict, path: str) -> bool:
-    """True if `cmd` is a bare existence check (EXISTENCE_ONLY_RE) naming `path` that
-    itself exited 0 — independent proof the path was actually there, not inferred from
-    the exit code of a compound command that might never have reached it.
+    """True if `cmd` is a real file-existence probe (`test -f`/`test -e`, or the `[ ... ]`
+    equivalent — see FILE_EXISTENCE_PROBE_RE) naming EXACTLY `path`, that itself exited 0 —
+    independent proof the path was actually there, not inferred from the exit code of a
+    compound command that might never have reached it.
+
+    Two things a looser check would get wrong: a path match must be exact-token equality,
+    not substring (`config.yaml.bak` must not corroborate `config.yaml`), and the flag must
+    be a real file-existence test, not `test -n`/`-z` (those test a STRING's emptiness, not
+    the filesystem, even when the string happens to be the path) (Greptile P1, PR #45,
+    "Unrelated checks confirm missing files").
     """
-    cmd_text = str(cmd.get("cmd", ""))
-    return (
-        cmd.get("exit_code") == 0
-        and path in cmd_text
-        and bool(EXISTENCE_ONLY_RE.match(cmd_text.strip()))
-    )
+    if cmd.get("exit_code") != 0:
+        return False
+    match = FILE_EXISTENCE_PROBE_RE.match(str(cmd.get("cmd", "")).strip())
+    if not match:
+        return False
+    return (match.group("path1") or match.group("path2")) == path
 
 
 def _confirmed_by_sibling_existence_check(commands: list, path: str, exclude_idx: int) -> bool:
-    """True if some OTHER command in the receipt independently proves `path` existed.
+    """True if some EARLIER command (lower index than `exclude_idx`) independently proves
+    `path` existed before the quiet-search compound at `exclude_idx` ran.
 
     This is the only evidence that can break the tie between a quiet-grep compound that
     actually ran and found nothing, and one whose leading existence check failed and never
     reached grep at all — both look identical from the compound command's own exit code and
-    output_tail alone.
+    output_tail alone. Order matters as much as existence: a `test -f X` recorded AFTER the
+    quiet search only proves X exists NOW — it could have been created after the search ran
+    and found nothing, which is the exact ambiguity this function exists to resolve, not
+    corroborate (Greptile P1, PR #45, "Later check validates earlier search"). So only a
+    sibling strictly before `exclude_idx` counts.
     """
     return any(
         _is_positive_existence_check(other, path)
         for j, other in enumerate(commands)
-        if j != exclude_idx and isinstance(other, dict)
+        if j < exclude_idx and isinstance(other, dict)
     )
 
 
@@ -321,18 +345,24 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 # is a receipt-wide count, but here it is used the other way around from the
                 # passing-evidence branch below: for THIS claim, more commands elsewhere in
                 # the receipt is exactly the sign that something else might be doing the
-                # padding, not more support — with one narrow exception: a command whose
-                # only job is confirming gate_path existed is not padding the claim's
-                # coverage, it is the sole way a quiet-grep compound's ambiguous exit code
-                # can be trusted at all (Greptile P1, PR #45, "Missing file passes
-                # quiet-grep check"). With no other, unexplained command in the receipt to
-                # borrow from, this claim's cited command is plainly its entire evidence,
-                # and its own scope is what a human reviewer judges (approved_by), same as
-                # any other evidence-matching question this gate cannot verify by itself.
+                # padding, not more support — with one narrow exception: a command that
+                # EARLIER in the receipt confirms gate_path existed is not padding the
+                # claim's coverage, it is the only way a quiet-grep compound's ambiguous
+                # exit code can be trusted at all (Greptile P1, PR #45, "Missing file passes
+                # quiet-grep check"). That exception is order-sensitive: a matching command
+                # recorded AFTER idx proves nothing about whether gate_path existed when the
+                # quiet search ran (it could have been created afterward), so it still
+                # counts as unexplained padding, not corroboration (Greptile P1, PR #45,
+                # "Later check validates earlier search"). With no other, unexplained
+                # command in the receipt to borrow from, this claim's cited command is
+                # plainly its entire evidence, and its own scope is what a human reviewer
+                # judges (approved_by), same as any other evidence-matching question this
+                # gate cannot verify by itself.
                 padding = [
                     j for j, other in enumerate(commands)
                     if j != idx and not (
                         gate_path and isinstance(other, dict)
+                        and j < idx
                         and _is_positive_existence_check(other, gate_path)
                     )
                 ]
@@ -340,11 +370,12 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                     problems.append(
                         f"claim[{i}] {text!r} sets expects_failure and asserts "
                         "exhaustiveness, and the receipt records other commands beyond the "
-                        "one cited that are not a sibling existence check confirming the "
-                        "same path — they cannot be what makes this claim exhaustive, so "
-                        "its cited command must be the receipt's only command (or paired "
-                        "only with a command that confirms the path existed) for this to "
-                        "pass under --strict"
+                        "one cited that are not an EARLIER sibling existence check "
+                        "confirming the same exact path — they cannot be what makes this "
+                        "claim exhaustive, so its cited command must be the receipt's only "
+                        "command (or paired only with a command that tests the exact same "
+                        "path and exits 0, recorded BEFORE it) for this to pass under "
+                        "--strict"
                     )
                 else:
                     # Clearing the padding concern above proves nothing by itself about WHY
@@ -401,11 +432,13 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                                     "this exit code is identical whether the search ran and "
                                     f"found nothing, or the existence check on {gate_path!r} "
                                     "failed and the chain short-circuited before grep ever "
-                                    "ran. Record a separate command in 'commands' that "
-                                    f"tests {gate_path!r} and exits 0, proving the file was "
-                                    "actually there when the search ran"
+                                    "ran. Record a separate command in 'commands', BEFORE "
+                                    f"this one, that tests the exact path {gate_path!r} and "
+                                    "exits 0, proving the file was actually there when the "
+                                    "search ran — the same check recorded AFTER this command "
+                                    "only proves the file exists now, not that it did then"
                                 )
-                            # else: a separate command elsewhere in the receipt already
+                            # else: a separate, earlier command in the receipt already
                             # proved the target present, so the chain's own exit code —
                             # reachable only if its existence check passed too — is valid
                             # negative content evidence.

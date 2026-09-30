@@ -17,12 +17,19 @@ proposed_by: bot-06-quality-security
 
 surface: openapi.yaml
 
-# Also created in this change, under the same QUALITY ownership and the same protocol:
-#   contracts/README.md
-#   contracts/api/README.md          (consumers: WEB, ANDROID, IOS)
-#   contracts/events/README.md       (consumers: SYSTEMS, WEB, INFRA)
-#   contracts/changes/README.md, TEMPLATE.yaml.example, archive/
-# G-4 validates one declared surface per document; openapi.yaml is the one with content.
+# Every other contract-surface path this change touches. G-4 requires the declared surfaces
+# to cover the whole change: an undeclared path means either the wrong change document was
+# selected, or the document is not saying what it changed.
+#
+# Listed one by one rather than as `contracts/**`. A wildcard would satisfy the check while
+# describing nothing, which is the failure the check exists to catch.
+surfaces:
+  - contracts/README.md
+  - contracts/api/README.md          # consumers: WEB, ANDROID, IOS
+  - contracts/events/README.md       # consumers: SYSTEMS, WEB, INFRA
+  - contracts/changes/README.md
+  - contracts/changes/TEMPLATE.yaml.example
+  - contracts/changes/archive/.gitkeep
 
 breaking: false
 version: 0.1.0

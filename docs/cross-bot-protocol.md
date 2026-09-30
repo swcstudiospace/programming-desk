@@ -85,6 +85,10 @@ A contract change states:
 change_id: feat-push-notifications-v1
 proposed_by: bot-01-systems-backend
 surface: contracts/api/notifications.yaml
+# Plus `surfaces:` for any further contract paths the change touches. Between them they
+# must cover every contract-surface file in the diff, or G-4 fails and names the gaps —
+# that coverage is what stops a document left over from a merged change validating a
+# later, unrelated one.
 breaking: false
 version: 1.4.0
 

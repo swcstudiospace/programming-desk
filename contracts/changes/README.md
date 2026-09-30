@@ -19,6 +19,12 @@ sign-off into a merge condition instead of a thread nobody can find later.
 
 `change_id`, `proposed_by`, `surface`, `breaking`, `version`, `summary`, and `semantic_changes`.
 
+`surfaces` is optional and holds any further contract paths the change touches. Together with
+`surface` it must cover **every** contract-surface file in the diff, excluding the change
+document itself — G-4 fails and names the undeclared paths otherwise. List them individually;
+`contracts/**` satisfies the check while describing nothing, which is the failure the check
+exists to catch.
+
 `semantic_changes` has no default on purpose. Set it to `[]` to state there are none. A field
 whose meaning changed while its name and type did not is the one break no schema diff, compiler
 or test catches — the only defence is being asked, deliberately, every time.
@@ -31,8 +37,18 @@ picks up a change document does not select the template.
 
 ## One active document at a time
 
-CI selects the change document with `ls -1 contracts/changes/*.yaml | head -n1`, so keep exactly
-one active `*.yaml` here: the change this pull request is proposing.
+The gate's callers select a change document by globbing this directory — the CI template uses
+`ls -1 contracts/changes/*.yaml | head -n1`. Keep exactly one active `*.yaml` here: the change
+this pull request is proposing.
 
 **Once a change has merged, move its document to `archive/`.** The glob is not recursive, so an
 archived document stays readable as history without being picked up as the active one.
+
+Two things enforce this rather than trusting it:
+
+- `ci/hooks/g4-preflight.sh` refuses to run with more than one document here, and says which
+  ones to archive.
+- G-4 itself requires the document's declared surfaces to cover the diff. A document left
+  behind after its change merged describes different paths, so it cannot validate a later
+  change — which is what a filename-ordered `head -n1` would otherwise let it do, including
+  for a breaking change with no acknowledgements.

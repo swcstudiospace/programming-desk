@@ -55,7 +55,12 @@ A **breaking** change needs a major version bump, a migration note, and a positi
 acknowledgement from *every* listed consumer. A **non-breaking** change still needs a change
 document; acknowledgements are informational, but a rejection blocks.
 
-Both need `semantic_changes` declared explicitly — `[]` if there are none. A field whose
+Both need the declared surfaces (`surface`, plus `surfaces` for anything further) to cover
+every contract-surface file in the diff. That is what ties a document to a change: without it, a
+document left in `contracts/changes/` after its own change merged will validate a later,
+unrelated one, because the caller selects a document by globbing the directory.
+
+Both also need `semantic_changes` declared explicitly — `[]` if there are none. A field whose
 *meaning* changed while its name and type stayed the same is the one change no tool detects, and
 every consumer's behaviour shifts under it silently. Declaring it requires noticing it, which
 requires being asked. The gate asks.

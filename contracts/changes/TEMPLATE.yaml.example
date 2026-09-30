@@ -17,6 +17,14 @@ proposed_by: bot-01-systems-backend
 # or G-4 fails with "no consumers resolved" rather than guessing who is affected.
 surface: contracts/api/example.yaml
 
+# Any further contract paths this change touches. `surface` plus `surfaces` must cover every
+# contract-surface file in the diff (the change document itself excepted), or G-4 fails and
+# names what is missing. That coverage is what ties this document to this change — a document
+# left active after its change merged declares different paths and can no longer validate a
+# later one. List paths individually; `contracts/**` passes the check while describing nothing.
+# surfaces:
+#   - contracts/api/example-errors.yaml
+
 # See skills/contract-first-changes/SKILL.md §1. The list of breaking changes is longer
 # than people expect: narrowing a type and making an optional field required both count.
 breaking: false

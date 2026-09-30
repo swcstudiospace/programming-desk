@@ -70,7 +70,14 @@ declaring it, which requires noticing it, which requires asking the question del
 3. ACKNOWLEDGE Every consumer confirms it can implement against this
 4. MERGE       Contract lands BEFORE any implementation
 5. IMPLEMENT   Each bot, in its own paths, in parallel
+6. ARCHIVE     Move the merged change document to contracts/changes/archive/
 ```
+
+Step 6 is not tidying. Callers select a change document by globbing `contracts/changes/`, so
+a merged document left active can be selected for a later change. G-4 requires the document's
+declared surfaces (`surface`, plus an optional `surfaces` list) to cover the diff, which makes
+that mis-selection fail rather than pass — but archiving is what keeps the selection
+unambiguous in the first place.
 
 **Acknowledgement is a commitment, not a formality.** A consumer acking a contract says "I can
 build this". Acking without checking the field types reintroduces exactly the bug the protocol

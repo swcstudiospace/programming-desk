@@ -65,6 +65,33 @@ def required_consumers(surface_path: str, manifest: dict) -> list[str]:
     return []
 
 
+def declared_surfaces(doc: dict) -> list[str]:
+    """Every surface the change document claims, from 'surface' plus optional 'surfaces'."""
+    out: list[str] = []
+    one = doc.get("surface")
+    if isinstance(one, str) and one.strip():
+        out.append(one.strip())
+    for extra in doc.get("surfaces") or []:
+        if str(extra).strip():
+            out.append(str(extra).strip())
+    return out
+
+
+def _surface_match(pattern: str, path: str) -> bool:
+    """Stricter than _match: no basename fallback.
+
+    _match() falls back to comparing basenames for a pattern with no '/', which is right for
+    ownership globs and wrong here — 'openapi.yaml' must not cover 'contracts/openapi.yaml'.
+    A declared surface is an exact path, a directory glob, or an explicit glob.
+    """
+    if pattern == path:
+        return True
+    if pattern.endswith("/**"):
+        prefix = pattern[:-3]
+        return path == prefix or path.startswith(prefix + "/")
+    return fnmatch.fnmatch(path, pattern)
+
+
 def changed_files(base: str) -> list[str]:
     out = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"],
                          capture_output=True, text=True, cwd=REPO_ROOT)
@@ -76,7 +103,8 @@ def touched_contracts(files: list[str], manifest: dict) -> list[str]:
     return [f for f in files if any(_match(p, f) for p in surfaces)]
 
 
-def check_change_doc(doc: dict, manifest: dict) -> list[str]:
+def check_change_doc(doc: dict, manifest: dict, touched: list[str] | None = None,
+                     change_path: Path | None = None) -> list[str]:
     problems: list[str] = []
 
     for field in REQUIRED_CHANGE_FIELDS:
@@ -89,7 +117,46 @@ def check_change_doc(doc: dict, manifest: dict) -> list[str]:
     breaking = doc["breaking"]
     acks = {a["bot"]: a for a in doc.get("acknowledgements", []) if isinstance(a, dict)}
 
-    needed = doc.get("consumers_required") or required_consumers(surface, manifest)
+    # The change document must actually describe THIS change.
+    #
+    # Without this, a document left in contracts/changes/ after its own change merged will
+    # validate a later, unrelated change: the caller selects a document by globbing the
+    # directory, the gate reads it, and a breaking change with no acknowledgements passes on
+    # the strength of a stale non-breaking record. The document's declared surfaces are the
+    # only thing tying it to a diff, so they have to cover the diff.
+    surfaces = declared_surfaces(doc)
+    if touched is not None and surfaces:
+        # Compare the change document by resolved path, not by string: the gate may be run
+        # from a subdirectory, and a document that failed to match its own entry in the diff
+        # would be reported as an undeclared surface against itself.
+        def _is_change_doc(rel: str) -> bool:
+            if change_path is None:
+                return False
+            try:
+                return (REPO_ROOT / rel).resolve() == change_path.resolve()
+            except OSError:
+                return False
+
+        undeclared = [
+            t for t in touched
+            if not _is_change_doc(t) and not any(_surface_match(p, t) for p in surfaces)
+        ]
+        if undeclared:
+            problems.append(
+                "change document does not cover every contract surface in this change.\n"
+                "      Declared: " + ", ".join(surfaces) + "\n"
+                "      Undeclared: " + ", ".join(undeclared) + "\n"
+                "      Either this is the wrong change document — a stale one selected from\n"
+                "      contracts/changes/ validates a change it never described — or the\n"
+                "      paths above belong in its 'surfaces:' list."
+            )
+
+    needed = list(doc.get("consumers_required") or [])
+    if not needed:
+        for surf in surfaces:
+            for consumer in required_consumers(surf, manifest):
+                if consumer not in needed:
+                    needed.append(consumer)
     if not needed:
         problems.append(
             f"no consumers resolved for surface '{surface}' — "
@@ -197,7 +264,7 @@ def main() -> int:
         print(f"G-4 FAIL — change document is not valid YAML: {exc}", file=sys.stderr)
         return 1
 
-    problems = check_change_doc(doc, manifest)
+    problems = check_change_doc(doc, manifest, touched=touched, change_path=args.change)
 
     if problems:
         print(f"\nG-4 FAIL — {args.change}", file=sys.stderr)

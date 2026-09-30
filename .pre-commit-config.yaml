@@ -128,16 +128,24 @@ repos:
       #
       #     pre-commit run --hook-stage manual g4-contract-preflight --all-files
       #
-      # Expect a failure here whenever a contract surface is touched without a change
-      # document. That is the reminder, not a defect. The blocking run, with the document,
-      # is in CI:
+      # It runs through ci/hooks/g4-preflight.sh, which resolves the active change document
+      # from contracts/changes/ and passes it to the gate. Calling the gate directly would
+      # report "no change document supplied" on every run — including runs where the
+      # contributor has written a valid one — so the pre-flight could never report ready.
+      #
+      # The wrapper also fails when contracts/changes/ holds more than one document: the
+      # gate's caller selects one by globbing that directory, so a second, already-merged
+      # document can be picked and validate a change it never described. Archive the merged
+      # one. This is the same rule contracts/changes/README.md states, made executable.
+      #
+      # The blocking run is in CI:
       #
       #     python3 ci/gates/check_contracts.py --base origin/main \
       #         --change contracts/changes/<change-id>.yaml
       # -------------------------------------------------------------------------------
       - id: g4-contract-preflight
         name: "G-4 — contract-first pre-flight (advisory)"
-        entry: python3 ci/gates/check_contracts.py --files
+        entry: ci/hooks/g4-preflight.sh
         language: python
         additional_dependencies: ["pyyaml"]
         files: ^(contracts/|openapi\.yaml$)|\.proto$

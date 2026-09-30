@@ -1,0 +1,107 @@
+{
+  "task_id": "desk-v2-infra",
+  "bot": "bot-05-infrastructure",
+  "started_at": "2026-09-30T02:00:13Z",
+  "completed_at": "2026-09-30T02:00:14Z",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 101 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base bot-01-systems-backend/desk-v2-gateway",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-05-infrastructure: 12 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base bot-01-systems-backend/desk-v2-gateway",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS \u2014 12 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base bot-01-systems-backend/desk-v2-gateway",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "bash -n infra/desk-gateway/install.sh && bash -n infra/desk-gateway/install-nginx.sh",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import yaml; [yaml.safe_load(open(p)) for p in ['infra/railway/forwarders.yaml', '.github/workflows/gates.yml', '.github/workflows/desk-intake.yml']]\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": ""
+    },
+    {
+      "cmd": "systemd-analyze verify infra/desk-gateway/desk-gateway.service",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import xml.etree.ElementTree as ET; ET.parse('prompts/bot-05-infrastructure.xml')\"",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import re,sys; t=open('prompts/bot-05-infrastructure.xml').read(); sys.exit(0 if not re.search(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}', t) and '{{DESK_GATEWAY_URL}}' in t and '{{DESK_CHANNEL_ID}}' in t else 1)\"",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml validates (every path resolves to exactly one bot)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1: every changed path in this PR is owned by the acting bot",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3: no committed secret shapes in the diff against the base branch",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4: no contract surface is touched without a change document",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "install scripts parse under bash -n",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "forwarders.yaml and both workflows are valid YAML",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "desk-gateway.service passes systemd-analyze verify",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "INFRA prompt source is well-formed XML",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "INFRA prompt source uses placeholders and carries no literal UUID",
+      "evidence_command_index": 8
+    }
+  ],
+  "unverified": [
+    "Tailscale ACL policy.hujson is not applied or validated against the tailnet admin console",
+    "Railway Tailscale Forwarder services are specified, not deployed; TS_AUTHKEY and CONNECTION_MAPPING values are set in Railway by hand",
+    "nginx vhosts are not loaded: desk.swcstudio.space has no DNS record or certificate yet",
+    "desk-intake.yml is not exercised end to end until DESK_INTAKE_TOKEN exists in the repository secrets and the gateway is public"
+  ],
+  "approved_by": "bot-06-quality-security"
+}

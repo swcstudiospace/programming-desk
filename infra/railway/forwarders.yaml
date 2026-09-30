@@ -1,0 +1,24 @@
+# Tailscale Forwarder mappings, one forwarder per Railway project (plan §5; prose in README.md).
+# Railway variable form: CONNECTION_MAPPING_<n> = "<port>:<target>:<port>" — listen and target
+# ports are equal for every mapping here.
+# Service names are provisional until n1 lists the projects; fix them here first, then in Railway.
+# plane = the data class from plan §6 that the port serves.
+
+forwarders:
+  - project: Ultrathink
+    environment: production
+    machine: ultrathink-production-tailscale-forwarder
+    mappings:
+      - { port: 4000, target: greptimedb.railway.internal, service: greptimedb, plane: events }    # HTTP / SQL
+      - { port: 4001, target: greptimedb.railway.internal, service: greptimedb, plane: events }    # gRPC
+      - { port: 4003, target: greptimedb.railway.internal, service: greptimedb, plane: events }    # Postgres wire
+      - { port: 5432, target: timescaledb.railway.internal, service: timescaledb, plane: index }
+      - { port: 6379, target: dragonfly.railway.internal, service: dragonfly, plane: cache }
+
+  - project: Agent Substrate
+    environment: production
+    machine: agent-substrate-production-tailscale-forwarder
+    mappings:
+      - { port: 8888, target: hindsight-api.railway.internal, service: hindsight-api, plane: memory }   # REST + /mcp/<bank>/
+      - { port: 9380, target: ragflow.railway.internal, service: ragflow, plane: documents }            # API
+      - { port: 80, target: ragflow.railway.internal, service: ragflow, plane: documents }              # web UI, optional

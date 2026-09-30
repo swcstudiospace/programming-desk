@@ -1,0 +1,43 @@
+# Issue labelled `desk:intake` → POST /v1/intake on the desk gateway (plan §10).
+# The issue stays the record: LEAD's desk_intake_ack comments the Graph ID and tracker links back
+# on it, so this workflow posts once and does not comment itself.
+# Secret DESK_INTAKE_TOKEN is the `github` origin token from the gateway's INTAKE_TOKENS.
+
+name: Desk intake
+
+on:
+  issues:
+    types: [labeled]
+
+permissions: {}   # no checkout, no GITHUB_TOKEN use; the only credential is the intake token
+
+jobs:
+  intake:
+    if: github.event.label.name == 'desk:intake'
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST the issue to /v1/intake
+        env:
+          DESK_INTAKE_TOKEN: ${{ secrets.DESK_INTAKE_TOKEN }}
+          # Passed through env, not interpolated into the script: titles and bodies are attacker text.
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_USER: ${{ github.event.issue.user.login }}
+          IDEMPOTENCY_KEY: github:${{ github.repository }}:${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$DESK_INTAKE_TOKEN" ]]; then
+            echo "::error::DESK_INTAKE_TOKEN secret is not set on this repository"
+            exit 1
+          fi
+          jq -n \
+            --arg title "$ISSUE_TITLE" --arg ask "$ISSUE_BODY" --arg url "$ISSUE_URL" \
+            --arg by "$ISSUE_USER" --arg key "$IDEMPOTENCY_KEY" \
+            '{origin: "github", title: $title, ask: $ask, links: [$url],
+              requested_by: $by, idempotency_key: $key, priority: "normal"}' > payload.json
+          curl --fail-with-body -sS --max-time 30 \
+            -X POST https://desk.swcstudio.space/v1/intake \
+            -H "Authorization: Bearer $DESK_INTAKE_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data @payload.json

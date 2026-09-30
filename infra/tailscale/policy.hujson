@@ -1,0 +1,53 @@
+// Tailscale ACL policy for the Spectrum Web Co tailnet — Programming Desk v2 (plan §5).
+// Apply in the admin console (Access controls); the "tests" block is checked on every save.
+//
+// Who is on the tailnet
+//   tag:railway-forwarder  the two Railway Tailscale Forwarder machines (one per Railway project)
+//   tag:vps                the Hostinger VPS (187.77.130.10): substrate-mcp, desk-gateway, nginx
+//   tag:admin              Ove's Mac mini and XPS, for administration
+//
+// Who is NOT on the tailnet
+//   Grok Bot computers. They reach the desk only over https://desk.swcstudio.space, which is
+//   public and authenticates per seat with OAuth; nothing in this file grants a Bot anything.
+//   "Route egress through this desktop" on the Mac mini stays an INFRA-only emergency path, so
+//   there is deliberately no grant for it either.
+//
+// Deny by default: the single grant below is the whole allow list. In particular tag:admin is
+// not granted anything on tag:vps here — the VPS is administered over its public address as
+// before. Add a grant, do not widen this one, if that changes.
+{
+  "tagOwners": {
+    "tag:railway-forwarder": ["autogroup:admin"],
+    "tag:vps":               ["autogroup:admin"],
+    "tag:admin":             ["autogroup:admin"],
+  },
+
+  "grants": [
+    {
+      "src": ["tag:vps", "tag:admin"],
+      "dst": ["tag:railway-forwarder"],
+      // Exactly the forwarded ports: Greptime 4000-4003, Timescale 5432, Dragonfly 6379,
+      // Hindsight 8888, RAGFlow 9380 (API) and 80 (web UI). Plaintext is acceptable on this
+      // hop because the tailnet is WireGuard; the services still require their own credentials.
+      "ip": ["tcp:4000-4003", "tcp:5432", "tcp:6379", "tcp:8888", "tcp:9380", "tcp:80"],
+    },
+  ],
+
+  "tests": [
+    {
+      "src": "tag:vps",
+      "accept": ["tag:railway-forwarder:4000", "tag:railway-forwarder:5432", "tag:railway-forwarder:8888"],
+      "deny":   ["tag:railway-forwarder:22", "tag:railway-forwarder:443"],
+    },
+    {
+      "src": "tag:admin",
+      "accept": ["tag:railway-forwarder:6379", "tag:railway-forwarder:9380"],
+      "deny":   ["tag:vps:22", "tag:vps:8791"],
+    },
+    {
+      // A forwarder is a target only; it must never be able to open anything on the VPS.
+      "src": "tag:railway-forwarder",
+      "deny": ["tag:vps:22", "tag:vps:7410", "tag:vps:8791", "tag:admin:22"],
+    },
+  ],
+}

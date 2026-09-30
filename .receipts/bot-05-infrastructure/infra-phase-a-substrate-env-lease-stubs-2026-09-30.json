@@ -1,0 +1,750 @@
+{
+  "task_id": "infra-phase-a-substrate-env-lease-stubs-2026-09-30",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0",
+  "grok_run": "20260930T065532Z-29e26e2b",
+  "tickets": [
+    "SPE-4789",
+    "SPE-4793",
+    "SPE-4792"
+  ],
+  "pull_request": 38,
+  "started_at": "2026-09-30T06:56:00Z",
+  "completed_at": "2026-09-30T07:20:00Z",
+  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change. Fourth tip (LEAD GO, PR #38 after #36 was closed by the head-branch rename): INFRA unit sketch for the lease sweeper — substrate-lease-reap.{service,timer} calling the SYSTEMS-owned coord_reap_leases on the loopback substrate-mcp, default 45s within a 30-60s band, with the bearer kept in a root-only curl config file so no credential reaches the unit or a process listing. On-demand reaping through the MCP tool is retained and stays SYSTEMS'; the timer is only a sweeper for quiet load. Fifth tip: eight more Greptile findings on #38, all verified real and all fixed — leading zeros breaking the probe's unquoted JSON numbers (durations and ports), an empty target entry from a stray comma vanishing from the scan, EnvironmentFile optional on both units, Persistent= promising a catch-up tick a monotonic timer never delivers, the cron sketch both ignoring LEASE_INTERVAL_S above 60 and sourcing the env file as shell, the cadence invariant missing its TIMEOUT term because OnUnitActiveSec measures from renewal START not finish, and the receipt citing superseded PR #36. Sixth tip: Greptile P1 4142018423 — a failed sweep looked successful because curl --fail-with-body only checks the HTTP status while MCP reports tool failure as HTTP 200 with result.isError or a JSON-RPC error. ExecStart is now an INFRA-owned wrapper, substrate-lease-reap.sh, that parses the response (JSON or SSE) and exits non-zero unless the tool actually ran and succeeded. Seventh tip: two more findings on the wrapper itself — a multiline SSE result made a successful sweep exit 4 (parsed per data: line instead of joining the event's data as the SSE spec requires), and a negative SUBSTRATE_LEASE_REAP_LOG_BYTES inverted the journal cap into near-unbounded output. Both reproduced and fixed. Added infra/lease-heartbeat/smoke-reap-sse.sh, a self-contained re-runnable check for the multiline-SSE case, which fails against the pre-fix wrapper and passes against the fixed one; the LOG_BYTES constraint is now documented in §6 and the env example.",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/substrate/SUBSTRATE-ENV.md infra/substrate/substrate.env.example infra/desk-gateway/gateway.env.example infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/DRIFT-SCAN.md infra/lease-heartbeat/lease-heartbeat.env.example infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/desk-lease-heartbeat.timer infra/lease-heartbeat/drift-probe.sh .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 11 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files infra/substrate/SUBSTRATE-ENV.md infra/substrate/substrate.env.example infra/desk-gateway/gateway.env.example infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/DRIFT-SCAN.md infra/lease-heartbeat/lease-heartbeat.env.example infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/desk-lease-heartbeat.timer infra/lease-heartbeat/drift-probe.sh .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.md",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 11 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "bash -n infra/lease-heartbeat/drift-probe.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "(no output — syntax clean)"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_GIT_BRANCH=main ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 0,
+      "duration_s": 1.1,
+      "output_tail": "{\"probe\":\"git_tip\",\"checked_at\":\"2026-09-30T07:01:16Z\",\"repo_dir\":\"/home/user/programming-desk\",\"ok\":true,\"branch\":\"claude/substrate-env-lease-stubs-1s6sf0\",\"local_tip\":\"64989b71f64ee204aecf15081fde8e0b0bc83de5\",\"dirty\":true,\"remote\":\"origin\",\"remote_branch\":\"main\",\"remote_tip\":\"0179c8f1480291570c2bb4a9b7056c457c3af2dc\",\"relation\":\"ahead\",\"note\":\"\"}"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:8123,127.0.0.1:1,bogus  # 8123 = local python http.server started for the probe",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "127.0.0.1:8123=up 127.0.0.1:1=down bogus=down"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all | python3 -c \"import json,sys;d=json.load(sys.stdin);print('json_ok keys='+','.join(sorted(d)),'relation='+d['git_tip']['relation'],'reachable='+str(d['reachability']['targets'][0]['reachable']))\"",
+      "exit_code": 0,
+      "duration_s": 1.2,
+      "output_tail": "json_ok keys=checked_at,drift_probe,git_tip,reachability relation=ahead reachable=False"
+    },
+    {
+      "cmd": "grep -nE '^GREPTIME_(URL|USER|PASSWORD|DB)=' infra/substrate/substrate.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "26:GREPTIME_URL=\n27:GREPTIME_USER=\n28:GREPTIME_PASSWORD=\n29:GREPTIME_DB=public"
+    },
+    {
+      "cmd": "grep -nE '^[A-Z_]+=.+' infra/substrate/substrate.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "14:SUBSTRATE_HOST=127.0.0.1\n15:SUBSTRATE_PORT=7410\n16:SUBSTRATE_LOG_LEVEL=INFO\n29:GREPTIME_DB=public"
+    },
+    {
+      "cmd": "grep -nE '^(Type|OnUnitActiveSec|Unit|ExecStart|EnvironmentFile)=' infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/desk-lease-heartbeat.timer",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "desk-lease-heartbeat.service:21:Type=oneshot\ndesk-lease-heartbeat.service:25:EnvironmentFile=-/etc/desk-lease-heartbeat/heartbeat.env\ndesk-lease-heartbeat.service:27:ExecStart=/opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat renew\ndesk-lease-heartbeat.timer:19:OnUnitActiveSec=60\ndesk-lease-heartbeat.timer:25:Unit=desk-lease-heartbeat.service"
+    },
+    {
+      "cmd": "ls infra/lease-heartbeat/",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "DRIFT-SCAN.md\nLEASE-HEARTBEAT.md\ndesk-lease-heartbeat.service\ndesk-lease-heartbeat.timer\ndrift-probe.sh\nlease-heartbeat.env.example"
+    },
+    {
+      "cmd": "git check-ignore -v .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": ".gitignore:5:.receipts/**/*.json\t.receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json"
+    },
+    {
+      "cmd": "git ls-files --error-unmatch .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json"
+    },
+    {
+      "cmd": "GIT_TERMINAL_PROMPT=0 timeout 10 git ls-remote git://203.0.113.7/blackhole.git refs/heads/main",
+      "exit_code": 124,
+      "duration_s": 10.0,
+      "output_tail": "(no output — the outer 10s cap fired; ls-remote had not returned)"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=git://203.0.113.7/blackhole.git DRIFT_GIT_TIMEOUT_S=3 ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 0,
+      "duration_s": 3.2,
+      "output_tail": "relation=unknown note=ls-remote timed out after 3s"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach ''",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "{\"probe\":\"reachability\",...,\"targets\":[],\"targets_requested\":0,\"targets_malformed\":0,\"ok\":false}"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1,bogus",
+      "exit_code": 3,
+      "duration_s": 0.05,
+      "output_tail": "ok=False requested=2 malformed=1"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all  # 8123 = local python http.server started for the probe",
+      "exit_code": 0,
+      "duration_s": 1.3,
+      "output_tail": "ok= True relation= ahead / reach ok= True requested= 2 malformed= 0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
+    },
+    {
+      "cmd": "grep -nE 'PLACEHOLDER|TimeoutStartSec|RandomizedDelaySec|OnUnitActiveSec' infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/desk-lease-heartbeat.timer",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "desk-lease-heartbeat.service:28:# PLACEHOLDER — generate from LEASE_TIMEOUT_S at install time\ndesk-lease-heartbeat.service:33:TimeoutStartSec=30\ndesk-lease-heartbeat.timer:13:#     OnUnitActiveSec + RandomizedDelaySec  <=  LEASE_TTL_S / 3\ndesk-lease-heartbeat.timer:26:# PLACEHOLDER — generate from LEASE_INTERVAL_S at install time.\ndesk-lease-heartbeat.timer:27:OnUnitActiveSec=60\ndesk-lease-heartbeat.timer:28:# PLACEHOLDER — generate from LEASE_JITTER_S.\ndesk-lease-heartbeat.timer:30:RandomizedDelaySec=5"
+    },
+    {
+      "cmd": "git show 76fd388:infra/lease-heartbeat/drift-probe.sh > old.sh && DRIFT_PROBE_TIMEOUT_S=abc bash old.sh reach 127.0.0.1:1 | python3 -c 'json.load(sys.stdin)'",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "JSON PARSE FAILED: Expecting value: line 1 column 73 (char 72)   [old script exit=0]"
+    },
+    {
+      "cmd": "DRIFT_PROBE_TIMEOUT_S=abc ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "{\"probe\":\"config\",\"ok\":false,\"error\":\"DRIFT_PROBE_TIMEOUT_S must be a number of seconds, with no unit suffix (e.g. 5 or 2.5), got: abc\"}"
+    },
+    {
+      "cmd": "PATH=<shim with a timeout that exits 127> DRIFT_GIT_REMOTE=origin ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 3,
+      "duration_s": 0.1,
+      "output_tail": "ok=False remote_checked=False"
+    },
+    {
+      "cmd": "PATH=<shim with a timeout that exits 127> ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.05,
+      "output_tail": "ok=False unattempted=1 reachable=False probed=False"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all",
+      "exit_code": 0,
+      "duration_s": 1.3,
+      "output_tail": "top ok=True | tip ok=True remote_checked=True relation=ahead / reach ok=True req=2 malformed=0 unattempted=0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=git://203.0.113.7/blackhole.git DRIFT_GIT_TIMEOUT_S=3 ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 0,
+      "duration_s": 3.2,
+      "output_tail": "ok=True remote_checked=False note=ls-remote timed out after 3s"
+    },
+    {
+      "cmd": "for v in abc 2s 0 0.0 -1; do DRIFT_PROBE_TIMEOUT_S=$v ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1; done  # each must exit 3",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[abc] exit=3  [2s] exit=3  [0] exit=3  [0.0] exit=3  [-1] exit=3  |  valid: [5] timeout_s=5 ok=True  [2.5] timeout_s=2.5 ok=True"
+    },
+    {
+      "cmd": "git rev-parse --abbrev-ref HEAD",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0  (prefix 'bot-05-infrastructure' matches the gates regex ^bot-0[0-6]-[a-z0-9-]+$)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "systemd-analyze verify substrate-lease-reap.service substrate-lease-reap.timer",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "(no output — both units verify clean)"
+    },
+    {
+      "cmd": "grep -nE 'Bearer|token|TOKEN|password' infra/lease-heartbeat/substrate-lease-reap.service infra/lease-heartbeat/substrate-lease-reap.timer",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — neither unit contains a credential, a token name or a Bearer literal)"
+    },
+    {
+      "cmd": "grep -nE '^(SUBSTRATE_MCP_URL|SUBSTRATE_LEASE_REAP_[A-Z_]+)=' infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "51:SUBSTRATE_MCP_URL=\n55:SUBSTRATE_LEASE_REAP_INTERVAL_SEC=\n57:SUBSTRATE_LEASE_REAP_TIMEOUT_SEC=\n62:SUBSTRATE_LEASE_REAP_CURL_CONFIG=\n63:SUBSTRATE_LEASE_REAP_REQUEST="
+    },
+    {
+      "cmd": "grep -nE '^[A-Z_]+=.+' infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — every value in the heartbeat env example is still empty, names only)"
+    },
+    {
+      "cmd": "grep -nE '^(OnUnitActiveSec|OnBootSec|Persistent)=' infra/lease-heartbeat/substrate-lease-reap.timer",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "24:OnBootSec=60\n27:OnUnitActiveSec=45\n35:Persistent=false"
+    },
+    {
+      "cmd": "python3 -c 'parse the ```json block in LEASE-HEARTBEAT.md as the documented coord_reap_leases request body'",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "parsed: {\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"coord_reap_leases\",\"arguments\":{}}} | tool: coord_reap_leases | args: {}"
+    },
+    {
+      "cmd": "DRIFT_PROBE_TIMEOUT_S=05 ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "{\"probe\":\"config\",\"ok\":false,\"error\":\"DRIFT_PROBE_TIMEOUT_S must be a number of seconds — no unit suffix, no leading zero (e.g. 5 or 2.5), got: 05\"}"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:080",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "parsed; ok=False malformed=1 err=expected host:port, with a port of 1-65535 and no leading zero"
+    },
+    {
+      "cmd": "./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:70000",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "ok=False err=port out of range (1-65535): 70000"
+    },
+    {
+      "cmd": "for t in '127.0.0.1:1,' ',127.0.0.1:1' '127.0.0.1:1,,127.0.0.1:2'; do ./infra/lease-heartbeat/drift-probe.sh reach \"$t\"; done  # each must count the empty entry and exit 3",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "trailing: requested=2 malformed=1 ok=False exit=3 | leading: requested=2 malformed=1 ok=False exit=3 | interior: requested=3 malformed=1 ok=False exit=3"
+    },
+    {
+      "cmd": "for t in '127.0.0.1:1,127.0.0.1:2' ' 127.0.0.1:1 , 127.0.0.1:2 '; do ./infra/lease-heartbeat/drift-probe.sh reach \"$t\"; done  # clean lists must still exit 0",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "two clean: requested=2 malformed=0 ok=True exit=0 | with whitespace: requested=2 malformed=0 ok=True exit=0"
+    },
+    {
+      "cmd": "systemd-analyze verify substrate-lease-reap.service substrate-lease-reap.timer desk-lease-heartbeat.timer",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "(no output — all three verify clean after the EnvironmentFile and Persistent changes)"
+    },
+    {
+      "cmd": "systemd-analyze verify desk-lease-heartbeat.service",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "desk-lease-heartbeat.service: Command /opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat is not executable: No such file or directory"
+    },
+    {
+      "cmd": "grep -n '^EnvironmentFile=' infra/lease-heartbeat/desk-lease-heartbeat.service infra/lease-heartbeat/substrate-lease-reap.service",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "desk-lease-heartbeat.service:29:EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env\nsubstrate-lease-reap.service:32:EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env  (no '-' prefix on either)"
+    },
+    {
+      "cmd": "grep -n '\\. /etc/desk-lease-heartbeat' infra/lease-heartbeat/LEASE-HEARTBEAT.md",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "(no match — the cron sketch no longer sources the env file as shell)"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all  # 8123 = local python http.server",
+      "exit_code": 0,
+      "duration_s": 1.3,
+      "output_tail": "top ok=True | tip ok=True remote_checked=True relation=ahead / reach ok=True req=2 malformed=0 unattempted=0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
+    },
+    {
+      "cmd": "curl --fail-with-body --silent --show-error --config <curlrc> --data @<request> http://127.0.0.1:8300/mcp  # fake MCP returning HTTP 200 with result.isError=true",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "curl exit=0 — the bare form treats a failed tool as a successful sweep, which is exactly what systemd would have recorded"
+    },
+    {
+      "cmd": "SUBSTRATE_MCP_URL=http://127.0.0.1:8300/mcp ./infra/lease-heartbeat/substrate-lease-reap.sh  # same fake response",
+      "exit_code": 5,
+      "duration_s": 0.2,
+      "output_tail": "substrate-lease-reap: tool reported isError"
+    },
+    {
+      "cmd": "for mode in ok iserror rpcerror sse_ok sse_iserror http500 garbage; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done  # against a local fake MCP server in each response shape",
+      "exit_code": 0,
+      "duration_s": 3.0,
+      "output_tail": "ok exit=0 swept | iserror exit=5 tool reported isError | rpcerror exit=5 JSON-RPC error -32601 | sse_ok exit=0 swept | sse_iserror exit=5 tool reported isError | http500 exit=2 HTTP 500 | garbage exit=4 unparseable response"
+    },
+    {
+      "cmd": "SUBSTRATE_MCP_URL=http://127.0.0.1:1/mcp ./infra/lease-heartbeat/substrate-lease-reap.sh  # nothing listening",
+      "exit_code": 3,
+      "duration_s": 0.1,
+      "output_tail": "curl: (7) Failed to connect to 127.0.0.1 port 1 — wrapper exit 3 (request could not be completed)"
+    },
+    {
+      "cmd": "env -u SUBSTRATE_MCP_URL ./infra/lease-heartbeat/substrate-lease-reap.sh",
+      "exit_code": 1,
+      "duration_s": 0.02,
+      "output_tail": "SUBSTRATE_MCP_URL: SUBSTRATE_MCP_URL is not set — the installer has not run"
+    },
+    {
+      "cmd": "bash -n infra/lease-heartbeat/substrate-lease-reap.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "(no output — syntax clean)"
+    },
+    {
+      "cmd": "grep -n '^ExecStart=' infra/lease-heartbeat/substrate-lease-reap.service",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "ExecStart=/opt/programming-desk/infra/lease-heartbeat/substrate-lease-reap.sh"
+    },
+    {
+      "cmd": "ls .receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md"
+    },
+    {
+      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > old-reap.sh && SUBSTRATE_MCP_URL=<fake multiline-SSE success> bash old-reap.sh",
+      "exit_code": 4,
+      "duration_s": 0.3,
+      "output_tail": "exit=4 unparseable — a SUCCESSFUL sweep reported as a failure, on every tick, because each data: line was parsed as standalone JSON"
+    },
+    {
+      "cmd": "SUBSTRATE_MCP_URL=<fake multiline-SSE success> ./infra/lease-heartbeat/substrate-lease-reap.sh",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "substrate-lease-reap: swept"
+    },
+    {
+      "cmd": "for mode in sse_multiline_ok sse_multiline_err sse_nospace sse_no_trailing sse_two_events sse_done plain; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done",
+      "exit_code": 0,
+      "duration_s": 3.0,
+      "output_tail": "sse_multiline_ok exit=0 swept | sse_multiline_err exit=5 isError | sse_nospace exit=0 | sse_no_trailing exit=0 | sse_two_events exit=5 isError | sse_done exit=0 | plain exit=0"
+    },
+    {
+      "cmd": "head -c 2000 big.txt | wc -c ; head -c -2000 big.txt | wc -c  # 10000-byte body",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "2000 then 8000 — a negative cap turns 'at most N bytes' into 'all but the last N', and python raw[:-N] inverts identically"
+    },
+    {
+      "cmd": "SUBSTRATE_LEASE_REAP_LOG_BYTES=-5 ./infra/lease-heartbeat/substrate-lease-reap.sh",
+      "exit_code": 1,
+      "duration_s": 0.02,
+      "output_tail": "substrate-lease-reap: SUBSTRATE_LEASE_REAP_LOG_BYTES must be a non-negative integer, got: -5"
+    },
+    {
+      "cmd": "for mode in ok iserror rpcerror sse_ok sse_iserror http500 garbage; do ./infra/lease-heartbeat/substrate-lease-reap.sh; done  # regression after both fixes",
+      "exit_code": 0,
+      "duration_s": 3.0,
+      "output_tail": "ok exit=0 | iserror exit=5 | rpcerror exit=5 | sse_ok exit=0 | sse_iserror exit=5 | http500 exit=2 | garbage exit=4 — unchanged"
+    },
+    {
+      "cmd": "bash -n infra/lease-heartbeat/smoke-reap-sse.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "(no output — syntax clean)"
+    },
+    {
+      "cmd": "bash infra/lease-heartbeat/smoke-reap-sse.sh",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "substrate-lease-reap: swept\nSMOKE PASS: multiline-SSE success parsed, exit 0"
+    },
+    {
+      "cmd": "git show 99028dd:infra/lease-heartbeat/substrate-lease-reap.sh > old2.sh && sed 's#./infra/lease-heartbeat/substrate-lease-reap.sh#old2.sh#' infra/lease-heartbeat/smoke-reap-sse.sh | bash",
+      "exit_code": 4,
+      "duration_s": 0.6,
+      "output_tail": "substrate-lease-reap: unparseable response: Expecting property name enclosed in double quotes: line 1 column 2\nSMOKE FAIL: exit 4"
+    },
+    {
+      "cmd": "grep -n 'non-negative integer\\|NON-NEGATIVE INTEGER' infra/lease-heartbeat/LEASE-HEARTBEAT.md infra/lease-heartbeat/lease-heartbeat.env.example",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "LEASE-HEARTBEAT.md and lease-heartbeat.env.example both state the SUBSTRATE_LEASE_REAP_LOG_BYTES constraint and why a negative value inverts the cap"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The ownership manifest still validates after adding infra/substrate/ and infra/lease-heartbeat/.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Every path this change touches, including both receipt files, resolves to bot-05-infrastructure (G-1 PASS). ownership.yaml itself was not edited: its bare README.md rule sends a README at any depth to QUALITY, so the two prose files are named SUBSTRATE-ENV.md and LEASE-HEARTBEAT.md instead.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3 finds no secret in any touched file, including the two env examples and this receipt.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-7 desk integrity is unaffected: no roster, pack, prompt or template was touched, so no Greptime MCP server was registered and no tool was added.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "drift-probe.sh is syntactically valid bash.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The git-tip probe reports local tip, branch, dirty flag, remote tip and the ahead/behind relation without fetching, and correctly resolved 'ahead' against origin/main.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The reachability probe distinguishes an open port, a closed port and a malformed target in one run, and a closed port does not abort the remaining probes.",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "drift-probe.sh all emits parseable JSON with both sub-probes, and exits 0 while reporting an unreachable target — probe status is separate from probe result.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "All four GREPTIME_* names (URL, USER, PASSWORD, DB) are present in the substrate env example.",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "The only non-empty values in the substrate env example are a loopback host, a port, a log level and the database name 'public' — no credential and no public domain.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "The heartbeat unit is Type=oneshot driven by the timer's OnUnitActiveSec, reads its env from /etc/desk-lease-heartbeat/heartbeat.env, and its ExecStart names the not-yet-existing SYSTEMS entrypoint.",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "No install.sh exists in infra/lease-heartbeat/, so nothing installs the stub unit that would fail every tick.",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "Greptile P1 4141814747 confirmed, not refuted: .gitignore line 5 (.receipts/**/*.json) silently excluded the JSON receipt from the first commit, so the PR carried only the Markdown half and G-2 would have found no receipt for this task.",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The JSON receipt is now tracked in git, force-added past that ignore rule the way the seat's existing .json receipts are. .gitignore itself is unowned in ownership.yaml, so it was not edited.",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "Greptile P1 4141814758 reproduced: a bare git ls-remote against an unresponsive remote does not return on its own and had to be killed by an outer cap.",
+      "evidence_command_index": 14,
+      "expects_failure": true
+    },
+    {
+      "claim": "With DRIFT_GIT_TIMEOUT_S the same lookup returns bounded, reports the timeout in 'note', and keeps exit 0 because a timed-out remote is a probe result rather than a probe that could not be attempted.",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "Greptile P1 4141814773 fixed for the empty case: an empty target list now exits 3 with ok:false instead of exiting 0 with an empty target array.",
+      "evidence_command_index": 16,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile P1 4141814773 fixed for the malformed case: a malformed target is counted and exits 3, while the well-formed target beside it is still probed and reported.",
+      "evidence_command_index": 17,
+      "expects_failure": true
+    },
+    {
+      "claim": "A fully well-formed run still exits 0 and reports an open port up and a closed port down, so tightening the configuration checks did not turn an ordinary outage into a script failure.",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "Greptile P1 4141814794 and 4141814784 addressed in the units: TimeoutStartSec and RandomizedDelaySec are both marked PLACEHOLDER and generated at install time alongside OnUnitActiveSec.",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "Greptile P1 4141898005 confirmed, and worse than reported: on the pushed tip an invalid DRIFT_PROBE_TIMEOUT_S also produced UNPARSEABLE JSON (timeout_s:abc emitted unquoted) while still exiting 0.",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Root cause fixed at the source: both *_TIMEOUT_S values are validated before any probe runs, and a bad one stops the run with a config object and exit 3 instead of a misleading result.",
+      "evidence_command_index": 21,
+      "expects_failure": true
+    },
+    {
+      "claim": "A git lookup that could not be STARTED now reports ok:false with remote_checked:false and exits 3, so a caller trusting 'ok' can no longer read an unchecked remote tip as a completed check.",
+      "evidence_command_index": 22,
+      "expects_failure": true
+    },
+    {
+      "claim": "The same defect in the reachability probe is fixed: a connect that could not be started reports probed:false and is counted in targets_unattempted rather than claiming the target is down.",
+      "evidence_command_index": 23,
+      "expects_failure": true
+    },
+    {
+      "claim": "The ordinary paths still behave after the tightening: a good run exits 0 with remote_checked true, an open port up and a closed port down.",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "A timed-out remote is still treated as a probe result rather than a failure: ok stays true, remote_checked is false, and the exit stays 0.",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "Duration validation rejects a non-numeric value, a unit suffix, zero and a negative, and accepts an integer and a decimal, keeping timeout_s numeric in the JSON.",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "The head branch was renamed to bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0, so the gates job's acting-bot step can now attribute this change; the receipt's branch field matches.",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "The two new sweeper units and the docs they change stay inside bot-05-infrastructure ownership.",
+      "evidence_command_index": 28
+    },
+    {
+      "claim": "G-3 finds no secret in the sweeper units or the updated env example.",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Both sweeper units verify clean under systemd-analyze, so the ExecStart line continuations and Timer stanza parse as systemd intends.",
+      "evidence_command_index": 30
+    },
+    {
+      "claim": "Neither sweeper unit contains a credential, a token name or a Bearer literal: the bearer is reached through a root-only curl config file named by SUBSTRATE_LEASE_REAP_CURL_CONFIG, so it never reaches a command line visible in ps or systemctl show.",
+      "evidence_command_index": 31,
+      "expects_failure": true
+    },
+    {
+      "claim": "All five sweeper env names are present: SUBSTRATE_MCP_URL, SUBSTRATE_LEASE_REAP_INTERVAL_SEC, SUBSTRATE_LEASE_REAP_TIMEOUT_SEC, SUBSTRATE_LEASE_REAP_CURL_CONFIG, SUBSTRATE_LEASE_REAP_REQUEST.",
+      "evidence_command_index": 32
+    },
+    {
+      "claim": "The heartbeat env example remains names-only after the addition — every value is still empty.",
+      "evidence_command_index": 33,
+      "expects_failure": true
+    },
+    {
+      "claim": "The sweeper timer carries the documented 45s default, within the sanctioned 30-60s band, and is deliberately not Persistent.",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "The coord_reap_leases request body documented in LEASE-HEARTBEAT.md parses as JSON and names the tool with no arguments.",
+      "evidence_command_index": 35
+    },
+    {
+      "claim": "Greptile P1 4141980702 fixed for durations: a leading zero is rejected before any probe runs, so the snapshot can no longer carry timeout_s:05, which JSON forbids.",
+      "evidence_command_index": 36,
+      "expects_failure": true
+    },
+    {
+      "claim": "The same finding applied to the port, which is also emitted unquoted: 080 is now rejected as malformed and the surrounding JSON stays parseable.",
+      "evidence_command_index": 37,
+      "expects_failure": true
+    },
+    {
+      "claim": "Port range is enforced as well, so 70000 is malformed rather than probed.",
+      "evidence_command_index": 38,
+      "expects_failure": true
+    },
+    {
+      "claim": "Greptile P1 4141980726 fixed: an empty entry from a trailing, leading or doubled comma is counted and reported malformed instead of being silently skipped. Bash word-splitting and read -ra both discard a trailing empty field, so the list is split by hand.",
+      "evidence_command_index": 39
+    },
+    {
+      "claim": "Clean target lists, including ones with whitespace around entries, still exit 0 after the stricter parsing.",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "Greptile P1 4141980742 and P2 4141980755 fixed in the units: EnvironmentFile is required on both services and Persistent is gone from the heartbeat timer; all three affected units verify clean.",
+      "evidence_command_index": 41
+    },
+    {
+      "claim": "The heartbeat service's only systemd-analyze complaint remains the documented stub ExecStart, which is the SYSTEMS entrypoint that does not exist yet.",
+      "evidence_command_index": 42,
+      "expects_failure": true
+    },
+    {
+      "claim": "Neither unit still carries the '-' prefix that let systemd start a renewal with no env file at all.",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": "Greptile P2 4141980775 fixed: the cron sketch no longer sources the systemd EnvironmentFile as shell, which would mangle a token containing shell-significant characters.",
+      "evidence_command_index": 44,
+      "expects_failure": true
+    },
+    {
+      "claim": "The probe's ordinary path is unaffected by all four changes: a healthy run still exits 0 with the remote tip checked, an open port up and a closed port down.",
+      "evidence_command_index": 45
+    },
+    {
+      "claim": "Greptile P1 4142018423 reproduced: against an HTTP 200 response carrying result.isError, the bare curl --fail-with-body form exits 0, so systemd would have marked a failed sweep successful while expired leases stayed unreaped.",
+      "evidence_command_index": 46
+    },
+    {
+      "claim": "The wrapper fails that same response, so the unit now fails when the tool reports failure.",
+      "evidence_command_index": 47,
+      "expects_failure": true
+    },
+    {
+      "claim": "substrate-lease-reap.sh distinguishes all seven MCP response shapes tested — plain-JSON success, result.isError, JSON-RPC error, SSE success, SSE isError, HTTP 500 and an unparseable body — with a distinct exit code per class, over both JSON and SSE framing.",
+      "evidence_command_index": 48
+    },
+    {
+      "claim": "A transport failure is separated from a tool failure: an unreachable endpoint exits 3, not 5.",
+      "evidence_command_index": 49,
+      "expects_failure": true
+    },
+    {
+      "claim": "The wrapper refuses to run at all when a required env name is unset, rather than calling an empty URL.",
+      "evidence_command_index": 50,
+      "expects_failure": true
+    },
+    {
+      "claim": "substrate-lease-reap.sh is syntactically valid bash.",
+      "evidence_command_index": 51
+    },
+    {
+      "claim": "The reap unit's ExecStart is the wrapper at the documented /opt/programming-desk install path, no longer a bare curl.",
+      "evidence_command_index": 52
+    },
+    {
+      "claim": "The sweeper's prose receipt that QUALITY noted absent is now present.",
+      "evidence_command_index": 53
+    },
+    {
+      "claim": "Greptile P1 4142097603 reproduced: on the previous tip a SUCCESSFUL sweep whose SSE result spanned several data: lines exited 4, so the timer would have reported failure on every tick while the substrate was healthy.",
+      "evidence_command_index": 54,
+      "expects_failure": true
+    },
+    {
+      "claim": "The same response now parses and exits 0, because an SSE event's data is joined across its data: lines as the spec requires rather than parsed line by line.",
+      "evidence_command_index": 55
+    },
+    {
+      "claim": "SSE framing variants all behave: multiline success and isError, no space after the colon, no trailing blank line, two events in one response, and a [DONE] sentinel.",
+      "evidence_command_index": 56
+    },
+    {
+      "claim": "Greptile P2 4142097621 confirmed at the mechanism level: on a 10000-byte body head -c 2000 yields 2000 bytes while head -c -2000 yields 8000, and the Python slice inverts the same way.",
+      "evidence_command_index": 57
+    },
+    {
+      "claim": "A negative log cap is now refused before any request is made, so the cap cannot be inverted into near-unbounded journal output on repeated failing sweeps.",
+      "evidence_command_index": 58,
+      "expects_failure": true
+    },
+    {
+      "claim": "All seven original response shapes still map to the same exit codes after both fixes.",
+      "evidence_command_index": 59
+    },
+    {
+      "claim": "The new self-contained smoke check is syntactically valid bash.",
+      "evidence_command_index": 60
+    },
+    {
+      "claim": "smoke-reap-sse.sh passes against the fixed wrapper: a successful JSON-RPC result pretty-printed across many data: lines is parsed and the sweep exits 0. It needs no external fixture, no network and no secret.",
+      "evidence_command_index": 61
+    },
+    {
+      "claim": "The smoke check is discriminating rather than tautological: run against the pre-fix wrapper from 99028dd it FAILS with exit 4, the exact false-failure the finding described.",
+      "evidence_command_index": 62,
+      "expects_failure": true
+    },
+    {
+      "claim": "The SUBSTRATE_LEASE_REAP_LOG_BYTES non-negative-integer constraint is documented in both LEASE-HEARTBEAT.md §6 and the env example, with the reason a negative value inverts the cap.",
+      "evidence_command_index": 63
+    },
+    {
+      "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
+      "evidence_command_index": 64,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "Nothing was installed or restarted on the VPS: the heartbeat unit/timer are stubs whose ExecStart target under services/desk-lease-heartbeat does not exist yet (SYSTEMS), and no install.sh was written on purpose",
+    "No live Greptime, Timescale, Dragonfly, Hindsight or RAGFlow probe was run from this session; the SPE-4789 receipts infra-spe4789-greptime-place-env and infra-spe4789-agent-events-append-mode remain the only evidence for the placement and the tailnet startup timeout, and neither is restated here",
+    "The reachability probe was exercised only against loopback (a local python http.server on 8123, a closed port, and a malformed target) — never against a tailscale-forwarder host, which needs the VPS",
+    "GREPTIME_URL on the VPS is still the public HTTPS + Basic fallback; the tailnet cutover and the G-6 retirement of public exposure are not part of this change",
+    "The suggested drift_scan snapshot shape in DRIFT-SCAN.md §4 is a proposal to SYSTEMS, not an accepted interface; contracts/tool-rosters is QUALITY-owned and was not touched",
+    "LEASE_TTL_S and LEASE_INTERVAL_S values, and the renew subcommand's exit-code contract, are open on SYSTEMS (DRIFT-SCAN.md §5, LEASE-HEARTBEAT.md §5)",
+    "approved_by stays null until QUALITY reviews; G-2 fails closed on that field by design",
+    "The cadence invariant now includes the jitter term (INTERVAL + JITTER <= TTL/3) and all three unit literals are generated at install time — but no installer exists yet to enforce it, so the guarantee is documented, not executed",
+    "Quality Gates has not yet been observed passing on the renamed bot-05-infrastructure/* branch — the rename satisfies the acting-bot regex locally, but only a CI run proves the remaining gates green",
+    "The sweeper is not installed and has never been run against a live substrate-mcp: coord_reap_leases has not been called, so neither the tool name, its argument shape, nor its response on a sweep with nothing to reap is confirmed (LEASE-HEARTBEAT.md §5 asks SYSTEMS for all three)",
+    "systemd-analyze verify parses the sweeper units but does not execute them; the ${...} expansions in ExecStart are unresolved because no EnvironmentFile exists on this host",
+    "The cadence invariant now carries a TIMEOUT term because OnUnitActiveSec measures from when a renewal started, not finished — this is read from the systemd documentation and the unit files, not observed on a running timer, since nothing is installed",
+    "substrate-lease-reap.sh was exercised only against a local fake MCP server that is INFRA's model of the protocol — never against a real substrate-mcp, and never over an authenticated session"
+  ],
+  "files_changed": [
+    "infra/substrate/SUBSTRATE-ENV.md",
+    "infra/substrate/substrate.env.example",
+    "infra/desk-gateway/gateway.env.example",
+    "infra/lease-heartbeat/LEASE-HEARTBEAT.md",
+    "infra/lease-heartbeat/DRIFT-SCAN.md",
+    "infra/lease-heartbeat/lease-heartbeat.env.example",
+    "infra/lease-heartbeat/desk-lease-heartbeat.service",
+    "infra/lease-heartbeat/desk-lease-heartbeat.timer",
+    "infra/lease-heartbeat/drift-probe.sh",
+    ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json",
+    ".receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.md",
+    "infra/lease-heartbeat/substrate-lease-reap.service",
+    "infra/lease-heartbeat/substrate-lease-reap.timer",
+    "infra/lease-heartbeat/substrate-lease-reap.sh",
+    ".receipts/bot-05-infrastructure/infra-spe4792-lease-reap-timer-2026-09-30.md",
+    "infra/lease-heartbeat/smoke-reap-sse.sh"
+  ],
+  "destructive": false,
+  "deployment": null,
+  "rollback_plan": "Docs and stub unit files only; nothing is installed, enabled or restarted, and no live env file was edited. Revert the two commits on the branch, or close the draft PR — there is no host state to undo and no data implication. The one behavioural note is documentary: gateway.env.example now marks its GREPTIME_* block TRANSITIONAL, which changes no running gateway because install.sh never overwrites a live /etc/desk-gateway/gateway.env.",
+  "secrets_committed": false,
+  "p1s_addressed": [
+    "4141814747",
+    "4141814758",
+    "4141814773",
+    "4141814784",
+    "4141814794",
+    "4141898005",
+    "4141980702",
+    "4141980721",
+    "4141980726",
+    "4141980742",
+    "4142018423",
+    "4142097603"
+  ],
+  "p2s_addressed": [
+    "4141980755",
+    "4141980762",
+    "4141980775",
+    "4141980782",
+    "4142097621"
+  ],
+  "p1s_deferred": []
+}

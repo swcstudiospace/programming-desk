@@ -51,7 +51,7 @@ Carry the read sha, and refuse to write over anything else. Two parts.
 **1. Capture the sha `text` was read at**, beside the `repo.show` call:
 
 ```python
-read_sha = await repo.rev_parse(ref)        # or: run_command(["git","rev-parse",ref], cwd=repo.dir)
+read_sha = await repo.head_sha(ref)         # or: run_command(["git","rev-parse",ref], cwd=repo.dir)
 text = await repo.show(args["receipt_path"], ref)
 ```
 

@@ -594,7 +594,9 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "G-1 PASS -- bot-00-programming-lead: 20 file(s) within owned paths. Green again after the revert; round 9 left it failing on three foreign paths."
+      "output_tail": "G-1 PASS -- bot-00-programming-lead: 20 file(s) within owned paths. Green again after the revert; round 9 left it failing on three foreign paths.",
+      "historical": true,
+      "note": "Historical -- reflects the diff at the round-10 tip (472ac513), 20 paths. Superseded by command index 96 for the current tip (31 paths); do not cite this entry for a present-tense G-1 claim."
     },
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
@@ -619,6 +621,13 @@
       "exit_code": 1,
       "duration_s": 0.2,
       "output_tail": "G-2 FAIL -- 'approved_by' is missing. Unchanged and intended. Note this is the gate AS ON MAIN: the round-9 edit to it was reverted, so this is the stock G-2's verdict, not one this branch arranged."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.08,
+      "output_tail": "G-1 PASS -- bot-00-programming-lead: 31 file(s) within owned paths",
+      "note": "Round-11 refresh. Re-run at the current tip after Greptile P2 flagged that the claim citing command 91 (20 paths, tip 472ac513) had gone stale: later rounds (companion specs, the loop_acks checker, this receipt's own churn) grew the diff to 31 paths, all still within bot-00-programming-lead's owned paths. Command 91 is left in place as the historical record of the round-10 tip; this entry is the one the current G-1 claim cites."
     }
   ],
   "claims": [
@@ -901,8 +910,8 @@
       "evidence_command_index": 81
     },
     {
-      "claim": "G-1 passes across the whole branch again -- 20 paths, all within LEAD's owned paths. Round 9 left it failing on three foreign paths; round 10's revert restored it, and no commit on this branch now crosses a seat boundary.",
-      "evidence_command_index": 91
+      "claim": "G-1 passes across the whole branch again -- 31 paths, all within LEAD's owned paths. Round 9 left it failing on three foreign paths; round 10's revert restored it (20 paths at that tip); later rounds grew the diff to its current 31, still entirely within bot-00-programming-lead's owned paths, refreshed and re-verified in round 11.",
+      "evidence_command_index": 96
     },
     {
       "claim": "The round-9 cross-seat edits are fully withdrawn: ci/gates/check_receipt.py, skills/verification-receipts/SKILL.md and services/desk-gateway/src/desk_gateway/tools/quality.py are byte-identical to origin/main, and the diff --stat over those paths is empty.",
@@ -1042,7 +1051,7 @@
   "deployment": null,
   "rollback_plan": null,
   "approvals": [],
-  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name. Round-6 tip-fix dispatched as run 20260930T130155Z-3c21c0aa against tip e9c04647 (Greptile review 28066863, 5 P1 + 5 P2): all five P1s fixed, four of the five P2s fixed, and P2 4144833385 (wire the checks into CI) recorded as an INFRA/QUALITY ask because .github/workflows/** is not LEAD's. The approval stamp from the previous tip was removed rather than carried forward; this receipt is unapproved by design until QUALITY reviews the current tip. Round-7 tip-fix (Greptile review 28084795 tip_match on tip 427aa303, confidence 2/5, 3 open P1 + 1 open P2): all three P1s fixed and the P2 answered within ownership. approved_by remains absent -- the round-6 clearing stands, and round 7 established that the documented stamping tool cannot clear it either, which is now a blocker against bot-01/bot-06 rather than a LEAD action. Round-8 tip-fix (Greptile tip_match on tip bf22ed69, confidence 1/5, 4 open P1 + 3 open P2): P1-1, P1-2, P1-3 and all three P2s fixed. P1-4 is not fixable within LEAD's ownership -- the preflight is bot-01's and the gate is bot-06's -- and the work order's request to fix it conflicts with its own requirement that G-1 exit 0, so it was raised to the dispatcher with both patches specified. approved_by remains unset. Round-9 tip-fix (Greptile tip_match review 28096832 on tip 0b609d5, confidence 3/5, 2 open P1 + 4 open P2): both P1s and all four P2s addressed. P1-2 required editing bot-01's and bot-06's paths, which LEAD did on the dispatcher's repeated instruction and recorded as a deliberate G-1 violation isolated in commit 9b220cc. approved_by remains unset. Round-10 tip-fix (Greptile tip_match 28102261 on tip 472ac513, confidence 2/5): cross-seat edits reverted (three files, byte-identical to origin/main, G-1 green at 20 paths), the acknowledgement tests made replayable from five committed fixtures plus a LEAD-owned checker, the approval TOCTOU specified as companion C-2, and the docs reframed so no companion-owned tool is described as simply broken. approved_by remains unset.",
+  "notes": "Dispatched by Grok Bot through grok-claude-cloud-connector, run 20260930T065422Z-07bf7b47. Draft PR only; no merge, no Greptile claim, no QUALITY stamp. The three items in blockers are all QUALITY or SYSTEMS work that this PR deliberately does not do in LEAD's name. Round-6 tip-fix dispatched as run 20260930T130155Z-3c21c0aa against tip e9c04647 (Greptile review 28066863, 5 P1 + 5 P2): all five P1s fixed, four of the five P2s fixed, and P2 4144833385 (wire the checks into CI) recorded as an INFRA/QUALITY ask because .github/workflows/** is not LEAD's. The approval stamp from the previous tip was removed rather than carried forward; this receipt is unapproved by design until QUALITY reviews the current tip. Round-7 tip-fix (Greptile review 28084795 tip_match on tip 427aa303, confidence 2/5, 3 open P1 + 1 open P2): all three P1s fixed and the P2 answered within ownership. approved_by remains absent -- the round-6 clearing stands, and round 7 established that the documented stamping tool cannot clear it either, which is now a blocker against bot-01/bot-06 rather than a LEAD action. Round-8 tip-fix (Greptile tip_match on tip bf22ed69, confidence 1/5, 4 open P1 + 3 open P2): P1-1, P1-2, P1-3 and all three P2s fixed. P1-4 is not fixable within LEAD's ownership -- the preflight is bot-01's and the gate is bot-06's -- and the work order's request to fix it conflicts with its own requirement that G-1 exit 0, so it was raised to the dispatcher with both patches specified. approved_by remains unset. Round-9 tip-fix (Greptile tip_match review 28096832 on tip 0b609d5, confidence 3/5, 2 open P1 + 4 open P2): both P1s and all four P2s addressed. P1-2 required editing bot-01's and bot-06's paths, which LEAD did on the dispatcher's repeated instruction and recorded as a deliberate G-1 violation isolated in commit 9b220cc. approved_by remains unset. Round-10 tip-fix (Greptile tip_match 28102261 on tip 472ac513, confidence 2/5): cross-seat edits reverted (three files, byte-identical to origin/main, G-1 green at 20 paths), the acknowledgement tests made replayable from five committed fixtures plus a LEAD-owned checker, the approval TOCTOU specified as companion C-2, and the docs reframed so no companion-owned tool is described as simply broken. approved_by remains unset. Round-11 tip-fix (Greptile P2s on the current tip): the C-2 companion spec's repo.rev_parse(ref) example corrected to repo.head_sha(ref), the real method on desk_gateway.repo.Repo -- rev_parse does not exist on that class. Separately, the G-1 claim citing command 91 had gone stale (it still said 20 paths; the tip is now at 31, confirmed by a fresh `check_ownership.py --bot bot-00-programming-lead --base origin/main` run recorded as command 96); the claim and its evidence index are refreshed, and command 91 is kept and marked historical rather than deleted, since it was an accurate reading of the round-10 tip. approved_by remains unset.",
   "greptile_round_1": {
     "reviewed_head": "0d9caa5c46ca007cd6e77667c9cf950f7b7290af",
     "findings": [

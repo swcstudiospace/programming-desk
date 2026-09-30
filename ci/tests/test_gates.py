@@ -355,11 +355,12 @@ class TestG2Receipts:
         assert "expects_failure but command[0] exited 0" in r.stderr
 
     def test_expects_failure_cannot_waive_strict_exhaustiveness(self, tmp_path):
-        """A claim's own expects_failure must not borrow the receipt's OTHER commands to
-        dodge --strict. This claim is evidenced by exactly one command that was expected
-        to fail — reproduction evidence for the bug it names, never exhaustive evidence —
-        regardless of how many other commands (e.g. the fix that follows it) the receipt
-        records for other claims.
+        """A claim's own expects_failure must not borrow OTHER, unrelated commands
+        elsewhere in the receipt to look better-supported than it is. This claim is
+        evidenced by one narrow, failing command (a single test file, not the suite) while
+        the receipt separately records a passing run of the whole suite for something else
+        — that second command cannot be what makes THIS claim exhaustive, so its presence
+        is exactly the original bypass this check exists to catch (Greptile P1, PR #45).
 
         Runs against the candidate (run_candidate_gate), not the working tree (run_gate):
         gate-self-test overlays ci/gates/ with the base ref on pull requests (Greptile P1
@@ -380,6 +381,29 @@ class TestG2Receipts:
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 1
         assert "exhaustive" in r.stderr.lower()
+
+    def test_expects_failure_alone_can_satisfy_strict_exhaustiveness(self, tmp_path):
+        """A single expected-failure command CAN be exhaustive evidence when it is the
+        receipt's only command: a search that exits non-zero exactly when it finds nothing
+        across its whole target is reproduction evidence and total coverage at once
+        (Greptile P1, PR #45, "Valid negative evidence rejected" — the prior, unconditional
+        version of this check rejected this receipt regardless of what the command proved).
+        With nothing else in the receipt to borrow from, the command's own scope is left to
+        a human reviewer (approved_by) to judge, same as any other evidence-matching
+        question this gate cannot verify by itself.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "grep -c '=[^=]' .env.example", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
 
 
 # ===========================================================================

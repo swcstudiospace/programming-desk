@@ -149,10 +149,15 @@ A claim citing a failing command sets `"expects_failure": true`. The gate then r
 command to have a **non-zero** exit — so the flag cannot be used to excuse a claim whose evidence
 actually failed. It asserts "this was supposed to fail", not "ignore the exit code".
 
-Under `--strict`, an `expects_failure` claim worded exhaustively ("confirmed every case fails") is
-still rejected even when the receipt records other commands for other claims (the fix that follows
-the reproduction, say). One expected-failure command is reproduction evidence for the bug it names
-— it is never exhaustive evidence, and the receipt's total command count does not change that.
+Under `--strict`, an `expects_failure` claim worded exhaustively ("every value is still empty") can
+pass — a search that exits non-zero exactly when it finds nothing across its whole target is
+reproduction evidence and total coverage at once — but only when its cited command is the receipt's
+only command. The moment the receipt records anything else (the fix that follows a reproduction,
+say), that claim is rejected: other commands elsewhere cannot make THIS claim any more exhaustive,
+so their presence is only ever a sign of the original bypass this check exists to catch — a narrow,
+failing command padded by an unrelated one recorded for something else. With nothing else in the
+receipt to borrow from, the cited command's own scope is this claim's entire evidence, left to a
+human reviewer (`approved_by`) to judge, the same as any other evidence-matching question.
 
 ### §3 Matching evidence to claims
 

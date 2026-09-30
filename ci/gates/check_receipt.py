@@ -184,19 +184,29 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
 
         if strict and EXHAUSTIVE_RE.search(text):
             if expects_failure:
-                # A claim's own expects_failure must not borrow the receipt's OTHER
-                # commands to waive this check. The claim is evidenced by exactly one
-                # command that was *expected to fail* — that is reproduction evidence for
-                # the bug it names, never exhaustive evidence, no matter how many other
-                # commands the receipt records for other claims (e.g. the fix that follows
-                # it). len(commands) is a receipt-wide count and says nothing about this
-                # claim's own evidence, so it must not be what decides this.
-                problems.append(
-                    f"claim[{i}] {text!r} sets expects_failure and asserts "
-                    "exhaustiveness — a single expected-failure command cannot be "
-                    "exhaustive evidence, regardless of how many other commands the "
-                    "receipt records"
-                )
+                # A single expected-failure command CAN be exhaustive evidence: a search
+                # that exits non-zero exactly when it finds nothing across its whole target
+                # (e.g. a grep for any populated value) is reproduction evidence and total
+                # coverage at once. What it must never do is borrow OTHER, unrelated
+                # commands elsewhere in the receipt to look better-supported than it is —
+                # that was the original bypass this check exists for (Greptile P1, PR #45):
+                # a claim citing one narrow, failing command, padded by an unrelated command
+                # recorded for something else (the fix that follows it, say). len(commands)
+                # is a receipt-wide count, but here it is used the other way around from the
+                # passing-evidence branch below: for THIS claim, more commands elsewhere in
+                # the receipt is exactly the sign that something else might be doing the
+                # padding, not more support. With no other command in the receipt to borrow
+                # from, this claim's cited command is plainly its entire evidence, and its
+                # own scope is what a human reviewer judges (approved_by), same as any other
+                # evidence-matching question this gate cannot verify by itself.
+                if len(commands) > 1:
+                    problems.append(
+                        f"claim[{i}] {text!r} sets expects_failure and asserts "
+                        "exhaustiveness, and the receipt records other commands beyond the "
+                        "one cited — they cannot be what makes this claim exhaustive, so "
+                        "its cited command must be the receipt's only command for this to "
+                        "pass under --strict"
+                    )
             elif len(commands) < 2:
                 problems.append(
                     f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "

@@ -15,10 +15,11 @@ the ticket closes. `desk_app_tools_load {app, task_id}` turns a pack on;
 `desk_app_tools_load {app, task_id, unload: true}` turns it off. **Live tools per seat never
 exceed 20** (15 roster + 5 pack), and the gateway refuses the call that would cross the line.
 
-Packs today: `kanbanos`, `desklanes`, `clippyos`, each for seats `web`, `android`, `ios`. The
-load tool sits on the ANDROID and IOS rosters (`packs_allowed: true`); WEB is a declared consumer
-but its roster does not carry `desk_app_tools_load`, so WEB reaches a pack only through the pack
-connector fallback in §3.
+Packs today: `kanbanos`, `desklanes`, `clippyos` (each for seats `web`, `android`, `ios`), and
+`androidlocal`, `androidmetavr` (seat `android` only — the SPE-5160 companion to android/tools).
+The load tool sits on the ANDROID and IOS rosters (`packs_allowed: true`); WEB is a declared
+consumer but its roster does not carry `desk_app_tools_load`, so WEB reaches a pack only through
+the pack connector fallback in §3.
 
 ```
 Ticket needs an app's tools (smoke, flags, push test, crash reports, product data)?
@@ -46,6 +47,15 @@ A pack loaded "for later" is a pack with no ticket, and doctor reports it.
 | `kanbanos` | `kanbanos_api_smoke`, `kanbanos_supabase_query`, `kanbanos_push_test`, `kanbanos_feature_flags`, `kanbanos_crash_reports` | web, android, ios |
 | `desklanes` | `desklanes_api_smoke`, `desklanes_scoreboard_get`, `desklanes_push_test`, `desklanes_store_listing_get`, `desklanes_crash_reports` | web, android, ios |
 | `clippyos` | `clippyos_api_smoke`, `clippyos_render_job_status`, `clippyos_push_test`, `clippyos_crash_reports` | web, android, ios |
+| `androidlocal` | `androidlocal_emu_boot`, `androidlocal_adb_devices`, `androidlocal_install_apk`, `androidlocal_unit_test`, `androidlocal_instrumented_run` | android |
+| `androidmetavr` | `androidmetavr_logcat_capture`, `androidmetavr_screenshot`, `androidmetavr_ui_dump`, `androidmetavr_ui_tap` | android |
+
+`androidlocal` and `androidmetavr` together cover the nine `android/tools` CLI commands from PR
+#47 (5 + 4 = 9 tools), split across two packs because a pack holds at most five. ANDROID's roster
+is already at its 15-tool ceiling, leaving a 5-tool pack budget — the two packs fit that budget
+individually but not simultaneously (5 + 4 = 9 > 5 remaining); loading both for the same ticket
+hits the same "Two packs at once" refusal in the failure-modes table below, not a bug specific to
+these two packs. Unload one before loading the other.
 
 Every pack tool has the same shape as a roster tool: `kind`, `gates`, a JSON schema with
 `additionalProperties: false`, and a `packs.*` backend in the gateway. `*_supabase_query` is

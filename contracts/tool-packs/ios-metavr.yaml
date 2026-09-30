@@ -1,0 +1,73 @@
+# Tool pack: iOS MetaVR device tools. Loaded by the ios seat for one ticket via
+# desk_app_tools_load. Contract surface (QUALITY); consumer bot-04-ios.
+#
+# SPE-5161 / PR #48 (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e): each tool below shells
+# out to a MetaVR executable of the exact given name found on PATH, and skips (no device
+# contacted, nothing fabricated) when that binary is missing. Moved out of
+# contracts/tool-rosters/ios.yaml (where they were named desk_ios_*) to keep that permanent
+# roster within ROSTER_MAX_TOOLS=15 (G-7); see
+# contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml.
+#
+# backend note: `ios.*` names the gateway module these expect once implemented. As of this
+# change, services/desk-gateway/src/desk_gateway/tools/ has no `ios.py` — only core, infra,
+# lead, mobile, packs, quality, systems, web. resolve() (tools/__init__.py) raises
+# ModuleNotFoundError for any of these today, reproduced directly; server.py's dispatch() has
+# no specific handler for that, so it falls through to {"error": "internal", "reason":
+# "ModuleNotFoundError while running <tool>"} — not a silent success. Implementing ios.py to
+# wrap the PR #48 CLI is SYSTEMS/bot-01's to pick up; not attempted from this seat.
+version: 1.0.0
+app: iosmetavr
+title: iOS MetaVR device tools
+seats: [ios]
+tools:
+  - name: iosmetavr_device_screenshot
+    kind: write
+    gates: []
+    description: >-
+      Capture a device screenshot via a MetaVR `device_screenshot` executable found on PATH by
+      that exact name. Skips (no device contacted, no stand-in image written) when the binary is
+      missing; never claims a Simulator was used.
+    backend: ios.device_screenshot
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: iosmetavr_ui_dump
+    kind: write
+    gates: []
+    description: >-
+      Dump the on-device UI hierarchy via a MetaVR `ui_dump` executable found on PATH by that
+      exact name. Skips (no device contacted) when the binary is missing; never fabricates a
+      stand-in dump.
+    backend: ios.ui_dump
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: iosmetavr_ui_tap
+    kind: write
+    gates: []
+    description: >-
+      Send a tap to a device via a MetaVR `ui_tap` executable found on PATH by that exact name.
+      Skips (no device contacted) when the binary is missing; never claims a tap was delivered
+      when it was not invoked. No coordinate/target parameter: PR #48's ios/tools/cli.py gives
+      device_screenshot, ui_dump and ui_tap the identical --serial/--out arguments only (verified
+      directly against that CLI), so a required x/y here would be a contract promise no backend
+      can ever honor without an ios/** change. Directed-tap targeting is bot-04-ios's to add to
+      the underlying CLI first; tracked as a PR #48 follow-up, not attempted from this seat.
+    backend: ios.ui_tap
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }

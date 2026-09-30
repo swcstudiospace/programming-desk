@@ -1,0 +1,105 @@
+# Tool pack: iOS local/filesystem tools. Loaded by the ios seat for one ticket via
+# desk_app_tools_load. Contract surface (QUALITY); consumer bot-04-ios.
+#
+# SPE-5161 / PR #48 (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e): these five run on Linux
+# against files already on disk. None boots a Simulator, invokes xcodebuild, or submits to the
+# App Store; see ios/tools/IOS_TOOLS.md on that branch for the underlying CLI these wrap.
+# Moved out of contracts/tool-rosters/ios.yaml (where they were named desk_ios_*) to keep that
+# permanent roster within ROSTER_MAX_TOOLS=15 (G-7); see
+# contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml.
+#
+# backend note: `ios.*` names the gateway module these expect once implemented. As of this
+# change, services/desk-gateway/src/desk_gateway/tools/ has no `ios.py` — only core, infra,
+# lead, mobile, packs, quality, systems, web. resolve() (tools/__init__.py) raises
+# ModuleNotFoundError for any of these today, reproduced directly; server.py's dispatch() has
+# no specific handler for that, so it falls through to {"error": "internal", "reason":
+# "ModuleNotFoundError while running <tool>"} — not a silent success. Implementing ios.py to
+# wrap the PR #48 CLI is SYSTEMS/bot-01's to pick up; not attempted from this seat.
+version: 1.0.0
+app: ioslocal
+title: iOS local tools
+seats: [ios]
+tools:
+  - name: ioslocal_plist_lint
+    kind: read
+    gates: []
+    description: >-
+      Lint an Info.plist already on disk: blank usage-description strings, and an
+      always-location entitlement present without its when-in-use counterpart. Linux-safe pure
+      parse; does not invoke Xcode, xcodebuild, or a Simulator.
+    backend: ios.plist_lint
+    input:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 500 }
+        as_json: { type: boolean, default: true }
+
+  - name: ioslocal_entitlements_scan
+    kind: read
+    gates: []
+    description: >-
+      Scan .entitlements and Info.plist files under a path on disk for entitlement keys and
+      usage-description keys, or diff that inventory between diff_base and diff_head paths.
+      Requires either path, or both diff_base and diff_head; the gateway's schema validator
+      (services/desk-gateway/src/desk_gateway/schema.py) has no anyOf/oneOf combinator, so an
+      incomplete call is rejected by the backend, not the schema. Filesystem-only and
+      Linux-safe. Distinct from desk_entitlements_diff, which diffs two git refs rather than two
+      paths already checked out.
+    backend: ios.entitlements_scan
+    input:
+      type: object
+      additionalProperties: false
+      required: []
+      properties:
+        path: { type: string, minLength: 1, maxLength: 500 }
+        diff_base: { type: string, minLength: 1, maxLength: 500 }
+        diff_head: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: ioslocal_spm_test_linux
+    kind: write
+    gates: []
+    description: >-
+      Run `swift test` for a Swift package when a Swift toolchain is on PATH; skips rather than
+      failing when the toolchain is missing. dry_run prints the planned command without running
+      it. Never invokes xcodebuild and never boots a Simulator.
+    backend: ios.spm_test_linux
+    input:
+      type: object
+      additionalProperties: false
+      required: [package]
+      properties:
+        package: { type: string, minLength: 1, maxLength: 500 }
+        dry_run: { type: boolean, default: false }
+
+  - name: ioslocal_snapshot_diff
+    kind: write
+    gates: []
+    description: >-
+      Hash-diff two fixture files or directories (sha256, plus width/height for PNG payloads)
+      and write the result to out. Not a pixel diff and does not render UI.
+    backend: ios.snapshot_diff
+    input:
+      type: object
+      additionalProperties: false
+      required: [before, after, out]
+      properties:
+        before: { type: string, minLength: 1, maxLength: 500 }
+        after: { type: string, minLength: 1, maxLength: 500 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: ioslocal_xcodebuild_receipt
+    kind: read
+    gates: []
+    description: >-
+      Parse a saved xcodebuild log file for its final TEST/BUILD SUCCEEDED/FAILED line, scheme,
+      destination, and error lines. Reads the log file only; does not invoke xcodebuild and does
+      not boot a Simulator.
+    backend: ios.xcodebuild_receipt
+    input:
+      type: object
+      additionalProperties: false
+      required: [log]
+      properties:
+        log: { type: string, minLength: 1, maxLength: 500 }

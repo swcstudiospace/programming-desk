@@ -1,0 +1,89 @@
+change_id: spe-5161-ios-local-tools-v1.1.0
+proposed_by: bot-06-quality-security
+surface: contracts/tool-rosters/ios.yaml
+surfaces:
+  - contracts/tool-rosters/ios.yaml
+  - contracts/tool-packs/**
+
+breaking: false
+version: 1.1.0
+previous_version: 1.0.0
+
+summary: >
+  Additive, revised: the 8 desk_ios_* local/MetaVR tools wrapping the Linux-safe CLI added in
+  SPE-5161 / PR #48 (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e) do not land on the ios
+  roster. Landing them there put 15 own tools + 8 core = 23 effective tools against
+  ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 (G-7 FAIL) — disclosed in the prior
+  version of this document and in the accompanying receipt. Fixed per LEAD decision by splitting
+  the 8 tools into two new tool-packs instead of raising ROSTER_MAX_TOOLS:
+  contracts/tool-packs/ios-local.yaml (app ioslocal: ioslocal_plist_lint,
+  ioslocal_entitlements_scan, ioslocal_spm_test_linux, ioslocal_snapshot_diff,
+  ioslocal_xcodebuild_receipt — 5 tools) and contracts/tool-packs/ios-metavr.yaml (app iosmetavr:
+  iosmetavr_device_screenshot, iosmetavr_ui_dump, iosmetavr_ui_tap — 3 tools). ios.yaml reverts
+  to its prior 7 own tools (7 + 8 core = 15, exactly at the ceiling); bot-04-ios loads either
+  pack for the life of one ticket via desk_app_tools_load. No existing roster tool (the original
+  7, or desk_entitlements_diff in particular) is renamed or removed.
+
+  Naming: the 8 tools are renamed from desk_ios_* to ioslocal_*/iosmetavr_* as part of this move.
+  contracts/tool-packs/**'s own loader (services/desk-gateway/src/desk_gateway/rosters.py)
+  requires every tool in a pack to be prefixed with that pack's declared `app`, and requires
+  `app` to be unique across pack files (it is a dict key; two pack files sharing one `app` value
+  would silently shadow one another at gateway load, not merge). All 8 tools shared only the
+  literal prefix "desk_ios_", which is not a valid `app` value on its own (app excludes
+  underscores) and collapses to a single non-distinguishing "desk" prefix — too coarse to name
+  two distinct packs. None of these 8 names has shipped or been depended on anywhere outside
+  this still-open, gate-failing change (grep confirms only contracts/tool-rosters/ios.yaml and
+  this document ever referenced desk_ios_*), so renaming them now is a same-change revision, not
+  a breaking change to a landed contract.
+
+  Also fixed while moving these definitions (review findings from a P1/P2 pass on PR #54 tip
+  d7be5f2): ioslocal_snapshot_diff, iosmetavr_device_screenshot and iosmetavr_ui_dump are now
+  kind: write (each writes a file to `out`, and the MetaVR pair contacts a device — both were
+  previously misclassified kind: read). This is not cosmetic: server.py's call_tool() sets
+  `is_error=bool(error) and not spec.read_only`, so a read-kind tool's backend failure (a
+  ModuleNotFoundError today, a real I/O failure once ios.py exists) would report to the MCP
+  caller as a non-error result — masking the very failure a file-writing tool needs surfaced.
+  ioslocal_entitlements_scan's description now says it
+  needs either `path` alone or both `diff_base` and `diff_head`; the gateway's schema validator
+  (services/desk-gateway/src/desk_gateway/schema.py) supports no anyOf/oneOf combinator, so this
+  stays backend-enforced rather than schema-enforced — an earlier draft of this pack added an
+  `anyOf` to the input schema, which that validator silently ignores, so it was removed rather
+  than left as a schema clause with no effect.
+
+  REVERTED (Greptile P1 on this pack, confirmed valid): iosmetavr_ui_tap briefly required `x`
+  and `y` device-point coordinates. Checked directly against PR #48's ios/tools/cli.py: its
+  `_add_metavr()` gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out
+  arguments only — there is no coordinate parameter anywhere in that CLI for any of the three.
+  A required x/y was therefore a contract promise no backend could ever honor, not merely one
+  not yet implemented; reverted to serial/out only (matching the CLI exactly, as the original
+  desk_ios_ui_tap did). Directed-tap targeting needs a change to ios/tools/metavr_bridge.py and
+  cli.py first — bot-04-ios's to add on PR #48, tracked as a follow-up, not attempted here.
+
+  KNOWN GAP (unchanged by this revision, disclosed not resolved, confirmed by reproduction):
+  services/desk-gateway has no `ios` backend module (only core, infra, lead, mobile, packs,
+  quality, systems, web exist under services/desk-gateway/src/desk_gateway/tools/). Every tool
+  in both new packs still declares `backend: ios.<fn>`.
+  `desk_gateway.tools.resolve()` (services/desk-gateway/src/desk_gateway/tools/__init__.py)
+  does `importlib.import_module(f"desk_gateway.tools.{module_name}")`, which raises
+  ModuleNotFoundError — reproduced directly:
+  `PYTHONPATH=services/desk-gateway/src python3 -c "from desk_gateway.tools import resolve;
+  resolve('ios.plist_lint')"` → `ModuleNotFoundError: No module named
+  'desk_gateway.tools.ios'`. server.py's call site (dispatch()) only catches TimeoutError and
+  LookupError specifically before falling through to a broad `except Exception`, so this is NOT
+  the {"error": "backend_missing"} path (that's for a missing function within an existing
+  module) — it surfaces to the caller as {"error": "internal", "reason": "ModuleNotFoundError
+  while running <tool>"}. Not a silent success or a fabricated result either way. Implementing
+  ios.py to wrap the PR #48 CLI is SYSTEMS/bot-01-systems-backend's to pick up against
+  services/desk-gateway/**, which this seat does not own and does not touch here.
+
+semantic_changes:
+  - field: tools[].name (the 8 local/MetaVR tools)
+    change: >-
+      Renamed from desk_ios_* to ioslocal_*/iosmetavr_* and moved from contracts/tool-rosters/
+      ios.yaml into contracts/tool-packs/ios-local.yaml and contracts/tool-packs/ios-metavr.yaml.
+      Access changes from "always present on the ios seat's tools/list" to "loaded for one
+      ticket via desk_app_tools_load {app: ioslocal|iosmetavr, task_id}". No prior version of
+      this document, and no other file, ever shipped or referenced these names, so no consumer
+      had a name or an access path to migrate away from.
+
+acknowledgements: []

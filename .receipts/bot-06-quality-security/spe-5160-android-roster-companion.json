@@ -1,0 +1,239 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "spe-5160-android-roster-companion",
+  "branch": "bot-06-quality-security/spe-5160-android-roster-companion",
+  "grok_run": "20260930T172852Z-15735be2",
+  "repo": "swcstudiospace/programming-desk",
+  "companion_to": "PR #47 bot-03-android/spe-5160-android-tools-metavr, tip a38454de6dab84124b7be8f99d64418d9d12224f",
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
+  "summary": "QUALITY companion to Android PR #47, revised after two prior commits on this branch. ce181f0 appended 9 desk_android_* tools directly to contracts/tool-rosters/android.yaml, pushing it to 24 effective tools against G-7's [10, 15] cap. 0f814cb then fixed two Greptile-flagged P2s on those same roster tools (kind read -> write on the three capture tools; an explicit oneOf on desk_android_ui_tap's schema) without touching the tool count, so G-7 still failed. LEAD decision: keep the roster untouched and split the android/tools overflow into two contracts/tool-packs/*.yaml packs instead of raising ROSTER_MAX_TOOLS. This change reverts android.yaml to be byte-identical to origin/main (7 own + 8 core = 15 effective, superseding both ce181f0's addition and 0f814cb's on-roster fixes) and adds contracts/tool-packs/androidlocal.yaml (5 tools: emu_boot, adb_devices, install_apk, unit_test, instrumented_run) and contracts/tool-packs/androidmetavr.yaml (4 tools: logcat_capture, screenshot, ui_dump, ui_tap), loadable per ticket by bot-03-android via desk_app_tools_load. The two Greptile fixes from 0f814cb are preserved in the new location: androidmetavr's capture tools are kind write, and androidmetavr_ui_tap's schema enforces exactly one of resource_id/text via oneOf. The existing G-4 change document is updated in place (same change_id/filename) to describe the pack surfaces. android/** was not touched.",
+  "scope": {
+    "added": [
+      "contracts/tool-packs/androidlocal.yaml",
+      "contracts/tool-packs/androidmetavr.yaml"
+    ],
+    "modified": [
+      "contracts/tool-rosters/android.yaml",
+      "contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      "ci/tests/test_gates.py",
+      "contracts/tool-packs/androidmetavr.yaml",
+      "skills/tool-packs/SKILL.md"
+    ],
+    "android_paths_touched": [],
+    "note_on_tool_rosters_android": "Modified relative to the prior commit on this branch (ce181f0), but byte-identical to origin/main after this change \u2014 see verification command 6. Not flagged as a touched contract surface by G-4 for that reason.",
+    "note_on_ci_tests": "ci/tests/test_gates.py is QUALITY-owned (ownership.yaml: ci/tests/**). One assertion (TestG7DeskIntegrity::test_real_rosters_and_packs_pass) hardcoded the repo's pack count; it was stale at '7 rosters, 3 packs' before this task's own prior commit and is corrected here to '7 rosters, 5 packs' to match the two packs this change adds on top of the three already in contracts/tool-packs/ (clippyos, desklanes, kanbanos)."
+  },
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 5 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-rosters/android.yaml')); print(len(d['tools']), d['version'], len(d['tools'])+8)\"",
+      "exit_code": 0,
+      "output_tail": "7 1.0.0 15"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-packs/androidlocal.yaml')); print(len(d['tools']), d['app'])\"",
+      "exit_code": 0,
+      "output_tail": "5 androidlocal"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-packs/androidmetavr.yaml')); print(len(d['tools']), d['app'])\"",
+      "exit_code": 0,
+      "output_tail": "4 androidmetavr"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files contracts/tool-packs/androidlocal.yaml contracts/tool-packs/androidmetavr.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "git diff origin/main -- contracts/tool-rosters/android.yaml",
+      "exit_code": 0,
+      "output_tail": "(empty \u2014 no diff; android.yaml matches origin/main exactly)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files contracts/tool-packs/androidlocal.yaml contracts/tool-packs/androidmetavr.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-packs/androidlocal.yaml contracts/tool-packs/androidmetavr.yaml --change contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS \u2014 spe-5160-android-local-tools-v1.1.0: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 -m venv /tmp/gatevenv && /tmp/gatevenv/bin/pip install -q pyyaml pytest && /tmp/gatevenv/bin/python -m pytest ci/tests -q",
+      "exit_code": 0,
+      "output_tail": "157 passed in 12.82s",
+      "note": "A bare 'pytest' on PATH resolves to a uv-managed venv missing pyyaml (pre-existing environment gap, not caused by this change \u2014 check_desk_integrity.py fails fast with 'pyyaml is required' under it); a scratch venv with both pyyaml and pytest was used instead to get a real result."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json --bot bot-06-quality-security",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true,
+      "note": "HISTORICAL \u2014 pre-stamp state, recorded before LEAD's approved_by stamp (58cc2c1, 2026-09-30T20:41:18Z). Expected and correct at the time: approved_by was explicitly null because QUALITY does not self-stamp (see stamp_note). See command index 17 for the current, post-stamp G-2 result."
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-packs/androidmetavr.yaml')); print([(t['name'],t['kind']) for t in d['tools']])\"",
+      "exit_code": 0,
+      "output_tail": "[('androidmetavr_logcat_capture', 'write'), ('androidmetavr_screenshot', 'write'), ('androidmetavr_ui_dump', 'write'), ('androidmetavr_ui_tap', 'write')]"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 5 packs, 22 prompt files checked",
+      "note": "Re-run after the fixes for Greptile findings 4147620213/4147620203; command is identical to index 0's and is executable as written."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files skills/tool-packs/SKILL.md contracts/tool-packs/androidmetavr.yaml",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 5 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS \u2014 spe-5160-android-local-tools-v1.1.0: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "output_tail": "157 passed in 12.02s",
+      "note": "Re-run after the SKILL.md and androidmetavr.yaml fixes; command is executable as written (a scratch venv with pyyaml+pytest was used, per the note on command index 9)."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json --bot bot-06-quality-security",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — spe-5160-android-roster-companion: 17 command(s), 16 substantiated claim(s), 6 unverified item(s)",
+      "note": "Re-run after LEAD's approved_by stamp (58cc2c1). Supersedes the FAIL at command index 10, which is now historical pre-stamp evidence."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "G-7 PASS: contracts/tool-rosters/android.yaml is back to 7 own + 8 core = 15 effective tools (within [10, 15]); contracts/tool-packs/ now holds 5 packs (clippyos, desklanes, kanbanos, androidlocal, androidmetavr), each within [1, 5] tools",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "android.yaml carries exactly 7 own tools at version 1.0.0 (unchanged from origin/main), 15 effective with the core eight",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "androidlocal.yaml has 5 tools (emu_boot, adb_devices, install_apk, unit_test, instrumented_run), all prefixed androidlocal_",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "androidmetavr.yaml has 4 tools (logcat_capture, screenshot, ui_dump, ui_tap), all prefixed androidmetavr_",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ownership.yaml manifest still validates (7 bots, 103 rules)",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-1 PASS: all 5 files this change adds/modifies resolve to bot-06-quality-security (contracts/tool-packs/**, contracts/changes/**, ci/tests/**, .receipts/bot-06-quality-security/** are all QUALITY-owned per ownership.yaml)",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "contracts/tool-rosters/android.yaml is byte-identical to origin/main \u2014 the prior commit's roster addition (ce181f0) is fully reverted, and G-4 correctly does not treat it as a touched contract surface",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-3 PASS: no secrets in the 4 changed/added contract and test files",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-4 PASS: the updated change document (same change_id/filename as before) declares both new pack surfaces, breaking: false, version 1.0.0, semantic_changes: [] \u2014 covers the full diff",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Full ci/tests gate self-test suite (157 tests, including TestG7DeskIntegrity and the corrected pack-count assertion) passes with no regressions",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "Greptile P2 fix (finding 4147620213 on the prior commit's equivalent, reproduced on the new pack files): androidmetavr_logcat_capture, androidmetavr_screenshot and androidmetavr_ui_dump all write to a caller-provided out path, so each is now kind: write (was read) \u2014 the same fix already applied to the roster version in 0f814cb, carried over to the pack split",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "G-7 re-verified PASS after the kind fixes on androidmetavr.yaml; the kind field is not part of G-7's tool-count check, so this is unaffected by and does not reopen the earlier roster-size resolution",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "Greptile P2 fix (finding 4147620213, 'New packs missing from guide'): skills/tool-packs/SKILL.md's pack guide now lists androidlocal and androidmetavr in both the 'Packs today' summary and the \u00a71 table, with a note on why they cannot be loaded simultaneously (5 + 4 = 9 exceeds the 5-tool pack budget left after ANDROID's 15-tool roster) \u2014 both files resolve to bot-06-quality-security ownership",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "G-3 re-verified PASS across the full branch diff (now 5 files vs origin/main) after the SKILL.md and androidmetavr.yaml edits",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "G-4 re-verified PASS \u2014 the change document still covers both pack surfaces after the kind fixes (skills/tool-packs/SKILL.md is not a contract surface, so G-4 does not need to declare it)",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "Full 157-test ci/tests suite re-verified passing after the SKILL.md and androidmetavr.yaml fixes \u2014 no regression from either change",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "Greptile P2 fix (finding 4149174790, 'Stale approval verification'): re-ran G-2 after LEAD's approved_by stamp \u2014 it now PASSES; the earlier FAIL (command index 10) is marked historical rather than left as the only recorded G-2 result",
+      "evidence_command_index": 17
+    }
+  ],
+  "unverified": [
+    "The `backend: android_cli.*` field on every new pack tool is a contract declaration only. No services/desk-gateway/** module implements it \u2014 there is no android_cli.py, and mobile.py (the module the prior commit's backend strings pointed at) is Play Console / App Store Connect only and does not cover android/tools. Wiring android_cli.* to shell out to `python -m android.tools <cmd>` (PR #47) is a SYSTEMS follow-up (services/desk-gateway/**, bot-01-systems-backend), not this QUALITY contract change.",
+    "androidmetavr.yaml's backend_kind/backend metavr path resolves a documented MetaVR tool id only; android/tools/metavr_bridge.py's device-connected check is hardcoded false ('Local-only bridge: never auto-detects a Quest/MetaVR device'), so every metavr-backed call in that pack raises DeviceUnavailable today, by design of PR #47 as it stands \u2014 these tools have never actually performed a capture or tap, and the pack's descriptions say so rather than implying otherwise.",
+    "androidlocal_unit_test and androidlocal_instrumented_run wrap android/tools/cli.py commands that print a skip line and exit 0 (reported as success) when no Gradle wrapper or device is available. That skip-is-exit-0 behavior belongs to PR #47's CLI and is out of scope for this contract-only change; both tool descriptions flag it so a caller reads the output rather than trusting a bare success signal.",
+    "No live adb, emulator, or Quest/MetaVR device was exercised \u2014 this change adds no runtime code, only YAML contract surfaces and one test-assertion fix.",
+    "desk_app_tools_load's live-tools ceiling (never exceed 20, per contracts/README.md) was not exercised against either new pack; that logic lives in the gateway's packs module, unmodified here.",
+    "No CI run observed on this branch (no GitHub Actions workflow invoked from this session)."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS \u2014 5 files, all bot-06-quality-security.",
+    "G-2": "This receipt. PASS after LEAD's approved_by stamp (58cc2c1) — see command index 17. The FAIL at command index 10 is historical, pre-stamp evidence.",
+    "G-3": "PASS \u2014 no secrets in the 4 changed/added contract and test files.",
+    "G-4": "PASS \u2014 contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml (updated in place), non-breaking, v1.0.0, declares both pack surfaces.",
+    "G-5": "Not a deployment. No rollback plan required.",
+    "G-6": "No destructive operation against product code. contracts/tool-rosters/android.yaml is restored to its origin/main content (the prior commit's addition is reverted, not force-pushed or rewritten); android/** is untouched; ci/tests/test_gates.py has one corrected assertion, covered by the passing suite.",
+    "G-7": "PASS \u2014 7 rosters, 5 packs, 22 prompt files checked. See blocker_resolution below for the history."
+  },
+  "approvals": [],
+  "approved_by": "bot-00-programming-lead",
+  "stamp_note": "LEAD stamped approved_by=bot-00-programming-lead under Ove G-2 grant extension 2026-10-01 for roster companion. G-2 only \u2014 no undraft/merge/Path B.",
+  "explicit": "Pushed directly to this seat branch (bot-06-quality-security/spe-5160-android-roster-companion) for the existing draft PR #53, per explicit instruction not to open a new PR or push a claude/* branch. Did not merge, did not undraft, did not edit android/** or any path outside contracts/tool-rosters/android.yaml, contracts/tool-packs/androidlocal.yaml, contracts/tool-packs/androidmetavr.yaml, contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml, ci/tests/test_gates.py and this receipt.",
+  "greptile_findings_round2": [
+    {
+      "comment_id": 4147620213,
+      "priority": "P2",
+      "title": "New packs missing from guide",
+      "verdict": "VALID \u2014 skills/tool-packs/SKILL.md's 'Packs today' line and \u00a71 table listed only kanbanos/desklanes/clippyos",
+      "disposition": "FIXED: added androidlocal and androidmetavr to both the summary line and the \u00a71 table, with a note on the simultaneous-load limit. Verified (see claims)."
+    },
+    {
+      "comment_id": 4147620203,
+      "priority": "P1",
+      "title": "Second pack cannot load (androidlocal + androidmetavr together exceed the 5-tool pack budget)",
+      "verdict": "VALID as a description of the system's existing 20-live-tool ceiling, not a defect introduced by this split \u2014 ANDROID's roster is 15, leaving a 5-tool pack budget regardless of how the 9 android/tools commands are packed, so any two-pack split of more than 5 tools total hits this",
+      "disposition": "NOT FIXED as a code change \u2014 by design, and already documented generically by skills/tool-packs/SKILL.md's pre-existing 'Two packs at once' row in its failure-modes table (line ~159) and its kanbanos/desklanes worked 'Bad' example, which treats the refusal as correct behavior, not a bug. A ticket needing both device/build and capture/MetaVR tools unloads one pack before loading the other (desk_app_tools_load supports unload: true for exactly this). Widening the 20-tool ceiling to let two packs coexist is a system-wide constant (contracts/README.md, all seats/packs), not something specific to androidlocal/androidmetavr \u2014 replied on the PR pointing to the existing failure-modes row rather than proposing a unilateral change to a shared ceiling."
+    }
+  ],
+  "blocker_resolution": {
+    "gate": "G-7 (ci/gates/check_desk_integrity.py)",
+    "prior_problem": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) \u2014 must be within [10, 15], introduced by the previous commit on this branch (ce181f0).",
+    "fix": "Reverted contracts/tool-rosters/android.yaml to its origin/main content (7 own + 8 core = 15 effective) and moved the 9 android/tools-wrapping tool definitions into two new contracts/tool-packs/*.yaml packs (androidlocal.yaml, 5 tools; androidmetavr.yaml, 4 tools), each within the pack cap of 5 and loadable per ticket via desk_app_tools_load. ROSTER_MAX_TOOLS was not raised.",
+    "verified": "python3 ci/gates/check_desk_integrity.py now exits 0 \u2014 'G-7 PASS \u2014 desk integrity: 7 rosters, 5 packs, 22 prompt files checked'."
+  },
+  "approved_at": "2026-09-30T20:41:18Z"
+}

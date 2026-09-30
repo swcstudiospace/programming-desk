@@ -1,0 +1,99 @@
+{
+  "task_id": "spe-5161-ios-roster-companion",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/spe-5161-ios-roster-companion",
+  "started_at": "2026-09-30T16:03:53Z",
+  "completed_at": "2026-09-30T17:25:18Z",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-rosters/ios.yaml'))\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "no exception; 15 own tools parsed, 7 pre-existing + 8 new desk_ios_* entries"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml'))\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "no exception"
+    },
+    {
+      "cmd": "git diff --name-only origin/main...HEAD -- ios/",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 2 file(s) within owned paths\n  NOTE: 2 contract surface file(s) touched — G-4 applies:\n    contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml\n    contracts/tool-rosters/ios.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS — spe-5161-ios-local-tools-v1.1.0: non-breaking, v1.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "  - contracts/tool-rosters/ios.yaml: 23 effective tool(s) (15 own + 8 core) — must be within [10, 15]\n  See contracts/README.md and docs/upgrade-plan-desk-v2.md §11\nG-7 FAIL — desk integrity: 1 problem(s)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 1,
+      "duration_s": 13.5,
+      "output_tail": "FAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_real_rosters_and_packs_pass\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_fixture_copy_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_prompt_source_with_placeholder_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_assembled_alias_under_prompts_is_checked_as_output\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_clean_template_passes\nFAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_missing_templates_dir_is_skipped_not_failed\n6 failed, 151 passed in 13.51s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "contracts/tool-rosters/ios.yaml and the new change document are valid YAML",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "the change document contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml parses",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "no file under ios/** is touched by this branch (PR #48 tip 7dfb11e is untouched)",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ownership.yaml manifest is internally valid",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-1: both changed paths (the roster and the change document) are owned by bot-06-quality-security",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4: the roster change ships with a non-breaking v1.1.0 change document covering its only contract surface, with consumers auto-resolved from ownership.yaml and no rejections",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "KNOWN BLOCKER: G-7 fails closed on this branch because ios.yaml now carries 23 effective tools (15 own + 8 core) against ROSTER_MAX_TOOLS=15. This is disclosed, not hidden — the roster header and the change document both name it. Fix (split desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise the ceiling in ci/gates/check_desk_integrity.py) is out of the 3-file scope given for this task and is not attempted here.",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "the gate test suite's only failures on this branch are the six G-7 cases that assert the real rosters/packs/prompts pass structural checks, all failing for the same single root cause above (ios.yaml over ROSTER_MAX_TOOLS); no other test regressed",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "The G-7 capacity conflict is documented, not resolved. No tool-pack file was added and ROSTER_MAX_TOOLS was not raised; both are candidate fixes named in the change document and left for a follow-up change, per this task's 3-file scope.",
+    "Runtime behavior of the 8 new desk_ios_* tools (dispatch to services/desk-gateway, actual ios.plist_lint/ios.entitlements_scan/etc. backends) is not exercised here — this change adds only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
+    "desk_contract_ack acknowledgements from the 7 auto-resolved consumers (bot-00 through bot-06) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
+    "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review."
+  ]
+}

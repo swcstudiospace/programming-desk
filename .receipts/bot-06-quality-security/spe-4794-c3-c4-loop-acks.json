@@ -627,6 +627,57 @@
       "exit_code": 1,
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": ""
+    },
+    {
+      "cmd": "git worktree add /tmp/scratch-r10tip2 07744ed --detach && cp ci/tests/test_gates.py /tmp/scratch-r10tip2/ci/tests/test_gates.py && (cd /tmp/scratch-r10tip2 && python3 -m pytest ci/tests/test_gates.py -k ordinary_parent_path -v)",
+      "exit_code": 0,
+      "output_tail": "1 passed in 0.20s \u2014 the new regression test for Greptile's round-11 finding ('Valid parent paths rejected') already passes against the prior tip (07744ed), confirming this round's change is a clarifying docstring + explicit test only, not a behaviour fix: _safe_normpath() already refused to collapse 'dir/../config.yaml' against 'config.yaml' before this round, as an unavoidable side effect of round 10's symlink-safety fix"
+    },
+    {
+      "cmd": "(cd /tmp/scratch-r10tip2 && git checkout -- ci/tests/test_gates.py) && git worktree remove /tmp/scratch-r10tip2",
+      "exit_code": 0,
+      "output_tail": "restores the worktree's modified test file before removal so the cleanup needs no --force (BYPASS_PATTERNS rejects a receipt command matching '--force\\b', and a legitimate worktree cleanup must not tautologically fail its own gate)"
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 round-11 clarify parent-path refusal + test'",
+      "exit_code": 0,
+      "output_tail": "[claude/pr45-r10-symlink-trailing-slash de5ba41] QUALITY: SPE-4794 #45 round-11 clarify parent-path refusal + test\n 2 files changed, 51 insertions(+)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "output_tail": "212 passed in 12.02s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"symlink or parent_path or trailing_slash\" -v",
+      "exit_code": 0,
+      "output_tail": "8 passed, 204 deselected in 0.40s \u2014 the new ordinary-parent-path regression, the round-10 symlink regression, and all six pre-existing trailing-slash regressions (including both P1-B directory-sibling cases) pass together"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else",
+      "expects_failure": true
     }
   ],
   "claims": [
@@ -1080,6 +1131,43 @@
       "claim": "This receipt correctly still has no approved_by — left unset per this round's task instructions ('Do NOT write approved_by'), and self-approval remains blocked by G-2 pending an independent reviewer",
       "evidence_command_index": 103,
       "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's clarifying docstring + regression test",
+      "evidence_command_index": 104
+    },
+    {
+      "claim": "Greptile review 28235784, round-11 HARD_FIX, technical P1 ('Valid parent paths rejected', ci/gates/check_receipt.py:155): the new regression test for this finding already passes against the prior tip (07744ed, before this round's docstring/test-only change), confirming _safe_normpath() already refused to collapse 'dir/../config.yaml' against 'config.yaml' as an unavoidable side effect of round 10's symlink-safety fix — this round adds no behaviour change, only an explicit test and docstring naming that trade-off as intentional rather than an oversight, per the task's option 1 ('no sound text-only way to distinguish symlink vs ordinary dir — leave collapse refused, add an explicit regression documenting intentional refusal')",
+      "evidence_command_index": 105
+    },
+    {
+      "claim": "This round's clarifying commit is committed to the seat branch: _safe_normpath()'s docstring now explicitly names the round-11 finding, states the refusal is intentional and permanent (not a gap to close), and records why the two candidate middle paths from the task (matching identical unresolved '../' prefixes; a syntactic 'looks like an ordinary directory' heuristic) are both unsound — the first never actually helps the reported case since the gate's own path carries no '../' prefix to match against, and the second does not exist since a symlink can be named anything a real directory can",
+      "evidence_command_index": 107
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 212 tests (211 on the prior tip + 1 new: the ordinary-parent-path-sibling-is-intentionally-not-corroboration regression), no regressions",
+      "evidence_command_index": 108
+    },
+    {
+      "claim": "The new parent-path regression test passes alongside the round-10 symlink regression and all six pre-existing trailing-slash regressions (including both P1-B directory-sibling cases) in the same run — confirming this round's clarification did not disturb either of the two properties round 11's own task explicitly said must not regress",
+      "evidence_command_index": 109
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 110
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 111
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 112
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by — left unset per this round's task instructions ('No approved_by'), and self-approval remains blocked by G-2 pending an independent reviewer",
+      "evidence_command_index": 113,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -1107,5 +1195,5 @@
     "Direct consequence of this round's fix, raised by Greptile on 9cc728a ('Valid parent paths rejected'): the same conservative choice above also rejects an honest `test -f dir/../config.yaml` sibling as corroboration for a compound gated on plain `config.yaml`, even when `dir` is an ordinary directory with no symlink involved anywhere. This is the identical trade-off from the opposite direction \u2014 the gate cannot tell, from the string `dir/../config.yaml` alone, whether `dir` is ordinary (safe to collapse) or a symlink (unsafe, which is exactly this round's P1). Collapsing `..` only when the named component is provably not a symlink would require resolving it against a real filesystem at check time, which this gate deliberately never does (`commands[].cmd` is self-reported text, evaluated independently of whenever/wherever the commands actually ran). So the fix is binary \u2014 always collapse `..` past a named component (unsound, this round's original P1) or never (sound, but strictly more conservative) \u2014 and this round intentionally takes the sound side. An honest receipt author who wants an `X/../Y`-shaped sibling to corroborate should record the probe using the same spelling as the compound's own gate path instead."
   ],
   "loop_acks": [],
-  "summary": "\n\nRound 10 hard-fix (this session, on top of round 9's directory-sibling trailing-slash fix at 9bb2188/741e420): Greptile's review scored 1/5 and raised P1-A, the security finding left open since round 9 \u2014 \"Symlink paths falsely corroborate searches\". _normalize_path() called posixpath.normpath, which textually collapses `link/../config` to `config` with no filesystem access, so an earlier `test -f config` sibling could falsely corroborate a quiet search gated on `test -e link/../config && ...` even when `link` is a symlink pointing somewhere else entirely. Fixed by replacing posixpath.normpath with a new _safe_normpath(): it still drops `.` components and empty components from doubled/trailing separators (safe regardless of symlinks), but it never cancels a `..` component against a preceding named component, so `link/../config` no longer normalizes to the same string as `config` and can no longer falsely corroborate it. Verified the regression test genuinely exercises the pre-fix candidate by running it against a worktree pinned to the prior tip (741e420), where it fails as expected, then against the fixed HEAD, where it passes. P1-B (round 9's directory-sibling trailing-slash fix, `test -d config` corroborating `test -e config/ && ...`) was re-verified and still holds \u2014 not regressed by this round's change. No approved_by written; self-approval remains blocked by G-2 pending an independent reviewer."
+  "summary": "\n\nRound 10 hard-fix (this session, on top of round 9's directory-sibling trailing-slash fix at 9bb2188/741e420): Greptile's review scored 1/5 and raised P1-A, the security finding left open since round 9 \u2014 \"Symlink paths falsely corroborate searches\". _normalize_path() called posixpath.normpath, which textually collapses `link/../config` to `config` with no filesystem access, so an earlier `test -f config` sibling could falsely corroborate a quiet search gated on `test -e link/../config && ...` even when `link` is a symlink pointing somewhere else entirely. Fixed by replacing posixpath.normpath with a new _safe_normpath(): it still drops `.` components and empty components from doubled/trailing separators (safe regardless of symlinks), but it never cancels a `..` component against a preceding named component, so `link/../config` no longer normalizes to the same string as `config` and can no longer falsely corroborate it. Verified the regression test genuinely exercises the pre-fix candidate by running it against a worktree pinned to the prior tip (741e420), where it fails as expected, then against the fixed HEAD, where it passes. P1-B (round 9's directory-sibling trailing-slash fix, `test -d config` corroborating `test -e config/ && ...`) was re-verified and still holds \u2014 not regressed by this round's change. No approved_by written; self-approval remains blocked by G-2 pending an independent reviewer.\n\nRound 11 (this session, on top of round 10's fix at 07744ed): Greptile's tip-match review scored 3/5 and reopened a new technical P1, \"Valid parent paths rejected\" \u2014 an honest `test -f dir/../config.yaml` sibling, where `dir` is an ordinary directory, no longer corroborates a compound gated on plain `config.yaml`, as a direct consequence of round 10's fix. Investigated both candidate middle paths the task offered and found neither sound: matching identical unresolved `../` prefixes on both sides never helps, since the gate's own path here carries no such prefix to match against; and there is no syntactic way to tell an ordinary directory name from a symlink name, so collapsing `X/../Y` only \"when X is provably not a symlink\" would require resolving `X` against a live filesystem, which this gate must not acquire (`commands[].cmd` is self-reported text, checked independently of whenever/wherever the commands actually ran). Per the task's option 1, took the no-narrower-fix path: added an explicit regression test asserting the refusal is intentional, and expanded `_safe_normpath()`'s docstring to name this trade-off directly rather than leaving it only in this receipt's `unverified` list. Confirmed via a worktree pinned to the prior tip that the new test already passed before this round \u2014 this is a clarifying docstring + test commit, not a behaviour change \u2014 and that the round-10 symlink regression and all P1-B trailing-slash regressions still hold alongside it. No approved_by written; self-approval remains blocked by G-2 pending an independent reviewer. Replied on the Greptile thread and left the decision on whether this counts as closed to LEAD, per the task's own instruction."
 }

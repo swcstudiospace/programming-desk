@@ -1,0 +1,133 @@
+{
+  "bot": "bot-06-quality-security",
+  "task_id": "spe-5160-android-roster-companion",
+  "receipt_kind": "quality_surface_addition",
+  "recorded_at": "2026-09-30T17:35:00+00:00",
+  "repo": "swcstudiospace/programming-desk",
+  "branch": "claude/spe-5160-android-roster-9qmv7u",
+  "grok_run": "20260930T172228Z-a62a2245",
+  "head_commit_sha": null,
+  "head_commit_rule": "null on purpose. A receipt cannot record the SHA of the commit that contains it.",
+  "companion_to": {
+    "pr": 47,
+    "title": "SPE-5160 android/tools local adb + MetaVR bridge",
+    "head_branch": "bot-03-android/spe-5160-android-tools-metavr",
+    "tip_sha": "a38454de6dab84124b7be8f99d64418d9d12224f",
+    "deferred_note": "PR #47's own body states: 'Roster: not included; contracts/tool-rosters/** stays with QUALITY.'"
+  },
+  "summary": "Adds the QUALITY-owned contract surface for PR #47's android/tools CLI and MetaVR bridge. contracts/tool-rosters/android.yaml is already at the 15-tool ceiling (8 core + 7 seat; ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS), so rather than force a breaking swap in that always-on roster, this adds a new pack (contracts/tool-packs/androidtools.yaml, 5 tools, seats: [android]) that bot-03-android loads on demand via desk_app_tools_load, plus the contract-change document contracts/changes/spe-5160-android-roster-companion-v1.yaml (G-4, non-breaking). One incidental fix: ci/tests/test_gates.py asserted a hardcoded pack count ('7 rosters, 3 packs') that the new 4th pack broke; that test file is QUALITY-owned (ci/tests/** in ownership.yaml) so the assertion was updated to '7 rosters, 4 packs' in the same change.",
+  "scope": {
+    "added": [
+      "contracts/tool-packs/androidtools.yaml",
+      "contracts/changes/spe-5160-android-roster-companion-v1.yaml",
+      ".receipts/bot-06-quality-security/spe-5160-android-roster-companion.json"
+    ],
+    "modified": [
+      "ci/tests/test_gates.py"
+    ],
+    "not_touched": [
+      "android/** (bot-03-android's path; PR #47's own files)",
+      "contracts/tool-rosters/android.yaml (left at its 15-tool ceiling; see 'schema unclear' note below)",
+      "services/desk-gateway/** (bot-01-systems-backend's path; backend strings in the new pack are contract-only, not wired)",
+      "ownership.yaml (contracts/tool-packs/** was already owner: bot-06-quality-security, contract_surface: true, with contract_consumers already listing bot-02/03/04; no manifest change needed)"
+    ],
+    "gate_scripts_touched": []
+  },
+  "schema_unclear_note": "The work order asked to 'Update contracts/tool-rosters/ for Android MetaVR / android.tools commands.' contracts/tool-rosters/android.yaml is already at exactly 15 effective tools (the hard ceiling), so adding any new roster tool there requires retiring an existing one — a scope/priority call (which of desk_play_track_status / desk_play_staged_rollout / desk_play_halt_rollout / desk_artifact_size_delta / desk_lint_baseline_diff / desk_contract_ack / desk_app_tools_load would be displaced) this companion change does not make unilaterally. contracts/tool-packs/ is the mechanism the README already documents for exactly this shape of problem (additive, loaded per ticket, capped at 5, never displacing the always-on roster), so that is what this change uses. Filed honestly rather than blocked on; a human or LEAD can redirect if a direct roster edit (with a chosen tool to retire) is actually wanted instead.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/tests/test_gates.py contracts/changes/spe-5160-android-roster-companion-v1.yaml contracts/tool-packs/androidtools.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/tests/test_gates.py contracts/changes/spe-5160-android-roster-companion-v1.yaml contracts/tool-packs/androidtools.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-packs/androidtools.yaml contracts/changes/spe-5160-android-roster-companion-v1.yaml --change contracts/changes/spe-5160-android-roster-companion-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS — spe-5160-android-roster-companion-v1: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 4 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 1,
+      "duration_s": 11.6,
+      "output_tail": "FAILED ci/tests/test_gates.py::TestG7DeskIntegrity::test_real_rosters_and_packs_pass - AssertionError: assert '7 rosters, 3 packs' in '...7 rosters, 4 packs...'\n1 failed, 156 passed in 11.56s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 12.0,
+      "output_tail": "157 passed in 11.96s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml still validates after the change (7 bots, 103 rules); no manifest change was needed for the new pack or change document",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1 PASS: all 3 changed/added paths resolve to bot-06-quality-security",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3 PASS: no secrets in the 3 changed files",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4 PASS: the new contract surface (contracts/tool-packs/androidtools.yaml) is covered by contracts/changes/spe-5160-android-roster-companion-v1.yaml — non-breaking, v1.0.0, semantic_changes: []",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-7 PASS: the new pack has exactly 5 tools (within [1,5]), every tool has a valid name/kind/gates/description/input schema with additionalProperties: false, and every tool name is prefixed androidtools_; roster count is unchanged at 7",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Before the fix, the gate self-test suite had one pre-existing failure caused by this change: a hardcoded '3 packs' string assertion in ci/tests/test_gates.py (QUALITY-owned) broke when the pack count became 4. This is the actual failure observed, not a hypothetical.",
+      "evidence_command_index": 5,
+      "expects_failure": true
+    },
+    {
+      "claim": "After updating the assertion to '4 packs' in the same file, the full 157-test gate self-test suite passes with no other regressions",
+      "evidence_command_index": 6
+    }
+  ],
+  "unverified": [
+    "The 'backend' field on each new pack tool (mobile.android_tools_*) is a contract declaration only. No implementation exists in services/desk-gateway/** — that module is bot-01-systems-backend's path and wiring it is not this change's scope.",
+    "No live adb, emulator, or Quest/MetaVR device was exercised by this change; it adds no runtime code, only YAML contract surfaces and one test-assertion fix.",
+    "desk_app_tools_load's projected-tools-ceiling behavior (MAX_LIVE_TOOLS in services/desk-gateway) was not exercised against this specific pack; it is read code in packs.py, not modified here.",
+    "contracts/tool-rosters/android.yaml was deliberately left unchanged — see schema_unclear_note. If the requester actually wants the nine android/tools commands living directly in the always-on roster, that needs an explicit decision about which of the 7 current seat tools to retire, which this companion change does not make.",
+    "No CI run observed (no GitHub Actions workflow invoked from this session).",
+    "approved_by is intentionally absent — see stamp_note. This is QUALITY's own work; G-2 will report a self-approval problem until an independent seat (LEAD or the human owner) reviews and stamps it.",
+    "Did not merge, did not undraft, and did not push to main."
+  ],
+  "g1_g6_notes": {
+    "G-1": "PASS — 3 files, all bot-06-quality-security. No manifest change required (contracts/tool-packs/** and ci/tests/** were already owned by this seat).",
+    "G-2": "This receipt. approved_by intentionally absent — see stamp_note.",
+    "G-3": "PASS on every changed file.",
+    "G-4": "PASS with contracts/changes/spe-5160-android-roster-companion-v1.yaml (non-breaking, v1.0.0).",
+    "G-5": "Not a deployment. No rollback plan required.",
+    "G-6": "No destructive operation. contracts/tool-rosters/android.yaml and android/** are both unchanged; the only modification to an existing file is the one-line assertion fix in ci/tests/test_gates.py, which the new pack made stale."
+  },
+  "stamp_note": "approved_by is intentionally absent. This is QUALITY's own work, and G-2 rejects approved_by == bot as self-approval. An independent seat (LEAD or the human owner) stamps it at review.",
+  "explicit": "Draft pull request only. Did not merge, did not undraft, and did not push to main.",
+  "approvals": [],
+  "approved_by": null
+}

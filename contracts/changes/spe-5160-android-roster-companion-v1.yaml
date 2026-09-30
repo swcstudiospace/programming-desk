@@ -1,0 +1,37 @@
+change_id: spe-5160-android-roster-companion-v1
+proposed_by: bot-06-quality-security
+surface: contracts/tool-packs/androidtools.yaml
+
+breaking: false
+version: 1.0.0
+previous_version: null
+
+summary: >
+  QUALITY companion to PR #47 (bot-03-android/spe-5160-android-tools-metavr, tip
+  a38454de6dab84124b7be8f99d64418d9d12224f), which shipped the android/tools local CLI (adb +
+  Gradle helpers) and a MetaVR tool-id bridge but deferred contracts/tool-rosters/** to QUALITY.
+  contracts/tool-rosters/android.yaml is already at its 15-tool ceiling (8 core + 7 seat; see
+  ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS), so this introduces a new tool pack instead
+  of editing that roster: contracts/tool-packs/androidtools.yaml, loaded on demand by
+  bot-03-android via desk_app_tools_load for an Android build/test/MetaVR ticket. Its five tools
+  (androidtools_adb_devices, androidtools_emu_boot, androidtools_install_apk,
+  androidtools_run_tests, androidtools_device_capture) cover all nine android/tools CLI commands
+  (emu_boot, adb_devices, install_apk, unit_test, instrumented_run, logcat_capture, screenshot,
+  ui_dump, ui_tap) and the four user-facing MetaVR bridge tool ids (device_logcat,
+  device_screenshot, ui_dump, ui_tap). New surface, no prior version: nothing a consumer already
+  depends on changes. Does not touch android/** (bot-03-android's path) and does not implement
+  services/desk-gateway/** (bot-01-systems-backend's path) — contract only.
+
+consumers_required:
+  - bot-02-web-edge
+  - bot-03-android
+  - bot-04-ios
+
+acknowledgements: []
+
+semantic_changes: []
+
+migration_note: >
+  None required. New pack, additive only: no seat loses a tool, and no existing tool, field or
+  endpoint is renamed, removed or reinterpreted. contracts/tool-rosters/android.yaml is
+  unchanged by this proposal.

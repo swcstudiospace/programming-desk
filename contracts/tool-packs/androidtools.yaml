@@ -1,0 +1,119 @@
+# Tool pack: android.tools / MetaVR bridge (SPE-5160 QUALITY companion to PR #47).
+# Loaded for one ticket via desk_app_tools_load. Contract surface (QUALITY); consumer
+# bot-03-android.
+#
+# contracts/tool-rosters/android.yaml is already at the 15-tool ceiling (8 core + 7 seat; see
+# ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS). Adding the android/tools CLI and MetaVR
+# bridge from PR #47 (branch bot-03-android/spe-5160-android-tools-metavr, tip a38454de) directly
+# to that roster would require retiring an existing always-on tool — a scope decision this
+# companion change does not make. A pack is additive instead: it puts the same nine android/tools
+# CLI commands behind five pack tools that bot-03-android loads only for a build/test/MetaVR
+# ticket, never displacing a Play-release tool.
+#
+# Coverage of android/tools (see android/tools/USAGE.md in PR #47):
+#   adb_devices                        -> androidtools_adb_devices
+#   emu_boot                           -> androidtools_emu_boot
+#   install_apk                        -> androidtools_install_apk
+#   unit_test, instrumented_run        -> androidtools_run_tests (mode)
+#   logcat_capture, screenshot,
+#   ui_dump, ui_tap                    -> androidtools_device_capture (action, backend_kind)
+#
+# androidtools_device_capture's `action` values are exactly the documented MetaVR bridge tool
+# ids from android/tools/metavr_bridge.py: device_logcat, device_screenshot, ui_dump, ui_tap.
+# This pack declares the surface only; it does not call MCP, the network, or a metavr binary
+# itself, and does not implement services/desk-gateway/** (bot-01-systems-backend's path).
+version: 1.0.0
+app: androidtools
+title: android.tools / MetaVR bridge
+seats: [android]
+tools:
+  - name: androidtools_adb_devices
+    kind: read
+    gates: []
+    description: >-
+      List adb-visible devices and emulators (serial, state, model) via `android.tools
+      adb_devices`. Reports an empty list rather than failing when adb is missing or no device
+      is attached.
+    backend: mobile.android_tools_adb_devices
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        as_json: { type: boolean, default: true }
+
+  - name: androidtools_emu_boot
+    kind: write
+    gates: []
+    description: >-
+      Start a named AVD emulator via `android.tools emu_boot`. Returns skipped with a reason
+      when the emulator binary or the named AVD is unavailable; never blocks on a missing
+      device. `dry_run` prints the emulator argv without spawning anything.
+    backend: mobile.android_tools_emu_boot
+    input:
+      type: object
+      additionalProperties: false
+      required: [avd]
+      properties:
+        avd: { type: string, minLength: 1, maxLength: 120 }
+        timeout_sec: { type: integer, minimum: 1, maximum: 600, default: 60 }
+        dry_run: { type: boolean, default: false }
+
+  - name: androidtools_install_apk
+    kind: write
+    gates: []
+    description: >-
+      `adb install -r` an APK path onto a connected device or emulator via `android.tools
+      install_apk`. Skips with reason (exit 0) when adb or the device is unavailable, or when
+      the install itself is rejected by the device.
+    backend: mobile.android_tools_install_apk
+    input:
+      type: object
+      additionalProperties: false
+      required: [apk_path]
+      properties:
+        apk_path: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, minLength: 1, maxLength: 120 }
+        dry_run: { type: boolean, default: false }
+
+  - name: androidtools_run_tests
+    kind: write
+    gates: []
+    description: >-
+      Run Gradle unit tests (`android.tools unit_test`) or an instrumented test class
+      (`android.tools instrumented_run`) selected by `mode`. `class_name` is required when
+      `mode` is `instrumented`. Skips cleanly (exit 0) when no Gradle wrapper or no device is
+      available.
+    backend: mobile.android_tools_run_tests
+    input:
+      type: object
+      additionalProperties: false
+      required: [mode]
+      properties:
+        mode: { type: string, enum: [unit, instrumented] }
+        module: { type: string, minLength: 1, maxLength: 200 }
+        class_name: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, minLength: 1, maxLength: 120 }
+        gradle_args: { type: array, items: { type: string, maxLength: 120 }, maxItems: 20 }
+
+  - name: androidtools_device_capture
+    kind: write
+    gates: []
+    description: >-
+      Capture on-device evidence — logcat, screenshot, a UI dump, or a UI tap — via
+      `android.tools` and its MetaVR bridge. `action` selects the operation; `backend_kind`
+      selects `adb` (direct) or `metavr` (resolves the documented MetaVR tool id only —
+      device_logcat, device_screenshot, ui_dump or ui_tap — and raises when no Quest/device is
+      connected). `ui_tap` requires `resource_id` or `text`.
+    backend: mobile.android_tools_device_capture
+    input:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [logcat, screenshot, ui_dump, ui_tap] }
+        backend_kind: { type: string, enum: [adb, metavr], default: adb }
+        serial: { type: string, minLength: 1, maxLength: 120 }
+        out_path: { type: string, minLength: 1, maxLength: 300 }
+        seconds: { type: integer, minimum: 1, maximum: 600 }
+        resource_id: { type: string, minLength: 1, maxLength: 200 }
+        text: { type: string, minLength: 1, maxLength: 200 }

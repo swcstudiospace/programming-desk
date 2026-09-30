@@ -29,9 +29,9 @@ def _digest(path: Path) -> dict:
     return row
 
 
-def _index(path: Path) -> dict[str, dict]:
+def _index(path: Path, solo_key: str | None = None) -> dict[str, dict]:
     if path.is_file():
-        return {".": _digest(path)}
+        return {path.name if solo_key is None else solo_key: _digest(path)}
     if not path.is_dir():
         raise FileNotFoundError(path)
     out = {}
@@ -41,8 +41,9 @@ def _index(path: Path) -> dict[str, dict]:
 
 
 def diff(before: Path, after: Path) -> dict:
-    left = _index(before)
-    right = _index(after)
+    solo_key = "." if before.is_file() and after.is_file() else None
+    left = _index(before, solo_key)
+    right = _index(after, solo_key)
     added = sorted(set(right) - set(left))
     removed = sorted(set(left) - set(right))
     changed = []

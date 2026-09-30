@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import datetime
 import plistlib
 from pathlib import Path
 
@@ -16,15 +18,32 @@ def _load(path: Path) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _collect(path: Path) -> dict:
+def _json_safe(value):
+    if isinstance(value, (bytes, bytearray)):
+        return {"__type__": "data", "base64": base64.b64encode(bytes(value)).decode("ascii")}
+    if isinstance(value, datetime.datetime):
+        return {"__type__": "date", "iso": value.isoformat()}
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
+
+
+def _values_equal(a, b) -> bool:
+    return type(a) is type(b) and a == b
+
+
+def _collect(path: Path, solo_key: str | None = None) -> dict:
     path = path.resolve()
-    root = path.parent if path.is_file() else path
-    files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
+    is_file = path.is_file()
+    root = path.parent if is_file else path
+    files = [path] if is_file else [p for p in path.rglob("*") if p.is_file()]
     entitlements: dict[str, dict] = {}
     usage: dict[str, dict] = {}
     unreadable: list[str] = []
     for item in files:
-        target = item.relative_to(root).as_posix()
+        target = solo_key if (is_file and solo_key is not None) else item.relative_to(root).as_posix()
         if item.suffix == ".entitlements":
             data = _load(item)
             if data is None:
@@ -61,19 +80,20 @@ def _usage_findings(by_target: dict[str, dict]) -> list[dict]:
     return findings
 
 
-def _value_changes(a: dict[str, dict], b: dict[str, dict]) -> list[dict]:
-    changes = []
-    for target in sorted(set(a) & set(b)):
-        left_vals, right_vals = a[target], b[target]
-        for key in sorted(set(left_vals) & set(right_vals)):
-            if left_vals[key] != right_vals[key]:
-                changes.append({
-                    "target": target,
-                    "key": key,
-                    "before": left_vals[key],
-                    "after": right_vals[key],
-                })
-    return changes
+def _entitlement_delta(a: dict[str, dict], b: dict[str, dict]) -> dict:
+    result = {}
+    for target in sorted(set(a) | set(b)):
+        left_vals, right_vals = a.get(target, {}), b.get(target, {})
+        added = sorted(set(right_vals) - set(left_vals))
+        removed = sorted(set(left_vals) - set(right_vals))
+        changed = [
+            {"key": key, "before": _json_safe(left_vals[key]), "after": _json_safe(right_vals[key])}
+            for key in sorted(set(left_vals) & set(right_vals))
+            if not _values_equal(left_vals[key], right_vals[key])
+        ]
+        if added or removed or changed:
+            result[target] = {"added": added, "removed": removed, "changed": changed}
+    return result
 
 
 def _public(collected: dict) -> dict:
@@ -102,8 +122,9 @@ def scan(path: Path) -> dict:
 def diff(base: Path, head: Path) -> dict:
     if not base.exists() or not head.exists():
         return {"status": "error", "reason": "both --diff paths must exist"}
-    left = _collect(base)
-    right = _collect(head)
+    solo_key = "." if base.is_file() and head.is_file() else None
+    left = _collect(base, solo_key)
+    right = _collect(head, solo_key)
     def delta(a: set[str], b: set[str]) -> dict:
         return {"added": sorted(b - a), "removed": sorted(a - b)}
     usage_findings = _usage_findings(right["usage"])
@@ -112,8 +133,7 @@ def diff(base: Path, head: Path) -> dict:
         "status": status,
         "base": str(base.resolve()),
         "head": str(head.resolve()),
-        "entitlements": delta(_flat_keys(left["entitlements"]), _flat_keys(right["entitlements"])),
-        "entitlements_value_changes": _value_changes(left["entitlements"], right["entitlements"]),
+        "entitlements": _entitlement_delta(left["entitlements"], right["entitlements"]),
         "usage": delta(_flat_keys(left["usage"]), _flat_keys(right["usage"])),
         "usage_findings": usage_findings,
         "unreadable": left["unreadable"] + right["unreadable"],

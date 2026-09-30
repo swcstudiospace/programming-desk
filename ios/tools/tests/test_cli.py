@@ -1,3 +1,4 @@
+import datetime
 import json
 import plistlib
 import struct
@@ -125,6 +126,17 @@ class CliTests(unittest.TestCase):
         self.assertIn("--target", result["argv"])
         self.assertIn("login.button", result["argv"])
 
+    def test_cli_ui_tap_requires_target(self):
+        proc = run("ui_tap", "--serial", "s1", "--out", "/tmp/out.png")
+        self.assertEqual(proc.returncode, 2)
+        self.assertIn("--target", proc.stderr)
+
+    def test_cli_ui_tap_forwards_target(self):
+        proc = run("ui_tap", "--serial", "s1", "--out", "/tmp/out.png", "--target", "login.button")
+        body = json.loads(proc.stdout)
+        self.assertIn("--target", body["argv"])
+        self.assertIn("login.button", body["argv"])
+
     def test_xcodebuild_log_any_failed_banner_fails(self):
         parsed = parse_log(
             "** TEST FAILED **\n"
@@ -171,11 +183,93 @@ class CliTests(unittest.TestCase):
             proc = run("entitlements_scan", "--diff", str(base), str(head))
         body = json.loads(proc.stdout)
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertEqual(body["entitlements"], {"added": [], "removed": []})
-        change = body["entitlements_value_changes"][0]
+        change = body["entitlements"]["App.entitlements"]["changed"][0]
         self.assertEqual(change["key"], "aps-environment")
         self.assertEqual(change["before"], "development")
         self.assertEqual(change["after"], "production")
+
+    def test_entitlements_diff_renamed_single_files_still_pair(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "Old.entitlements"
+            head = Path(tmp) / "New.entitlements"
+            base.write_bytes(plistlib.dumps({"aps-environment": "development"}))
+            head.write_bytes(plistlib.dumps({"aps-environment": "production"}))
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        change = body["entitlements"]["."]["changed"][0]
+        self.assertEqual(change["before"], "development")
+        self.assertEqual(change["after"], "production")
+
+    def test_entitlements_diff_per_target_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base"
+            head = Path(tmp) / "head"
+            base.mkdir(); head.mkdir()
+            (base / "App.entitlements").write_bytes(plistlib.dumps({"keychain-access-groups": ["x"]}))
+            (base / "Widget.entitlements").write_bytes(plistlib.dumps({"keychain-access-groups": ["x"]}))
+            (head / "App.entitlements").write_bytes(plistlib.dumps({"keychain-access-groups": ["x"]}))
+            (head / "Widget.entitlements").write_bytes(plistlib.dumps({}))
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertNotIn("App.entitlements", body["entitlements"])
+        self.assertEqual(body["entitlements"]["Widget.entitlements"]["removed"], ["keychain-access-groups"])
+
+    def test_entitlements_diff_type_change_is_not_equal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base"
+            head = Path(tmp) / "head"
+            base.mkdir(); head.mkdir()
+            (base / "App.entitlements").write_bytes(plistlib.dumps({"get-task-allow": True}))
+            (head / "App.entitlements").write_bytes(plistlib.dumps({"get-task-allow": 1}))
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        body = json.loads(proc.stdout)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(len(body["entitlements"]["App.entitlements"]["changed"]), 1)
+
+    def test_entitlements_diff_data_and_date_values_do_not_crash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp) / "base"
+            head = Path(tmp) / "head"
+            base.mkdir(); head.mkdir()
+            (base / "App.entitlements").write_bytes(
+                plistlib.dumps({"stamp": b"\x00\x01", "when": datetime.datetime(2020, 1, 1)})
+            )
+            (head / "App.entitlements").write_bytes(
+                plistlib.dumps({"stamp": b"\x02\x03", "when": datetime.datetime(2021, 1, 1)})
+            )
+            proc = run("entitlements_scan", "--diff", str(base), str(head))
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        body = json.loads(proc.stdout)
+        changed = {c["key"] for c in body["entitlements"]["App.entitlements"]["changed"]}
+        self.assertEqual(changed, {"stamp", "when"})
+
+    def test_snapshot_diff_file_vs_directory_pair_by_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            before = Path(tmp) / "shot.png"
+            after_dir = Path(tmp) / "after"
+            after_dir.mkdir()
+            out = Path(tmp) / "diff.json"
+            before.write_bytes(b"same")
+            (after_dir / "shot.png").write_bytes(b"same")
+            proc = run("snapshot_diff", "--before", str(before), "--after", str(after_dir), "--out", str(out))
+            body = json.loads(out.read_text())
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(body["status"], "ok")
+        self.assertEqual(body["added"], [])
+        self.assertEqual(body["removed"], [])
+
+    def test_xcodebuild_receipt_fields_agree_when_any_failed(self):
+        parsed = parse_log(
+            "** TEST FAILED **\n"
+            "xcodebuild -scheme Desk clean\n"
+            "** BUILD SUCCEEDED **\n",
+            "fixture.log",
+        )
+        self.assertEqual(parsed["status"], "failed")
+        self.assertEqual(parsed["result"], "FAILED")
+        self.assertEqual(parsed["action"], "TEST")
 
 
 if __name__ == "__main__":

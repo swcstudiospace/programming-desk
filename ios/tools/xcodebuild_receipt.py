@@ -35,8 +35,9 @@ def parse_log(text: str, source: str) -> dict:
             "result": None,
         })
         return parsed
-    action, result = results[-1].group(1), results[-1].group(2)
     any_failed = any(m.group(2) == "FAILED" for m in results)
+    reported = [m for m in results if m.group(2) == "FAILED"] if any_failed else results
+    action, result = reported[-1].group(1), reported[-1].group(2)
     parsed.update({
         "status": "failed" if any_failed else ("passed" if result == "SUCCEEDED" else "failed"),
         "action": action,

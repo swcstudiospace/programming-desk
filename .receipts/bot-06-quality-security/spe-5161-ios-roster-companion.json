@@ -21,25 +21,25 @@
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-1 PASS — bot-06-quality-security: 5 file(s) within owned paths\n  NOTE: 4 contract surface file(s) touched — G-4 applies:\n    contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml\n    contracts/tool-packs/ios-local.yaml\n    contracts/tool-packs/ios-metavr.yaml\n    contracts/tool-rosters/ios.yaml"
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 5 file(s) within owned paths\n  NOTE: 4 contract surface file(s) touched \u2014 G-4 applies:\n    contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml\n    contracts/tool-packs/ios-local.yaml\n    contracts/tool-packs/ios-metavr.yaml\n    contracts/tool-rosters/ios.yaml"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-4 PASS — spe-5161-ios-local-tools-v1.1.0: non-breaking, v1.1.0, 0 acknowledgement(s)"
+      "output_tail": "G-4 PASS \u2014 spe-5161-ios-local-tools-v1.1.0: non-breaking, v1.1.0, 0 acknowledgement(s)"
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked"
+      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 5 packs, 22 prompt files checked"
     },
     {
       "cmd": "python3 -m pytest ci/tests -q",
@@ -69,7 +69,7 @@
       "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/ios-metavr.yaml')); yaml.safe_load(open('contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml'))\" && python3 ci/gates/check_desk_integrity.py --repo . && python3 -m pytest ci/tests -q",
       "exit_code": 0,
       "duration_s": 14.1,
-      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 5 packs, 22 prompt files checked\n157 passed in 13.93s"
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 5 packs, 22 prompt files checked\n157 passed in 13.93s"
     }
   ],
   "claims": [
@@ -102,7 +102,7 @@
       "evidence_command_index": 6
     },
     {
-      "claim": "SECOND KNOWN BLOCKER (raised by Greptile review on PR #54, reproduced directly here): the 8 tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() does importlib.import_module(f\"desk_gateway.tools.{module_name}\") (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 tools raises ModuleNotFoundError. server.py's dispatch() only special-cases TimeoutError and LookupError before its broad except Exception, so this is NOT the {\"error\": \"backend_missing\"} path (that's for a missing function in an existing module) — it surfaces as {\"error\": \"internal\", \"reason\": \"ModuleNotFoundError while running <tool>\"}. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml), not QUALITY, so adding that module is out of this change's ownership and scope. Disclosed in the roster header, both pack files, and the change document.",
+      "claim": "SECOND KNOWN BLOCKER (raised by Greptile review on PR #54, reproduced directly here): the 8 tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() does importlib.import_module(f\"desk_gateway.tools.{module_name}\") (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 tools raises ModuleNotFoundError. server.py's dispatch() only special-cases TimeoutError and LookupError before its broad except Exception, so this is NOT the {\"error\": \"backend_missing\"} path (that's for a missing function in an existing module) \u2014 it surfaces as {\"error\": \"internal\", \"reason\": \"ModuleNotFoundError while running <tool>\"}. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml), not QUALITY, so adding that module is out of this change's ownership and scope. Disclosed in the roster header, both pack files, and the change document.",
       "evidence_command_index": 7,
       "expects_failure": true
     },
@@ -111,7 +111,7 @@
       "evidence_command_index": 8
     },
     {
-      "claim": "REVERTED (Greptile P1, comment 4147725446 on PR #54, confirmed valid): iosmetavr_ui_tap's required x/y device-point coordinates were checked directly against PR #48's ios/tools/cli.py and found undeliverable by any backend, not merely unimplemented — _add_metavr() gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out arguments only, with no coordinate parameter anywhere in that CLI. Reverted to required: [serial, out], matching the CLI and the tool's original (desk_ios_ui_tap) shape. Directed-tap targeting needs an ios/tools/metavr_bridge.py and cli.py change on PR #48 — bot-04-ios's to add, not this seat's.",
+      "claim": "REVERTED (Greptile P1, comment 4147725446 on PR #54, confirmed valid): iosmetavr_ui_tap's required x/y device-point coordinates were checked directly against PR #48's ios/tools/cli.py and found undeliverable by any backend, not merely unimplemented \u2014 _add_metavr() gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out arguments only, with no coordinate parameter anywhere in that CLI. Reverted to required: [serial, out], matching the CLI and the tool's original (desk_ios_ui_tap) shape. Directed-tap targeting needs an ios/tools/metavr_bridge.py and cli.py change on PR #48 \u2014 bot-04-ios's to add, not this seat's.",
       "evidence_command_index": 9
     },
     {
@@ -121,9 +121,11 @@
   ],
   "unverified": [
     "The backend-resolution gap (ios.* has no desk_gateway/tools/ios.py) is documented, not resolved. Adding that module is bot-01-systems-backend's path (ownership.yaml); not attempted here.",
-    "Runtime behavior of the 8 tools beyond the resolve()-level ModuleNotFoundError above is not exercised end-to-end — this change defines/relocates only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
+    "Runtime behavior of the 8 tools beyond the resolve()-level ModuleNotFoundError above is not exercised end-to-end \u2014 this change defines/relocates only the contract-surface YAML (name, kind, gates, description, input schema); the implementing CLI lives on bot-04-ios/spe-5161-ios-tools-metavr (PR #48) and ios/** was not touched or re-tested from this branch.",
     "desk_contract_ack acknowledgements from the auto-resolved consumers of contracts/tool-rosters/** (7 bots) and contracts/tool-packs/** (bot-02-web-edge, bot-03-android, bot-04-ios) are not recorded; the change is non-breaking so G-4 does not require them, but none has been solicited through desk_contract_ack.",
-    "approved_by is intentionally left unset. QUALITY (bot-06-quality-security) authored this change and does not self-approve; G-2 will fail closed on this receipt until a human or another seat stamps approved_by. That failure is the designed state, not a completed review.",
     "RESOLVED, no longer open: the x/y coordinate contract noted above as unverified was checked against PR #48's actual ui_tap CLI (command 9) and found undeliverable by any backend, so it was reverted rather than left for bot-04-ios to confirm. Directed-tap targeting stays an open follow-up for bot-04-ios on PR #48 (an ios/** CLI change), not a QUALITY contract gap."
-  ]
+  ],
+  "approved_by": "bot-00-programming-lead",
+  "stamp_note": "LEAD stamped approved_by=bot-00-programming-lead under Ove G-2 grant extension 2026-10-01 for roster companion. G-2 only \u2014 no undraft/merge/Path B.",
+  "approved_at": "2026-09-30T20:41:18Z"
 }

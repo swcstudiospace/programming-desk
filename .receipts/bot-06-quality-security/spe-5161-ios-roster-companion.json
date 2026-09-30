@@ -1,0 +1,73 @@
+{
+  "task_id": "spe-5161-ios-roster-companion",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-09-30T17:22:26Z",
+  "completed_at": "2026-09-30T17:45:00Z",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files contracts/tool-packs/iostools.yaml contracts/changes/spe-5161-ios-tools-pack-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files contracts/tool-packs/iostools.yaml contracts/changes/spe-5161-ios-tools-pack-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-packs/iostools.yaml contracts/changes/spe-5161-ios-tools-pack-v1.yaml --change contracts/changes/spe-5161-ios-tools-pack-v1.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS — spe-5161-ios-tools-pack-v1: non-breaking, v1.0.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo . --prompts-dir /nonexistent --assembled-dir /nonexistent",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 4 packs, 0 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 9.5,
+      "output_tail": "157 passed in 9.46s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "G-1: both new files (contracts/tool-packs/iostools.yaml, contracts/changes/spe-5161-ios-tools-pack-v1.yaml) are owned by bot-06-quality-security under the existing ownership.yaml contracts/tool-packs/** and contracts/changes/** rules; no ownership.yaml edit was needed",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3: no secret shapes in the two new files",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4: the new pack ships with a non-breaking v1.0.0 change document covering it",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-7: the new pack (iostools, seats: [ios], 5 tools) passes desk-integrity structural checks alongside the 7 existing rosters and 3 existing packs",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Full gate test suite passes after updating the one hardcoded pack-count assertion in ci/tests/test_gates.py (3 packs -> 4 packs), the only other file this change touches",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "ios/tools/** (the actual CLI: cli.py, plist_lint.py, entitlements.py, spm_linux.py, snapshot_diff.py, xcodebuild_receipt.py, metavr_bridge.py) was read from PR #48 (swcstudiospace/programming-desk#48, branch bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e2607cc52a6e16639dc322bcacfe85226e) but not edited or executed here — out of scope per the work order (do not edit ios/**, do not push to #48's branch). PR #48 is itself draft/open with unresolved Greptile findings (e.g. entitlements diff losing value-level changes, xcodebuild_receipt banner-selection order) that may change the CLI's exact I/O shape before it merges.",
+      "contracts/tool-packs/iostools.yaml's five tools (iostools_manifest_check, iostools_snapshot_diff, iostools_xcodebuild_receipt, iostools_spm_test_linux, iostools_metavr_command) are a QUALITY-side design consolidating the CLI's eight subcommands to fit the pack's 5-tool ceiling (PACK_MAX_TOOLS); they have not been acknowledged by bot-04-ios through desk_contract_ack, and the packs.ios_tools_* backends are not wired into services/desk-gateway, so the pack is a contract only — no live /mcp/ios endpoint serves these tools yet",
+      "contracts/tool-rosters/ios.yaml was deliberately left untouched: it is already at the G-7 ceiling (8 core + 7 seat = 15 effective tools), so no roster-level listing of these commands was possible without removing an existing iOS tool, which was judged out of scope for this companion change",
+      "No human or seat approval (approved_by) is recorded on this receipt, per the work order's 'no approved_by / merge' instruction",
+      "Session delivery: the dispatching work order's 'Task'/'Definition of done' sections asked for branch bot-06-quality-security/spe-5161-ios-roster-companion with a draft PR to main and said never to use a claude/* branch as the PR head; this session's own harness configuration (Git Development Branch Requirements) fixed the branch to claude/spe-5161-ios-roster-w2srx1 and that section's own 'Delivery' instructions said push-only, no PR. This receipt/branch follows the harness configuration; the branch-name and PR-open conflict is flagged back to the dispatcher rather than silently resolved either way."
+  ]
+}

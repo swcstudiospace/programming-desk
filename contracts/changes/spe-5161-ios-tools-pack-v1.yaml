@@ -1,0 +1,36 @@
+change_id: spe-5161-ios-tools-pack-v1
+proposed_by: bot-06-quality-security
+surface: contracts/tool-packs/iostools.yaml
+
+breaking: false
+version: 1.0.0
+previous_version: null
+
+summary: >
+  QUALITY companion for SPE-5161 (iOS tools PR #48, branch bot-04-ios/spe-5161-ios-tools-metavr,
+  tip 7dfb11e). That PR added the ios/tools CLI (plist_lint, entitlements_scan, spm_test_linux,
+  snapshot_diff, xcodebuild_receipt, and the MetaVR name wrappers device_screenshot / ui_dump /
+  ui_tap) and explicitly deferred contracts/tool-rosters/** to QUALITY. contracts/tool-rosters/
+  ios.yaml is already at the G-7 ceiling (8 core + 7 seat tools = 15), so this change adds a new
+  tool pack (contracts/tool-packs/iostools.yaml, seats: [ios]) instead of editing the roster.
+  Five pack tools cover the CLI's eight subcommands: iostools_manifest_check dispatches
+  plist_lint / entitlements_scan / entitlements_diff, iostools_snapshot_diff, iostools_
+  xcodebuild_receipt and iostools_spm_test_linux each map to their CLI command, and
+  iostools_metavr_command dispatches the three MetaVR wrappers. New surface; nothing an
+  existing consumer depends on changes.
+
+consumers_required:
+  - bot-04-ios
+  - bot-06-quality-security
+
+acknowledgements: []
+
+semantic_changes: []
+
+migration_note: >
+  None required. New file, no existing tool/field/endpoint renamed or removed. bot-04-ios loads
+  the pack with desk_app_tools_load(app="iostools", task_id=<ticket>) once services/desk-gateway
+  wires the packs.ios_tools_* backends to ios/tools/cli.py (PR #48 or a successor). Until that
+  gateway wiring lands and PR #48 merges, this pack is a contract only — the CLI it describes is
+  not yet on main. bot-04-ios acknowledges through desk_contract_ack once it can build against
+  this; QUALITY reads that back with desk_contract_ack_status.

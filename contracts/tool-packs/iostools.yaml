@@ -1,0 +1,95 @@
+# Tool pack: ios.tools companion for SPE-5161. Loaded for one ticket via desk_app_tools_load.
+# Contract surface (QUALITY); consumer bot-04-ios.
+#
+# contracts/tool-rosters/ios.yaml is already at the G-7 ceiling (8 core + 7 seat = 15), so the
+# ios.tools CLI added in PR #48 (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e) ships here
+# as a pack instead of a roster edit. Five tools cover the CLI's eight subcommands: plist_lint,
+# entitlements_scan and its --diff form share one tool, and the three MetaVR wrappers
+# (device_screenshot, ui_dump, ui_tap) share another. None of these invoke xcodebuild or boot a
+# Simulator; none write a stand-in artifact when a helper is missing.
+version: 1.0.0
+app: iostools
+title: iOS Tools (ios.tools CLI + MetaVR)
+seats: [ios]
+tools:
+  - name: iostools_manifest_check
+    kind: read
+    gates: []
+    description: >-
+      Run an ios.tools manifest check against files already on disk: plist_lint (blank usage
+      descriptions), entitlements_scan (entitlement and usage-string keys under a path), or
+      entitlements_diff (added/removed keys between two paths). Linux-safe; no Xcode, no
+      Simulator.
+    backend: packs.ios_tools_manifest_check
+    input:
+      type: object
+      additionalProperties: false
+      required: [check]
+      properties:
+        check: { type: string, enum: [plist_lint, entitlements_scan, entitlements_diff] }
+        path: { type: string, minLength: 1, maxLength: 300 }
+        base_path: { type: string, minLength: 1, maxLength: 300 }
+        head_path: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: iostools_snapshot_diff
+    kind: read
+    gates: []
+    description: >-
+      Hash diff (sha256, plus PNG width/height when present) of two snapshot fixture paths.
+      Not a pixel diff and not a UI render. Writes the report to out_path.
+    backend: packs.ios_tools_snapshot_diff
+    input:
+      type: object
+      additionalProperties: false
+      required: [before_path, after_path, out_path]
+      properties:
+        before_path: { type: string, minLength: 1, maxLength: 300 }
+        after_path: { type: string, minLength: 1, maxLength: 300 }
+        out_path: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: iostools_xcodebuild_receipt
+    kind: read
+    gates: []
+    description: >-
+      Parse a saved xcodebuild log for its last BUILD/TEST result banner, scheme and
+      destination. Reads a log file only; never invokes xcodebuild and never boots a Simulator.
+    backend: packs.ios_tools_xcodebuild_receipt
+    input:
+      type: object
+      additionalProperties: false
+      required: [log_path]
+      properties:
+        log_path: { type: string, minLength: 1, maxLength: 300 }
+
+  - name: iostools_spm_test_linux
+    kind: read
+    gates: []
+    description: >-
+      Run `swift test` for a Swift package when a swift toolchain is on PATH. Without one,
+      returns a skip (exit 3) rather than a pass. dry_run prints the planned command without
+      executing it.
+    backend: packs.ios_tools_spm_test
+    input:
+      type: object
+      additionalProperties: false
+      required: [package_path]
+      properties:
+        package_path: { type: string, minLength: 1, maxLength: 300 }
+        dry_run: { type: boolean, default: false }
+
+  - name: iostools_metavr_command
+    kind: write
+    gates: []
+    description: >-
+      Invoke a MetaVR/remote-device helper (device_screenshot, ui_dump, ui_tap) by its exact
+      executable name on PATH. A missing helper is a skip (exit 3); no stand-in screenshot or
+      dump is written.
+    backend: packs.ios_tools_metavr_command
+    input:
+      type: object
+      additionalProperties: false
+      required: [command, serial, out]
+      properties:
+        command: { type: string, enum: [device_screenshot, ui_dump, ui_tap] }
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 300 }

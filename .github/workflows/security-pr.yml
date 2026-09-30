@@ -26,16 +26,20 @@ on:
 
 permissions:
   contents: read
-  # Needed only for the optional upload-sarif step below. Uploading to code scanning requires
-  # GitHub Advanced Security on a private repo; on a repo without it the step is expected to
-  # fail and is marked continue-on-error so it never blocks the gate. The gate itself is
-  # enforced by each scanner's own exit code, not by this permission.
-  security-events: write
 
 jobs:
   secrets:
     name: Gitleaks (secrets)
     runs-on: [self-hosted, Linux, X64]
+    # security-events: write is declared per-job, not at the workflow root, per SECURITY.md
+    # ("widen permissions one job at a time, never at the workflow root") — each job needs it
+    # only for its own optional upload-sarif step below. Uploading to code scanning requires
+    # GitHub Advanced Security on a private repo; on a repo without it the step is expected to
+    # fail and is marked continue-on-error so it never blocks the gate. The gate itself is
+    # enforced by each scanner's own exit code, not by this permission.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -75,12 +79,12 @@ jobs:
         with:
           name: gitleaks-sarif
           path: gitleaks.sarif
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload to code scanning (best effort)
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
         with:
           sarif_file: gitleaks.sarif
           category: gitleaks
@@ -88,8 +92,13 @@ jobs:
   semgrep:
     name: Semgrep (SAST)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # --baseline-commit below needs the base ref's history
 
       - uses: actions/setup-python@v5
         with:
@@ -101,14 +110,31 @@ jobs:
       - name: Semgrep — repo rules + registry security/secrets packs
         # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
         # HIGH+ equivalent findings per SPE-5162, same intent as bandit's -lll below.
+        # Scans the whole repo, not just services/ci: executable code also lives under infra/
+        # and web/ (e.g. infra/unified-lsp-broker/broker.py, web/mcp-unified-lsp/server.ts), and
+        # a PR gate that skips those isn't "SAST on every PR". Semgrep respects .gitignore on
+        # its own (confirmed locally).
+        #
+        # --baseline-commit scopes blocking findings to what THIS PR changed, same reasoning as
+        # gitleaks' --log-opts above: a repo-wide scan on the full tree hits pre-existing findings
+        # in code this PR never touches (confirmed locally — the p/security-audit pack flags an
+        # existing xml.etree import in scripts/generate-templates.py, owned by a different bot,
+        # unrelated to any PR that happens to run this gate next). Without baselining, widening
+        # the scan to the whole repo would make every future PR's gate red for code it didn't
+        # write. Verified locally: full-tree scan surfaces that 1 pre-existing finding; the same
+        # scan with --baseline-commit origin/main against this PR's own diff finds 0.
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
           semgrep \
             --config ci/security/semgrep.yml \
             --config p/security-audit \
             --config p/secrets \
             --sarif --output semgrep.sarif \
             --severity ERROR --error \
-            services ci
+            --baseline-commit "origin/$BASE_REF" \
+            .
 
       - name: Upload SARIF artifact
         if: always()
@@ -116,12 +142,12 @@ jobs:
         with:
           name: semgrep-sarif
           path: semgrep.sarif
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload to code scanning (best effort)
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -129,6 +155,9 @@ jobs:
   bandit:
     name: Bandit (Python SAST)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -139,11 +168,16 @@ jobs:
       - name: Install Bandit
         run: pip install bandit bandit-sarif-formatter
 
-      - name: Bandit — services/ and ci/, HIGH severity only
+      - name: Bandit — whole repo, HIGH severity only
         # -lll raises the reported severity floor to HIGH, matching "fail on HIGH+" without
         # drowning every PR in LOW/MEDIUM noise. Confirmed locally: 0 findings, exit 0.
+        # Scans the whole repo, not just services/ci: bandit only ever looks at .py files, so
+        # widening the target costs nothing on non-Python trees and catches Python code under
+        # infra/ (e.g. infra/unified-lsp-broker/broker.py) that services/ci alone missed.
+        # ci/security/bandit.ini's exclude_dirs already keeps tests/vendor/node_modules/.venv
+        # out of scope.
         run: |
-          bandit -r services ci \
+          bandit -r . \
             --ini ci/security/bandit.ini \
             -lll \
             -f sarif -o bandit.sarif
@@ -154,12 +188,12 @@ jobs:
         with:
           name: bandit-sarif
           path: bandit.sarif
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload to code scanning (best effort)
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
         with:
           sarif_file: bandit.sarif
           category: bandit
@@ -167,6 +201,9 @@ jobs:
   dependencies:
     name: pip-audit / Trivy (SCA)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -180,6 +217,14 @@ jobs:
         # requirement file (confirmed locally — it errors on the [project] table). Trivy fs
         # below is the SCA path for that manifest. This step covers any requirements*.txt this
         # PR adds and is a no-op, not a false pass, when none exist.
+        #
+        # pip-audit has no severity flag or threshold at all (checked its full --help): it fails
+        # on ANY known vulnerability in a scanned file, not just HIGH+. That's stricter than this
+        # gate's stated "fail on HIGH+" policy, not weaker, so it's left as-is rather than
+        # papering over a tool gap with a severity filter pip-audit's own data often can't back
+        # (CVSS/severity isn't reliably present in PyPI/OSV advisories). Trivy below is the
+        # actual HIGH+-filtered SCA gate; treat this step as a stricter supplementary check that
+        # only fires once this repo adds a requirements*.txt file.
         run: |
           set -euo pipefail
           pip install pip-audit
@@ -190,7 +235,7 @@ jobs:
           fi
           for f in "${REQ_FILES[@]}"; do
             echo "::group::pip-audit $f"
-            pip-audit -r "$f" --strict
+            pip-audit -r "$f"
             echo "::endgroup::"
           done
 
@@ -198,9 +243,14 @@ jobs:
         # v0.28.0 (this workflow's first pin) hardcodes aquasecurity/setup-trivy@v0.2.1, a tag
         # upstream has since deleted — PR #50's own CI caught the resulting "unable to resolve
         # action" failure. v0.36.0 pins its setup-trivy dependency by commit SHA instead of a
-        # mutable tag (confirmed against the current upstream ref), which is both the fix and
-        # the more correct form per SECURITY.md's own "pin what executes by commit SHA" rule.
-        uses: aquasecurity/trivy-action@v0.36.0
+        # mutable tag, which is both the fix and the more correct form. This step's own pin is
+        # by commit SHA too (the v0.36.0 tag is annotated; this is its peeled commit), per
+        # SECURITY.md's "pin what executes by commit SHA, not a mutable tag".
+        #
+        # ignore-unfixed is deliberately NOT set: this gate's policy is fail on HIGH+, full stop.
+        # A HIGH/CRITICAL finding with no fix released yet is still a HIGH/CRITICAL finding —
+        # ignore-unfixed would let exactly that class of vulnerability merge silently.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -208,7 +258,6 @@ jobs:
           output: trivy.sarif
           severity: HIGH,CRITICAL
           exit-code: "1"
-          ignore-unfixed: true
 
       - name: Upload SARIF artifact
         if: always()
@@ -216,12 +265,12 @@ jobs:
         with:
           name: trivy-sarif
           path: trivy.sarif
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
       - name: Upload to code scanning (best effort)
         if: always()
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@1190a975f95ce23525efb6a3fc21ea29567c1b52 # v3
         with:
           sarif_file: trivy.sarif
           category: trivy

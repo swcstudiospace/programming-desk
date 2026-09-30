@@ -21,16 +21,11 @@ description = "Repo-wide false-positive suppressions"
 
 # ${VAR} / $VAR are secret *references* by name, the convention this repo's SECURITY.md
 # requires (§2) — not a credential value.
+#
+# Deliberately no path-based lockfile exemption here. check_secrets.py (G-3) already skips
+# *.lock by extension; exempting the same files here too would leave a lockfile-embedded
+# credential (e.g. a private git+ssh dependency URL or registry URL with inline basic auth)
+# outside both scanners at once. Gitleaks scans lockfiles like any other file in the PR diff.
 regexes = [
   '''\$\{[A-Za-z_][A-Za-z0-9_]*\}''',
-]
-
-# Lockfiles are generated, reviewed as a diff against a trusted registry, and never hand-edited
-# for a credential; they are also long enough that their own hashes occasionally trip generic
-# high-entropy rules.
-paths = [
-  '''(^|/)uv\.lock$''',
-  '''(^|/)package-lock\.json$''',
-  '''(^|/)deno\.lock$''',
-  '''(^|/)Cargo\.lock$''',
 ]

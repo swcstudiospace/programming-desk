@@ -95,10 +95,11 @@
       "expects_failure": false
     },
     {
-      "cmd": "git ls-remote --tags https://github.com/zaproxy/action-baseline.git https://github.com/github/codeql-action.git https://github.com/projectdiscovery/nuclei.git https://github.com/gitleaks/gitleaks.git",
+      "cmd": "for repo in zaproxy/action-baseline github/codeql-action projectdiscovery/nuclei gitleaks/gitleaks; do git ls-remote --tags \"https://github.com/$repo.git\" | grep -E 'v(0\\.14\\.0|3|3\\.3\\.7|8\\.21\\.2)(\\^\\{\\})?$'; done",
       "exit_code": 0,
       "duration_s": 1.5,
-      "output_tail": "v0.14.0 (zaproxy/action-baseline), v3 (github/codeql-action), v3.3.7 (nuclei), v8.21.2 (gitleaks) all confirmed present — only trivy-action's pin was wrong"
+      "output_tail": "v0.14.0 (zaproxy/action-baseline), v3 + its ^{} peeled commit (github/codeql-action), v3.3.7 (nuclei), v8.21.2 + its ^{} peeled commit (gitleaks) each individually confirmed present — a single git ls-remote invocation only ever queries its FIRST positional argument as the repository and treats the rest as ref-pattern filters, so this is a loop of four separate real queries, not one command against four repos",
+      "expects_failure": false
     },
     {
       "cmd": "git clone --depth 1 --branch v0.28.0 https://github.com/aquasecurity/trivy-action.git && grep -n setup-trivy trivy-action/action.yaml",
@@ -117,15 +118,53 @@
       "exit_code": 0,
       "duration_s": 0.6,
       "output_tail": "3fb12ec12f41e471780db15c232d5dd185dcb514 refs/tags/v0.2.6 — the SHA trivy-action@v0.36.0 pins internally exists and matches a current setup-trivy tag"
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 2.7,
+      "output_tail": "SARIF output written — 0 HIGH-severity findings scanning the whole repo (widened from services/ci per Greptile P1 4147142620 on PR #50)"
+    },
+    {
+      "cmd": "semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error .",
+      "exit_code": 1,
+      "duration_s": 15.5,
+      "output_tail": "Ran 69 rules on 240 files: 1 finding — python.lang.security.use-defused-xml.use-defused-xml in scripts/generate-templates.py:23, pre-existing on main, owned by bot-00-programming-lead, untouched by this PR. Real exit code captured directly (not through a pipe), proving an unscoped whole-repo Semgrep run would fail THIS PR for code it never touched — the reason --baseline-commit was added rather than shipping the naive widen-to-'.' fix.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git fetch --no-tags --depth=1 origin main && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error --baseline-commit origin/main .",
+      "exit_code": 0,
+      "duration_s": 15.0,
+      "output_tail": "Ran 37 rules on 9 files: 0 findings — 'Scan was limited to files changed since baseline commit.' Same whole-repo scan, same pre-existing finding still present on disk, but --baseline-commit correctly excludes it and only judges this PR's own 9 changed files."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_security_workflows.py -v",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "11 passed — new regression-guard suite (Greptile P2 4147142698) parsing security-pr.yml and asserting its blocking flags, SHA pins, and per-job permissions scoping"
+    },
+    {
+      "cmd": "sed -i 's/exit-code: \"1\"$/exit-code: \"1\"\\n          ignore-unfixed: true/' .github/workflows/security-pr.yml && python3 -m pytest ci/tests/test_security_workflows.py::TestTrivyBlocks::test_ignore_unfixed_not_set -v",
+      "exit_code": 1,
+      "duration_s": 0.04,
+      "output_tail": "AssertionError: assert True is not True — proves the new test actually catches the exact regression it's named for (re-adding ignore-unfixed: true), not just a tautology. File was restored from backup immediately after.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.4,
+      "output_tail": "168 passed in 10.36s (157 pre-existing + 11 new)"
     }
   ],
   "claims": [
     {
-      "claim": "ownership.yaml still validates with no duplicate pattern after adding the two QUALITY overrides, and every new path this change adds (workflows, ci/security/**, SECURITY.md, ownership.yaml itself, the receipt) resolves to bot-06-quality-security under G-1",
+      "claim": "ownership.yaml still validates with no duplicate pattern after adding the two QUALITY overrides (105 rules, up from 103; every rule names a declared bot)",
       "evidence_command_index": 0
     },
     {
-      "claim": "Running G-1 exactly as the work order's own verify command specifies (--bot bot-06-quality-security --base origin/main) passes for this branch's full diff against main",
+      "claim": "Running G-1 exactly as the work order's own verify command specifies (--bot bot-06-quality-security --base origin/main) passes for this branch's full diff against main — which is what actually establishes that every new path this change adds (workflows, ci/security/**, SECURITY.md, ownership.yaml itself, the receipt) resolves to bot-06-quality-security: G-1 PASS is defined as no unowned and no foreign file in the diff, not merely that the manifest parses",
       "evidence_command_index": 1
     },
     {
@@ -193,15 +232,43 @@
     {
       "claim": "The commit SHA that trivy-action@v0.36.0 pins its setup-trivy dependency to actually exists upstream and corresponds to the current v0.2.6 tag, so this fix does not just move the same failure to a different tag name",
       "evidence_command_index": 17
+    },
+    {
+      "claim": "Widening Bandit's scan target from services/ci to the whole repo (Greptile P1 4147142620 on PR #50: infra/ and web/ have executable code this gate was missing) is still 0 findings — the widen doesn't newly trip anything on the code that exists today",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "Widening Semgrep's scan target to the whole repo without diff-scoping is NOT safe to ship as-is: it surfaces a real, pre-existing finding (use-defused-xml) in scripts/generate-templates.py, a file this PR does not touch and does not own. A naive fix for the 'misses SAST outside services/ci' finding would have made this PR's own gate red for someone else's code, and would make every future PR's gate red for the same reason until that file is fixed",
+      "evidence_command_index": 19,
+      "expects_failure": true
+    },
+    {
+      "claim": "Adding --baseline-commit origin/$BASE_REF resolves that conflict: the same whole-repo Semgrep scan, same pre-existing finding still present on disk, exits 0 because baselining correctly limits blocking results to the 9 files this PR actually changed — this is the mechanism that lets the scan scope widen (closing the P1 finding) without making the gate fail on unrelated legacy code",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "The new ci/tests/test_security_workflows.py regression-guard suite (Greptile P2 4147142698: 'a later change could silently disable enforcement while the self-test remains green') passes against the fixed workflow — 11 tests asserting the blocking flags, SHA pins, and per-job permissions scoping this round of fixes introduced",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "The regression-guard suite is not a tautology: reintroducing the exact bug it was written for (ignore-unfixed: true on the Trivy step) makes test_ignore_unfixed_not_set fail, proving the test can actually catch the regression it names before the file was restored",
+      "evidence_command_index": 22,
+      "expects_failure": true
+    },
+    {
+      "claim": "The full gate suite (168 tests: 157 pre-existing + 11 new) passes with the workflow restored to its fixed state — no regression from any change in this round",
+      "evidence_command_index": 23
     }
   ],
   "unverified": [
-    "Trivy's filesystem scan itself (the aquasecurity/trivy-action@v0.36.0 step's actual scan output) was never executed in this sandbox — only that the action and its nested setup-trivy dependency now resolve. PR #50's own CI (self-hosted runner) is what will actually run it; whether it passes or finds HIGH+ vulnerabilities had not been observed as of this receipt revision.",
-    "The nightly DAST workflow (ZAP baseline via zaproxy/action-baseline@v0.14.0, and the Nuclei binary install/scan) was never executed: there is no STAGING_URL in this sandbox and no live target to scan against. The workflow's skip-when-unconfigured branch is the only path exercised, via reasoning about the job's `if:` condition, not an actual run of security-nightly.yml.",
-    "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif@v3) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox.",
+    "Trivy's filesystem scan itself (the aquasecurity/trivy-action@ed142fd...v0.36.0 step's actual scan output) was never executed in this sandbox — only that the action and its nested setup-trivy dependency resolve, and that its SHA pin is correct. PR #50's own CI (self-hosted runner) is what will actually run it; whether it passes or finds HIGH+ vulnerabilities had not been observed as of this receipt revision.",
+    "The nightly DAST workflow (ZAP baseline via zaproxy/action-baseline, now SHA-pinned, and the Nuclei binary install/scan) was never executed: there is no STAGING_URL in this sandbox and no live target to scan against. The workflow's skip-when-unconfigured branch is the only path exercised, via reasoning about the job's `if:` condition, not an actual run of security-nightly.yml.",
+    "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif, now SHA-pinned) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox. Per-job security-events: write (moved off the workflow root this round) was checked by parsing the YAML (command 21), not by observing the permission actually apply in a real run.",
     "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch — that limitation was reported, not worked around further.",
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
-    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve."
+    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
+    "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
+    "Bandit's whole-repo widening (unlike Semgrep's) was NOT given a --baseline-commit / diff-only mode, because it currently has zero pre-existing findings and bandit's own baseline mechanism (-b against a stored JSON snapshot) is a heavier lift than a git-ref diff. If a future pre-existing Python file trips a HIGH bandit finding unrelated to some PR, that PR's gate would go red the same way the unscoped Semgrep run did here — this is an accepted, not a closed, gap."
   ],
   "files_changed": [
     "ownership.yaml",

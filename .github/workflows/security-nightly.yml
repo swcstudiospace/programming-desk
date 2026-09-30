@@ -43,7 +43,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: ZAP baseline scan
-        uses: zaproxy/action-baseline@v0.14.0
+        # Pinned by commit SHA (v0.14.0's tag is annotated; this is its peeled commit) per
+        # SECURITY.md's "pin what executes by commit SHA, not a mutable tag".
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
         with:
           target: ${{ secrets.STAGING_URL }}
           # Baseline only — a passive/spidering pass, not an active attack profile. An active
@@ -81,7 +83,7 @@ jobs:
           path: |
             report_html.html
             nuclei-results.jsonl
-          if-no-files-found: ignore
+          if-no-files-found: warn
 
   skipped:
     needs: check-target

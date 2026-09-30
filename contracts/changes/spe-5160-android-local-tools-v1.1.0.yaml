@@ -1,48 +1,64 @@
-# Change document for the android.tools local/MetaVR bridge tool roster addition.
+# Change document for the android.tools local/MetaVR bridge tool surface.
 #
-# Verify before opening the pull request:
+# Superseded plan: the roster addition this document originally proposed (appending 9
+# desk_android_* tools to contracts/tool-rosters/android.yaml) failed G-7 — android.yaml was
+# already at the 15-tool ceiling (8 core + 7 seat; ROSTER_MAX_TOOLS in
+# ci/gates/check_desk_integrity.py) before the addition, and no existing tool is retired to make
+# room. LEAD decision: keep the roster untouched and cover the same android/tools surface with a
+# tool pack instead. This document is updated in place (same change_id / filename) rather than
+# replaced, so its history stays with one record.
+#
+# Verify before merging:
 #   python3 ci/gates/check_contracts.py --base origin/main \
 #       --change contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml
+#   python3 ci/gates/check_desk_integrity.py
 
 change_id: spe-5160-android-local-tools-v1.1.0
 proposed_by: bot-06-quality-security
 
-surface: contracts/tool-rosters/android.yaml
+surface: contracts/tool-packs/androidlocal.yaml
+surfaces:
+  - contracts/tool-packs/androidmetavr.yaml
 
 breaking: false
-version: 1.1.0
-previous_version: 1.0.0
+version: 1.0.0
+previous_version: null
 
 summary: >
-  Additive local android.tools from SPE-5160/#47 (bot-03-android/spe-5160-android-tools-metavr,
-  tip a38454de). Appends nine desk_android_* tools to the ANDROID seat roster wrapping
-  android/tools: emu_boot, adb_devices, install_apk (g6), unit_test, instrumented_run,
-  logcat_capture, screenshot, ui_dump and ui_tap (the last two MetaVR-primary wraps that resolve
-  a documented tool id rather than calling MCP directly). No existing tool, field or endpoint is
-  renamed, removed or reinterpreted; the roster grows from 7 to 16 seat tools (24 with the core
-  eight).
+  QUALITY companion to PR #47 (bot-03-android/spe-5160-android-tools-metavr, tip
+  a38454de6dab84124b7be8f99d64418d9d12224f), which shipped the android/tools local CLI (adb +
+  Gradle helpers) and a MetaVR tool-id bridge but deferred contracts/tool-rosters/** to QUALITY.
+  contracts/tool-rosters/android.yaml is at its 15-tool ceiling (8 core + 7 seat) and is left
+  unchanged by this revision — it is identical to origin/main. The nine android/tools CLI
+  commands (emu_boot, adb_devices, install_apk, unit_test, instrumented_run, logcat_capture,
+  screenshot, ui_dump, ui_tap) are instead covered by two new packs, each at most five tools per
+  contracts/README.md: contracts/tool-packs/androidlocal.yaml (emu_boot, adb_devices,
+  install_apk, unit_test, instrumented_run — 5 tools) and contracts/tool-packs/
+  androidmetavr.yaml (logcat_capture, screenshot, ui_dump, ui_tap — 4 tools, the last two
+  MetaVR-primary tool-id resolvers). bot-03-android loads either on demand via
+  desk_app_tools_load for an Android build/test/MetaVR ticket. New surfaces, no prior version:
+  nothing a consumer already depends on changes, and no existing roster tool is displaced.
+  Neither pack's `backend` is implemented in services/desk-gateway/** yet — see each pack's
+  header for the honest unverified note; wiring it is a SYSTEMS follow-up.
 
-# Resolved from ownership.yaml -> contract_consumers["contracts/tool-rosters/**"]. Every seat is
-# a consumer of every roster file; listed here only to make the reviewed scope legible.
+# Resolved from ownership.yaml -> contract_consumers["contracts/tool-packs/**"].
 consumers_required:
-  - bot-00-programming-lead
-  - bot-01-systems-backend
   - bot-02-web-edge
   - bot-03-android
   - bot-04-ios
-  - bot-05-infrastructure
-  - bot-06-quality-security
 
-# Required field. No existing field's name or type changed, so no field changed meaning.
+# Required field. New surface, no prior field to change meaning.
 semantic_changes: []
 
-# Empty on purpose. Non-breaking: acknowledgements are informational here (a rejection would
-# still block), and no consumer has been asked yet. A rejection blocks this non-breaking change
-# the same way; see check_contracts.py.
 acknowledgements: []
 
+migration_note: >
+  None required. New pack, additive only: no seat loses a tool, and
+  contracts/tool-rosters/android.yaml is unchanged from origin/main by this proposal.
+
 notes:
-  - "No migration_note: not required for a non-breaking change, and there is nothing to migrate
-    — every new tool is additive."
-  - "Out of scope: android/** (owned by bot-03-android, not touched here), gateway wiring,
-    Path B receipt stamping, PR #40, and the iOS roster."
+  - "Out of scope: android/** (owned by bot-03-android, not touched here), gateway wiring under
+    services/desk-gateway/** (bot-01-systems-backend), and the iOS roster."
+  - "A raise of ROSTER_MAX_TOOLS was considered and rejected per LEAD decision: the pack
+    mechanism documented in contracts/README.md already covers this shape of overflow without
+    widening what every bot sees in tools/list."

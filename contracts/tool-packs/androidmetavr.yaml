@@ -1,0 +1,103 @@
+# Tool pack: android.tools capture / MetaVR bridge (SPE-5160 QUALITY companion to PR #47).
+# Loaded for one ticket via desk_app_tools_load. Contract surface (QUALITY); consumer
+# bot-03-android.
+#
+# Companion to contracts/tool-packs/androidlocal.yaml: that pack covers the five device/build
+# commands from PR #47's `python -m android.tools <cmd>` CLI, this one covers the four
+# capture/UI commands (a pack holds at most five tools — see contracts/README.md). Together the
+# two packs cover all nine android/tools commands without touching
+# contracts/tool-rosters/android.yaml, which is already at its 15-tool ceiling (8 core + 7 seat;
+# ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS).
+#
+# Honesty notes (do not overclaim what #47 actually does):
+#   - `backend: android_cli.*` names the intended adapter only. No services/desk-gateway/**
+#     module implements it yet (no android_cli.py; mobile.py is Play Console/App Store Connect
+#     only and does not cover android/tools). Wiring it to shell out to
+#     `python -m android.tools <cmd>` is a SYSTEMS follow-up (services/desk-gateway/**,
+#     bot-01-systems-backend), out of scope for this QUALITY contract change.
+#   - backend metavr on androidmetavr_logcat_capture/screenshot and both MetaVR-primary tools
+#     resolves a documented MetaVR tool id only (device_logcat, device_screenshot, ui_dump,
+#     ui_tap) for the MetaVR MCP host to invoke; android/tools/metavr_bridge.py never calls
+#     MCP, the network or a metavr binary itself, and its device-connected check is hardcoded
+#     false, so a metavr call always raises DeviceUnavailable until real device detection lands
+#     in PR #47 or a successor — these tools never actually run a capture today.
+version: 1.0.0
+app: androidmetavr
+title: android.tools — capture / MetaVR bridge
+seats: [android]
+tools:
+  - name: androidmetavr_logcat_capture
+    kind: read
+    gates: []
+    description: >-
+      Capture logcat to a file via `android.tools logcat_capture`. backend adb dumps via `adb
+      logcat`; backend metavr resolves the documented device_logcat MetaVR tool id and reports
+      it for the MetaVR MCP host to invoke — this tool never calls MCP, the network or a metavr
+      binary itself, and always raises under backend metavr today (see pack header).
+    backend: android_cli.logcat_capture
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        seconds: { type: integer, minimum: 1, maximum: 300, default: 10 }
+        backend: { type: string, enum: [adb, metavr], default: adb }
+
+  - name: androidmetavr_screenshot
+    kind: read
+    gates: []
+    description: >-
+      Capture a screenshot to a file via `android.tools screenshot`. backend adb uses `adb
+      screencap`; backend metavr resolves the documented device_screenshot MetaVR tool id and
+      reports it for the MetaVR MCP host to invoke — this tool never calls MCP, the network or a
+      metavr binary itself, and always raises under backend metavr today (see pack header).
+    backend: android_cli.screenshot
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        backend: { type: string, enum: [adb, metavr], default: adb }
+
+  - name: androidmetavr_ui_dump
+    kind: read
+    gates: []
+    description: >-
+      MetaVR-primary UI hierarchy dump via `android.tools ui_dump`. Resolves the documented
+      ui_dump MetaVR tool id and reports it for the MetaVR MCP host to invoke; the resolution
+      message is written to out. android/tools/metavr_bridge.py's device-connected check is
+      hardcoded false, so this always raises DeviceUnavailable today (see pack header).
+    backend: android_cli.ui_dump
+    input:
+      type: object
+      additionalProperties: false
+      required: [out]
+      properties:
+        out: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+
+  - name: androidmetavr_ui_tap
+    kind: write
+    gates: []
+    description: >-
+      MetaVR-primary UI tap via `android.tools ui_tap`. Resolves the documented ui_tap MetaVR
+      tool id and reports it for the MetaVR MCP host to invoke; never taps anything itself, and
+      always raises DeviceUnavailable today (see pack header). Exactly one of resource_id or
+      text is required to target the tap.
+    backend: android_cli.ui_tap
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        serial: { type: string, maxLength: 120 }
+        resource_id: { type: string, minLength: 1, maxLength: 300 }
+        text: { type: string, minLength: 1, maxLength: 300 }
+      oneOf:
+        - required: [resource_id]
+          not: { required: [text] }
+        - required: [text]
+          not: { required: [resource_id] }

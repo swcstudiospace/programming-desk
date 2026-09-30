@@ -1,6 +1,23 @@
 change_id: desk-v2-tool-rosters-v1
 proposed_by: bot-06-quality-security
 surface: contracts/tool-rosters/_core.yaml
+
+# Every other contract-surface path this change touches. `surface` plus `surfaces` must cover
+# the whole diff (G-4), which is what binds this document to this change rather than a later
+# one. Listed individually on purpose: `contracts/**` would pass while describing nothing.
+surfaces:
+  - contracts/tool-rosters/lead.yaml
+  - contracts/tool-rosters/systems.yaml
+  - contracts/tool-rosters/web.yaml
+  - contracts/tool-rosters/android.yaml
+  - contracts/tool-rosters/ios.yaml
+  - contracts/tool-rosters/infra.yaml
+  - contracts/tool-rosters/quality.yaml
+  - contracts/tool-packs/clippyos.yaml
+  - contracts/tool-packs/desklanes.yaml
+  - contracts/tool-packs/kanbanos.yaml
+  - contracts/README.md
+
 breaking: false
 version: 1.0.0
 previous_version: null

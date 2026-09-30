@@ -4,8 +4,8 @@
   "branch": "bot-05-infrastructure/desk-gate-install-layout",
   "pull_request": 34,
   "started_at": "2026-09-30T05:37:00Z",
-  "completed_at": "2026-09-30T05:46:00Z",
-  "summary": "Fix install layout for future DESK_GATE_USER (Greptile P1 4141126594): move desk checkout to /opt/programming-desk, create desk-gate system user, verify readable gates + executable venv python. Do NOT enable DESK_GATE_USER yet. config.py default path left to SYSTEMS (services/desk-gateway/**).",
+  "completed_at": "2026-09-30T05:53:50Z",
+  "summary": "Tip fix for QUALITY BLOCKED #34: receipt claims as {claim,evidence_command_index}; /opt re-sync on rerun from non-canonical tree (4141208705); broaden DESK_REPO_DIR rewrite (4141208711); tighten perms / gate home / py_compile probe (P2s). DESK_GATE_USER still unset. approved_by null until QUALITY Path B.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -16,22 +16,67 @@
       "output_tail": "OK"
     },
     {
-      "cmd": "grep -E 'GATEWAY_ROOT=/opt/programming-desk|DESK_GATE_USER' infra/desk-gateway/install.sh infra/desk-gateway/gateway.env.example",
+      "cmd": "/tmp/pd-gates-venv/bin/python ci/gates/check_ownership.py --bot bot-05-infrastructure --files <5 INFRA paths>",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS \u2014 bot-05-infrastructure: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "grep -c 'rsync_to_opt|SRC_ROOT !=' infra/desk-gateway/install.sh",
       "exit_code": 0,
       "duration_s": 0.01,
-      "output_tail": "opt path; DESK_GATE_USER documented empty"
+      "output_tail": "sync_markers=3"
+    },
+    {
+      "cmd": "python3 -c migrate_pattern_smoke for bare/quoted legacy DESK_REPO_DIR",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "quoted_and_bare_legacy_match"
+    },
+    {
+      "cmd": "grep P2 markers GATE_HOME=/var/lib/desk-gate py_compile g+rX",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "p2_markers=4"
+    },
+    {
+      "cmd": "grep -q 'chmod -R a+rX' install.sh; expect absent",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "no_world_a+rX"
     }
   ],
   "claims": [
-    "infra/desk-gateway install path is /opt/programming-desk (migrates from /root/src/repos/programming-desk when needed)",
-    "desk-gateway.service WorkingDirectory and ExecStart point at /opt/programming-desk/services/desk-gateway",
-    "gateway.env.example sets DESK_REPO_DIR=/opt/programming-desk and documents DESK_GATE_USER empty",
-    "install.sh creates desk-gate (nologin) and verifies read of ci/gates + execute of venv python without setting DESK_GATE_USER"
+    {
+      "claim": "install.sh passes bash -n after the tip fix.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "All five touched paths remain inside bot-05-infrastructure ownership (G-1 PASS).",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Rerun from a non-/opt checkout re-syncs into /opt/programming-desk via rsync_to_opt (4141208705).",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "DESK_REPO_DIR migration matches bare and quoted legacy /root paths (4141208711).",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "desk-gate home is /var/lib/desk-gate (not under 0700 DATA_DIR); probe compiles a gate as desk-gate; no chmod -R a+rX on the checkout (P2s 4141208714/8717/8723).",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "World-readable recursive a+rX was removed from install.sh.",
+      "evidence_command_index": 5
+    }
   ],
   "unverified": [
-    "Live VPS not re-installed in this PR \u2014 operator must rerun infra/desk-gateway/install.sh after merge",
-    "services/desk-gateway config.py still defaults repo_dir to /root/... \u2014 SYSTEMS should align default when ticketed; live env DESK_REPO_DIR wins after install",
-    "DESK_GATE_USER privilege drop still disabled by design until a follow-up enable ticket"
+    "Live VPS not re-installed in this tip \u2014 operator must rerun infra/desk-gateway/install.sh after merge",
+    "services/desk-gateway config.py default repo_dir still /root/... \u2014 SYSTEMS carry-forward; live DESK_REPO_DIR wins after install",
+    "DESK_GATE_USER privilege drop still disabled by design until a follow-up enable ticket",
+    "approved_by remains null until QUALITY Path B after tip_match CLEAR"
   ],
   "files_changed": [
     "infra/desk-gateway/install.sh",
@@ -43,7 +88,15 @@
   "destructive": false,
   "secrets_committed": false,
   "p1s_addressed": [
-    "4141126594"
+    "4141126594",
+    "4141208698",
+    "4141208705",
+    "4141208711"
+  ],
+  "p2s_addressed": [
+    "4141208714",
+    "4141208717",
+    "4141208723"
   ],
   "p1s_deferred": []
 }

@@ -1,0 +1,23 @@
+[Unit]
+Description=Programming Desk gateway — per-seat MCP for Grok Bot
+Documentation=file:///root/src/repos/programming-desk/docs/upgrade-plan-desk-v2.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/root/src/repos/programming-desk/services/desk-gateway
+EnvironmentFile=-/etc/desk-gateway/gateway.env
+ExecStart=/root/src/repos/programming-desk/services/desk-gateway/.venv/bin/desk-gateway
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=desk-gateway
+
+[Install]
+WantedBy=multi-user.target

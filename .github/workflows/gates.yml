@@ -1,0 +1,104 @@
+# Quality gates. Copy to .github/workflows/gates.yml in the target repository.
+#
+# Gates are required status checks — they block the merge rather than merely reporting.
+# A gate that can be merged past is a suggestion.
+
+name: Quality Gates
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # gates diff against the base ref
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install gate dependencies
+        run: pip install pyyaml
+
+      - name: Determine the acting bot
+        id: bot
+        run: |
+          # Convention: the branch name is prefixed with the bot id,
+          # e.g. bot-03-android/feat-push-notifications
+          # or bot-00-programming-lead/desk-model for the orchestrator.
+          BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          BOT="${BRANCH%%/*}"
+          if [[ ! "$BOT" =~ ^bot-0[0-6]- ]]; then
+            echo "::error::Branch '$BRANCH' does not start with a bot id (bot-0N-name/...)."
+            echo "::error::G-1 cannot attribute the change without one."
+            exit 1
+          fi
+          echo "bot=$BOT" >> "$GITHUB_OUTPUT"
+          echo "Acting bot: $BOT"
+
+      - name: G-1 — Manifest self-check
+        run: python3 ci/gates/check_ownership.py --validate-manifest
+
+      - name: G-1 — Path ownership
+        run: |
+          python3 ci/gates/check_ownership.py \
+            --bot "${{ steps.bot.outputs.bot }}" \
+            --base "origin/${{ github.base_ref || 'main' }}"
+
+      - name: Locate the verification receipt
+        id: receipt
+        run: |
+          RECEIPT=$(ls -1 ".receipts/${{ steps.bot.outputs.bot }}"/*.json 2>/dev/null | head -n1 || true)
+          if [[ -z "$RECEIPT" ]]; then
+            echo "::error::G-2 — no verification receipt in .receipts/${{ steps.bot.outputs.bot }}/"
+            echo "::error::A completion claim requires a receipt. See skills/verification-receipts/"
+            exit 1
+          fi
+          echo "path=$RECEIPT" >> "$GITHUB_OUTPUT"
+
+      - name: G-2 — Verification receipt
+        run: |
+          python3 ci/gates/check_receipt.py \
+            --receipt "${{ steps.receipt.outputs.path }}" \
+            --bot "${{ steps.bot.outputs.bot }}" \
+            --strict
+
+      - name: G-3 — Committed secrets
+        run: python3 ci/gates/check_secrets.py --base "origin/${{ github.base_ref || 'main' }}"
+
+      - name: G-4 — Contract-first changes
+        run: |
+          CHANGE=$(ls -1 contracts/changes/*.yaml 2>/dev/null | head -n1 || true)
+          if [[ -n "$CHANGE" ]]; then
+            python3 ci/gates/check_contracts.py \
+              --base "origin/${{ github.base_ref || 'main' }}" --change "$CHANGE"
+          else
+            python3 ci/gates/check_contracts.py --base "origin/${{ github.base_ref || 'main' }}"
+          fi
+
+      - name: G-5/G-6 — Rollback and destructive operations
+        run: python3 ci/gates/check_rollback.py --receipt "${{ steps.receipt.outputs.path }}"
+
+      - name: G-7 — Desk integrity
+        run: python3 ci/gates/check_desk_integrity.py --repo .
+
+  gate-self-test:
+    # The gates are only trustworthy if they still block what they claim to block.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml pytest
+      - name: Gate test suite
+        run: python3 -m pytest ci/tests/ -v

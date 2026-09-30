@@ -108,11 +108,14 @@ EXISTENCE_ONLY_RE = re.compile(
 # files"). `-d`/`-r` were added alongside `-f`/`-e` to match COMPOUND_EXISTENCE_GATE_RE below,
 # which already accepts any single-letter test flag as the gate of a compound command — a
 # successful `test -d config` (or `test -r config.yaml`) is just as real a sibling probe as
-# `test -f`/`test -e` (Greptile P1, PR #45, "Valid filesystem probes rejected"). Captures the
-# exact path token so the caller can require equality (after normalization, see
-# _normalize_path) rather than substring containment.
+# `test -f`/`test -e` (Greptile P1, PR #45, "Valid filesystem probes rejected"). Captures both
+# the flag and the exact path token: the flag is what lets the caller require the sibling's
+# own predicate to match the compound's gate predicate (see _is_positive_existence_check) —
+# `test -d config` succeeding says nothing about whether `test -f config` would too (Greptile
+# P1, PR #45, "Mismatched probes corroborate searches") — and the path is compared after
+# normalization (see _normalize_path) rather than by substring containment.
 FILE_EXISTENCE_PROBE_RE = re.compile(
-    r"^\s*(?:test\s+-[fedr]\s+(?P<path1>\S+)|\[\s+-[fedr]\s+(?P<path2>\S+)\s+\])\s*$",
+    r"^\s*(?:test\s+-(?P<flag1>[fedr])\s+(?P<path1>\S+)|\[\s+-(?P<flag2>[fedr])\s+(?P<path2>\S+)\s+\])\s*$",
     re.IGNORECASE,
 )
 
@@ -126,9 +129,21 @@ def _normalize_path(path: str) -> str:
     evidence"). `posixpath.normpath` on an empty result (a bare `.` or `./`) is not a
     meaningful path token here, so that edge case falls back to the original string rather
     than collapsing every such probe onto the same normalized value.
+
+    A trailing slash is preserved rather than collapsed away: POSIX `test`/`[` requires a
+    path with a trailing slash to resolve to a directory, so `test -f config.yaml/` FAILS
+    even though `config.yaml` exists as a regular file — the slash changes what the check
+    actually proves, not just how the path is spelled. Treating `config.yaml` and
+    `config.yaml/` as the same normalized token would let a sibling on the bare path
+    corroborate a compound gated on the slashed one, whose own existence check can fail for a
+    reason that has nothing to do with content (Greptile P1, PR #45, "Different paths treated
+    as equal").
     """
+    has_trailing_slash = path.endswith("/") and path.strip() != "/"
     normalized = posixpath.normpath(path)
-    return path if normalized in ("", ".") else normalized
+    if normalized in ("", "."):
+        return path
+    return normalized + "/" if has_trailing_slash else normalized
 
 # A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
 # a different claim from one about its CONTENT ("the deprecated token was removed from
@@ -157,10 +172,17 @@ ABSENCE_CLAIM_RE = re.compile(
 # (e.g. `grep -c` always prints a count, even "0") is evidence the chain reached it; a
 # short-circuited chain prints nothing at all. Anchored to the START of the command (not
 # end-to-end like EXISTENCE_ONLY_RE above), since a content search is chained on after it.
-# The path each branch guards is captured so a quiet search (see SILENT_SEARCH_RE below) can
-# be checked against a separate, independent existence command for that same path.
+# The path AND flag each branch guards are captured so a quiet search (see SILENT_SEARCH_RE
+# below) can be checked against a separate, independent existence command for that same path
+# — tested with the same predicate. The flag matters as much as the path: a sibling `test -d
+# config` proves config is a directory, but the compound's own gate might be `test -f config
+# && ...`, which FAILS for a directory (short-circuiting before grep ever runs) even though
+# the sibling's `-d` check passed — comparing paths without also requiring the same flag lets
+# that mismatched pair corroborate a compound that never actually searched anything (Greptile
+# P1, PR #45, "Mismatched probes corroborate searches").
 COMPOUND_EXISTENCE_GATE_RE = re.compile(
-    r"^\s*(?:test\s+-[a-z]\s+(?P<gate_path1>\S+)|\[\s+-[a-z]\s+(?P<gate_path2>\S+)\s+\])\s*&&",
+    r"^\s*(?:test\s+-(?P<gate_flag1>[a-z])\s+(?P<gate_path1>\S+)"
+    r"|\[\s+-(?P<gate_flag2>[a-z])\s+(?P<gate_path2>\S+)\s+\])\s*&&",
     re.IGNORECASE,
 )
 
@@ -179,33 +201,45 @@ COMPOUND_EXISTENCE_GATE_RE = re.compile(
 SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet\b)")
 
 
-def _is_positive_existence_check(cmd: dict, path: str) -> bool:
+def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     """True if `cmd` is a real file-existence probe (`test -f`/`-e`/`-d`/`-r`, or the
-    `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path`, that itself exited 0 —
-    independent proof the path was actually there, not inferred from the exit code of a
-    compound command that might never have reached it.
+    `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path` with the exact same
+    `flag` as the compound it is meant to corroborate, that itself exited 0 — independent
+    proof the path passed THAT SPECIFIC test before the compound command ran, not inferred
+    from the exit code of a compound that might never have reached it.
 
-    Two things a looser check would get wrong: a path match must be exact-token equality
+    Three things a looser check would get wrong: a path match must be exact-token equality
     (after normalization), not substring (`config.yaml.bak` must not corroborate
-    `config.yaml`), and the flag must be a real filesystem test, not `test -n`/`-z` (those
-    test a STRING's emptiness, not the filesystem, even when the string happens to be the
-    path) (Greptile P1, PR #45, "Unrelated checks confirm missing files"). Comparing
-    normalized paths means `test -f ./config.yaml` corroborates a sibling probe for
-    `config.yaml` — the same file, spelled differently — instead of being rejected as a
-    different target (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
+    `config.yaml`); the flag must be a real filesystem test, not `test -n`/`-z` (those test a
+    STRING's emptiness, not the filesystem, even when the string happens to be the path)
+    (Greptile P1, PR #45, "Unrelated checks confirm missing files"); and the sibling's flag
+    must match the compound's own gate flag exactly — a `test -d config` passing proves
+    nothing about whether `test -f config` (a different predicate on the same path) would
+    also pass, so a `-d` sibling must not corroborate an `-f`-gated compound or vice versa
+    (Greptile P1, PR #45, "Mismatched probes corroborate searches"). Comparing normalized
+    paths means `test -f ./config.yaml` corroborates a sibling probe for `config.yaml` — the
+    same file, spelled differently — instead of being rejected as a different target
+    (Greptile P1, PR #45, "Equivalent paths reject valid evidence"); normalization preserves a
+    trailing slash's significance, so `config.yaml` and `config.yaml/` still compare unequal
+    (Greptile P1, PR #45, "Different paths treated as equal").
     """
     if cmd.get("exit_code") != 0:
         return False
     match = FILE_EXISTENCE_PROBE_RE.match(str(cmd.get("cmd", "")).strip())
     if not match:
         return False
+    matched_flag = match.group("flag1") or match.group("flag2")
+    if matched_flag.lower() != flag.lower():
+        return False
     matched_path = match.group("path1") or match.group("path2")
     return _normalize_path(matched_path) == _normalize_path(path)
 
 
-def _confirmed_by_sibling_existence_check(commands: list, path: str, exclude_idx: int) -> bool:
+def _confirmed_by_sibling_existence_check(
+    commands: list, path: str, flag: str, exclude_idx: int
+) -> bool:
     """True if some EARLIER command (lower index than `exclude_idx`) independently proves
-    `path` existed before the quiet-search compound at `exclude_idx` ran.
+    `path` passed the same `flag` test before the quiet-search compound at `exclude_idx` ran.
 
     This is the only evidence that can break the tie between a quiet-grep compound that
     actually ran and found nothing, and one whose leading existence check failed and never
@@ -214,10 +248,11 @@ def _confirmed_by_sibling_existence_check(commands: list, path: str, exclude_idx
     quiet search only proves X exists NOW — it could have been created after the search ran
     and found nothing, which is the exact ambiguity this function exists to resolve, not
     corroborate (Greptile P1, PR #45, "Later check validates earlier search"). So only a
-    sibling strictly before `exclude_idx` counts.
+    sibling strictly before `exclude_idx`, testing the exact same predicate as the compound's
+    own gate, counts.
     """
     return any(
-        _is_positive_existence_check(other, path)
+        _is_positive_existence_check(other, path, flag)
         for j, other in enumerate(commands)
         if j < exclude_idx and isinstance(other, dict)
     )
@@ -348,14 +383,21 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 # A quiet-grep compound (`test -f X && grep -q PATTERN X`) with empty
                 # output_tail is ambiguous on its own exit code alone (see SILENT_SEARCH_RE
                 # above) — it needs one specific OTHER command as corroboration: a bare
-                # existence check on that same path that itself exited 0. gate_path is set
-                # only when the cited command is exactly that shape, so every other claim
-                # keeps the single-command rule below unchanged.
+                # existence check on that same path, with the SAME flag as this compound's own
+                # gate, that itself exited 0. gate_path/gate_flag are set only when the cited
+                # command is exactly that shape, so every other claim keeps the single-command
+                # rule below unchanged.
                 gate_match = COMPOUND_EXISTENCE_GATE_RE.match(cmd_text)
+                gate_is_quiet_compound = (
+                    gate_match and not output_tail.strip() and SILENT_SEARCH_RE.search(cmd_text)
+                )
                 gate_path = (
-                    gate_match.group("gate_path1") or gate_match.group("gate_path2")
-                    if gate_match and not output_tail.strip() and SILENT_SEARCH_RE.search(cmd_text)
-                    else None
+                    (gate_match.group("gate_path1") or gate_match.group("gate_path2"))
+                    if gate_is_quiet_compound else None
+                )
+                gate_flag = (
+                    (gate_match.group("gate_flag1") or gate_match.group("gate_flag2"))
+                    if gate_is_quiet_compound else None
                 )
 
                 # A single expected-failure command CAN be exhaustive evidence: a search
@@ -387,7 +429,7 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                     if j != idx and not (
                         gate_path and isinstance(other, dict)
                         and j < idx
-                        and _is_positive_existence_check(other, gate_path)
+                        and _is_positive_existence_check(other, gate_path, gate_flag)
                     )
                 ]
                 if padding:
@@ -446,7 +488,7 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                             )
                         else:
                             if not gate_path or not _confirmed_by_sibling_existence_check(
-                                commands, gate_path, idx
+                                commands, gate_path, gate_flag, idx
                             ):
                                 problems.append(
                                     f"claim[{i}] {text!r} asserts exhaustiveness via a "

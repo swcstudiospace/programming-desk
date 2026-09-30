@@ -910,6 +910,105 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "cannot be what makes this claim exhaustive" in r.stderr
 
+    def test_expects_failure_silent_grep_q_trailing_slash_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -f config.yaml` (no trailing slash) must NOT corroborate a compound
+        gated on `test -f config.yaml/` (trailing slash) even though the two paths name the
+        same file. POSIX `test`/`[` requires a trailing-slash path to resolve to a directory,
+        so `test -f config.yaml/` fails for a regular file regardless of whether the file
+        exists — the slash changes what the check actually proves, not just its spelling.
+        Treating them as the same normalized path would let a real, passing `-f` sibling
+        corroborate a compound whose own gate can never pass for that same file (Greptile P1,
+        PR #45, "Different paths treated as equal").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_trailing_slash_sibling_still_matches_same_spelling(
+        self, tmp_path
+    ):
+        """The trailing-slash distinction cuts both ways: a sibling spelled with the SAME
+        trailing slash as the compound's own gate must still corroborate it — this is not a
+        blanket rejection of trailing slashes, only of treating a slashed and unslashed
+        spelling as interchangeable (Greptile P1, PR #45, "Different paths treated as
+        equal").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config/", "exit_code": 0},
+                {"cmd": "test -d config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_mismatched_flag_sibling_is_not_corroboration(
+        self, tmp_path
+    ):
+        """A sibling `test -d config` (proves config IS a directory) must NOT corroborate a
+        quiet search gated on `test -f config` (a different predicate on the same path) — a
+        directory existing says nothing about whether `test -f` on that same path would also
+        succeed; in fact it would fail, short-circuiting the compound before grep ever runs.
+        Comparing only the path and ignoring which flag each command used let a mismatched
+        pair falsely corroborate a compound that never searched anything (Greptile P1, PR #45,
+        "Mismatched probes corroborate searches").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -f config && grep -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_matching_e_flag_sibling_still_corroborates(
+        self, tmp_path
+    ):
+        """The flag-matching requirement cuts both ways: a sibling using the SAME flag (`-e`)
+        as the compound's own gate must still corroborate it — this is not a blanket rejection
+        of any particular flag, only of pairing a sibling's predicate with a different one on
+        the compound's gate (Greptile P1, PR #45, "Mismatched probes corroborate searches").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -e config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

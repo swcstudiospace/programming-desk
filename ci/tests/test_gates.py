@@ -803,6 +803,113 @@ class TestG2Receipts:
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
 
+    def test_expects_failure_silent_grep_q_dotslash_sibling_is_corroboration(self, tmp_path):
+        """A sibling existence check spelled `./config.yaml` must corroborate a quiet search
+        gated on `config.yaml` — same file, different but equivalent relative spelling. Exact
+        string comparison treated the two as different targets and rejected valid evidence
+        under `--strict` (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f ./config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_gate_dotslash_sibling_plain_is_corroboration(
+        self, tmp_path
+    ):
+        """The equivalence works the other way round too: a plain sibling `test -f
+        config.yaml` must corroborate a quiet search whose own gate is spelled
+        `./config.yaml` (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f ./config.yaml && grep -q legacy ./config.yaml",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_sibling_probe_is_corroboration(
+        self, tmp_path
+    ):
+        """A `test -d` sibling probe is just as real a filesystem check as `test -f`/`-e`,
+        and must corroborate a quiet `grep -R` search gated on the same directory (Greptile
+        P1, PR #45, "Valid filesystem probes rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -d config && grep -R -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_readable_sibling_probe_is_corroboration(
+        self, tmp_path
+    ):
+        """A `test -r` sibling probe (readable file) must corroborate a quiet search gated
+        on the same path, the same way `test -f`/`-e`/`-d` already do (Greptile P1, PR #45,
+        "Valid filesystem probes rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -r config.yaml", "exit_code": 0},
+                {"cmd": "test -r config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_sibling_wrong_path_is_still_padding(
+        self, tmp_path
+    ):
+        """A `test -d` sibling probe on a DIFFERENT directory must not corroborate a quiet
+        search gated on another directory — the flag being accepted now (`-d`) must not
+        loosen the exact-path requirement (Greptile P1, PR #45, "Valid filesystem probes
+        rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d other-config", "exit_code": 0},
+                {"cmd": "test -d config && grep -R -q legacy config", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

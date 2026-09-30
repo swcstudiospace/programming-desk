@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -99,16 +100,35 @@ EXISTENCE_ONLY_RE = re.compile(
 )
 
 # The narrower probe used specifically to corroborate a quiet-search sibling (see
-# _is_positive_existence_check below). Restricted to `-f`/`-e` — the only `test`/`[` flags
-# that actually test FILE existence — because `test -n`/`-z` test whether a STRING is
-# non-empty/empty, not whether a path exists on disk; a command like `test -n config.yaml`
-# has nothing to do with the filesystem even though it names the path as its operand
-# (Greptile P1, PR #45, "Unrelated checks confirm missing files"). Captures the exact path
-# token so the caller can require equality rather than substring containment.
+# _is_positive_existence_check below). Covers `-f`/`-e`/`-d`/`-r` — the `test`/`[` flags that
+# actually test something ON DISK (file exists, path exists, directory, readable) — because
+# `test -n`/`-z` test whether a STRING is non-empty/empty, not whether a path exists on disk;
+# a command like `test -n config.yaml` has nothing to do with the filesystem even though it
+# names the path as its operand (Greptile P1, PR #45, "Unrelated checks confirm missing
+# files"). `-d`/`-r` were added alongside `-f`/`-e` to match COMPOUND_EXISTENCE_GATE_RE below,
+# which already accepts any single-letter test flag as the gate of a compound command — a
+# successful `test -d config` (or `test -r config.yaml`) is just as real a sibling probe as
+# `test -f`/`test -e` (Greptile P1, PR #45, "Valid filesystem probes rejected"). Captures the
+# exact path token so the caller can require equality (after normalization, see
+# _normalize_path) rather than substring containment.
 FILE_EXISTENCE_PROBE_RE = re.compile(
-    r"^\s*(?:test\s+-[fe]\s+(?P<path1>\S+)|\[\s+-[fe]\s+(?P<path2>\S+)\s+\])\s*$",
+    r"^\s*(?:test\s+-[fedr]\s+(?P<path1>\S+)|\[\s+-[fedr]\s+(?P<path2>\S+)\s+\])\s*$",
     re.IGNORECASE,
 )
+
+
+def _normalize_path(path: str) -> str:
+    """Collapse equivalent relative spellings of the same path (`./config.yaml` vs
+    `config.yaml`, or a doubled separator) so sibling-probe matching compares what the path
+    actually points at instead of the exact characters used to write it — plain string
+    equality treated `./config.yaml` and `config.yaml` as different targets and rejected a
+    valid sibling probe under `--strict` (Greptile P1, PR #45, "Equivalent paths reject valid
+    evidence"). `posixpath.normpath` on an empty result (a bare `.` or `./`) is not a
+    meaningful path token here, so that edge case falls back to the original string rather
+    than collapsing every such probe onto the same normalized value.
+    """
+    normalized = posixpath.normpath(path)
+    return path if normalized in ("", ".") else normalized
 
 # A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
 # a different claim from one about its CONTENT ("the deprecated token was removed from
@@ -160,23 +180,27 @@ SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet
 
 
 def _is_positive_existence_check(cmd: dict, path: str) -> bool:
-    """True if `cmd` is a real file-existence probe (`test -f`/`test -e`, or the `[ ... ]`
-    equivalent — see FILE_EXISTENCE_PROBE_RE) naming EXACTLY `path`, that itself exited 0 —
+    """True if `cmd` is a real file-existence probe (`test -f`/`-e`/`-d`/`-r`, or the
+    `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path`, that itself exited 0 —
     independent proof the path was actually there, not inferred from the exit code of a
     compound command that might never have reached it.
 
-    Two things a looser check would get wrong: a path match must be exact-token equality,
-    not substring (`config.yaml.bak` must not corroborate `config.yaml`), and the flag must
-    be a real file-existence test, not `test -n`/`-z` (those test a STRING's emptiness, not
-    the filesystem, even when the string happens to be the path) (Greptile P1, PR #45,
-    "Unrelated checks confirm missing files").
+    Two things a looser check would get wrong: a path match must be exact-token equality
+    (after normalization), not substring (`config.yaml.bak` must not corroborate
+    `config.yaml`), and the flag must be a real filesystem test, not `test -n`/`-z` (those
+    test a STRING's emptiness, not the filesystem, even when the string happens to be the
+    path) (Greptile P1, PR #45, "Unrelated checks confirm missing files"). Comparing
+    normalized paths means `test -f ./config.yaml` corroborates a sibling probe for
+    `config.yaml` — the same file, spelled differently — instead of being rejected as a
+    different target (Greptile P1, PR #45, "Equivalent paths reject valid evidence").
     """
     if cmd.get("exit_code") != 0:
         return False
     match = FILE_EXISTENCE_PROBE_RE.match(str(cmd.get("cmd", "")).strip())
     if not match:
         return False
-    return (match.group("path1") or match.group("path2")) == path
+    matched_path = match.group("path1") or match.group("path2")
+    return _normalize_path(matched_path) == _normalize_path(path)
 
 
 def _confirmed_by_sibling_existence_check(commands: list, path: str, exclude_idx: int) -> bool:

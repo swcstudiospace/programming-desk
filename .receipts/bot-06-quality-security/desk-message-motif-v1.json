@@ -1,6 +1,8 @@
 {
   "task_id": "desk-message-motif-v1",
   "bot": "bot-06-quality-security",
+  "approved_by": "bot-00-programming-lead",
+  "approved_at": "2026-09-30T17:08:51Z",
   "branch": "bot-06-quality-security/desk-message-motif-v1",
   "started_at": "2026-09-30T16:06:36Z",
   "completed_at": "2026-09-30T16:10:12Z",
@@ -27,37 +29,37 @@
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 103 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-1 PASS — bot-06-quality-security: 15 file(s) within owned paths"
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 15 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.3,
-      "output_tail": "G-3 PASS — 15 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS \u2014 15 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-4 PASS — no contract surfaces touched"
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 1,
       "duration_s": 0.2,
-      "output_tail": "prompts/_shared/core-directives.xml: literal UUID at line(s) 540 — use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\nG-7 FAIL — desk integrity: 1 problem(s)"
+      "output_tail": "prompts/_shared/core-directives.xml: literal UUID at line(s) 540 \u2014 use {{DESK_CHANNEL_ID}} / {{SEAT_UUID:...}}\nG-7 FAIL \u2014 desk integrity: 1 problem(s)"
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "after removing dashes from the <bad> example's illustrative agent id: 7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+      "output_tail": "after removing dashes from the <bad> example's illustrative agent id: 7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
     },
     {
       "cmd": "python3 -m pytest ci/tests -q",

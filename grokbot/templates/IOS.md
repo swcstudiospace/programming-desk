@@ -18,6 +18,7 @@ Gateway: https://desk.swcstudio.space/mcp/ios
 ## Enabled skills
 
 - desk-bootstrap
+- desk-production-loop
 - desk-doctor
 - verification-receipts
 - ios

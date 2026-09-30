@@ -46,7 +46,20 @@ SEATS: list[tuple[str, str, str, str]] = [
 ]
 
 # Every seat enables these regardless of what its prompt marks load="always".
-BASE_SKILLS = ["desk-bootstrap", "desk-doctor", "verification-receipts"]
+#
+# desk-production-loop is a base skill rather than a per-seat load="always" entry because it is
+# desk policy, not a seat preference: the loop (brief -> act -> memory_write -> events_emit ->
+# handoff_to_hermes, with memory_brief and its etag required before any repo work) has to hold on
+# every seat or the memory plane has holes in it, and a seat that could opt out of it is a seat
+# whose brief the next seat cannot trust. It also carries the two negative defaults -- no raw docs
+# or memory connector, and skills list/invoke only until skills.approve exists -- which are
+# likewise desk-wide.
+BASE_SKILLS = [
+    "desk-bootstrap",
+    "desk-production-loop",
+    "desk-doctor",
+    "verification-receipts",
+]
 
 PAUSED = "paused until desk_doctor check is green"
 LEAD_ROUTINES = [

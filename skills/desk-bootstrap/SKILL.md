@@ -28,6 +28,9 @@ SYSTEM_PROMPT.xml written + sha reported? NO ─▶ §4  desk_doctor install_pro
 desk_doctor check green?                NO ──▶ skills/desk-doctor. Routines stay paused
 │ YES
 Done. LEAD un-pauses routines when all seven seats are green. §5
+│
+└─▶ Every ticket after this runs the production loop: brief → act → memory_write →
+    events_emit → handoff. `desk-production-loop/SKILL.md`. §6
 ```
 
 Three rules hold at every step: secrets and tailnet names never go in a template, a message or a
@@ -104,6 +107,19 @@ Do not edit the XML by hand. A prompt that differs from the render fails doctor 
 `desk-heartbeat` paused until LEAD says so. A routine running against a red seat produces
 confident output from a Bot with the wrong prompt or no memory, which is worse than silence.
 
+### §6 After green: the production loop
+
+Bootstrap is once. From the first ticket onward the seat runs the desk production loop —
+`memory_brief` (and its etag) before any repo work, then act, `memory_write`, `events_emit`, and
+`handoff_to_hermes` when the ticket hands off. It is in
+[`desk-production-loop/SKILL.md`](./desk-production-loop/SKILL.md), enabled on every seat template,
+and it is the default turn shape rather than an option: a seat that starts editing before the brief
+is re-deciding something the desk already recorded, with no way to know it.
+
+That skill also holds the two rules a freshly bootstrapped seat is most likely to get wrong: docs
+and memory reach the seat only through the substrate or the gateway (never a raw docs or memory
+server), and skills are listed and invoked, never installed or approved by the seat itself.
+
 ---
 
 ## Worked example
@@ -119,6 +135,7 @@ confident output from a Bot with the wrong prompt or no memory, which is worse t
 5. desk_doctor {action: install_prompt} → XML → write SYSTEM_PROMPT.xml → sha256sum
 6. desk_doctor {action: check, prompt_sha256: <hash>, installed_skills: [...]} → all green
 7. report to LEAD; desk-heartbeat stays paused until LEAD un-pauses
+8. first ticket arrives → desk-production-loop §2: memory_brief before the first edit
 ```
 
 **Bad — same seat, three shortcuts.**
@@ -147,6 +164,7 @@ second and third; only a re-publish of the template and a passphrase rotation fi
 | QUALITY in the group | Roster row red; platform cap of six exceeded | Remove QUALITY from the group; it works 1:1 |
 | Routine un-paused early | Heartbeat or intake runs on a red seat | Pause it; finish doctor first |
 | Mobile-only recipient | Connector card unavailable | Finish on desktop; mobile cannot complete bootstrap |
+| First ticket worked without a brief | Receipt has no `brief_etag`; work re-decides a recorded decision | `desk-production-loop` §2; degraded mode needs a human ack (§3 there) |
 
 ---
 

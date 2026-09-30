@@ -74,17 +74,41 @@ Env inputs (`lease-heartbeat.env.example`): `DRIFT_REPO_DIR`, `DRIFT_GIT_REMOTE`
 |---|---|
 | **0** | Every probe ran; trust the JSON. An unreachable target is `"reachable": false` **with exit 0** — "the desk cannot see Greptime" is an answer `drift_scan` needs, not a script failure, and collapsing the two would make an outage indistinguishable from a broken probe. |
 | **2** | Usage error. |
-| **3** | A probe could not be **attempted**: no such checkout, an empty target list, or a malformed target. |
+| **3** | A probe could not be **attempted**: an invalid timeout value, no such checkout, an empty target list, a malformed target, or a probe the environment could not start. |
 
-The empty-target case is why 3 exists separately. An empty `DRIFT_REACH_TARGETS` would otherwise
-exit 0 with `"targets": []`, so a misconfiguration that checked *no plane at all* would read
-exactly like a clean reachability result — the one confusion a drift scan cannot afford. A
-malformed target is counted the same way: it is reported in its own object with `"probed": false`
-so the well-formed targets beside it still get probed, but it is never silently forgiven.
+Exit 3 exists separately because every one of those cases would otherwise present as a clean
+result. An empty `DRIFT_REACH_TARGETS` exits 0 with `"targets": []`, so a misconfiguration that
+checked *no plane at all* reads exactly like every plane answering. Worse, a probe that could not
+be **started** — `timeout` missing, or a bad duration — would report `"reachable": false` for every
+target, turning one typo in the env file into "the whole substrate is down".
 
-Every level carries the same answer in the JSON as `ok`, plus `targets_requested` and
-`targets_malformed` on the reachability probe, so a caller that parses the output does not have to
-shell out to learn whether to trust it.
+So the line the whole exit table draws is **ran-and-failed versus never-ran**:
+
+| Situation | `probed` / `remote_checked` | `ok` | Exit |
+|---|---|---|---|
+| Port refused the connect | `probed: true`, `reachable: false` | true | 0 |
+| Connect hit the deadline (`timeout` returned 124) | `probed: true`, `reachable: false` | true | 0 |
+| `ls-remote` hit the deadline | `remote_checked: false`, `relation: unknown` | true | 0 |
+| `ls-remote` ran and errored (no such ref, auth) | `remote_checked: false` | true | 0 |
+| Probe could not be **started** (125/126/127) | `probed: false` | **false** | **3** |
+| Target could not be parsed | `probed: false` | **false** | **3** |
+| Empty target list, or invalid `*_TIMEOUT_S` | — | **false** | **3** |
+
+Every level carries the same answer in the JSON as `ok`, alongside `targets_requested`,
+`targets_malformed` and `targets_unattempted` on the reachability probe and `remote_checked` on
+the tip probe, so a caller that parses the output never has to shell out to learn whether to
+trust it. `targets_malformed` and `targets_unattempted` are counted apart because they need
+different fixes: the first is a typo in `DRIFT_REACH_TARGETS`, the second a broken probe host.
+
+### `*_TIMEOUT_S` is a number of seconds, and is validated first
+
+`DRIFT_PROBE_TIMEOUT_S` and `DRIFT_GIT_TIMEOUT_S` are checked before any probe runs, and a bad
+value stops the run with exit 3 and a `"probe": "config"` object on stderr. Both are interpolated
+into the JSON unquoted and handed to `timeout` as a duration, so an unvalidated one is two faults
+at once: `"timeout_s": abc` is not parseable JSON, and `timeout abc` exits before the probe runs
+while each target still claims to be down. No unit suffix is accepted — the variables are named
+`_S` and the field is emitted as `"timeout_s": <n>`, so `30s` would both make that name a lie and
+produce `"timeout_s":30s`. `timeout` reads a bare number as seconds, so nothing is lost.
 
 ### Bounded, always
 
@@ -130,12 +154,13 @@ the host the substrate is actually pointed at.
     "probe": "git_tip", "ok": true, "repo_dir": "/opt/programming-desk",
     "branch": "main", "local_tip": "<sha>", "dirty": false,
     "remote": "origin", "remote_branch": "main", "remote_tip": "<sha>",
+    "remote_checked": true,
     "relation": "same|ahead|behind|diverged|unknown_no_fetch|unknown",
     "note": ""
   },
   "reachability": {
     "probe": "reachability", "timeout_s": 5, "ok": true,
-    "targets_requested": 2, "targets_malformed": 0,
+    "targets_requested": 2, "targets_malformed": 0, "targets_unattempted": 0,
     "targets": [
       { "target": "host:port", "host": "host", "port": 4000,
         "reachable": true, "probed": true, "latency_ms": 9 }
@@ -146,6 +171,9 @@ the host the substrate is actually pointed at.
 
 The top-level `ok` is false whenever either sub-probe could not be attempted, and the script exits
 3 in the same case — one answer, available to a caller that parses and to one that checks `$?`.
+`git_tip.ok` answers "is this output trustworthy", **not** "did the remote answer"; that second
+question is `remote_checked`, which is false for a timeout, a git error, a missing remote and a
+lookup that never started alike.
 
 This is INFRA's suggestion for what `coord.drift_scan(repo)` consumes, offered so SYSTEMS has
 something concrete to accept or reject. It is **not** a contract change: the tool rosters under

@@ -38,6 +38,41 @@ GIT_TIMEOUT_S="${DRIFT_GIT_TIMEOUT_S:-$PROBE_TIMEOUT_S}"
 
 # Probe could not be attempted — see the exit-status table above.
 EX_NOT_ATTEMPTED=3
+# Internal only, never the script's own exit status: it lets probe_reach tell a target it could
+# not PARSE from one it could not RUN. Both are configuration faults and both end in exit 3, but
+# they need different fixes, so they are counted separately in the JSON.
+EX_MALFORMED=4
+
+# `timeout` exit codes that mean the command NEVER RAN, as opposed to ran-and-failed. 124 is
+# absent on purpose: that one means the command ran and was killed at the deadline, which is a
+# probe result. These three mean `timeout` itself could not start it — a bad interval, or no
+# `timeout` on PATH — so whatever they precede was never attempted.
+timeout_never_ran() { [[ $1 -eq 125 || $1 -eq 126 || $1 -eq 127 ]]; }
+
+# The numeric env inputs are interpolated into JSON unquoted and passed to `timeout` as a
+# duration, so an unvalidated one is two bugs at once: `timeout_s: abc` is not parseable JSON,
+# and `timeout abc` exits 125 before the probe runs while every target still reports
+# "reachable": false — a typo in the env file reading as "every plane is down". Validate once,
+# here, rather than patching each call site. `timeout`'s own suffixes are accepted.
+die_config() {
+  printf '{"probe":%s,"checked_at":%s,"ok":false,"error":%s}\n' \
+    "$(jstr "config")" "$(jstr "$(now_utc)")" "$(jstr "$1")" >&2
+  exit "$EX_NOT_ATTEMPTED"
+}
+
+# Seconds as a bare number, no unit suffix. The variables are named *_TIMEOUT_S and the field is
+# emitted as `"timeout_s": <n>`, so a suffix would both make that name a lie and produce
+# `"timeout_s":2s` — unparseable JSON from an input the operator had every reason to think valid.
+# `timeout` accepts a bare number as seconds, so nothing is lost.
+check_duration() {
+  local name="$1" value="$2"
+  if [[ ! "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    die_config "$name must be a number of seconds, with no unit suffix (e.g. 5 or 2.5), got: $value"
+  fi
+  if [[ "$value" =~ ^0+([.]0+)?$ ]]; then
+    die_config "$name must be greater than zero, got: $value"
+  fi
+}
 
 now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
@@ -59,6 +94,10 @@ jstr() {
 # probe. Without a fetch the remote tip comes from ls-remote, which reads refs and no objects.
 probe_tip() {
   local dir="$1" local_tip="" branch="" dirty="unknown" remote_tip="" relation="unknown" err=""
+  # `ok` answers "is this output trustworthy", not "did the remote answer". A remote that timed
+  # out or refused is a RESULT (ok stays true, relation stays unknown, note says why); a lookup
+  # that could not be started at all is not (ok goes false and the caller must not trust it).
+  local ok="true" attempted=0
 
   if ! git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
     printf '{"probe":"git_tip","checked_at":%s,"repo_dir":%s,"ok":false,"error":%s}\n' \
@@ -106,6 +145,13 @@ probe_tip() {
       # and the exit status stays 0.
       if [[ $ls_rc -eq 124 ]]; then
         err="ls-remote timed out after ${GIT_TIMEOUT_S}s"
+      elif timeout_never_ran "$ls_rc"; then
+        # The lookup NEVER RAN. Reporting ok:true here would let a caller that trusts `ok` treat
+        # an unchecked remote tip as a completed check — the same confusion the empty-target case
+        # creates for reachability, and just as wrong.
+        ok="false"
+        attempted="$EX_NOT_ATTEMPTED"
+        err="ls-remote could not be started (exit $ls_rc): ${ls_out//$'\n'/ }"
       else
         err="ls-remote failed (exit $ls_rc): ${ls_out//$'\n'/ }"
       fi
@@ -114,12 +160,20 @@ probe_tip() {
     err="no DRIFT_GIT_REMOTE set — local tip only"
   fi
 
-  printf '{"probe":"git_tip","checked_at":%s,"repo_dir":%s,"ok":true,"branch":%s,' \
-    "$(jstr "$(now_utc)")" "$(jstr "$dir")" "$(jstr "$branch")"
+  # remote_checked is the unambiguous signal a caller actually wants: did this run obtain the
+  # remote tip? False covers "no remote configured", "timed out", "git failed" and "never ran" —
+  # `relation` alone cannot distinguish those from an answered lookup.
+  local remote_checked="false"
+  if [[ -n "$remote_tip" ]]; then remote_checked="true"; fi
+
+  printf '{"probe":"git_tip","checked_at":%s,"repo_dir":%s,"ok":%s,"branch":%s,' \
+    "$(jstr "$(now_utc)")" "$(jstr "$dir")" "$ok" "$(jstr "$branch")"
   printf '"local_tip":%s,"dirty":%s,"remote":%s,"remote_branch":%s,"remote_tip":%s,' \
     "$(jstr "$local_tip")" "$dirty" "$(jstr "$GIT_REMOTE")" "$(jstr "$GIT_BRANCH")" \
     "$(jstr "$remote_tip")"
-  printf '"relation":%s,"note":%s}\n' "$(jstr "$relation")" "$(jstr "$err")"
+  printf '"remote_checked":%s,"relation":%s,"note":%s}\n' \
+    "$remote_checked" "$(jstr "$relation")" "$(jstr "$err")"
+  return "$attempted"
 }
 
 # --- TCP reachability --------------------------------------------------------
@@ -134,22 +188,35 @@ probe_one_target() {
   if [[ -z "$host" || -z "$port" || "$host" == "$target" || ! "$port" =~ ^[0-9]+$ ]]; then
     printf '{"target":%s,"reachable":false,"probed":false,"error":%s}' \
       "$(jstr "$target")" "$(jstr "expected host:port")"
-    return "$EX_NOT_ATTEMPTED"
+    return "$EX_MALFORMED"
   fi
 
+  local rc=0 probed="true" attempted=0
   started=$(date +%s%3N)
-  if err=$(timeout "$PROBE_TIMEOUT_S" \
-             bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>&1); then
-    reachable="true"
-    err=""
-  elif [[ -z "$err" ]]; then
-    err="connect failed or timed out after ${PROBE_TIMEOUT_S}s"
-  fi
+  err=$(timeout "$PROBE_TIMEOUT_S" \
+          bash -c 'exec 3<>"/dev/tcp/$1/$2"' _ "$host" "$port" 2>&1) && rc=0 || rc=$?
   elapsed_ms=$(( $(date +%s%3N) - started ))
 
-  printf '{"target":%s,"host":%s,"port":%s,"reachable":%s,"probed":true,"latency_ms":%s,"error":%s}' \
-    "$(jstr "$target")" "$(jstr "$host")" "$port" "$reachable" "$elapsed_ms" \
+  if [[ $rc -eq 0 ]]; then
+    reachable="true"
+    err=""
+  elif timeout_never_ran "$rc"; then
+    # The connect NEVER RAN, so this target's state is unknown — not down. Reporting
+    # "reachable": false here would turn one bad env value into "every plane is down", which is
+    # the most misleading thing a reachability probe can say.
+    probed="false"
+    attempted="$EX_NOT_ATTEMPTED"
+    err="probe could not be started (exit $rc): ${err//$'\n'/ }"
+  elif [[ $rc -eq 124 ]]; then
+    err="connect timed out after ${PROBE_TIMEOUT_S}"
+  elif [[ -z "$err" ]]; then
+    err="connect failed (exit $rc)"
+  fi
+
+  printf '{"target":%s,"host":%s,"port":%s,"reachable":%s,"probed":%s,"latency_ms":%s,"error":%s}' \
+    "$(jstr "$target")" "$(jstr "$host")" "$port" "$reachable" "$probed" "$elapsed_ms" \
     "$(jstr "${err//$'\n'/ }")"
+  return "$attempted"
 }
 
 # An empty or malformed target list is a CONFIGURATION failure, not a reachability result. Exiting
@@ -157,7 +224,7 @@ probe_one_target() {
 # is the one confusion a drift scan cannot afford — so both cases return EX_NOT_ATTEMPTED and say
 # so in `ok`, while every well-formed target is still probed and reported.
 probe_reach() {
-  local targets="$1" first=1 t requested=0 malformed=0 status=0 ok="true"
+  local targets="$1" first=1 t rc=0 requested=0 malformed=0 unattempted=0 status=0 ok="true"
   printf '{"probe":"reachability","checked_at":%s,"timeout_s":%s,"targets":[' \
     "$(jstr "$(now_utc)")" "$PROBE_TIMEOUT_S"
   if [[ -n "$targets" ]]; then
@@ -169,19 +236,25 @@ probe_reach() {
       requested=$((requested + 1))
       [[ $first -eq 1 ]] || printf ','
       first=0
-      # A malformed target is reported in its own object and counted; it must not abort the
-      # remaining probes, but it must not be silently forgiven either.
-      if ! probe_one_target "$t"; then
-        malformed=$((malformed + 1))
-      fi
+      # A target that could not be parsed or could not be run is reported in its own object and
+      # counted; it must not abort the remaining probes, but it must not be silently forgiven
+      # either. The two are counted apart because they need different fixes: a malformed target
+      # is a typo in DRIFT_REACH_TARGETS, an unattempted one is a broken probe environment.
+      rc=0
+      probe_one_target "$t" || rc=$?
+      case $rc in
+        0) ;;
+        "$EX_MALFORMED")     malformed=$((malformed + 1)) ;;
+        *)                   unattempted=$((unattempted + 1)) ;;
+      esac
     done
   fi
-  if [[ $requested -eq 0 || $malformed -gt 0 ]]; then
+  if [[ $requested -eq 0 || $malformed -gt 0 || $unattempted -gt 0 ]]; then
     status=$EX_NOT_ATTEMPTED
     ok="false"
   fi
-  printf '],"targets_requested":%s,"targets_malformed":%s,"ok":%s}\n' \
-    "$requested" "$malformed" "$ok"
+  printf '],"targets_requested":%s,"targets_malformed":%s,"targets_unattempted":%s,"ok":%s}\n' \
+    "$requested" "$malformed" "$unattempted" "$ok"
   return "$status"
 }
 
@@ -191,6 +264,13 @@ usage() {
 
 main() {
   local cmd="${1:-}"
+  # Before any probe: these two are interpolated into JSON unquoted and handed to `timeout`, so
+  # an invalid one must stop the run rather than produce unparseable output and a false "down".
+  case "$cmd" in
+    -h|--help|help) : ;;
+    *) check_duration DRIFT_PROBE_TIMEOUT_S "$PROBE_TIMEOUT_S"
+       check_duration DRIFT_GIT_TIMEOUT_S "$GIT_TIMEOUT_S" ;;
+  esac
   case "$cmd" in
     tip)   probe_tip "${2:-$REPO_DIR}" ;;
     reach) probe_reach "${2:-$REACH_TARGETS}" ;;

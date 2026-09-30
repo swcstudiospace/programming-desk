@@ -1,7 +1,7 @@
 {
   "task_id": "infra-phase-a-substrate-env-lease-stubs-2026-09-30",
   "bot": "bot-05-infrastructure",
-  "branch": "claude/substrate-env-lease-stubs-1s6sf0",
+  "branch": "bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0",
   "grok_run": "20260930T065532Z-29e26e2b",
   "tickets": [
     "SPE-4789",
@@ -11,7 +11,7 @@
   "pull_request": 36,
   "started_at": "2026-09-30T06:56:00Z",
   "completed_at": "2026-09-30T07:20:00Z",
-  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee.",
+  "summary": "Phase A INFRA half, docs and stubs only, nothing installed on the VPS. SPE-4789/4793: GREPTIME_* placement under /etc/substrate/substrate.env with the tailnet-forwarder-preferred / public-HTTPS-Basic-fallback order, plus OTEL / MCP-audit / evidence env names reserved as placeholders; gateway.env.example marks its GREPTIME_* copy TRANSITIONAL because substrate-mcp owns the store credential. SPE-4792: systemd oneshot+timer and cron sketch for the seat lease heartbeat with env names only, the TIMEOUT < INTERVAL <= TTL/3 invariant, and a read-only credential-free drift-probe.sh feeding coord.drift_scan(repo). No secrets, no values, no probe transcripts restated from prior receipts. No AddMcpServer for Greptime. services/** untouched. Second tip: five Greptile P1s (4141814747, 4141814758, 4141814773, 4141814784, 4141814794) all verified as real and fixed — the JSON receipt was being swallowed by .gitignore, ls-remote had no timeout, an empty or malformed reachability target list exited 0, and the unit's TimeoutStartSec plus the timer's RandomizedDelaySec were fixed literals that broke the cadence guarantee. Third tip: Greptile P1 4141898005 (an unattempted git lookup reporting success) verified and fixed at the root — both *_TIMEOUT_S values are now validated before any probe runs, and 'never ran' is separated from 'ran and failed' in both sub-probes. The same defect was found and fixed in the reachability probe, which Greptile had not flagged. Head branch renamed to bot-05-infrastructure/* so G-1 can attribute the change.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -136,6 +136,54 @@
       "output_tail": "desk-lease-heartbeat.service:28:# PLACEHOLDER — generate from LEASE_TIMEOUT_S at install time\ndesk-lease-heartbeat.service:33:TimeoutStartSec=30\ndesk-lease-heartbeat.timer:13:#     OnUnitActiveSec + RandomizedDelaySec  <=  LEASE_TTL_S / 3\ndesk-lease-heartbeat.timer:26:# PLACEHOLDER — generate from LEASE_INTERVAL_S at install time.\ndesk-lease-heartbeat.timer:27:OnUnitActiveSec=60\ndesk-lease-heartbeat.timer:28:# PLACEHOLDER — generate from LEASE_JITTER_S.\ndesk-lease-heartbeat.timer:30:RandomizedDelaySec=5"
     },
     {
+      "cmd": "git show 76fd388:infra/lease-heartbeat/drift-probe.sh > old.sh && DRIFT_PROBE_TIMEOUT_S=abc bash old.sh reach 127.0.0.1:1 | python3 -c 'json.load(sys.stdin)'",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "JSON PARSE FAILED: Expecting value: line 1 column 73 (char 72)   [old script exit=0]"
+    },
+    {
+      "cmd": "DRIFT_PROBE_TIMEOUT_S=abc ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.02,
+      "output_tail": "{\"probe\":\"config\",\"ok\":false,\"error\":\"DRIFT_PROBE_TIMEOUT_S must be a number of seconds, with no unit suffix (e.g. 5 or 2.5), got: abc\"}"
+    },
+    {
+      "cmd": "PATH=<shim with a timeout that exits 127> DRIFT_GIT_REMOTE=origin ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 3,
+      "duration_s": 0.1,
+      "output_tail": "ok=False remote_checked=False"
+    },
+    {
+      "cmd": "PATH=<shim with a timeout that exits 127> ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1",
+      "exit_code": 3,
+      "duration_s": 0.05,
+      "output_tail": "ok=False unattempted=1 reachable=False probed=False"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=origin DRIFT_REACH_TARGETS=127.0.0.1:8123,127.0.0.1:1 ./infra/lease-heartbeat/drift-probe.sh all",
+      "exit_code": 0,
+      "duration_s": 1.3,
+      "output_tail": "top ok=True | tip ok=True remote_checked=True relation=ahead / reach ok=True req=2 malformed=0 unattempted=0 / 127.0.0.1:8123=up 127.0.0.1:1=down"
+    },
+    {
+      "cmd": "DRIFT_GIT_REMOTE=git://203.0.113.7/blackhole.git DRIFT_GIT_TIMEOUT_S=3 ./infra/lease-heartbeat/drift-probe.sh tip",
+      "exit_code": 0,
+      "duration_s": 3.2,
+      "output_tail": "ok=True remote_checked=False note=ls-remote timed out after 3s"
+    },
+    {
+      "cmd": "for v in abc 2s 0 0.0 -1; do DRIFT_PROBE_TIMEOUT_S=$v ./infra/lease-heartbeat/drift-probe.sh reach 127.0.0.1:1; done  # each must exit 3",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[abc] exit=3  [2s] exit=3  [0] exit=3  [0.0] exit=3  [-1] exit=3  |  valid: [5] timeout_s=5 ok=True  [2.5] timeout_s=2.5 ok=True"
+    },
+    {
+      "cmd": "git rev-parse --abbrev-ref HEAD",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0  (prefix 'bot-05-infrastructure' matches the gates regex ^bot-0[0-6]-[a-z0-9-]+$)"
+    },
+    {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/infra-phase-a-substrate-env-lease-stubs-2026-09-30.json --bot bot-05-infrastructure --strict",
       "exit_code": 1,
       "duration_s": 0.2,
@@ -227,8 +275,43 @@
       "evidence_command_index": 19
     },
     {
+      "claim": "Greptile P1 4141898005 confirmed, and worse than reported: on the pushed tip an invalid DRIFT_PROBE_TIMEOUT_S also produced UNPARSEABLE JSON (timeout_s:abc emitted unquoted) while still exiting 0.",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Root cause fixed at the source: both *_TIMEOUT_S values are validated before any probe runs, and a bad one stops the run with a config object and exit 3 instead of a misleading result.",
+      "evidence_command_index": 21,
+      "expects_failure": true
+    },
+    {
+      "claim": "A git lookup that could not be STARTED now reports ok:false with remote_checked:false and exits 3, so a caller trusting 'ok' can no longer read an unchecked remote tip as a completed check.",
+      "evidence_command_index": 22,
+      "expects_failure": true
+    },
+    {
+      "claim": "The same defect in the reachability probe is fixed: a connect that could not be started reports probed:false and is counted in targets_unattempted rather than claiming the target is down.",
+      "evidence_command_index": 23,
+      "expects_failure": true
+    },
+    {
+      "claim": "The ordinary paths still behave after the tightening: a good run exits 0 with remote_checked true, an open port up and a closed port down.",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "A timed-out remote is still treated as a probe result rather than a failure: ok stays true, remote_checked is false, and the exit stays 0.",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "Duration validation rejects a non-numeric value, a unit suffix, zero and a negative, and accepts an integer and a decimal, keeping timeout_s numeric in the JSON.",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "The head branch was renamed to bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0, so the gates job's acting-bot step can now attribute this change; the receipt's branch field matches.",
+      "evidence_command_index": 27
+    },
+    {
       "claim": "G-2 run against this receipt reports exactly one problem, the null approved_by: no bypass command, no claim citing a failing or non-existent command, and no vague unverified entry. Approval is QUALITY's to add.",
-      "evidence_command_index": 20,
+      "evidence_command_index": 28,
       "expects_failure": true
     }
   ],
@@ -239,9 +322,9 @@
     "GREPTIME_URL on the VPS is still the public HTTPS + Basic fallback; the tailnet cutover and the G-6 retirement of public exposure are not part of this change",
     "The suggested drift_scan snapshot shape in DRIFT-SCAN.md §4 is a proposal to SYSTEMS, not an accepted interface; contracts/tool-rosters is QUALITY-owned and was not touched",
     "LEASE_TTL_S and LEASE_INTERVAL_S values, and the renew subcommand's exit-code contract, are open on SYSTEMS (DRIFT-SCAN.md §5, LEASE-HEARTBEAT.md §5)",
-    "Quality Gates cannot pass on this branch: the workflow derives the acting bot from the branch prefix and requires ^bot-0[0-6]-[a-z0-9-]+$, and this run was dispatched onto claude/substrate-env-lease-stubs-1s6sf0. A bot-05-infrastructure/ branch is needed for a green gates run",
     "approved_by stays null until QUALITY reviews; G-2 fails closed on that field by design",
-    "The cadence invariant now includes the jitter term (INTERVAL + JITTER <= TTL/3) and all three unit literals are generated at install time — but no installer exists yet to enforce it, so the guarantee is documented, not executed"
+    "The cadence invariant now includes the jitter term (INTERVAL + JITTER <= TTL/3) and all three unit literals are generated at install time — but no installer exists yet to enforce it, so the guarantee is documented, not executed",
+    "Quality Gates has not yet been observed passing on the renamed bot-05-infrastructure/* branch — the rename satisfies the acting-bot regex locally, but only a CI run proves the remaining gates green"
   ],
   "files_changed": [
     "infra/substrate/SUBSTRATE-ENV.md",
@@ -265,7 +348,8 @@
     "4141814758",
     "4141814773",
     "4141814784",
-    "4141814794"
+    "4141814794",
+    "4141898005"
   ],
   "p2s_addressed": [],
   "p1s_deferred": []

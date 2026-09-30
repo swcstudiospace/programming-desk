@@ -1,7 +1,7 @@
 # INFRA — Phase A half: substrate env placement + lease/drift install stubs
 
 - **Run:** `20260930T065532Z-29e26e2b` · **Tickets:** SPE-4789, SPE-4793 (env placement, docs), SPE-4792 (lease heartbeat / drift_scan support)
-- **Branch:** `claude/substrate-env-lease-stubs-1s6sf0` · **PR:** #36 (draft, hold)
+- **Branch:** `bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0` (renamed from `claude/*` so G-1 can attribute the change) · **PR:** #36 (draft, hold)
 - **Approved by:** *null until QUALITY*
 - **Status:** docs and stubs. **Nothing installed, nothing restarted, no live env file edited.**
 
@@ -49,14 +49,30 @@ at any depth and would send a README here to QUALITY. No values, no public domai
 Two of these (the stall and the empty-target case) were reproduced before being fixed, and both
 reproductions are in the receipt with `expects_failure`.
 
+## Third tip — a sixth P1, on the fix itself
+
+**4141898005 — an unattempted git lookup reported success.** Correct, and worse than reported: on
+the pushed tip an invalid `DRIFT_PROBE_TIMEOUT_S` also emitted `"timeout_s":abc` — **unparseable
+JSON** — while still exiting 0.
+
+Fixed at the root rather than at the call site. Both `*_TIMEOUT_S` values are validated before any
+probe runs (seconds as a bare number, no unit suffix, greater than zero), and the script separates
+**ran-and-failed** from **never-ran** everywhere: `timeout` exits 125/126/127 now mean the probe
+was never attempted, so `ok` goes false and the exit is 3, while a deadline (124) stays a result
+with exit 0. New fields: `remote_checked` on the tip probe, `targets_unattempted` beside
+`targets_malformed` on the reachability probe.
+
+**The same defect existed in the reachability probe and Greptile had not flagged it** — a probe
+that could not start reported `"reachable": false` for every target, turning one typo in the env
+file into "the whole substrate is down". Fixed in the same pass.
+
 ## For QUALITY / LEAD
 
 Two things need a decision from someone else before this can go further:
 
-1. **Branch naming.** Quality Gates derives the acting bot from the branch prefix
-   (`^bot-0[0-6]-[a-z0-9-]+$`). This run was dispatched onto a `claude/` branch, so the gates job
-   fails at that step before any gate runs. A `bot-05-infrastructure/` branch is needed for a green
-   run; INFRA will not re-target without being told to.
+1. **Branch naming — resolved.** The head branch was renamed to
+   `bot-05-infrastructure/substrate-env-lease-stubs-1s6sf0`, so the gates job's acting-bot step
+   attributes the change instead of exiting before any gate runs. PR #36 kept, still draft.
 2. **`ownership.yaml`.** An `infra/substrate/**` and `infra/lease-heartbeat/**` rule after the bare
    `README.md` line — the shape `infra/railway/**` already has — would let these directories carry
    ordinary READMEs. QUALITY's call.

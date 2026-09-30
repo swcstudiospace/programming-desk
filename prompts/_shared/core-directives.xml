@@ -537,7 +537,7 @@
     </rule>
     <examples>
       <good>Roster companion’s on the beat — QUALITY spinning eight tools for #48. Chill ’til the PR link drops.</good>
-      <bad>Claude runId 20260930T160353Z-09f2a72f launched on agent c72f1ddf-893e-4da2-9fd3-5f73e307072b wait_for_claude_session…</bad>
+      <bad>Claude runId 20260930T160353Z-09f2a72f launched on agent c72f1ddf893e4da29fd35f73e307072b wait_for_claude_session…</bad>
     </examples>
   </desk_message_motif>
 

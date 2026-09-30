@@ -1,0 +1,45 @@
+{
+  "task_id": "spe-5160-android-tools-metavr",
+  "bot": "bot-03-android",
+  "branch": "bot-03-android/spe-5160-android-tools-metavr",
+  "started_at": "2026-09-30T15:56:51Z",
+  "completed_at": "2026-09-30T15:58:49Z",
+  "commands": [
+    {
+      "cmd": "python -m unittest android.tools.tests.test_tools -v",
+      "exit_code": 0,
+      "duration_s": 0.104,
+      "output_tail": "Ran 14 tests in 0.009s\n\nOK"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "android.tools unit tests pass (dry-run argv, adb devices parse, gradle skip, MetaVR bridge ids, ui_tap target validation, DeviceUnavailable skip path)",
+      "evidence_command_index": 0
+    }
+  ],
+  "unverified": [
+    "No emulator was started or exercised in this environment",
+    "No adb device was connected or exercised",
+    "No Quest/MetaVR device was exercised; metavr_bridge only resolves documented tool ids and raises DeviceUnavailable",
+    "The roster file was not edited; contracts/tool-rosters/** stays with QUALITY (bot-06-quality-security)",
+    "android/tools/README.md omitted: basename README.md is owned by QUALITY; docs live in android/tools/USAGE.md"
+  ],
+  "files_changed": [
+    "android/__init__.py",
+    "android/tools/__init__.py",
+    "android/tools/__main__.py",
+    "android/tools/cli.py",
+    "android/tools/adb.py",
+    "android/tools/gradle.py",
+    "android/tools/metavr_bridge.py",
+    "android/tools/USAGE.md",
+    "android/tools/tests/__init__.py",
+    "android/tools/tests/test_tools.py",
+    ".receipts/bot-03-android/spe-5160-android-tools-metavr.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "approved_by": "bot-06-quality-security"
+}

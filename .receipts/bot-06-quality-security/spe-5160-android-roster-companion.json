@@ -58,6 +58,36 @@
       "cmd": "python3 ci/gates/check_desk_integrity.py",
       "exit_code": 1,
       "output_tail": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) — must be within [10, 15]\nG-7 FAIL — desk integrity: 1 problem(s)"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-rosters/android.yaml')); t={x['name']:x for x in d['tools']}; print([(n,t[n]['kind']) for n in ['desk_android_logcat_capture','desk_android_screenshot','desk_android_ui_dump','desk_android_ui_tap']])\"",
+      "exit_code": 0,
+      "output_tail": "[('desk_android_logcat_capture', 'write'), ('desk_android_screenshot', 'write'), ('desk_android_ui_dump', 'write'), ('desk_android_ui_tap', 'write')]"
+    },
+    {
+      "cmd": "pip install -q jsonschema && python3 -c \"import yaml, jsonschema; d=yaml.safe_load(open('contracts/tool-rosters/android.yaml')); s=({x['name']:x for x in d['tools']})['desk_android_ui_tap']['input']; jsonschema.Draft7Validator.check_schema(s); v=jsonschema.Draft7Validator(s); print([(c, v.is_valid(c)) for c in [{'resource_id':'x'},{'text':'y'},{},{'resource_id':'x','text':'y'}]])\"",
+      "exit_code": 0,
+      "output_tail": "[({'resource_id': 'x'}, True), ({'text': 'y'}, True), ({}, False), ({'resource_id': 'x', 'text': 'y'}, False)]"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files contracts/tool-rosters/android.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json (re-run after Greptile-driven fixes)",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files contracts/tool-rosters/android.yaml contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml (re-run after Greptile-driven fixes)",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/tool-rosters/android.yaml --change contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml (re-run after Greptile-driven fixes)",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — spe-5160-android-local-tools-v1.1.0: non-breaking, v1.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py (re-run after Greptile-driven fixes — kind/schema fixes do not change tool count)",
+      "exit_code": 1,
+      "output_tail": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) — must be within [10, 15]\nG-7 FAIL — desk integrity: 1 problem(s)"
     }
   ],
   "claims": [
@@ -94,6 +124,31 @@
       "claim": "BLOCKER — G-7 (desk integrity) FAILS on this change as specified: the work order's 9 additional tools push android.yaml to 16 own tools (24 effective with the 8 core tools), but contracts/README.md and docs/upgrade-plan-desk-v2.md §11 cap every seat roster at [10, 15] effective tools, and android.yaml was already at the 15-tool ceiling (8 core + 7 own) before this change. This is enforced by ci/gates/check_desk_integrity.py and by ci/tests/test_gates.py::TestG7DeskIntegrity (including a test literally named test_roster_with_sixteen_tools_blocked). The files are written exactly as the work order specifies; CI will not go green until this is resolved.",
       "evidence_command_index": 7,
       "expects_failure": true
+    },
+    {
+      "claim": "Greptile P2 fix: desk_android_logcat_capture, desk_android_screenshot and desk_android_ui_dump all mutate a local file at the caller-provided out path, so each is now kind: write (was read), matching the kind convention (write fails closed) instead of read (fails open, which could have silently swallowed a failed capture as an empty result)",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Greptile P2 fix: desk_android_ui_tap's input schema now has a oneOf constraint that accepts resource_id-only or text-only and rejects both neither and both together; verified against jsonschema.Draft7Validator with all four cases (resource_id only, text only, neither, both) matching the intended accept/reject pattern. The description was also corrected: the android/tools backend (metavr_bridge.ui_tap) only rejects 'neither' at runtime — it does not reject 'both' — so the exactly-one constraint is enforced at the schema/gateway layer, not assumed from the backend",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-1 re-verified PASS after the Greptile-driven kind and schema fixes; no ownership regression introduced",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "G-3 re-verified PASS after the Greptile-driven kind and schema fixes; no secrets introduced",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "G-4 re-verified PASS after the Greptile-driven kind and schema fixes; the change document still covers the (now-corrected) roster edit",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "G-7 re-verified: still FAILS with the same 24-effective-tool count. The kind/schema fixes do not change the tool count, confirming the roster-size BLOCKER is independent of and unaffected by the other fixes applied in response to review",
+      "evidence_command_index": 13,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -113,6 +168,57 @@
   },
   "stamp_note": "approved_by intentionally omitted. This is QUALITY's own work on a contract surface it owns; G-2 rejects approved_by == bot as self-approval, and no Path B transfer/stamp was requested or performed on this branch. An independent seat or the human owner stamps it at review.",
   "explicit": "Draft pull request only. Did not merge, did not undraft, did not push to main, did not edit android/** or any path outside contracts/tool-rosters/android.yaml, contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml and this receipt.",
+  "greptile_findings": [
+    {
+      "comment_id": 4147461615,
+      "priority": "P1",
+      "title": "Android roster exceeds limit",
+      "verdict": "VALID — same root cause as the BLOCKER already documented in this receipt and the PR body",
+      "disposition": "NOT FIXED on this branch — see blocker object below. Replied on the PR pointing to the existing documentation rather than duplicating it."
+    },
+    {
+      "comment_id": 4147461630,
+      "priority": "P1",
+      "title": "Android backends cannot load (desk_gateway.tools.android missing)",
+      "verdict": "VALID — no gateway adapter module exists yet for these backend ids",
+      "disposition": "NOT FIXED — services/desk-gateway/** is owned by bot-01-systems-backend per ownership.yaml, not bot-06-quality-security. Writing a gateway adapter is outside this QUALITY companion PR's three-file scope and outside this seat's write ownership. Replied on the PR naming the owning seat."
+    },
+    {
+      "comment_id": 4147461623,
+      "priority": "P1",
+      "title": "Receipt lacks required approval",
+      "verdict": "Expected state, not a defect — matches the work order's explicit instruction to omit approved_by/Path B, and G-2's self-approval rule (bot-06 cannot approve its own contract-surface change)",
+      "disposition": "NOT FIXED (by design) — replied on the PR explaining approved_by is intentionally pending independent review, per stamp_note in this receipt."
+    },
+    {
+      "comment_id": 4147461655,
+      "priority": "P1",
+      "title": "Skipped tests report success (unit_test/instrumented_run exit 0 on skip)",
+      "verdict": "VALID as a description of android/tools' CLI behavior (android/tools/cli.py, android/tools/gradle.py), which this PR does not touch",
+      "disposition": "NOT FIXED — the behavior lives in android/** (PR #47, owned by bot-03-android), explicitly out of scope for this companion PR. Documented as intentional in PR #47's own android/tools/USAGE.md ('prints a skip line and exits 0... so CI without an emulator is fine'). Replied on the PR pointing to the owning PR/seat."
+    },
+    {
+      "comment_id": 4147461644,
+      "priority": "P1",
+      "title": "MetaVR actions never run (bridge never reports device-connected, never invokes MCP)",
+      "verdict": "VALID as a description of android/tools/metavr_bridge.py, which this PR does not touch",
+      "disposition": "NOT FIXED — by design per PR #47's own USAGE.md ('It does not call MCP, the network, or a metavr binary') and metavr_bridge.py's hardcoded _DEVICE_CONNECTED = False. Lives in android/**, out of scope. Replied on the PR pointing to the owning PR/seat."
+    },
+    {
+      "comment_id": 4147461668,
+      "priority": "P2",
+      "title": "File writes labeled read-only (logcat_capture/screenshot/ui_dump marked kind: read)",
+      "verdict": "VALID — all three write to a caller-provided out path",
+      "disposition": "FIXED: kind changed read -> write for desk_android_logcat_capture, desk_android_screenshot and desk_android_ui_dump. Verified (see claims)."
+    },
+    {
+      "comment_id": 4147461677,
+      "priority": "P2",
+      "title": "Tap accepts conflicting targets (resource_id/text not mutually exclusive in schema)",
+      "verdict": "VALID — schema allowed both or neither; backend only rejects neither",
+      "disposition": "FIXED: added a oneOf constraint to desk_android_ui_tap's input schema (exactly one of resource_id/text); corrected the description's claim about backend behavior. Verified against jsonschema.Draft7Validator (see claims)."
+    }
+  ],
   "blocker": {
     "gate": "G-7 (ci/gates/check_desk_integrity.py)",
     "problem": "contracts/tool-rosters/android.yaml: 24 effective tool(s) (16 own + 8 core) — must be within [10, 15]",

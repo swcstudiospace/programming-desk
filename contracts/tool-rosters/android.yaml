@@ -199,7 +199,7 @@ tools:
         dry_run: { type: boolean, default: false }
 
   - name: desk_android_logcat_capture
-    kind: read
+    kind: write
     gates: []
     description: >-
       Capture logcat to a file. backend adb dumps via `adb logcat`; backend metavr resolves the
@@ -217,7 +217,7 @@ tools:
         backend: { type: string, enum: [adb, metavr], default: adb }
 
   - name: desk_android_screenshot
-    kind: read
+    kind: write
     gates: []
     description: >-
       Capture a screenshot to a file. backend adb uses `adb screencap`; backend metavr resolves
@@ -234,7 +234,7 @@ tools:
         backend: { type: string, enum: [adb, metavr], default: adb }
 
   - name: desk_android_ui_dump
-    kind: read
+    kind: write
     gates: []
     description: >-
       MetaVR-primary UI hierarchy dump. Resolves the documented ui_dump MetaVR tool id and
@@ -254,7 +254,7 @@ tools:
     description: >-
       MetaVR-primary UI tap. Resolves the documented ui_tap MetaVR tool id and reports it for
       the MetaVR MCP host to invoke. Exactly one of resource_id or text is required to target
-      the tap; the backend rejects neither-or-both.
+      the tap; the schema rejects neither or both (the backend itself only rejects neither).
     backend: android.ui_tap
     input:
       type: object
@@ -263,3 +263,8 @@ tools:
         serial: { type: string, maxLength: 120 }
         resource_id: { type: string, minLength: 1, maxLength: 300 }
         text: { type: string, minLength: 1, maxLength: 300 }
+      oneOf:
+        - required: [resource_id]
+          not: { required: [text] }
+        - required: [text]
+          not: { required: [resource_id] }

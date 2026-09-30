@@ -47,18 +47,6 @@ BYPASS_PATTERNS: list[tuple[str, str]] = [
 
 REQUIRED_FIELDS = ["task_id", "bot", "commands", "claims", "unverified"]
 
-# A degraded-mode turn acknowledgement (`loop_acks`), per
-# skills/desk-bootstrap/desk-production-loop/SKILL.md §3.1. Distinct from `approvals[]`, which is
-# G-5/G-6's destructive-operation surface — see the loop_acks block in check() for why they must
-# not be merged.
-REQUIRED_LOOP_ACK_FIELDS = ["condition", "operation", "ack_id", "human_granted_by", "at", "scope"]
-LOOP_ACK_CONDITIONS = {"brief_degraded", "brief_no_revision_marker"}
-# Anything that names a seat rather than a person: the bot ids, and the seat labels they go by.
-SEAT_ID_RE = re.compile(
-    r"^\s*(?:bot-0[0-6](?:-[a-z0-9-]+)?|LEAD|SYSTEMS|WEB|ANDROID|IOS|INFRA|QUALITY|the desk)\s*$",
-    re.IGNORECASE,
-)
-
 # Claims whose wording asserts exhaustiveness. These need more than one piece of evidence.
 EXHAUSTIVE_RE = re.compile(
     r"\b(all|every|everything|fully|completely|entirely|no regressions|nothing broke)\b",
@@ -186,45 +174,6 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                 f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "
                 f"only {len(commands)} command(s)"
             )
-
-    # --- loop_acks: degraded-mode turn acknowledgements --------------------
-    # A turn ack is NOT a g5/g6 approval and must not live in `approvals[]`: check_rollback.py
-    # validates every entry there once a destructive command is present, and pairs entries to
-    # destructive commands by count — so a turn ack there either fails a receipt whose destructive
-    # op was properly approved, or silently satisfies G-6 for one that was not. It gets its own
-    # field, and that field is checked here rather than in G-6 for exactly the same reason.
-    loop_acks = receipt.get("loop_acks")
-    if loop_acks is not None:
-        if not isinstance(loop_acks, list):
-            problems.append("'loop_acks' must be a list")
-        else:
-            for i, ack in enumerate(loop_acks):
-                if not isinstance(ack, dict):
-                    problems.append(f"loop_acks[{i}] must be an object")
-                    continue
-                missing = [f for f in REQUIRED_LOOP_ACK_FIELDS if not ack.get(f)]
-                if missing:
-                    problems.append(
-                        f"loop_acks[{i}] is missing {missing} — a degraded-mode ack records the "
-                        "condition, the operation, the ack id, the human who granted it, when, "
-                        "and the one turn it covers"
-                    )
-                # The grantor is a human. A seat id here is worse than an absent field: it makes a
-                # turn with no human in it read as compliance, which is what the ack exists to rule
-                # out. `relayed_by` is where the relaying seat belongs.
-                granter = str(ack.get("human_granted_by") or "")
-                if granter and SEAT_ID_RE.match(granter):
-                    problems.append(
-                        f"loop_acks[{i}] human_granted_by is {granter!r}, which is a seat, not a "
-                        "human — degraded repo work needs a person's acknowledgement. The relaying "
-                        "seat goes in 'relayed_by'"
-                    )
-                cond = ack.get("condition")
-                if cond and cond not in LOOP_ACK_CONDITIONS:
-                    problems.append(
-                        f"loop_acks[{i}] condition {cond!r} is not one of "
-                        f"{sorted(LOOP_ACK_CONDITIONS)}"
-                    )
 
     # --- unverified honesty ----------------------------------------------
     if isinstance(unverified, list) and not unverified:

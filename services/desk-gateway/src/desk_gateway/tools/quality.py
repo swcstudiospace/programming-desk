@@ -150,25 +150,13 @@ async def receipt_approve(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
         return failure("invalid_receipt", "receipt is not valid JSON")
     if receipt.get("bot") == ctx.bot_id:
         return failure("self_approval", "QUALITY cannot approve a QUALITY receipt")
-    # An unstamped receipt is the EXPECTED input here, not an error. Gating the receipt as fetched
-    # therefore deadlocked the tool: check_receipt.py fails an absent `approved_by` unconditionally
-    # (not behind --strict, and this preflight passes strict=False), so the one state this tool
-    # exists to change was the one state it refused, and every correct first stamp returned
-    # gate_failed forever.
-    #
-    # So stamp into a candidate first and gate THAT. It permits the expected-absent `approved_by`,
-    # sets it, and then re-runs G-2/G-3/G-5/G-6 over the stamped copy — which is also strictly
-    # better than the old order, because the gates now run over exactly the bytes that get
-    # committed rather than over a pre-stamp state that is never what lands.
-    candidate = dict(receipt)
-    candidate["approved_by"] = ctx.bot_id
-    candidate["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    if args.get("note"):
-        candidate["approval_note"] = redact_text(args["note"])
-    check = await repo.receipt_check(candidate, candidate.get("bot") or "", False, args["receipt_path"])
+    check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
     if not check.get("ok"):
-        return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 once stamped", gates=check.get("gates"))
-    receipt = candidate
+        return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", gates=check.get("gates"))
+    receipt["approved_by"] = ctx.bot_id
+    receipt["approved_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    if args.get("note"):
+        receipt["approval_note"] = redact_text(args["note"])
     push = await _commit_file(ctx, args["branch"], args["receipt_path"], json.dumps(receipt, indent=2) + "\n", f"QUALITY: approve {args['receipt_path']}")
     return {"ok": bool(push.get("pushed")), "receipt_path": args["receipt_path"], "approved_by": ctx.bot_id, "push": push}
 

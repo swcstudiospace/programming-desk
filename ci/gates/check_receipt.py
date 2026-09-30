@@ -55,7 +55,8 @@ REQUIRED_FIELDS = ["task_id", "bot", "commands", "claims", "unverified"]
 REQUIRED_LOOP_ACK_FIELDS = ["condition", "operation", "ack_id", "human_granted_by", "at", "scope"]
 LOOP_ACK_CONDITIONS = {"brief_degraded", "brief_no_revision_marker"}
 SEAT_ID_RE = re.compile(
-    r"^\s*(?:bot-0[0-6](?:-[a-z0-9-]+)?|LEAD|SYSTEMS|WEB|ANDROID|IOS|INFRA|QUALITY|the desk)\s*$",
+    r"^\s*(?:bot-0[0-6](?:-[a-z0-9-]+)?|LEAD|SYSTEMS|WEB|ANDROID|IOS|INFRA|QUALITY|the desk"
+    r"|desk-[a-z][a-z0-9-]*)\s*$",
     re.IGNORECASE,
 )
 
@@ -188,13 +189,19 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
             )
 
     # --- loop_acks: degraded-mode turn acks (G-2) -------------------------
-    # Optional: a receipt for a turn that never went degraded carries [] or omits the field
-    # entirely, and that must stay a pass.
-    loop_acks = receipt.get("loop_acks")
-    if loop_acks is not None:
+    # Optional: a receipt for a turn that never went degraded OMITS the field, or carries [].
+    # A present-but-null field is a different shape from omission — `"loop_acks" in receipt`
+    # (rather than `.get(...) is not None`) is what tells the two apart, so an explicit null
+    # is caught here instead of silently reading the same as "no field at all".
+    if "loop_acks" in receipt:
+        loop_acks = receipt.get("loop_acks")
         if not isinstance(loop_acks, list):
-            problems.append("'loop_acks' must be a list")
+            problems.append(
+                "'loop_acks' must be a list — omit the field entirely if this turn never "
+                "went degraded; do not set it to null"
+            )
         else:
+            task_id = receipt.get("task_id")
             for i, ack in enumerate(loop_acks):
                 if not isinstance(ack, dict):
                     problems.append(f"loop_acks[{i}] must be an object")
@@ -205,16 +212,37 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                         f"loop_acks[{i}] is missing {missing} — a degraded-mode ack records the "
                         "condition, the operation, the ack id, the human who granted it, when, "
                         "and the one turn it covers")
-                granter = str(ack.get("human_granted_by") or "")
-                if granter and SEAT_ID_RE.match(granter):
+
+                granter = ack.get("human_granted_by")
+                if granter is not None and not isinstance(granter, str):
+                    # A truthy non-string (e.g. `true`, an id, an object) would otherwise be
+                    # silently stringified below and could dodge both the missing-field check
+                    # (it is truthy) and the seat-name regex (it does not look like a seat).
+                    problems.append(
+                        f"loop_acks[{i}] human_granted_by must be a string naming a person, "
+                        f"got {type(granter).__name__} ({granter!r})")
+                elif granter and SEAT_ID_RE.match(granter):
                     problems.append(
                         f"loop_acks[{i}] human_granted_by is {granter!r}, which is a seat, not a "
                         "human — degraded repo work needs a person's acknowledgement. The "
                         "relaying seat goes in 'relayed_by'")
+
                 cond = ack.get("condition")
                 if cond and (not isinstance(cond, str) or cond not in LOOP_ACK_CONDITIONS):
                     problems.append(f"loop_acks[{i}] condition {cond!r} is not one of "
                                     f"{sorted(LOOP_ACK_CONDITIONS)}")
+
+                scope = ack.get("scope")
+                if scope is not None and not isinstance(scope, str):
+                    problems.append(f"loop_acks[{i}] scope must be a string")
+                elif scope and isinstance(task_id, str) and task_id not in scope:
+                    # An ack's scope is supposed to bind it to *this* turn. A scope carried
+                    # over from another ticket, or a blanket phrase like "all turns", is
+                    # truthy and would otherwise pass unnoticed.
+                    problems.append(
+                        f"loop_acks[{i}] scope {scope!r} does not name this receipt's "
+                        f"task_id ({task_id!r}) — an ack scoped to another ticket, or a "
+                        "blanket scope, does not authorise this turn")
 
     # --- unverified honesty ----------------------------------------------
     if isinstance(unverified, list) and not unverified:

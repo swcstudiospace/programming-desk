@@ -265,6 +265,117 @@ class TestG2Receipts:
 
 
 # ===========================================================================
+# G-2 — loop_acks (degraded-mode turn acknowledgements)
+# ===========================================================================
+
+def valid_ack(**overrides) -> dict:
+    ack = {
+        "condition": "brief_degraded",
+        "operation": "degraded-loop: repo work without a memory brief",
+        "ack_id": "ack-test-001",
+        "human_granted_by": "Ove",
+        "relayed_by": "bot-00-programming-lead",
+        "at": "2026-09-30T09:41:11Z",
+        "scope": "one turn, ticket test-task",
+    }
+    ack.update(overrides)
+    return ack
+
+
+class TestG2LoopAcks:
+
+    def test_omitted_loop_acks_passes(self, tmp_path):
+        """A receipt for a turn that never went degraded need not carry the field at all."""
+        r = run_gate("check_receipt.py", "--receipt", str(write_receipt(tmp_path)))
+        assert r.returncode == 0, r.stderr
+
+    def test_empty_loop_acks_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+
+    def test_valid_loop_ack_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack()])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+
+    def test_null_loop_acks_blocked(self, tmp_path):
+        """An explicit null is a different shape from omitting the field and must not be
+        read the same way — it is a malformed field, not 'no ack'."""
+        p = write_receipt(tmp_path, loop_acks=None)
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a list" in r.stderr
+        assert "do not set it to null" in r.stderr
+
+    def test_non_list_loop_acks_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks={"condition": "brief_degraded"})
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a list" in r.stderr
+
+    def test_non_dict_entries_blocked(self, tmp_path):
+        """A list of strings must fail cleanly rather than crash on attribute access."""
+        p = write_receipt(tmp_path, loop_acks=["brief_degraded"])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be an object" in r.stderr
+
+    def test_missing_ack_fields_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[{"condition": "brief_degraded"}])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is missing" in r.stderr
+
+    @pytest.mark.parametrize("granter", [True, 12345, ["Ove"], {"name": "Ove"}])
+    def test_human_granted_by_non_string_blocked(self, tmp_path, granter):
+        """A truthy non-string value must not dodge the missing-field check (it is truthy)
+        and then dodge the seat-name check (it does not look like a seat)."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by=granter)])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "must be a string naming a person" in r.stderr
+
+    def test_human_granted_by_seat_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="bot-01-systems-backend")])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is a seat, not a human" in r.stderr
+
+    def test_human_granted_by_desk_connector_blocked(self, tmp_path):
+        """`desk-<seat>` is a documented OAuth connector name, not a person."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(human_granted_by="desk-lead")])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is a seat, not a human" in r.stderr
+
+    def test_invalid_condition_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(condition="not-a-real-condition")])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "is not one of" in r.stderr
+
+    def test_scope_non_string_blocked(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=["test-task"])])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "scope must be a string" in r.stderr
+
+    @pytest.mark.parametrize("scope", ["one turn, ticket some-other-ticket", "all turns"])
+    def test_scope_unbound_from_task_blocked(self, tmp_path, scope):
+        """A scope naming another ticket, or a blanket scope, must not authorise this turn."""
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope=scope)])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1
+        assert "does not name this receipt's task_id" in r.stderr
+
+    def test_scope_bound_to_task_passes(self, tmp_path):
+        p = write_receipt(tmp_path, loop_acks=[valid_ack(scope="one turn, ticket test-task")])
+        r = run_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+
+
+# ===========================================================================
 # G-3 — committed secrets
 # ===========================================================================
 

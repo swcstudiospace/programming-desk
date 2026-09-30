@@ -102,9 +102,10 @@ bot may write there, which keeps one bot from editing another's evidence.
   validates every entry once any destructive command is present, and pairs entries to destructive
   commands **by count**.
 - **`loop_acks[]`** records a **degraded-mode turn acknowledgement** — a human saying "work this
-  ticket even though the memory brief failed", per
-  `skills/desk-bootstrap/desk-production-loop/SKILL.md` §3. It authorises a *turn*, never an
-  operation.
+  ticket even though the memory brief failed". It authorises a *turn*, never an operation. There
+  is no separate loop-skill document to consult: the two conditions it can carry
+  (`brief_degraded`, `brief_no_revision_marker`) and every required field are defined here and
+  enforced by `ci/gates/check_receipt.py`'s `LOOP_ACK_CONDITIONS` — this file is the contract.
 
 Putting a turn ack in `approvals[]` breaks G-6 in both directions: without `at`/`blast_radius` it
 fails a receipt whose destructive op was properly approved, and *with* them it silently satisfies
@@ -128,11 +129,17 @@ somebody who knows what the brief could not tell the seat said go ahead, so a se
 authorises nothing. A build seat asks LEAD and LEAD asks the human, which makes `relayed_by` the
 LEAD seat and `human_granted_by` the person at the end of that chain; LEAD's own degraded turns are
 acked by the human directly, with `relayed_by` null. G-2 fails an entry whose `human_granted_by` is
-absent or looks like a seat — an entry naming a bot is worse than a missing one, because it reads
-as compliance.
+absent, non-string, or looks like a seat (including a `desk-<seat>` connector name) — an entry
+naming a bot is worse than a missing one, because it reads as compliance. A JSON `true` or a bare
+id is not a name: `human_granted_by` must be a string.
 
-The field is **optional**: a receipt for a turn that never went degraded carries `[]` or omits it,
-and that must stay a pass.
+**`scope` binds the ack to this turn, not to the desk in general.** G-2 checks that `scope`
+contains the receipt's own `task_id`, so an ack copied from an earlier ticket, or a blanket phrase
+like "all turns", does not silently authorise a turn it was never written for.
+
+The field is **optional**: a receipt for a turn that never went degraded omits it or carries `[]`.
+Setting it to `null` is neither — `loop_acks` must be a list whenever the key is present, so an
+explicit null fails rather than being read as "no field at all".
 
 Note command index 0: **a failing command is valuable evidence.** It proves the bug was real
 before the fix. A receipt that only ever shows green is often a receipt where the reproduction

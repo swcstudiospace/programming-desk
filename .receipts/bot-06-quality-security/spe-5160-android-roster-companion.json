@@ -81,7 +81,7 @@
       "exit_code": 1,
       "output_tail": "G-2 FAIL \u2014 'approved_by' is missing \u2014 work must be reviewed by someone else",
       "expects_failure": true,
-      "note": "Expected and correct: approved_by is explicitly null because QUALITY does not self-stamp (see stamp_note). G-2 clears only after LEAD or the human owner reviews and stamps this receipt."
+      "note": "HISTORICAL \u2014 pre-stamp state, recorded before LEAD's approved_by stamp (58cc2c1, 2026-09-30T20:41:18Z). Expected and correct at the time: approved_by was explicitly null because QUALITY does not self-stamp (see stamp_note). See command index 17 for the current, post-stamp G-2 result."
     },
     {
       "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('contracts/tool-packs/androidmetavr.yaml')); print([(t['name'],t['kind']) for t in d['tools']])\"",
@@ -114,6 +114,12 @@
       "exit_code": 0,
       "output_tail": "157 passed in 12.02s",
       "note": "Re-run after the SKILL.md and androidmetavr.yaml fixes; command is executable as written (a scratch venv with pyyaml+pytest was used, per the note on command index 9)."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5160-android-roster-companion.json --bot bot-06-quality-security",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — spe-5160-android-roster-companion: 17 command(s), 16 substantiated claim(s), 6 unverified item(s)",
+      "note": "Re-run after LEAD's approved_by stamp (58cc2c1). Supersedes the FAIL at command index 10, which is now historical pre-stamp evidence."
     }
   ],
   "claims": [
@@ -180,6 +186,10 @@
     {
       "claim": "Full 157-test ci/tests suite re-verified passing after the SKILL.md and androidmetavr.yaml fixes \u2014 no regression from either change",
       "evidence_command_index": 16
+    },
+    {
+      "claim": "Greptile P2 fix (finding 4149174790, 'Stale approval verification'): re-ran G-2 after LEAD's approved_by stamp \u2014 it now PASSES; the earlier FAIL (command index 10) is marked historical rather than left as the only recorded G-2 result",
+      "evidence_command_index": 17
     }
   ],
   "unverified": [
@@ -192,7 +202,7 @@
   ],
   "g1_g6_notes": {
     "G-1": "PASS \u2014 5 files, all bot-06-quality-security.",
-    "G-2": "This receipt.",
+    "G-2": "This receipt. PASS after LEAD's approved_by stamp (58cc2c1) — see command index 17. The FAIL at command index 10 is historical, pre-stamp evidence.",
     "G-3": "PASS \u2014 no secrets in the 4 changed/added contract and test files.",
     "G-4": "PASS \u2014 contracts/changes/spe-5160-android-local-tools-v1.1.0.yaml (updated in place), non-breaking, v1.0.0, declares both pack surfaces.",
     "G-5": "Not a deployment. No rollback plan required.",

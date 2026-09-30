@@ -228,22 +228,22 @@
       "output_tail": "5 passed, 25 deselected in 1.61s"
     },
     {
-      "cmd": "# control A: delete the safe_path call from contract_propose, keep the containment check\npytest tests/test_server.py -q -k contract_propose",
+      "cmd": "# control A — remove the safe_path call, keep the containment check\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not safe_path(args[\"surface\"])']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
       "exit_code": 0,
       "duration_s": 1.9,
-      "output_tail": "5 passed, 25 deselected — the containment check covers the same '..' payloads, so the two guards are genuinely redundant here"
+      "output_tail": "5 passed, 25 deselected in 1.76s — the containment check refuses the same '..' payloads, so the two guards are genuinely redundant here. git diff --stat after the restore: empty."
     },
     {
-      "cmd": "# control B: keep safe_path, delete the containment check\npytest tests/test_server.py -q -k contract_propose",
+      "cmd": "# control B — keep safe_path, remove the containment check\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not target.resolve().is_relative_to(tree.resolve())']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
       "exit_code": 1,
       "duration_s": 1.5,
-      "output_tail": "FAILED test_contract_propose_will_not_write_through_a_symlink_in_the_tree\n1 failed, 4 passed — safe_path sees a clean relative path, so only containment stops the symlink"
+      "output_tail": "FAILED test_contract_propose_will_not_write_through_a_symlink_in_the_tree\n1 failed, 4 passed, 25 deselected in 1.63s — safe_path sees a clean relative path, so only containment stops the symlink. git diff --stat after the restore: empty."
     },
     {
-      "cmd": "# control C: delete BOTH guards, i.e. the handler as it arrived from PR #22\npytest tests/test_server.py -q -k contract_propose",
+      "cmd": "# control C — remove BOTH guards, i.e. the handler as PR #22 shipped it\ncd services/desk-gateway\npython3 - <<'PY'\nimport pathlib\nMARKERS = ['if not safe_path(args[\"surface\"])', 'if not target.resolve().is_relative_to(tree.resolve())']\np = pathlib.Path(\"src/desk_gateway/tools/systems.py\")\nfor marker in MARKERS:\n    lines = p.read_text().splitlines(keepends=True)\n    out, i, hits = [], 0, 0\n    while i < len(lines):\n        if marker in lines[i]:\n            i += 2; hits += 1; continue\n        out.append(lines[i]); i += 1\n    assert hits == 1, f\"marker {marker!r} matched {hits} times\"\n    p.write_text(\"\".join(out))\nPY\npython3 -m pytest tests/test_server.py -q -k contract_propose\ngit checkout -- src/desk_gateway/tools/systems.py   # restores; verify with git diff --stat",
       "exit_code": 1,
       "duration_s": 2.2,
-      "output_tail": "FAILED ...refuses_a_surface_that_escapes_the_tree[contracts/../../../tmp/desk-gateway-escape.yaml]\nFAILED ...refuses_a_surface_that_escapes_the_tree[contracts/../../root/.ssh/authorized_keys]\nFAILED ...refuses_a_surface_that_escapes_the_tree[contracts/ok/../../../../tmp/desk-gateway-escape.yaml]\nFAILED ...will_not_write_through_a_symlink_in_the_tree\n4 failed, 1 passed — the one pass is the legitimate-surface test, as it should be"
+      "output_tail": "FAILED ...escapes_the_tree[contracts/../../../tmp/desk-gateway-escape.yaml]\nFAILED ...escapes_the_tree[contracts/../../root/.ssh/authorized_keys]\nFAILED ...escapes_the_tree[contracts/ok/../../../../tmp/desk-gateway-escape.yaml]\nFAILED ...will_not_write_through_a_symlink_in_the_tree\n4 failed, 1 passed, 25 deselected in 2.06s — the one pass is the legitimate-surface test, as it should be. git diff --stat after the restore: empty."
     }
   ],
   "claims": [
@@ -403,7 +403,7 @@
       "title": ".github/workflows/desk-intake.yml, new from PR #22, audited for the same class",
       "verdict": "CLEAN. It declares `permissions: {}`, passes attacker-controlled issue title, body and author login through env: rather than interpolating them, and builds its JSON with `jq -n --arg`, which cannot be escaped out of. `set -euo pipefail` is set.",
       "disposition": "No change made.",
-      "residual": "None open. Regression-tested through the handler: three escape payloads and a symlinked target, all refused, with the outside file verified unchanged. Verified non-vacuous by removing both guards and watching 4 of 5 fail, and each guard's distinct role established by removing them one at a time."
+      "residual": "The intake token is passed as `-H \"Authorization: Bearer $DESK_INTAKE_TOKEN\"` on the curl argv, which is readable from /proc on a shared runner. Negligible on an ephemeral GitHub-hosted runner and not a P1; left for INFRA rather than changed here, since it is outside what this landing needs to fix and would edit an INFRA-owned file. STILL OPEN — unaffected by anything in this PR, and not covered by the contract_propose tests, which are a different component."
     },
     {
       "id": "4140571384",
@@ -413,7 +413,7 @@
       "verdict": "VALID, and more severe than reported — reproduced; an absolute surface would also escape via pathlib, though the schema's leading contracts/ blocks that route",
       "disposition": "FIXED: systems.py already imported safe_path and used it elsewhere; contract_propose now calls it, plus a resolved-containment check so a symlink in the tree cannot redirect the write.",
       "how": "Regression-tested with four escape payloads and two legitimate surfaces.",
-      "residual": "The roster pattern still admits '..'. Tightening it is a contract change needing acknowledgements, and the write path is now guarded, so the schema is no longer load-bearing here. Raised for QUALITY."
+      "residual": "Regression-tested through the handler, not the helper: three escape payloads and a symlinked target refused via /mcp/systems, with the outside file verified byte-unchanged. Shown non-vacuous by removing both guards (4 of 5 fail) and each in turn — the containment check carries the property; safe_path is redundant for '..' payloads and kept as the cheap early rejection every other repo-path tool here uses. STILL OPEN: the roster pattern itself admits '..'. Tightening it is a contract change needing acknowledgements, and the write path is now guarded, so the schema is no longer load-bearing for this. Raised for QUALITY."
     },
     {
       "id": "4140571393",
@@ -456,6 +456,7 @@
     "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through.",
     "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did.",
     "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage.",
-    "Greptile caught the same mistake twice in this PR, in two different files: a test that asserts on a helper rather than on the code path that calls it. The workflow-injection tests ran a copy of the bot-resolution script; the traversal tests asserted safe_path directly and would have passed against a handler that never called it. Both now execute the real path. The pattern worth remembering: when a fix is 'call the existing guard', the test has to prove the call happens, because the guard itself was never broken."
+    "Greptile caught the same mistake twice in this PR, in two different files: a test that asserts on a helper rather than on the code path that calls it. The workflow-injection tests ran a copy of the bot-resolution script; the traversal tests asserted safe_path directly and would have passed against a handler that never called it. Both now execute the real path. The pattern worth remembering: when a fix is 'call the existing guard', the test has to prove the call happens, because the guard itself was never broken.",
+    "Two receipt defects in this PR came from editing it with a script rather than reading it back: an insertion shifted every later evidence_command_index, and an append put the traversal finding at index 3 while a later edit wrote its residual to index 2, overwriting the desk-intake caveat. Both were caught by review, not by me. A receipt is the artifact whose whole value is being trustworthy, so a programmatic edit to one needs the same read-back a code change gets."
   ]
 }

@@ -1,0 +1,222 @@
+# Security PR gate (SPE-5162) — secrets, SAST, SCA on every pull request into main.
+#
+# Deliberately NOT AutoRedTeam or any other full offensive-security suite. That class of check
+# is slow, noisy, and belongs on a schedule (see .github/workflows/security-nightly.yml and
+# ci/security/garak-stub.md), never blocking every PR.
+#
+# Owned by QUALITY (bot-06-quality-security) — see ownership.yaml's "QUALITY narrow override"
+# entry for ci/security/** and .github/workflows/security-*.yml.
+#
+# runs-on matches ci/.github/workflows/gates.yml's own comment: this organisation's
+# GitHub-hosted minutes are blocked by a spending limit, so every job here targets the
+# self-hosted VPS runner. If that runner is offline this job sits queued rather than failing —
+# check the runner before debugging a red/stuck check.
+#
+# Each scanner runs independently so one tool's finding does not hide another's; each writes a
+# SARIF file, all of which are uploaded as a workflow artifact unconditionally (`if: always()`)
+# and, best-effort, to code scanning if the repository has Advanced Security enabled — the
+# artifact upload is the guaranteed path, the code-scanning upload is a bonus one PR reviewers
+# do not need to unblock the gate.
+
+name: Security PR Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  # Needed only for the optional upload-sarif step below. Uploading to code scanning requires
+  # GitHub Advanced Security on a private repo; on a repo without it the step is expected to
+  # fail and is marked continue-on-error so it never blocks the gate. The gate itself is
+  # enforced by each scanner's own exit code, not by this permission.
+  security-events: write
+
+jobs:
+  secrets:
+    name: Gitleaks (secrets)
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # gitleaks scans the commit range against the base ref
+
+      - name: Fetch base ref
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+
+      - name: Gitleaks — scan only this PR's commits
+        env:
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        # Scoped to origin/$BASE_REF..HEAD, not the whole repository: a full-history scan hits
+        # the intentional fake-secret fixtures in the G-3 gate's own test suite
+        # (ci/tests/test_gates.py, services/desk-gateway/tests/test_units.py). Those are
+        # pre-existing on main and marked for a different scanner's allowlist convention (see
+        # ci/security/gitleaks.toml's comment); scanning only what the PR adds means this gate
+        # judges the PR, not the fixtures beneath it.
+        run: |
+          set -euo pipefail
+          curl -sSL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          tar xzf gitleaks.tar.gz gitleaks
+          ./gitleaks detect --source . \
+            --config ci/security/gitleaks.toml \
+            --log-opts="origin/$BASE_REF..HEAD" \
+            --report-format sarif --report-path gitleaks.sarif \
+            --exit-code 1 \
+            -v
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-sarif
+          path: gitleaks.sarif
+          if-no-files-found: ignore
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gitleaks.sarif
+          category: gitleaks
+
+  semgrep:
+    name: Semgrep (SAST)
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Semgrep
+        run: pip install semgrep
+
+      - name: Semgrep — repo rules + registry security/secrets packs
+        # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
+        # HIGH+ equivalent findings per SPE-5162, same intent as bandit's -lll below.
+        run: |
+          semgrep \
+            --config ci/security/semgrep.yml \
+            --config p/security-audit \
+            --config p/secrets \
+            --sarif --output semgrep.sarif \
+            --severity ERROR --error \
+            services ci
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  bandit:
+    name: Bandit (Python SAST)
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bandit
+        run: pip install bandit bandit-sarif-formatter
+
+      - name: Bandit — services/ and ci/, HIGH severity only
+        # -lll raises the reported severity floor to HIGH, matching "fail on HIGH+" without
+        # drowning every PR in LOW/MEDIUM noise. Confirmed locally: 0 findings, exit 0.
+        run: |
+          bandit -r services ci \
+            --ini ci/security/bandit.ini \
+            -lll \
+            -f sarif -o bandit.sarif
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-sarif
+          path: bandit.sarif
+          if-no-files-found: ignore
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: bandit.sarif
+          category: bandit
+
+  dependencies:
+    name: pip-audit / Trivy (SCA)
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: pip-audit — requirements*.txt targets
+        # pip-audit reads pip-style requirement files; this repo pins Python deps via
+        # services/desk-gateway's uv-managed pyproject.toml, which pip-audit cannot parse as a
+        # requirement file (confirmed locally — it errors on the [project] table). Trivy fs
+        # below is the SCA path for that manifest. This step covers any requirements*.txt this
+        # PR adds and is a no-op, not a false pass, when none exist.
+        run: |
+          set -euo pipefail
+          pip install pip-audit
+          mapfile -t REQ_FILES < <(git ls-files -- 'services/**/requirements*.txt' 'ci/**/requirements*.txt')
+          if [ "${#REQ_FILES[@]}" -eq 0 ]; then
+            echo "No requirements*.txt under services/ or ci/ — nothing for pip-audit to scan. Skipping."
+            exit 0
+          fi
+          for f in "${REQ_FILES[@]}"; do
+            echo "::group::pip-audit $f"
+            pip-audit -r "$f" --strict
+            echo "::endgroup::"
+          done
+
+      - name: Trivy filesystem scan — HIGH+ dependency vulnerabilities
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          ignore-unfixed: true
+
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy.sarif
+          if-no-files-found: ignore
+
+      - name: Upload to code scanning (best effort)
+        if: always()
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy

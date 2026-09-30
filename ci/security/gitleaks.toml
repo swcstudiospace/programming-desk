@@ -1,0 +1,36 @@
+# Gitleaks config for the security PR gate (.github/workflows/security-pr.yml, SPE-5162).
+#
+# Extends gitleaks' default ruleset rather than replacing it — this file only adds
+# repo-specific allowlisting, it never narrows detection.
+#
+# Scope note: the workflow runs `gitleaks detect --log-opts="origin/$BASE_REF..HEAD"`, i.e.
+# only the commits a PR actually adds, not the whole repository history. That is deliberate:
+# a full-history scan of this repo hits ci/tests/test_gates.py and
+# services/desk-gateway/tests/test_units.py, whose fake credentials are fixtures for gate G-3
+# (see SECURITY.md §3) and are already marked `# pragma: allowlist secret` for that gate.
+# Gitleaks has no equivalent marker convention, so scanning the PR diff range — never the
+# fixtures already on main — is what keeps this gate from failing on its sibling gate's own
+# test data. Verified locally: 12 pre-existing findings on a full-repo scan, 0 on the
+# origin/main..HEAD range with no new commits (see the SPE-5162 receipt).
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Repo-wide false-positive suppressions"
+
+# ${VAR} / $VAR are secret *references* by name, the convention this repo's SECURITY.md
+# requires (§2) — not a credential value.
+regexes = [
+  '''\$\{[A-Za-z_][A-Za-z0-9_]*\}''',
+]
+
+# Lockfiles are generated, reviewed as a diff against a trusted registry, and never hand-edited
+# for a credential; they are also long enough that their own hashes occasionally trip generic
+# high-entropy rules.
+paths = [
+  '''(^|/)uv\.lock$''',
+  '''(^|/)package-lock\.json$''',
+  '''(^|/)deno\.lock$''',
+  '''(^|/)Cargo\.lock$''',
+]

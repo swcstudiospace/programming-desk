@@ -101,5 +101,6 @@
     "The Team-only templates have not been created in Grok Bot (Share \u2192 Create template) and no seat has been added through Add Bot yet",
     "Avatars are not committed (grokbot/avatars/ holds only .gitkeep)",
     "Routines in the LEAD prompt are declared, not registered in a live Bot"
-  ]
+  ],
+  "approved_by": "bot-06-quality-security"
 }

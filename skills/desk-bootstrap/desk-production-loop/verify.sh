@@ -13,9 +13,22 @@
 # What it cannot do: assert that a rule is CORRECT, or that a seat follows it. Every round's defect
 # would have passed the previous round's version of this check. It is a drift alarm, not a proof.
 #
-# Not wired into CI: .github/workflows/** is bot-05-infrastructure's under ownership.yaml, so LEAD
-# cannot add the step. Recorded in the receipt's `unverified` as an INFRA/QUALITY ask; run it by
-# hand, and from the receipt, until then.
+# Not wired into CI, and nothing in this skill or its docs says otherwise. Every CI path is foreign
+# to bot-00: .github/workflows/** and ci/.github/workflows/** are bot-05-infrastructure's,
+# ci/.github/** and ci/gates/** are bot-06-quality-security's. So a later template change can still
+# drop the loop with the PR gates green -- G-7 checks templates for forbidden CONTENT, not for a
+# required skill -- and this script only catches it for whoever runs it by hand or from the receipt.
+#
+# For whichever owner picks it up, the whole change is two steps in the gates workflow, after the
+# G-7 step and needing nothing else:
+#
+#   - name: Desk production loop — consistency
+#     run: bash skills/desk-bootstrap/desk-production-loop/verify.sh
+#   - name: Seat templates — generator drift
+#     run: python3 scripts/generate-templates.py --check
+#
+# Both exit non-zero on failure, take no arguments, need no credentials and no network, and run from
+# the repository root in well under a second. Tracked in the receipt's `blockers`.
 #
 # Run from the repository root. Cited by
 # .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json.
@@ -33,6 +46,7 @@ D=load("docs/desk-operating-model.md")
 V=load("docs/vps-agent-bus.md")
 R=load("grokbot/README.md")
 G=load("scripts/generate-templates.py")
+V_SELF=load("skills/desk-bootstrap/desk-production-loop/verify.sh")   # this script checks itself too
 # The seven seat templates are named explicitly, not globbed. A glob over an empty or partial
 # directory runs zero per-template checks and then reports "7/7 templates" on the strength of
 # nothing -- the check has to fail when a template is MISSING, which is exactly the case a glob
@@ -138,6 +152,38 @@ need('payload.reason: "brief_degraded"' not in S,"R6e stale overloaded reason re
 need("An absent `cached` means `false`" in fS,"R6f cached absent skill")
 need("an absent `cached` means `false`" in fD,"R6f cached absent doc")
 need("the fresh path never sets" in fS,"R6f fresh path")
+# --- round 7 ---------------------------------------------------------------------------------
+# (a) a degraded-mode turn ack is NOT a g5/g6 approval: it must stay out of approvals[], because
+# G-6 validates every entry and pairs entries to destructive commands by COUNT. Both failure
+# directions have to stay documented, or the next round "helpfully" adds at/blast_radius and turns
+# the loud failure into a silent pass.
+need("loop_acks" in S and "loop_acks" in D,"R7a loop_acks field")
+need("A turn ack goes in `loop_acks`, never in `approvals[]`" in fS,"R7a section heading")
+need("REQUIRED_APPROVAL_FIELDS" in S,"R7a gate source cited")
+need("a COUNT, not a pairing" in S,"R7a count-not-pairing cited")
+need("Worse — a false PASS" in fS,"R7a false-pass direction")
+need("as understood at approval time" in fS,"R7a blast radius at approval time")
+need("G-5/G-6's destructive-operation" in fS and "G-5/G-6's destructive-operation" in fD,"R7a approvals is g5/g6 surface")
+# the old wording put the ack in approvals[] — it must not survive anywhere
+need("in the receipt under `approvals`" not in fS,"R7a stale approvals instruction removed")
+for dead in ("approvals[{operation: \"degraded-loop", "no `approvals` entry"):
+    need(dead not in S,"R7a stale approvals example: "+dead[:32])
+# (b) the first QUALITY stamp cannot come from desk_receipt_approve, and no seat fakes it
+need("The first QUALITY stamp cannot come from `desk_receipt_approve` today" in fS,"R7b deadlock named")
+need("gate_failed" in S and "gate_failed" in D,"R7b gate_failed code")
+need("never reached on a first stamp" in S,"R7b unreachable line cited")
+need("the check is not behind `--strict`" in fS,"R7b not behind strict")
+need("naming the reviewed sha" in fS and "naming the reviewed sha" in fD,"R7b sha in the note")
+need("an empty string fails identically" in fS,"R7b empty string fails too")
+need("is one line and it is not LEAD's" in fS,"R7b foreign fix named")
+for owner in ("bot-01-systems-backend","bot-06-quality-security"):
+    need(owner in S,"R7b owner named "+owner)
+# (c) neither this skill nor its docs may claim that CI runs the loop checks -- it does not
+need("Not wired into CI" in V_SELF,"R7c honest CI note in this script")
+# assembled from fragments so the forbidden phrases do not appear literally in this file, which
+# reads itself into V_SELF -- a literal list would match its own assertion and fail every run
+for claim in ("CI "+"runs this check","enforced "+"by CI","CI "+"enforces"):
+    need(claim not in fS and claim not in fD and claim not in V_SELF,"R7c false CI claim: "+claim)
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")
 need("read timestamp, not a revision id" in fD,"R2b doc")
@@ -171,5 +217,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
 PY

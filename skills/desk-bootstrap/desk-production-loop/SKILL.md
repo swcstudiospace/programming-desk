@@ -305,9 +305,42 @@ without a recorded human acknowledgement:
 |---|---|
 | 1 | Stop before the first edit. Do not retry in a loop — one retry, then it is degraded. (Nothing to retry on the no-marker condition: the contract will not grow an etag between two calls.) |
 | 2 | Ask for the ack the way approvals are already routed: a build seat asks LEAD (priority false); LEAD asks Ove in the 1:1. State the tool, the condition, the verbatim `reason` **and the path that carried it** where there is one, and what you intend to edit. |
-| 3 | Record the returned ack id in the receipt under `approvals` with the `operation` string for the condition, and put the verbatim `reason` plus its field path — or, for the no-marker condition, the absence of the marker — in `unverified`. |
+| 3 | Record the returned ack id in the receipt under **`loop_acks`** — **not `approvals`**, see below — with the `operation` string for the condition, and put the verbatim `reason` plus its field path, or for the no-marker condition the absence of the marker, in `unverified`. |
 | 4 | Act, and emit the **normal** kinds for what happened — `implementation.started`, then `implementation.completed` with the receipt path — each carrying the payload fields below. Degradation is a property of the turn, not its outcome (§6). |
 | 5 | Do **not** fire `handoff_to_hermes`. A handoff propagates an unknown memory state into another runtime, where it stops being visible. Hand off only if the ack says so in as many words. |
+
+#### §3.1 A turn ack goes in `loop_acks`, never in `approvals[]`
+
+`approvals[]` is not a general log of things a human said yes to. It is **G-5/G-6's destructive-operation
+surface**, and putting a turn ack there breaks the gate in both directions. From
+`ci/gates/check_rollback.py`:
+
+```python
+REQUIRED_APPROVAL_FIELDS = ["operation", "approved_by", "at", "blast_radius"]
+...
+if destructive:
+    for i, ap_rec in enumerate(approvals):          # EVERY entry, not just the destructive ones
+        missing = [f for f in REQUIRED_APPROVAL_FIELDS if not ap_rec.get(f)]
+        ...
+    if len(approvals) < len(destructive):            # a COUNT, not a pairing
+```
+
+| If the turn ack sits in `approvals[]` | What G-6 does |
+|---|---|
+| With `operation` + `ack` id only, as this skill used to say | **FAIL.** Every entry is validated once any destructive command is in `commands`, so a turn ack missing `at` and `blast_radius` fails a receipt whose destructive op was properly approved: `approvals[0] is missing ['at', 'blast_radius']` |
+| With all four fields filled in, to satisfy that check | **Worse — a false PASS.** The gate pairs approvals to destructive ops **by count**, so a turn ack for a degraded brief satisfies G-6 for an unrelated `rm -rf`. Verified: one destructive command, one four-field turn ack, `G-5/G-6 PASS — 1 destructive op(s) approved` |
+
+The second row is why "just add `at` and `blast_radius`" is the wrong fix: it converts a loud failure
+into a silent one, and a silent one in the gate that exists to stop unapproved destruction. So:
+
+- **A degraded-mode turn ack goes in `loop_acks`** — a LEAD-owned array for this loop, with
+  `condition` (the blocker code), `operation`, `ack_id`, `granted_by`, `at`, and `scope` (the one
+  ticket and one turn it covers). Nothing in `ci/gates/` reads it, which is correct: it is not a
+  destructive-op approval and must not be counted as one.
+- **`approvals[]` stays for g5/g6 operations only**, one entry per destructive command, each with all
+  four fields including the blast radius **as understood at approval time**.
+- **A turn ack is not an `approval_id`** and never substitutes for one (§3, below). The field split is
+  the mechanical expression of a rule this skill already had in prose.
 
 **One field per meaning.** A degraded event carries three separate things — *which desk rule fired*,
 *what the upstream said*, and *where it said it* — and they do not fit in one `reason` key. Use these
@@ -358,7 +391,8 @@ where there is one. Its consumer is LEAD, which is correct for a turn that produ
 a decision.
 
 An ack authorises **one turn** of repo work on **one ticket**. It is not an `approval_id` for a g5
-or g6 tool and does not substitute for one. **Never type an ack id you were not given** — a
+or g6 tool and does not substitute for one — which is why it lives in `loop_acks` and not in
+`approvals[]` (§3.1). **Never type an ack id you were not given** — a
 plausible string satisfies a receipt field and puts a fabricated approval in the audit trail, which
 is a PD-5 breach with evidence attached (`skills/desk-gateway` §3).
 
@@ -413,6 +447,39 @@ A seat that adds a skill to itself is executing unreviewed instructions with no 
 **Write the receipt before the claim**, per `skills/verification-receipts` (G-2). The loop does not
 replace that; phases 3 and 4 are downstream of it, because `memory_write` is refused without a
 `receipt_path` or a `source`.
+
+> **The first QUALITY stamp cannot come from `desk_receipt_approve` today.** Leave `approved_by`
+> unset — a seat never stamps its own work, and G-2 failing closed on an unstamped receipt is the
+> designed state — but do not expect the documented tool to clear it, because it cannot:
+>
+> ```python
+> # services/desk-gateway/src/desk_gateway/tools/quality.py — receipt_approve
+> check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
+> if not check.get("ok"):
+>     return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", …)
+> receipt["approved_by"] = ctx.bot_id          # ← never reached on a first stamp
+> ```
+>
+> The preflight runs G-2 on the receipt **as fetched**, and `ci/gates/check_receipt.py` fails an
+> absent `approved_by` unconditionally — the check is not behind `--strict`, and the preflight passes
+> `strict=False` anyway. So the one state the tool exists to change is the one state it refuses:
+> every correct unstamped receipt returns `gate_failed` forever. Verified: G-2 non-strict on an
+> unstamped receipt exits 1 with `'approved_by' is missing`.
+>
+> **What works today, and what does not.** The route that has actually landed a stamp on this desk is
+> QUALITY reviewing the tip and committing the stamp to the PR branch — `approved_by`, `approved_at`
+> and an `approval_note` **naming the reviewed sha**. That is a reviewed human action, not a tool
+> call, and the sha in the note is what makes it tip-matched; a note that names an older tip is the
+> defect this receipt was pulled up for. What is **not** a fix: a seat writing any placeholder into
+> `approved_by` to get the preflight past itself. That fabricates the independent check the gate
+> exists to require, and an empty string fails identically — `if not approved_by` catches both.
+>
+> **The real fix is one line and it is not LEAD's.** `services/**` is `bot-01-systems-backend`'s and
+> `ci/gates/**` is `bot-06-quality-security`'s, so LEAD records the blocker rather than editing
+> either. Either owner can close it: have `receipt_approve` run its preflight against the receipt
+> **with `approved_by` already set** (stamp into a copy, gate the copy, then commit), or teach the
+> preflight to exempt that one field on a first stamp. The first is preferable — it gates exactly
+> what gets committed. Proposed patch is in the receipt's `blockers`.
 
 ### §5 Phase 3 — memory_write
 
@@ -609,6 +676,7 @@ Rules that already bind, before the schema exists:
 | Edit a foreign path to "finish the feature" | G-1. Cross-seat work is contract-first |
 | Mint an event kind | §6 — nothing consumes it |
 | Swap a kind to signal degradation | §6.2 — a finished turn labelled `ticket.blocked` reports a blocker for work that is ready for review, in `payload.event` and the summary where it is harder to spot |
+| Put a degraded-mode turn ack in `approvals[]` | §3.1 — G-6 validates every entry when a destructive command is present, and pairs approvals to destructive ops by count; a turn ack there either fails a properly-approved receipt or silently satisfies G-6 for an unrelated destructive op. It goes in `loop_acks` |
 | Invent an ack id, an `approval_id`, or a packet signature | PD-5, G-3 — a fabricated approval with an audit trail |
 | Claim done without a receipt | G-2. A claim without a command is a guess with confident phrasing |
 | Hand off a goal that already has an Agent Bus job | Two branches, one goal, a merge race a human untangles |
@@ -634,8 +702,10 @@ receipt stub: task_id, brief_read_at: 1790761742.31, cached: false   ← §2.2 r
 → LEAD (priority false): "desk_brief succeeded (no substrate/recall error). Its contract exposes no
    etag, so I cannot detect a change under me. Intending to edit
    services/desk-gateway/src/…/intake.py. Ack to proceed?"   → ack-2026-09-30-011
-receipt: approvals[{operation: "degraded-loop: repo work on a brief with no revision marker",
-  approved_by: "…", id: "ack-2026-09-30-011"}]
+receipt: loop_acks[{condition: "brief_no_revision_marker",       ← NOT approvals[] — §3.1
+  operation: "degraded-loop: repo work on a brief with no revision marker",
+  ack_id: "ack-2026-09-30-011", granted_by: "…", at: "2026-09-30T09:14:02Z",
+  scope: "one turn, ticket intake-ack-idempotent"}]
 desk_ownership_resolve {paths: ["services/desk-gateway/src/…/intake.py"]}  → bot-01  ✔ mine
 desk_event_emit {kind: "implementation.started", graph_id, task_id,
   payload: {degraded: true, blocker: "brief_no_revision_marker", ack: "ack-2026-09-30-011"}}
@@ -674,8 +744,11 @@ desk_brief {…} → {seat, generated_at: 1790762100.04,          ← no top-lev
 → LEAD (priority false): "desk_brief degraded: substrate.error=upstream_error,
    substrate.reason='substrate returned HTTP 502'. Intending to edit
    services/desk-gateway/src/…/intake.py. Ack to proceed?"   → LEAD ↔ Ove → ack-2026-09-30-004
-receipt: approvals[{operation: "degraded-loop: repo work without a memory brief",
-  approved_by: "…", id: "ack-2026-09-30-004"}];
+receipt: loop_acks[{condition: "brief_degraded",                 ← NOT approvals[] — §3.1
+  operation: "degraded-loop: repo work without a memory brief",
+  ack_id: "ack-2026-09-30-004", granted_by: "ove", at: "2026-09-30T09:41:11Z",
+  scope: "one turn, ticket intake-ack-idempotent"}];
+  approvals: []                                                  ← no g5/g6 op in this turn
   unverified: ["substrate.reason 'substrate returned HTTP 502'; recall.error also set; prior
   decisions on this ticket unknown"]; brief_etag: null, brief_read_at: null
 desk_event_emit {kind: "implementation.started", …, payload: {degraded: true,
@@ -707,7 +780,8 @@ desk_brief {graph_id: "ut-…", task_id: "…"}
   Reading substrate.error here would read `undefined` and pass.
 → LEAD: "desk_brief degraded: error=unknown_tool, top-level reason='desk_brief is not on the
    systems roster…'. No brief tool on this seat at all. Intending to edit …. Ack to proceed?"
-receipt: approvals[{operation: "degraded-loop: repo work without a memory brief", …}];
+receipt: loop_acks[{condition: "brief_degraded", operation: "degraded-loop: repo work without a
+  memory brief", ack_id: "…", granted_by: "…", at: "…", scope: "one turn, one ticket"}];
   unverified: ["desk_brief returned error=unknown_tool at the top level (reason: '…'); the seat has
   no brief tool, so no prior decision on this ticket was read"]
 desk_event_emit {kind: "implementation.started", …, payload: {degraded: true,
@@ -780,7 +854,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Failed brief read as successful | Populated response, no top-level `reason`, so no ack was sought | §2.1 — `substrate.error`, `recall.error` and `recall.results[].error` decide, nothing else |
 | Call-level refusal read as a successful brief | `{error: "unknown_tool"}` or `{error: "deadline"}`; the seat checks `substrate.error`, finds nothing, and proceeds | §2.1 — classify the shape on the top-level `error` first; Shape A has no nested fields |
 | Ack asked for with no reason to quote | Shape A response; the skill said there was no top-level `reason`, so step 2 had nothing in it | §3 — row 1 of the reason-path table: quote the top-level `reason` with its `error` code |
-| Edit on a succeeded brief with no marker and no ack | Receipt has `brief_read_at` + `cached` and no `approvals` entry | §2.3 — the no-marker condition needs its own ack; the timestamp is a record, not a licence |
+| Edit on a succeeded brief with no marker and no ack | Receipt has `brief_read_at` + `cached` and no `loop_acks` entry | §2.3 — the no-marker condition needs its own ack; the timestamp is a record, not a licence |
 | A no-etag contract reported as an outage | "Brief failed, substrate down" on a brief whose nested fields were all clean | §2.3 — absence of an etag field is not a failure; it is the middle row, with the no-marker ack |
 | `ok: true` retain read as "the fact is in memory" | One plane refused; `graph:` scope or the seat bank is missing the fact and the receipt says "retained" | §5 — read `results` per plane; record the failed plane in `unverified` |
 | Retain error read as "nothing was written" | A `deadline` or transport error treated as *none*; the fact may be upstream already | §5 — only `evidence_required` and `secret_refused` prove nothing was written |
@@ -796,8 +870,10 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | "Confirming" the empty queue with `desk_roster_status` | Same `store.intake_counts()` call, same empty answer, now believed | §2.1 — there is no independent read; `unverified` is the answer |
 | Loading or unloading a pack to inspect pack state | A write on a corrupt packs file reads `{}` and then overwrites it, destroying every seat's pack records | §2.1 — never diagnose with a write |
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
-| Degraded work, no ack | No `approvals` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
+| Degraded work, no ack | No `loop_acks` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |
+| Turn ack recorded in `approvals[]` | G-6 fails a receipt whose destructive op was properly approved — or, with all four fields, passes one that was not | §3.1 — `loop_acks` for turn acks, `approvals[]` for g5/g6 only |
+| `approved_by` filled in to get `desk_receipt_approve` past its own preflight | The independent check is fabricated; an empty string fails identically | §4 — leave it unset; the first stamp is QUALITY's reviewed act naming the reviewed sha |
 | Nothing recorded about the brief | Reviewer cannot tell what state you read | `brief_etag`, or `brief_read_at` + `cached`, naming the field it came from (§2.2) |
 | `generated_at` recorded as `brief_etag` | A staleness guarantee that does not exist; diffing it alarms on every fresh call and stays silent across a cache hit | §2.2 — it goes in `brief_read_at`; change detection is unavailable until the etag lands |
 | Etag moved mid-turn (etag-bearing tool) | Two turns' claims disagree | Re-brief and re-read before claiming |
@@ -823,6 +899,8 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | No staleness claim the tool cannot support | PD-1, PD-6 | `generated_at` is when you read, not what you read; the gap goes in `unverified` |
 | Degradation goes in the payload, never in the event kind | G-4 | A mislabelled turn is a blocker nobody owns or work nobody reviews — and on the gateway path the label sits in `payload.event`, not in a routable kind (§6.1) |
 | One payload field per meaning: `blocker`, `upstream_reason`, `reason_path` | PD-1 | A single `reason` loses either the filterable code or the diagnostic |
+| Turn acks in `loop_acks`; `approvals[]` reserved for g5/g6 operations | G-6 | G-6 validates every `approvals` entry and pairs them to destructive ops by count — a turn ack there fails a good receipt or silently passes a bad one (§3.1) |
+| `approved_by` left unset by the authoring seat, whatever the approval tool does | G-2, PD-5 | A placeholder fabricates the independent check; the first stamp is QUALITY's reviewed act, naming the sha it reviewed (§4) |
 | Per-plane outcome of every `desk_memory_retain`, claimed no further than `results` supports | G-2, PD-1 | `ok` is `any()` over two planes, and an error is not proof that nothing was written |
 | No claim that an emitted event reached a consumer | PD-1, PD-6 | The gateway collapses the catalogue kind to `note`; routing on the gateway path is unverified (§6.1) |
 | `memory_write` refused without `receipt_path` or `source` | G-2 | Memory is downstream of verification, never a substitute |

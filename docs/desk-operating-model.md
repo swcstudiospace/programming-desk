@@ -86,8 +86,12 @@ which is enabled on all seven seat templates. Eight points are desk policy rathe
    (`degraded-loop: repo work without a memory brief`, or `…on a brief with no revision marker`). A read
    timestamp is not a substitute for the marker: **no seat proceeds to an edit on `generated_at` and
    `cached` alone.** Acks route the way approvals already do: a build seat asks LEAD priority false;
-   LEAD asks Ove in the 1:1. The ack id goes in the receipt's `approvals`, and the verbatim reason plus
-   its field path in `unverified` — the **top-level `reason`, with its `error` code**, for Shape A, and
+   LEAD asks Ove in the 1:1. The ack id goes in the receipt's **`loop_acks`, never in `approvals[]`** —
+   `approvals[]` is G-5/G-6's destructive-operation surface, where the gate validates every entry and
+   pairs entries to destructive commands by count, so a turn ack there either fails a receipt whose
+   destructive op was properly approved or silently satisfies G-6 for one that was not. The verbatim
+   reason plus
+   its field path go in `unverified` — the **top-level `reason`, with its `error` code**, for Shape A, and
    `substrate.reason`, `recall.reason` or `recall.results[<bank>].reason` **named with its bank** for a
    per-bank Hindsight failure, since `pd-desk` and `pd-<seat>` failing are different incidents. An ack
    covers one turn on one ticket, it is not a g5/g6 `approval_id`, and it is never typed by the seat
@@ -201,6 +205,17 @@ A merge-claim receipt names the commit Greptile COMPLETED and does not claim CLE
 CLEAR_WITH_WAIVERS for a later tip that review did not cover. `merge_claim.allowed` stays
 false and the verdict stays BLOCKED until Greptile's status on that tip is COMPLETED and
 QUALITY stamps `approved_by`. Until that stamp, `approved_by` stays empty and G-2 fails closed.
+
+**The first stamp is a reviewed human act, not a tool call.** `desk_receipt_approve` runs its
+G-2/G-3/G-5/G-6 preflight on the receipt *as fetched* and then sets `approved_by`, but
+`ci/gates/check_receipt.py` fails an absent `approved_by` unconditionally — so the tool returns
+`gate_failed` on exactly the unstamped state it exists to change, and cannot make a first stamp. Until
+an owner fixes that (stamp into a copy and gate the copy, or exempt that one field on a first stamp —
+`services/**` is bot-01's, `ci/gates/**` is bot-06's), QUALITY reviews the tip and commits the stamp
+to the PR branch with an `approval_note` **naming the reviewed sha**. A note naming an earlier tip is
+not a tip-matched approval. No seat writes a placeholder into `approved_by` to get the preflight past
+itself: an empty string fails the same check, and a filled-in one fabricates the independent review
+the gate exists to require.
 
 SKIPPED is not a pass. Do not send LEAD back to review an older SHA after the branch has moved.
 The pending target is the tip of `cursor/desk-human-visible-surface-101e` that contains this

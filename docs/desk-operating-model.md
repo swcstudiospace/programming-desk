@@ -206,16 +206,34 @@ CLEAR_WITH_WAIVERS for a later tip that review did not cover. `merge_claim.allow
 false and the verdict stays BLOCKED until Greptile's status on that tip is COMPLETED and
 QUALITY stamps `approved_by`. Until that stamp, `approved_by` stays empty and G-2 fails closed.
 
-**The first stamp is a reviewed human act, not a tool call.** `desk_receipt_approve` runs its
-G-2/G-3/G-5/G-6 preflight on the receipt *as fetched* and then sets `approved_by`, but
-`ci/gates/check_receipt.py` fails an absent `approved_by` unconditionally — so the tool returns
-`gate_failed` on exactly the unstamped state it exists to change, and cannot make a first stamp. Until
-an owner fixes that (stamp into a copy and gate the copy, or exempt that one field on a first stamp —
-`services/**` is bot-01's, `ci/gates/**` is bot-06's), QUALITY reviews the tip and commits the stamp
-to the PR branch with an `approval_note` **naming the reviewed sha**. A note naming an earlier tip is
-not a tip-matched approval. No seat writes a placeholder into `approved_by` to get the preflight past
-itself: an empty string fails the same check, and a filled-in one fabricates the independent review
-the gate exists to require.
+**An approval must be bound to a sha, and must not create one.** Neither route available today
+satisfies that, so this is an open contract gap rather than a procedure:
+
+- `desk_receipt_approve` gates the receipt *before* it stamps, and `ci/gates/check_receipt.py` fails
+  an absent `approved_by` unconditionally — not behind `--strict`, and the preflight passes
+  `strict=False` regardless. So the tool returns `gate_failed` on exactly the unstamped state it
+  exists to change, and can never make a first stamp.
+- Skipping the tool and committing the stamp by hand fails for a deeper reason. Writing the approval
+  into a file on the PR branch **creates a new tip**: Greptile's COMPLETED and the reviewed sha in
+  the note both name the old one, and the merge head is now a commit nothing reviewed. Review that
+  and the next stamp moves the head again. **Advancing the tip is not a side effect of the stamp; it
+  is the stamp** — an approval delivered as a commit cannot describe the head it is committed to.
+
+So the approval does not live in the receipt file. The receipt carries an `approval_ref` —
+`kind` (`check_run`, `pr_review` or `gateway_store`), `name`, and the `reviewed_sha` the reviewer
+actually read — and G-2 resolves it against the **current head** at gate time, passing only when an
+approval exists for that exact sha. Preferred mechanism is a GitHub check run on the reviewed sha
+(`POST /repos/{repo}/check-runs` takes `head_sha` as a required field, so the binding is structural,
+and the gateway already holds a GitHub token); a PR review approval and a gateway-store record keyed
+by `(receipt_path, reviewed_sha)` are the fallbacks, the latter following the no-commit precedent
+`contract_ack` already sets with `store.record_ack`.
+
+Both halves are foreign to LEAD — `services/**` is bot-01's, `ci/gates/**` and
+`contracts/tool-rosters/**` are bot-06's — and are specified with patches in
+`.receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json`'s `blockers`. Until they land,
+an approval that leaves the reviewed tip intact is not obtainable, and no seat writes a placeholder
+into `approved_by` to work around it: an empty string fails the same check, and a filled-in one
+fabricates the independent review the gate exists to require.
 
 SKIPPED is not a pass. Do not send LEAD back to review an older SHA after the branch has moved.
 The pending target is the tip of `cursor/desk-human-visible-surface-101e` that contains this

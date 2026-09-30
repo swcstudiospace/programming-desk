@@ -333,12 +333,37 @@ if destructive:
 The second row is why "just add `at` and `blast_radius`" is the wrong fix: it converts a loud failure
 into a silent one, and a silent one in the gate that exists to stop unapproved destruction. So:
 
-- **A degraded-mode turn ack goes in `loop_acks`** — a LEAD-owned array for this loop, with
-  `condition` (the blocker code), `operation`, `ack_id`, `granted_by`, `at`, and `scope` (the one
-  ticket and one turn it covers). Nothing in `ci/gates/` reads it, which is correct: it is not a
-  destructive-op approval and must not be counted as one.
+- **A degraded-mode turn ack goes in `loop_acks`**, specified below.
 - **`approvals[]` stays for g5/g6 operations only**, one entry per destructive command, each with all
   four fields including the blast radius **as understood at approval time**.
+
+**`loop_acks` — the interim contract.** One entry per ack, appended in the turn it was granted:
+
+| Field | Type | Holds |
+|---|---|---|
+| `condition` | string | The blocker code — `brief_degraded` or `brief_no_revision_marker`. The same value as `payload.blocker` on the turn's events |
+| `operation` | string | The `operation` string for that condition, verbatim from §3 |
+| `ack_id` | string | The id the approver returned. **Never** a string the seat composed |
+| `granted_by` | string | Who granted it — a seat id for a LEAD ack, or the human's name for a 1:1 ack |
+| `at` | ISO-8601 | When it was granted, not when the receipt was written |
+| `scope` | string | The one ticket and one turn it covers, named. An ack does not generalise |
+
+**No gate reads `loop_acks`, and that is deliberate but incomplete.** Deliberate, because
+`ci/gates/check_rollback.py` must not see it — being counted as a destructive-op approval is the
+whole defect this field exists to avoid. Incomplete, because it means nothing validates the shape
+either: a seat can write a malformed entry, or omit the field after getting an ack, and no gate will
+say so.
+
+**How presence is checked, today and properly.** Today: by review. A degraded turn is visible in the
+receipt's `unverified` (§3 step 3) and in `payload.degraded` on its events, so a reviewer who sees
+either and no matching `loop_acks` entry has found an unacknowledged degraded turn. That is a human
+check, and this skill is the only thing asserting it. Properly, and this is the ask on QUALITY:
+`skills/verification-receipts/SKILL.md` carries the shared receipt contract and is
+`bot-06-quality-security`'s, so the field belongs there, with a G-2 rule that is cheap to state —
+**if any command or claim in the receipt records a degraded turn, `loop_acks` must hold an entry
+whose `condition` matches and whose six fields are all present** — and which must not be added to
+`check_rollback.py`, where the count would reintroduce the hazard. Recorded in the receipt's
+`blockers` with that wording.
 - **A turn ack is not an `approval_id`** and never substitutes for one (§3, below). The field split is
   the mechanical expression of a rule this skill already had in prose.
 
@@ -448,38 +473,81 @@ A seat that adds a skill to itself is executing unreviewed instructions with no 
 replace that; phases 3 and 4 are downstream of it, because `memory_write` is refused without a
 `receipt_path` or a `source`.
 
-> **The first QUALITY stamp cannot come from `desk_receipt_approve` today.** Leave `approved_by`
-> unset — a seat never stamps its own work, and G-2 failing closed on an unstamped receipt is the
-> designed state — but do not expect the documented tool to clear it, because it cannot:
->
-> ```python
-> # services/desk-gateway/src/desk_gateway/tools/quality.py — receipt_approve
-> check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
-> if not check.get("ok"):
->     return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", …)
-> receipt["approved_by"] = ctx.bot_id          # ← never reached on a first stamp
-> ```
->
-> The preflight runs G-2 on the receipt **as fetched**, and `ci/gates/check_receipt.py` fails an
-> absent `approved_by` unconditionally — the check is not behind `--strict`, and the preflight passes
-> `strict=False` anyway. So the one state the tool exists to change is the one state it refuses:
-> every correct unstamped receipt returns `gate_failed` forever. Verified: G-2 non-strict on an
-> unstamped receipt exits 1 with `'approved_by' is missing`.
->
-> **What works today, and what does not.** The route that has actually landed a stamp on this desk is
-> QUALITY reviewing the tip and committing the stamp to the PR branch — `approved_by`, `approved_at`
-> and an `approval_note` **naming the reviewed sha**. That is a reviewed human action, not a tool
-> call, and the sha in the note is what makes it tip-matched; a note that names an older tip is the
-> defect this receipt was pulled up for. What is **not** a fix: a seat writing any placeholder into
-> `approved_by` to get the preflight past itself. That fabricates the independent check the gate
-> exists to require, and an empty string fails identically — `if not approved_by` catches both.
->
-> **The real fix is one line and it is not LEAD's.** `services/**` is `bot-01-systems-backend`'s and
-> `ci/gates/**` is `bot-06-quality-security`'s, so LEAD records the blocker rather than editing
-> either. Either owner can close it: have `receipt_approve` run its preflight against the receipt
-> **with `approved_by` already set** (stamp into a copy, gate the copy, then commit), or teach the
-> preflight to exempt that one field on a first stamp. The first is preferable — it gates exactly
-> what gets committed. Proposed patch is in the receipt's `blockers`.
+#### §4.1 The approval must be bound to a sha, and must not create one
+
+Leave `approved_by` unset. A seat never stamps its own work, and G-2 failing closed on an unstamped
+receipt is the designed state. The rest of this section is about why the **stamp itself** is not a
+receipt-file edit, because two separate defects meet here and each one on its own looks like a small
+bug in a tool.
+
+**Defect 1 — the stamping tool deadlocks on its own input.** `desk_receipt_approve` gates the
+receipt before it stamps:
+
+```python
+# services/desk-gateway/src/desk_gateway/tools/quality.py — receipt_approve
+check = await repo.receipt_check(receipt, receipt.get("bot") or "", False, args["receipt_path"])
+if not check.get("ok"):
+    return failure("gate_failed", "the receipt does not pass G-2/G-3/G-5/G-6 before stamping", …)
+receipt["approved_by"] = ctx.bot_id          # ← never reached on a first stamp
+```
+
+`repo.receipt_check` writes the receipt **as fetched** to a scratch file and runs G-2 over it, and
+`ci/gates/check_receipt.py` fails an absent `approved_by` unconditionally — not behind `--strict`,
+and the preflight passes `strict=False` anyway. So the one state the tool exists to change is the one
+state it refuses: every correct unstamped receipt returns `gate_failed`, forever. Verified: G-2
+non-strict on an unstamped receipt exits 1 with `'approved_by' is missing`.
+
+**Defect 2 — and this is the one that rules out the obvious workaround.** The workaround for defect 1
+is to skip the tool: QUALITY reviews tip X and lands the stamp as a hand-written commit. That
+cannot work, and not because of a bug — because of what a commit is. **Writing the approval into a
+file on the branch creates a new tip Y.** Greptile's COMPLETED and the reviewed sha in the
+`approval_note` both name X, and the merge head is now Y, which nothing has reviewed. Review Y and
+the stamp for it creates Z. **Advancing the tip is not a side effect of the stamp; it is the stamp** —
+an approval delivered as a commit can never describe the head it is committed to. Three pushes on
+this branch are the demonstration: each one moved the head past the tip the previous review covered.
+
+So a receipt-file stamp is wrong in both directions at once. It is **unbound** — it asserts a sha in
+prose, and nothing checks that the sha it names is the head — and it is **tip-creating**. The rule
+that falls out:
+
+> **An approval must be bound to a sha, and must not create one.**
+
+**What satisfies that, in preference order.** All three are foreign changes; none is a LEAD edit.
+
+| Mechanism | Bound to a sha? | Creates a commit? | Notes |
+|---|---|---|---|
+| **A GitHub check run on the reviewed sha** — `POST /repos/{repo}/check-runs` with `head_sha`, a fixed `name` like `desk/quality-approval`, `conclusion: "success"` | **Yes, by construction** — the API takes the sha as a required field | **No** | Preferred. The gateway already holds a GitHub token (`upstreams.GitHub`), so this is a new method beside `comment_on_issue`, not new plumbing. A push to a new head simply has no such check run, which is the correct behaviour rather than a staleness problem to manage |
+| **A PR review approval** | Yes — GitHub marks a review stale when the head moves | No | Human-visible and needs no new tool, but a review is by a GitHub user; mapping one to `bot-06-quality-security` is a convention the gate would have to encode |
+| **A gateway-store record**, keyed by `(receipt_path, reviewed_sha)` | Yes, if the sha is part of the key | No | There is already a precedent for a no-commit approval: `contract_ack` records acks through `store.record_ack` and commits nothing. But the store's reader returns its default on `OSError`/`JSONDecodeError` (§2.1), so a corrupt store silently loses the approval. That fails **closed** — G-2 goes red, not green — so it is survivable, but it is the weakest of the three and invisible on the PR |
+
+**What the receipt carries instead of a stamp.** Not the approval — a **pointer** to where the
+approval lives, so the gate can resolve it against the head at gate time:
+
+```jsonc
+"approval_ref": {
+  "kind": "check_run",                    // check_run | pr_review | gateway_store
+  "name": "desk/quality-approval",        // what to look for
+  "reviewed_sha": "<40 hex>",             // the sha the reviewer actually read
+  "resolved_by": "G-2 at gate time"       // never by the authoring seat
+}
+```
+
+`reviewed_sha` is recorded by the *reviewer's* mechanism, not typed by the authoring seat, and G-2's
+job becomes: resolve `approval_ref` for the **current head**, and pass only if an approval exists for
+that exact sha. That is what makes tip matching mechanical instead of a sentence in a note that
+nobody can check.
+
+**What is still not a fix**, under any of this: a seat writing a placeholder into `approved_by` to
+get a preflight past itself. That fabricates the independent review the gate exists to require, and
+an empty string fails identically — `if not approved_by` catches both.
+
+**Ownership, plainly.** `services/**` is `bot-01-systems-backend`'s, `ci/gates/**` and
+`contracts/tool-rosters/**` are `bot-06-quality-security`'s. Closing this needs one change in each:
+a gateway tool that records a sha-bound approval without committing, and a G-2 that resolves
+`approval_ref` against the head instead of reading `approved_by` from the file. Both are specified
+with the proposed patches in the receipt's `blockers`. Until they land, **this PR's approval is not
+obtainable by any mechanism that leaves the reviewed tip intact**, and that — not a missing stamp —
+is what the red G-2 on this receipt records.
 
 ### §5 Phase 3 — memory_write
 
@@ -873,7 +941,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Degraded work, no ack | No `loop_acks` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |
 | Turn ack recorded in `approvals[]` | G-6 fails a receipt whose destructive op was properly approved — or, with all four fields, passes one that was not | §3.1 — `loop_acks` for turn acks, `approvals[]` for g5/g6 only |
-| `approved_by` filled in to get `desk_receipt_approve` past its own preflight | The independent check is fabricated; an empty string fails identically | §4 — leave it unset; the first stamp is QUALITY's reviewed act naming the reviewed sha |
+| `approved_by` filled in to get `desk_receipt_approve` past its own preflight | The independent check is fabricated; an empty string fails identically | §4.1 — leave it unset. The approval is not a receipt-file stamp: it is sha-bound and commit-free, resolved from `approval_ref` |
 | Nothing recorded about the brief | Reviewer cannot tell what state you read | `brief_etag`, or `brief_read_at` + `cached`, naming the field it came from (§2.2) |
 | `generated_at` recorded as `brief_etag` | A staleness guarantee that does not exist; diffing it alarms on every fresh call and stays silent across a cache hit | §2.2 — it goes in `brief_read_at`; change detection is unavailable until the etag lands |
 | Etag moved mid-turn (etag-bearing tool) | Two turns' claims disagree | Re-brief and re-read before claiming |
@@ -900,7 +968,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Degradation goes in the payload, never in the event kind | G-4 | A mislabelled turn is a blocker nobody owns or work nobody reviews — and on the gateway path the label sits in `payload.event`, not in a routable kind (§6.1) |
 | One payload field per meaning: `blocker`, `upstream_reason`, `reason_path` | PD-1 | A single `reason` loses either the filterable code or the diagnostic |
 | Turn acks in `loop_acks`; `approvals[]` reserved for g5/g6 operations | G-6 | G-6 validates every `approvals` entry and pairs them to destructive ops by count — a turn ack there fails a good receipt or silently passes a bad one (§3.1) |
-| `approved_by` left unset by the authoring seat, whatever the approval tool does | G-2, PD-5 | A placeholder fabricates the independent check; the first stamp is QUALITY's reviewed act, naming the sha it reviewed (§4) |
+| `approved_by` left unset by the authoring seat, whatever the approval tool does | G-2, PD-5 | A placeholder fabricates the independent check. An approval must be bound to a sha and must not create one, so it does not live in the receipt file at all (§4.1) |
 | Per-plane outcome of every `desk_memory_retain`, claimed no further than `results` supports | G-2, PD-1 | `ok` is `any()` over two planes, and an error is not proof that nothing was written |
 | No claim that an emitted event reached a consumer | PD-1, PD-6 | The gateway collapses the catalogue kind to `note`; routing on the gateway path is unverified (§6.1) |
 | `memory_write` refused without `receipt_path` or `source` | G-2 | Memory is downstream of verification, never a substitute |

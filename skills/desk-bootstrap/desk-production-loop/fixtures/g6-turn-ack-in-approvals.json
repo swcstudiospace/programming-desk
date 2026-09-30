@@ -1,0 +1,22 @@
+{
+  "_fixture": "NOT a real receipt. Evidence for skills/desk-bootstrap/desk-production-loop/SKILL.md §3.1: a degraded-mode turn ack recorded in approvals[] with {operation, approved_by, id} fails G-6 whenever the receipt also carries a destructive command, because the gate validates every approvals entry against [operation, approved_by, at, blast_radius]. Expected: check_rollback.py exits 1. See fixtures/README.md.",
+  "task_id": "fixture-g6-turn-ack-in-approvals",
+  "bot": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "rm -rf build/",
+      "exit_code": 0,
+      "output_tail": "synthetic destructive command; this fixture is never executed"
+    }
+  ],
+  "claims": [],
+  "unverified": [],
+  "approved_by": "bot-06-quality-security",
+  "approvals": [
+    {
+      "operation": "degraded-loop: repo work without a memory brief",
+      "approved_by": "ove",
+      "id": "ack-0000-00-00-000"
+    }
+  ]
+}

@@ -34,10 +34,24 @@
 # .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json.
 #
 #   bash skills/desk-bootstrap/desk-production-loop/verify.sh
+#
+# DESK_LOOP_ROOT: run the checks against a different tree than the one this script lives in. It
+# exists for the negative tests. Asserting that a rule is PRESENT is easy; asserting that its
+# absence is CAUGHT means mutating the skill and re-running, and doing that in the working tree
+# risks a restore step that reaches past the mutation -- `git checkout -- SKILL.md` discards
+# whatever else was uncommitted in that file. So a negative test copies the tree to a scratch
+# directory, mutates the copy, and points this script at it; the working tree is never touched:
+#
+#   scratch=$(mktemp -d)
+#   git archive --format=tar HEAD | tar -x -C "$scratch"      # or cp -a of the tracked files
+#   python3 - "$scratch/skills/.../SKILL.md" <<'EOF' ... mutate ... EOF
+#   DESK_LOOP_ROOT="$scratch" bash skills/desk-bootstrap/desk-production-loop/verify.sh   # expect 1
+#   rm -rf "$scratch"
+#
 set -euo pipefail
-cd "$(dirname "$0")/../../.."
+cd "${DESK_LOOP_ROOT:-$(dirname "$0")/../../..}"
 python3 - <<'PY'
-import re,sys
+import json,re,subprocess,sys
 from pathlib import Path
 def load(p): return Path(p).read_text()
 S=load("skills/desk-bootstrap/desk-production-loop/SKILL.md")
@@ -47,6 +61,11 @@ V=load("docs/vps-agent-bus.md")
 R=load("grokbot/README.md")
 G=load("scripts/generate-templates.py")
 V_SELF=load("skills/desk-bootstrap/desk-production-loop/verify.sh")   # this script checks itself too
+# ...but only its HEADER for the honesty assertions below. An assertion that searches the whole file
+# for its own literal always passes, because the literal is in the assertion: a tautology that would
+# survive deleting the comment it was meant to protect. The header is everything above `set -euo`,
+# which is comments only and contains no assertion text.
+V_HEAD=V_SELF.split("set -euo pipefail")[0]
 # The seven seat templates are named explicitly, not globbed. A glob over an empty or partial
 # directory runs zero per-template checks and then reports "7/7 templates" on the strength of
 # nothing -- the check has to fail when a template is MISSING, which is exactly the case a glob
@@ -169,21 +188,62 @@ need("in the receipt under `approvals`" not in fS,"R7a stale approvals instructi
 for dead in ("approvals[{operation: \"degraded-loop", "no `approvals` entry"):
     need(dead not in S,"R7a stale approvals example: "+dead[:32])
 # (b) the first QUALITY stamp cannot come from desk_receipt_approve, and no seat fakes it
-need("The first QUALITY stamp cannot come from `desk_receipt_approve` today" in fS,"R7b deadlock named")
+# R7b kept the facts about the deadlock; round 8 replaced the REMEDY they were attached to, so the
+# assertions that pinned the old remedy's sentences moved to R8a rather than being relaxed.
+need("the stamping tool deadlocks on its own input" in fS,"R7b deadlock named")
 need("gate_failed" in S and "gate_failed" in D,"R7b gate_failed code")
 need("never reached on a first stamp" in S,"R7b unreachable line cited")
-need("the check is not behind `--strict`" in fS,"R7b not behind strict")
-need("naming the reviewed sha" in fS and "naming the reviewed sha" in fD,"R7b sha in the note")
+need("not behind `--strict`" in fS and "not behind `--strict`" in fD,"R7b not behind strict")
 need("an empty string fails identically" in fS,"R7b empty string fails too")
-need("is one line and it is not LEAD's" in fS,"R7b foreign fix named")
 for owner in ("bot-01-systems-backend","bot-06-quality-security"):
     need(owner in S,"R7b owner named "+owner)
 # (c) neither this skill nor its docs may claim that CI runs the loop checks -- it does not
-need("Not wired into CI" in V_SELF,"R7c honest CI note in this script")
-# assembled from fragments so the forbidden phrases do not appear literally in this file, which
-# reads itself into V_SELF -- a literal list would match its own assertion and fail every run
+# assembled from fragments, and searched in V_HEAD not V_SELF, so neither assertion can satisfy
+# itself out of its own source text
+need(("Not wired "+"into CI") in V_HEAD,"R7c honest CI note in this script's header")
 for claim in ("CI "+"runs this check","enforced "+"by CI","CI "+"enforces"):
-    need(claim not in fS and claim not in fD and claim not in V_SELF,"R7c false CI claim: "+claim)
+    need(claim not in fS and claim not in fD and claim not in V_HEAD,"R7c false CI claim: "+claim)
+# --- round 8 ---------------------------------------------------------------------------------
+# (a) an approval must be BOUND to a sha and must not CREATE one. A receipt-file stamp does the
+# opposite of both, which is why the tip chase was structural rather than bad luck.
+need("must be bound to a sha, and must not create one" in fS,"R8a binding rule skill")
+need("must be bound to a sha, and must not create one" in fD,"R8a binding rule doc")
+need("approval_ref" in S and "approval_ref" in D,"R8a approval_ref field")
+need("reviewed_sha" in S and "reviewed_sha" in D,"R8a reviewed_sha field")
+need("Advancing the tip is not a side effect of the stamp; it is the stamp" in fS,"R8a tip-chase named")
+need("check run" in fS.lower() and "head_sha" in S,"R8a check-run mechanism")
+need("record_ack" in S,"R8a no-commit precedent cited")
+# the superseded workaround must be gone from BOTH files, not merely contradicted
+for dead in ("QUALITY reviews the tip and commits the stamp",
+             "commits the stamp to the PR branch",
+             "The first stamp is a reviewed human act, not a tool call"):
+    need(dead not in fS,"R8a stale workaround in skill: "+dead[:40])
+    need(dead not in fD,"R8a stale workaround in doc: "+dead[:40])
+# (b) the G-6 fixtures are IN-REPO and this script actually runs them, so SS3.1's reasoning is
+# machine-checked rather than asserted in prose
+FIX=Path("skills/desk-bootstrap/desk-production-loop/fixtures")
+for name,want in (("g6-turn-ack-in-approvals.json",1),("g6-turn-ack-four-fields.json",0)):
+    f=FIX/name
+    need(f.is_file(),"R8b fixture missing: "+name)
+    body=json.loads(f.read_text())
+    need(body.get("_fixture","").startswith("NOT a real receipt"),"R8b fixture not labelled: "+name)
+    need(any(re.search(r"\brm\s+-rf?\b",c.get("cmd","")) for c in body["commands"]),"R8b fixture has no destructive cmd: "+name)
+    got=subprocess.run([sys.executable,"ci/gates/check_rollback.py","--receipt",str(f)],
+                       capture_output=True,text=True).returncode
+    need(got==want,f"R8b {name}: check_rollback exited {got}, expected {want} -- if G-6 now pairs "
+                   f"approvals to destructive ops instead of counting them, SS3.1's second row is "
+                   f"what needs rewriting, not this fixture")
+need((FIX/"README.md").is_file() and "by count" in (FIX/"README.md").read_text(),"R8b fixture README")
+# (c) the negative tests must not restore the working tree with `git checkout --`
+need("DESK_LOOP_ROOT" in V_HEAD,"R8c scratch-root documented")
+need("git "+"checkout -- SKILL.md` discards" in V_HEAD,"R8c hazard named in header")
+# (d) loop_acks is described well enough for QUALITY to add it to the shared receipt contract
+i=S.index("| Field | Type | Holds |")
+loop_tbl=S[i:S.index("\n\n",i)]
+for f in ("condition","operation","ack_id","granted_by","at","scope"):
+    need("`"+f+"`" in loop_tbl,"R8d loop_acks field documented: "+f)
+need("No gate reads `loop_acks`" in fS,"R8d gate gap stated")
+need("How presence is checked" in fS,"R8d presence check stated")
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")
 need("read timestamp, not a revision id" in fD,"R2b doc")
@@ -217,5 +277,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
 PY

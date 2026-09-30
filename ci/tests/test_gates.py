@@ -381,6 +381,28 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "exhaustive" in r.stderr.lower()
 
+    def test_expects_failure_exhaustiveness_allows_valid_negative_search_evidence(self, tmp_path):
+        """Not every expects_failure + exhaustive claim is abuse (Greptile P1, PR #45,
+        'Valid negative evidence rejected'). A `grep` that exits 1 because it scanned the
+        whole input and matched nothing is, unlike a failing test, evidence that covers
+        every instance — exactly what an exhaustive negative claim needs. That must still
+        pass --strict once the claim has been independently approved elsewhere.
+
+        Runs against the candidate (run_candidate_gate); see run_candidate_gate() docstring.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "grep -c 'populated' env/*.conf", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value is still empty", "evidence_command_index": 0,
+                 "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
 
 # ===========================================================================
 # G-2 — loop_acks (degraded-mode turn acknowledgements)

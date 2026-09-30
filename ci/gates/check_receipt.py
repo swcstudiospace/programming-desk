@@ -66,6 +66,13 @@ EXHAUSTIVE_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Search tools whose exit code 1 specifically means "found no match" — not a runtime error,
+# not one failing case among many, but a scan of the *entire* input coming back negative. That
+# full-input scope is what can make a negative claim ("every value is still empty") honestly
+# exhaustive from a single command, unlike a test runner's exit 1 (some cases failed, others
+# may not even have run) or a script's exit 1 (means whatever that script decided it means).
+NEGATIVE_SEARCH_RE = re.compile(r"\b(grep|egrep|fgrep|rg|ag|ack)\b")
+
 
 class ReceiptError(Exception):
     pass
@@ -185,18 +192,30 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
         if strict and EXHAUSTIVE_RE.search(text):
             if expects_failure:
                 # A claim's own expects_failure must not borrow the receipt's OTHER
-                # commands to waive this check. The claim is evidenced by exactly one
-                # command that was *expected to fail* — that is reproduction evidence for
-                # the bug it names, never exhaustive evidence, no matter how many other
-                # commands the receipt records for other claims (e.g. the fix that follows
-                # it). len(commands) is a receipt-wide count and says nothing about this
-                # claim's own evidence, so it must not be what decides this.
-                problems.append(
-                    f"claim[{i}] {text!r} sets expects_failure and asserts "
-                    "exhaustiveness — a single expected-failure command cannot be "
-                    "exhaustive evidence, regardless of how many other commands the "
-                    "receipt records"
-                )
+                # commands to waive this check. len(commands) is a receipt-wide count and
+                # says nothing about this claim's own evidence, so it must not be what
+                # decides this — the cited command has to stand on its own.
+                #
+                # Most expected-failure commands (a failing test, a failing build) are
+                # reproduction evidence for the one bug they name, never exhaustive
+                # evidence, no matter how many other commands the receipt records for
+                # other claims (e.g. the fix that follows it). But a search tool whose
+                # exit 1 means "scanned the whole input, found no match" (grep and
+                # friends) is different in kind: that single command's negative result
+                # already covers every instance, which is exactly what an exhaustive
+                # negative claim ("every value is still empty") needs. Real abuse — a
+                # test or script failure dressed up in exhaustive wording — still has
+                # nothing that scans "every" anything, so it keeps failing here.
+                cmd_str = cited.get("cmd", "") if isinstance(cited, dict) else ""
+                if not (exit_code == 1 and NEGATIVE_SEARCH_RE.search(cmd_str)):
+                    problems.append(
+                        f"claim[{i}] {text!r} sets expects_failure and asserts "
+                        f"exhaustiveness, but command[{idx}] {cmd_str!r} is not a "
+                        "full-scope search whose exit 1 means \"found nothing anywhere\" "
+                        "— a single expected-failure command otherwise cannot be "
+                        "exhaustive evidence, regardless of how many other commands the "
+                        "receipt records"
+                    )
             elif len(commands) < 2:
                 problems.append(
                     f"claim[{i}] {text!r} asserts exhaustiveness but the receipt has "

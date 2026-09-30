@@ -308,6 +308,62 @@
       "duration_s": 0.1,
       "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 1,
+      "duration_s": 12.30,
+      "output_tail": "FAILED test_expects_failure_silent_grep_q_later_sibling_is_still_padding, FAILED test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration, FAILED test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration — 3 failed, 192 passed (run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 3 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md && git commit -m 'QUALITY: SPE-4794 #45 hard-fix sibling path+order + guide'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/task-fxsvga e63f7d7] QUALITY: SPE-4794 #45 hard-fix sibling path+order + guide\n 3 files changed, 178 insertions(+), 60 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 11.90,
+      "output_tail": "195 passed in 11.90s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k silent_grep_q -v",
+      "exit_code": 0,
+      "duration_s": 0.47,
+      "output_tail": "test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_later_sibling_is_still_padding PASSED, test_expects_failure_silent_grep_q_substring_sibling_is_not_corroboration PASSED, test_expects_failure_silent_grep_q_test_dash_n_is_not_corroboration PASSED, test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding PASSED — 6 passed, 189 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
+      "expects_failure": true
     }
   ],
   "claims": [
@@ -538,6 +594,44 @@
       "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
       "evidence_command_index": 49,
       "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's sibling-path-exactness and sibling-ordering hard-fix",
+      "evidence_command_index": 50
+    },
+    {
+      "claim": "Greptile's tip_match 0/5 on e3a93b9, technical Security P1 #1 ('Unrelated checks confirm missing files'): before this round's fix committed, the suite ran with 3 new candidate-gate tests failing against the still-unfixed HEAD (because run_candidate_gate() archives HEAD via 'git archive', not the working tree) — confirming those three new regression tests actually exercise the committed candidate rather than passing vacuously",
+      "evidence_command_index": 51,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _is_positive_existence_check() now matches a sibling's path via FILE_EXISTENCE_PROBE_RE (restricted to test -f/-e and [ -f ]/[ -e ]) and exact equality on the captured path token, rejecting both substring matches (config.yaml.bak no longer corroborates config.yaml) and non-existence flags (test -n no longer counts); _confirmed_by_sibling_existence_check() and the single-command padding computation both now require the sibling's command index to be strictly lower than the quiet-search compound's own index, so a sibling recorded after the compound (Greptile's technical Security P1 #2, 'Later check validates earlier search') is rejected as padding instead of accepted as corroboration",
+      "evidence_command_index": 52
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 195 tests (192 on the prior tip + 3 new: substring false-positive rejection, test -n rejection, and later-sibling rejection; the prior confirmed-existence test was reordered in place, not added, so it is not counted as new), no regressions",
+      "evidence_command_index": 53
+    },
+    {
+      "claim": "All six silent_grep_q tests pass individually against the real candidate via run_candidate_gate(): the missing-file case is still rejected, a sibling existence check preceding the quiet search still corroborates it, a sibling recorded AFTER the quiet search is now rejected as padding, a substring-matching sibling on a different path is now rejected, a test -n sibling on the exact path is now rejected, and an unrelated-path sibling is still rejected — matching the exact scope of Greptile's two technical P1s and no regression in the already-passing cases",
+      "evidence_command_index": 54
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 55
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 56
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 57
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by — approved_by is intentionally left unset per this round's task instructions, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 58,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -553,9 +647,8 @@
     "COMPOUND_EXISTENCE_GATE_RE's 'no captured output' rule only recognises `test -f/-e X && ...` and `[ -f/-e X ] && ...` lead-ins (matching EXISTENCE_ONLY_RE's own alternation); a content search chained after a `stat`/`ls` existence probe, or chained with `;` instead of `&&`, is not covered by this round's fix and would need a follow-up if that shape turns out to matter in practice",
     "SILENT_SEARCH_RE recognises `grep -q`/`grep --quiet` specifically (including combined short flags like `-iq`); a different silent-by-design search tool (e.g. a custom script that also prints nothing) chained the same way is not covered by this round's sibling-existence-check requirement at all, so it still falls into the 'no captured output, not silent-search-shaped' rejection branch above it — this was scoped to the exact tool Greptile's finding used, not every possible silent search command",
     "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes — e.g. an absence claim that names neither a path noun nor one of the listed phrases — would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser",
-    "This round's fix (Greptile's remaining technical P1, tip_match 2/5): a quiet-grep compound (`test -f X && grep -q PATTERN X` / `[ -f X ] && grep -q PATTERN X`) now requires a SEPARATE command in the same receipt that is a bare existence check (EXISTENCE_ONLY_RE) naming the same path and exiting 0, or it is rejected as exhaustive evidence — closing the gap where a missing file and a real quiet no-match produced the identical exit code and empty output. The sibling-existence-check exception to the pre-existing 'no other commands' padding rule is scoped narrowly (only a bare existence check on the exact same path counts; any other extra command, including one that also proves existence via a non-EXISTENCE_ONLY_RE shape like `find . -name X`, is still treated as padding and rejected) — this is intentionally conservative/fail-closed, consistent with the rest of this gate's heuristics, not an exhaustive parser of every way existence could be proven",
-    "The sibling-existence-check match (`_is_positive_existence_check`) tests `path in other_cmd` as a plain substring, not a shell-aware tokenizer — a sibling command whose argument differs only by quoting or an unrelated prefix/suffix overlap (e.g. testing `config/.env.example.bak` would substring-match a gate_path of `.env.example`) could in principle satisfy the corroboration requirement when it does not actually prove the same file existed; this mirrors the substring-based path matching already used elsewhere in this gate (e.g. MISSING_TARGET_RE's quoted-text stripping) rather than introducing a new class of approximation, but it was not specifically probed with an adversarial near-match path in this round's tests",
-    "This gate does not verify that the sibling existence-check command actually ran BEFORE the quiet-grep compound it corroborates — 'commands' is not asserted to be in chronological execution order anywhere else in this file either, so a receipt could record the corroborating `test -f X` after the compound command and still pass; this is a pre-existing property of the receipt schema (no command timestamps are required), not a new gap introduced by this fix, but it means the sibling check proves 'X existed at some recorded point', not strictly 'X existed when the compound ran'"
+    "Superseded by this round's fix (see new commands/claims below): the sibling-existence-check exception to the pre-existing 'no other commands' padding rule is now restricted to a real file-existence probe (`test -f`/`test -e`/`[ -f ]`/`[ -e ]` only, via FILE_EXISTENCE_PROBE_RE) matched by EXACT path-token equality, and only when that sibling's command index is strictly lower than the quiet-search compound's own index. Any other extra command — a different flag (`test -n`, `-d`, ...), a substring/near-match path, a non-test-shaped existence probe like `find . -name X`, or a same-path match recorded AFTER the compound — is still treated as padding and rejected. Still intentionally conservative/fail-closed, not an exhaustive parser of every way existence could be proven.",
+    "The ordering requirement added this round (sibling command index < quiet-search command index) is enforced on the receipt's own array order, not on wall-clock timestamps — no per-command timestamp is recorded anywhere in this schema, so a receipt author who lists commands out of true execution order could still satisfy the check by construction. This trusts array order as a proxy for execution order, the same trust this gate already places in 'commands' elsewhere (e.g. nothing stops a receipt from listing any command in a fabricated sequence); closing that would need per-command timestamps in the schema, which is out of scope for this round's fix."
   ],
   "loop_acks": []
 }

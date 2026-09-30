@@ -500,6 +500,40 @@ class GitHub:
     async def comment_on_issue(self, repo: str, number: int, body: str) -> dict[str, Any]:
         return await self.http.request("POST", f"/repos/{repo}/issues/{number}/comments", json={"body": body})
 
+    async def find_issue_comment(
+        self, repo: str, number: int, marker: str, *, since: str | None = None, max_pages: int = 5
+    ) -> dict[str, Any]:
+        """Whether a comment carrying `marker` is already on the issue.
+
+        GitHub lists issue comments oldest-first with no way to reverse them, so on a long
+        thread the pages this walks are the *oldest* comments — the least likely to hold a
+        marker a caller is asking about. `since` is what makes the search reach it: an
+        ISO-8601 instant, narrowing the thread to comments touched after it, so a window
+        around when the comment would have been written costs one page whatever the thread's
+        length. A caller that omits it on a thread longer than the page budget will not find
+        a comment that is there.
+
+        `complete` is the honest part: a `found: false` that ran out of page budget is not
+        evidence of absence. A caller using this to decide whether it already posted
+        something must not post on `complete: false`.
+        """
+        for page in range(1, max_pages + 1):
+            params: dict[str, Any] = {"per_page": 100, "page": page}
+            if since:
+                params["since"] = since
+            result = await self.http.request("GET", f"/repos/{repo}/issues/{number}/comments", params=params)
+            if not result.get("ok"):
+                return result
+            comments = result.get("body")
+            if not isinstance(comments, list):
+                return {"error": UPSTREAM_ERROR, "reason": "github returned no comment list for the issue"}
+            for comment in comments:
+                if isinstance(comment, dict) and marker in (comment.get("body") or ""):
+                    return {"ok": True, "found": True, "complete": True}
+            if len(comments) < 100:
+                return {"ok": True, "found": False, "complete": True}
+        return {"ok": True, "found": False, "complete": False}
+
 
 class PlayConsole:
     def __init__(self, settings: Settings) -> None:

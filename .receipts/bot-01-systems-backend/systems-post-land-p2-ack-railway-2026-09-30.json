@@ -1,0 +1,174 @@
+{
+  "task_id": "systems-post-land-p2-ack-railway-2026-09-30",
+  "bot": "bot-01-systems-backend",
+  "branch": "bot-01-systems-backend/post-land-p2-ack-railway",
+  "pull_request": null,
+  "started_at": "2026-09-30T05:40:00Z",
+  "completed_at": "2026-09-30T06:35:00Z",
+  "summary": "Post-land P2s in services/desk-gateway, on main @ dcac9c0. desk_intake_ack delivers the origin reply at most once per ack: a write-ahead delivery marker in the intake record plus the same marker embedded in the comment body, so a store failure after a successful comment cannot buy a second comment on the retry (4141126604). desk_railway_status scopes latest_deployment to one environment — production when the project has one, else the single/first listed — names that environment, and _find_service returns that environment's deployment so railway_logs and the railway_redeploy staleness check both act on the environment they report (4141126611). Second commit answers the three Greptile P1s on the first: the recovery lookup carries a `since` window anchored to the first attempt so a thread longer than the page budget cannot strand the intake (4141224505); acks for the same reply are serialised per ack and re-read the record inside that lock, so two calls in flight together cannot both post (4141224477); and a lookup that cannot answer, an unconfigured gateway included, now refuses to advance rather than marking an intake acknowledged on the chance the reply landed (4141224494).",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "uv run pytest -q  (services/desk-gateway, after the Greptile P1 fixes)",
+      "exit_code": 0,
+      "duration_s": 12.7,
+      "output_tail": "99 passed in 12.68s"
+    },
+    {
+      "cmd": "negative control: git checkout dcac9c0 -- tools/lead.py tools/infra.py, then uv run pytest -q -k \"does_not_repost or reads_the_issue or unreadable_issue or different_ack\"",
+      "exit_code": 1,
+      "duration_s": 1.4,
+      "output_tail": "E AssertionError: the retry posted the reply a second time — 4 failed, 91 deselected in 1.36s"
+    },
+    {
+      "cmd": "negative control: same revert, uv run pytest -q -k \"scopes or production or another_environments or only_environment\"",
+      "exit_code": 1,
+      "duration_s": 2.1,
+      "output_tail": "E AssertionError: ['dep-staging'] assert ['dep-staging'] == ['dep-prod'] — 8 failed, 1 passed, 86 deselected in 2.11s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files $(git diff --name-only dcac9c0)",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 6 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files $(git diff --name-only dcac9c0)",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 6 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "uvx --with pyyaml --from pytest pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.6,
+      "output_tail": "157 passed in 10.55s"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224505): drop the `since` window from the recovery lookup, then uv run pytest -q -k longer_than_the_page_budget",
+      "exit_code": 1,
+      "duration_s": 1.3,
+      "output_tail": "E AssertionError: the reply is on the issue, but the lookup could not read far enough to see it, so the intake is stranded — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224477): remove the per-ack lock and the re-read it protects, then uv run pytest -q -k concurrent_intake_acks",
+      "exit_code": 1,
+      "duration_s": 1.4,
+      "output_tail": "E AssertionError: both calls posted: [...two identical ack comments...] assert 2 == 1 — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "negative control (Greptile 4141224494): restore the not_configured early return in the lookup path, then uv run pytest -q -k no_token",
+      "exit_code": 1,
+      "duration_s": 1.1,
+      "output_tail": "E AssertionError: {'is_error': False, 'ok': True, ... 'error': 'not_configured'} assert (False is True) — 1 failed, 98 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main  &&  python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "G-4 PASS — no contract surfaces touched / G-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "P2 4141126604: a successful GitHub comment followed by a failing Store.intake_ack leaves the intake un-advanced, and the retry that failure asks for advances the record without posting a second comment — asserted on the fake issue's comment list, which holds exactly one body",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The same holds in the narrower window where even the delivery record could not be written: the retry reads the issue back, finds the marker it would have posted, and finishes the advance without posting. One comment, one lookup",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "An outcome that cannot be read back fails closed: with the comment lookup returning HTTP 403 the tool returns notify_unknown, posts nothing, and the intake stays claimed; once the lookup answers again the same call finishes with one comment still on the issue",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Idempotence is per ack and not per intake: a later ack with a different status and message on the same intake posts its own reply, so the guard cannot swallow a reply the requester was owed",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Store.intake_delivery is a write of its own, keyed per ack, and returns None for an unknown intake_id; the delivery state survives being re-read from disk. An `attempted` write keeps first_at from the first attempt, and a state meaning nothing was sent drops it so the next attempt is a first attempt again",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224505: the recovery lookup carries a `since` window anchored a day before the first attempt, so on an issue seeded with 600 older comments — past the lookup's 5x100 page budget — the retry still finds its marker on the first page and does not repost. Asserted on the query parameters the real GitHub.find_issue_comment sent",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224477: two desk_intake_ack calls for the same ack issued concurrently, with the POST held open 200ms to force the overlap, post exactly one comment; one reports posted:true and the other posted:false, and both report delivered:true",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Greptile P1 4141224494: with an attempt recorded and the GitHub token then gone, the ack returns notify_unknown with notify.error not_configured, posts nothing, and leaves the intake claimed rather than advancing it. The carve-out for a reply that was never attempted on an unconfigured gateway is unchanged",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Each of the three P1 fixes has its own negative control: removing the `since` window strands the intake at notify_unknown, removing the per-ack lock posts two identical comments, and restoring the not_configured early return advances the intake on an unreadable outcome",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "Both negative controls show these tests failing against the code on main @ dcac9c0, so they are keyed on the defects rather than merely green. The duplicate-comment assertion is the one that fires first",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "P2 4141126611: with a service deployed in staging (listed first) and production, railway_status reports latest_deployment as production's dep-prod and environment_id as env-prod, while deployments still carries both environments",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "railway_logs falls back to the chosen environment's deployment: it reads dep-prod, not the staging instance the API listed first, and reports the environment_id it read from",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "A service with nothing deployed in the chosen environment yields not_found naming that environment rather than another environment's logs, and an explicit deployment_id still reads whatever it names",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "With no environment named production the single/first listed environment is used, so a one-environment project is unchanged in behaviour",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "railway_redeploy compares prior_deployment_id to the target environment's deployment and redeploys into that same environment; the two pre-existing staleness tests are unchanged and still pass",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The change is confined to services/desk-gateway and this receipt; ci/, ownership.yaml and other seats' paths are untouched, and the repo gate suite is green at this tip",
+      "evidence_command_index": 3
+    }
+  ],
+  "unverified": [
+    "No gateway was deployed or restarted; all evidence is from the unit suite in services/desk-gateway plus the repo gate scripts run locally",
+    "No upstream was contacted. GitHub is stubbed at the HTTP boundary, so the real comment_on_issue and find_issue_comment run against a fake that implements paging and the `since` filter as documented — but GitHub's own behaviour for those parameters on the issue-comments endpoint is not verified against the live API. In particular `since` is documented as filtering on last-updated time; if it behaved otherwise the recovery lookup's window would be wrong",
+    "The per-ack lock is process-local, matching the scope Store serialises its writes in. Two gateway processes sharing one data directory are outside what either guards; there the durable marker and the lookup are the only defence, and that configuration is untested",
+    "The recovery window is widened by 24h against clock skew between this gateway and GitHub. Skew larger than that would narrow the window past the comment and could produce a duplicate; no clock-skew scenario was tested",
+    "Delivery records written by the first commit of this branch carry no first_at, so a recovery lookup for one of those falls back to reading the thread from its start — the pre-fix behaviour. Only relevant to an intake acked between the two commits, which is no deployed gateway",
+    "find_issue_comment walks at most 5 pages of 100 comments within the `since` window. A window that somehow held more than 500 comments returns complete:false, which the ack treats as unknown and refuses to post on — correct but untested at that volume",
+    "The ack idempotency key is a digest of the ack arguments, so a retry that deliberately changes the message is a new delivery and posts again. That is the intended trade-off against suppressing a second legitimate reply; it is asserted for a different status, not for a reworded retry of the same status",
+    "Whether Railway can return service instances with no environments listed on the project is unknown; that case falls back to the single environment in deployments, and to no deployment when several are present"
+  ],
+  "files_changed": [
+    ".receipts/bot-01-systems-backend/systems-post-land-p2-ack-railway-2026-09-30.json",
+    ".receipts/bot-01-systems-backend/systems-post-land-p2-ack-railway-2026-09-30.md",
+    "services/desk-gateway/src/desk_gateway/store.py",
+    "services/desk-gateway/src/desk_gateway/tools/infra.py",
+    "services/desk-gateway/src/desk_gateway/tools/lead.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
+    "services/desk-gateway/tests/test_server.py",
+    "services/desk-gateway/tests/test_units.py"
+  ],
+  "destructive": false,
+  "secrets_committed": false,
+  "p1s_addressed": [
+    "4141224505",
+    "4141224477",
+    "4141224494"
+  ],
+  "p2s_addressed": [
+    "4141126604",
+    "4141126611"
+  ],
+  "p1s_deferred": [],
+  "base_commit": "dcac9c0182ecc69f80ab5b1ed03b8789598816dd"
+}

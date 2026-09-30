@@ -119,6 +119,41 @@ def test_store_intake_is_idempotent_and_claimable(tmp_path: Path):
     assert acked["state"] == "accepted" and acked["graph_id"] == "ut-abc-deadbeef"
 
 
+def test_store_records_ack_delivery_separately_from_the_advance(tmp_path: Path):
+    """The delivery record has to survive a failed advance, which is the whole point of it.
+
+    tools.lead.intake_ack posts the origin reply before advancing, so a failed advance asks
+    LEAD to call again; only a record written before the post can tell that second call a
+    comment may already exist. Per ack key, so a later ack is its own delivery.
+    """
+    store = Store(tmp_path)
+    created = store.intake_create({"origin": "github", "title": "t", "ask": "do the thing"})
+    intake_id = created["intake_id"]
+
+    assert store.intake_delivery_get(created, "accepted:abc") == {}
+    store.intake_delivery(intake_id, "accepted:abc", "attempted")
+    first = store.intake_delivery_get(store.intake_get(intake_id), "accepted:abc")
+    assert first["state"] == "attempted" and first["first_at"] == first["at"]
+
+    # A second attempt keeps first_at: it is the moment a recovery lookup searches from, and
+    # moving it forward would move the window past the comment it is looking for.
+    store.intake_delivery(intake_id, "accepted:abc", "attempted")
+    second = store.intake_delivery_get(store.intake_get(intake_id), "accepted:abc")
+    assert second["first_at"] == first["first_at"]
+
+    store.intake_delivery(intake_id, "accepted:abc", "delivered")
+    reread = store.intake_get(intake_id)
+    assert store.intake_delivery_get(reread, "accepted:abc")["state"] == "delivered"
+    assert store.intake_delivery_get(reread, "done:xyz") == {}
+    assert store.intake_delivery("in-nosuchintake", "accepted:abc", "attempted") is None
+
+    # Nothing was sent, so the next attempt is a first attempt again rather than inheriting a
+    # search window for a post that never happened.
+    store.intake_delivery(intake_id, "done:xyz", "attempted")
+    store.intake_delivery(intake_id, "done:xyz", "unconfigured")
+    assert "first_at" not in store.intake_delivery_get(store.intake_get(intake_id), "done:xyz")
+
+
 def test_store_intake_idempotency_is_scoped_by_origin(tmp_path: Path):
     """Two origins may pick the same key; neither may swallow the other's request.
 

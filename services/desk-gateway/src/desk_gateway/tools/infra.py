@@ -20,6 +20,32 @@ def _projects(ctx: ToolContext, which: str) -> list[str]:
     return [n for n in names if ctx.services.railway.project_id(n)]
 
 
+def _default_environment_id(environments: list[dict[str, Any]]) -> str | None:
+    """The environment every unqualified Railway call means: production, else the first listed.
+
+    One rule, used by railway_status when it scopes latest_deployment and by _find_service
+    when it picks the environment to read variables from or redeploy into, so the deployment
+    reported as current and the environment acted on are always the same one.
+    """
+    prod = next((e for e in environments if e.get("name") == "production"), None)
+    chosen = prod or (environments[0] if environments else {})
+    return chosen.get("id")
+
+
+def _env_deployment(by_env: dict[str, Any], environment_id: str | None) -> dict[str, Any] | None:
+    """The deployment in one environment, and nothing when that environment has none.
+
+    Never another environment's: "the service's latest deployment" across environments is not
+    a thing, and the first instance the API happened to return could be staging while the
+    caller — logs, a redeploy check — meant production.
+    """
+    if environment_id:
+        return by_env.get(environment_id)
+    if len(by_env) == 1:
+        return next(iter(by_env.values()))
+    return None
+
+
 async def railway_status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     railway = ctx.services.railway
     if not railway.http.configured:
@@ -31,29 +57,45 @@ async def railway_status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
             out.append({"project": name, **result})
             continue
         project = ((result.get("body") or {}).get("data") or {}).get("project") or {}
+        environments = [(e.get("node") or {}) for e in ((project.get("environments") or {}).get("edges") or [])]
+        default_env = _default_environment_id(environments)
         services = []
         for edge in (project.get("services") or {}).get("edges") or []:
             node = edge.get("node") or {}
             instances = [(e.get("node") or {}) for e in ((node.get("serviceInstances") or {}).get("edges") or [])]
-            latest = next((i.get("latestDeployment") for i in instances if i.get("latestDeployment")), None)
-            # Per environment as well as the first one found: "the service's current deployment"
-            # is only a well-defined thing within one environment, and a redeploy names one.
+            # Per environment: "the service's current deployment" is only a well-defined thing
+            # within one environment, and a redeploy names one.
             by_env = {i["environmentId"]: i["latestDeployment"] for i in instances if i.get("environmentId") and i.get("latestDeployment")}
-            services.append({"id": node.get("id"), "name": node.get("name"), "latest_deployment": latest, "deployments": by_env})
-        out.append({"project": name, "id": project.get("id"), "services": services, "environments": [(e.get("node") or {}) for e in ((project.get("environments") or {}).get("edges") or [])]})
+            latest = _env_deployment(by_env, default_env)
+            services.append({
+                "id": node.get("id"),
+                "name": node.get("name"),
+                # Scoped, and says which environment it is scoped to: an unqualified
+                # latest_deployment was whichever instance the API listed first, so a consumer
+                # falling back to it could read logs from, or reason about, another environment.
+                "latest_deployment": latest,
+                "environment_id": default_env,
+                "deployments": by_env,
+            })
+        out.append({"project": name, "id": project.get("id"), "services": services, "environments": environments})
     if not out:
         return {"projects": [], **failure("not_configured", "no Railway project ids configured")}
     return {"projects": out}
 
 
 async def _find_service(ctx: ToolContext, project: str, service_name: str) -> dict[str, Any] | None:
+    """One service, the environment an unqualified call means, and that environment's deployment."""
     status = await railway_status(ctx, {"project": project})
     for p in status.get("projects") or []:
         for s in p.get("services") or []:
             if s.get("name") == service_name:
-                envs = p.get("environments") or []
-                prod = next((e for e in envs if e.get("name") == "production"), envs[0] if envs else {})
-                return {"project_id": p.get("id"), "service": s, "environment_id": prod.get("id")}
+                environment_id = _default_environment_id(p.get("environments") or [])
+                return {
+                    "project_id": p.get("id"),
+                    "service": s,
+                    "environment_id": environment_id,
+                    "deployment": _env_deployment(s.get("deployments") or {}, environment_id),
+                }
     return None
 
 
@@ -62,16 +104,26 @@ async def railway_logs(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]
     if not railway.http.configured:
         return {"lines": [], **failure("not_configured", "Railway API token is not configured on the gateway")}
     deployment_id = args.get("deployment_id")
+    environment_id = None
     if not deployment_id:
+        # The fallback names one environment's deployment, not whichever the API listed first:
+        # logs read from the wrong environment are worse than no logs, because they look right.
         found = await _find_service(ctx, args["project"], args["service"])
-        if not found or not (found["service"].get("latest_deployment") or {}).get("id"):
-            return {"lines": [], **failure("not_found", "service or latest deployment not found")}
-        deployment_id = found["service"]["latest_deployment"]["id"]
+        if not found:
+            return {"lines": [], **failure("not_found", f"service {args['service']} not found in {args['project']}")}
+        environment_id = found["environment_id"]
+        deployment_id = (found["deployment"] or {}).get("id")
+        if not deployment_id:
+            return {"lines": [], **failure(
+                "not_found",
+                f"{args['service']} has no deployment in environment {environment_id or 'unknown'}; "
+                "pass deployment_id to read another environment's logs",
+            )}
     result = await railway.logs(deployment_id, int(args.get("lines", 100)))
     if result.get("error"):
         return {"lines": [], **result}
     logs = ((result.get("body") or {}).get("data") or {}).get("deploymentLogs") or []
-    return {"deployment_id": deployment_id, "lines": logs}
+    return {"deployment_id": deployment_id, "environment_id": environment_id, "lines": logs}
 
 
 async def railway_variable_names(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
@@ -104,8 +156,7 @@ async def railway_redeploy(ctx: ToolContext, args: dict[str, Any]) -> dict[str, 
     if not found:
         return failure("not_found", "service not found")
     environment_id = found["environment_id"]
-    current = ((found["service"].get("deployments") or {}).get(environment_id)) or {}
-    current_id = current.get("id")
+    current_id = (found["deployment"] or {}).get("id")
     if current_id != args["prior_deployment_id"]:
         return failure(
             "stale_deployment",

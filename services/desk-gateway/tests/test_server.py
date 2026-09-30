@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
 import secrets
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -541,6 +544,278 @@ async def test_intake_ack_advances_once_the_reply_is_posted(client, rpc, monkeyp
     assert "ut-abc123-deadbeef" in posted[0] and intake_id in posted[0]
 
 
+class FakeIssue:
+    """The two GitHub endpoints an ack uses, standing in at the HTTP boundary.
+
+    Wired under `HttpUpstream.request` rather than over `GitHub`'s methods, so the real
+    comment_on_issue and find_issue_comment run: the pagination, the oldest-first ordering
+    and the `since` window are exercised instead of being assumed. `backlog` seeds comments
+    from a month ago, which is how a thread gets longer than the lookup's page budget.
+    """
+
+    PER_PAGE_CAP = 100
+
+    def __init__(self, backlog: int = 0) -> None:
+        old = time.time() - 30 * 86400
+        self.comments: list[dict] = [{"body": f"backlog {i}", "at": old + i} for i in range(backlog)]
+        self.gets: list[dict] = []
+        self.error: dict | None = None
+        self.post_delay = 0.0
+
+    @property
+    def bodies(self) -> list[str]:
+        return [c["body"] for c in self.comments]
+
+    def posted(self, marker_owner: str) -> list[str]:
+        return [b for b in self.bodies if marker_owner in b]
+
+    async def request(self, method: str, path: str, **kwargs):
+        if "/comments" not in path:          # audit and health traffic is not this fake's business
+            return {"ok": True, "status": 200, "body": {}}
+        if self.error is not None:
+            return self.error
+        if method == "POST":
+            if self.post_delay:
+                await asyncio.sleep(self.post_delay)
+            self.comments.append({"body": kwargs["json"]["body"], "at": time.time()})
+            return {"ok": True, "status": 201, "body": {"id": len(self.comments)}}
+        params = kwargs.get("params") or {}
+        self.gets.append(params)
+        rows = self.comments
+        if params.get("since"):
+            cut = datetime.strptime(params["since"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc).timestamp()
+            rows = [c for c in rows if c["at"] >= cut]
+        per = min(int(params.get("per_page", 30)), self.PER_PAGE_CAP)
+        start = (int(params.get("page", 1)) - 1) * per
+        return {"ok": True, "status": 200, "body": [{"body": c["body"]} for c in rows[start:start + per]]}
+
+
+def _stub_github(monkeypatch, backlog: int = 0) -> FakeIssue:
+    from desk_gateway.upstreams import HttpUpstream, not_configured
+
+    issue = FakeIssue(backlog)
+
+    async def fake_request(self, method, path, **kwargs):
+        # The real request() answers not_configured before it reaches the network, and a test
+        # that took a token away would otherwise keep getting served.
+        if not self.configured:
+            return not_configured(self.name)
+        return await issue.request(method, path, **kwargs)
+
+    monkeypatch.setattr(HttpUpstream, "request", fake_request)
+    _configure_upstreams(monkeypatch)
+    return issue
+
+
+ACK = {"status": "accepted", "graph_id": "ut-abc123-deadbeef", "message": "queued for uplift"}
+MARKER = "desk-intake-ack"
+
+
+def _flaky_delivery(monkeypatch, failing_state: str):
+    """Make the delivery record fail for one state, the way a full disk would."""
+    from desk_gateway.store import Store
+
+    real = Store.intake_delivery
+
+    def flaky(self, intake_id_, key, state):
+        if state == failing_state:
+            raise OSError("no space left on device while writing intake.json")
+        return real(self, intake_id_, key, state)
+
+    monkeypatch.setattr(Store, "intake_delivery", flaky)
+    return real
+
+
+async def test_intake_ack_does_not_repost_when_the_store_fails_after_the_comment(client, rpc, monkeypatch):
+    """The reply precedes the advance, so a failed advance must not buy a second comment.
+
+    The failure tells LEAD to call again — that is the point of posting first — and the retry
+    arrived with the comment already on the issue and nothing in the response or the record
+    saying so, so it posted an identical one. Two acknowledgements of one request, from the
+    requester's side.
+    """
+    from desk_gateway.store import Store
+
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+
+    real_ack = Store.intake_ack
+    attempts: list[str] = []
+
+    def failing_ack(self, intake_id_, ack):   # noqa: ARG001 — signature must match
+        attempts.append(intake_id_)
+        raise OSError("no space left on device while writing intake.json")
+
+    monkeypatch.setattr(Store, "intake_ack", failing_ack)
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out["is_error"] is True and out["error"] == "internal", out
+    assert attempts == [intake_id]
+    assert len(issue.posted(MARKER)) == 1, issue.bodies
+
+    monkeypatch.setattr(Store, "intake_ack", real_ack)
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert len(issue.posted(MARKER)) == 1, "the retry posted the reply a second time"
+    assert issue.gets == [], "the record knew the reply was delivered; the issue did not need reading"
+    assert out["ok"] is True and out["intake"]["state"] == "accepted", out
+    assert out["notify"]["delivered"] is True and out["notify"]["posted"] is False
+
+
+async def test_intake_ack_reads_the_issue_back_when_the_delivery_record_was_lost(client, rpc, monkeypatch):
+    """The narrower window: the comment landed and even the record of it could not be written.
+
+    Nothing local knows the outcome, so the issue is asked. Finding the marker is the proof
+    the reply was delivered, and the retry only has to finish the advance.
+    """
+    from desk_gateway.store import Store
+
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+
+    real_delivery = _flaky_delivery(monkeypatch, "delivered")
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out["is_error"] is True and out["error"] == "internal", out
+    assert len(issue.posted(MARKER)) == 1 and issue.gets == [], issue.gets
+
+    monkeypatch.setattr(Store, "intake_delivery", real_delivery)
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert len(issue.posted(MARKER)) == 1, "the retry posted the reply a second time"
+    assert len(issue.gets) == 1, "the retry did not check the issue it may have posted to"
+    assert out["ok"] is True and out["intake"]["state"] == "accepted", out
+    assert out["notify"]["delivered"] is True and out["notify"]["posted"] is False
+
+
+async def test_intake_ack_recovers_on_a_thread_longer_than_the_page_budget(client, rpc, monkeypatch):
+    """Greptile P1 4141224505: a long thread must not make the reply unfindable.
+
+    GitHub lists issue comments oldest-first and will not reverse them, so a lookup that
+    starts at the beginning spends its whole page budget on the oldest comments and never
+    reaches the reply. That is not a stuck lookup, it is a stuck intake: every retry reads
+    unknown, refuses to post, and never advances, with no way out by asking again. The window
+    starts from the first attempt instead, so the thread's length stops mattering.
+    """
+    from desk_gateway.store import Store
+
+    issue = _stub_github(monkeypatch, backlog=600)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+
+    real_delivery = _flaky_delivery(monkeypatch, "delivered")
+    assert (await rpc.call("lead", "desk_intake_ack", args))["error"] == "internal"
+    assert len(issue.posted(MARKER)) == 1
+
+    monkeypatch.setattr(Store, "intake_delivery", real_delivery)
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out.get("error") != "notify_unknown", (
+        "the reply is on the issue, but the lookup could not read far enough to see it, so the "
+        "intake is stranded: every retry reads unknown and refuses to post or advance"
+    )
+    assert out["ok"] is True and out["notify"]["delivered"] is True, out
+    assert len(issue.posted(MARKER)) == 1, "the retry posted the reply a second time"
+    assert issue.gets and issue.gets[0].get("since"), "the lookup read the thread from its start"
+    # Found on the first page of the window, not by walking 600 backlog comments.
+    assert len(issue.gets) == 1, issue.gets
+
+
+async def test_intake_ack_will_not_repost_on_an_unreadable_issue(client, rpc, monkeypatch):
+    """An unknown outcome is the case that double-posts, so it fails closed instead.
+
+    Retrying blind would be the original bug with extra steps: the comment is probably there.
+    The intake stays claimed and says what to look at, which is recoverable; a duplicate
+    acknowledgement on someone's issue is not.
+    """
+    from desk_gateway.store import Store
+
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+
+    real_delivery = _flaky_delivery(monkeypatch, "delivered")
+    assert (await rpc.call("lead", "desk_intake_ack", args))["error"] == "internal"
+
+    monkeypatch.setattr(Store, "intake_delivery", real_delivery)
+    issue.error = {"error": "upstream_error", "reason": "github returned HTTP 403"}
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out["is_error"] is True and out["error"] == "notify_unknown", out
+    assert "403" in out["notify"]["reason"]
+    assert len(issue.posted(MARKER)) == 1, "the reply went out again without knowing the first one had not"
+    status = await rpc.call("lead", "desk_intake_next", {})
+    assert status["queue"] == {"claimed": 1}, status["queue"]
+
+    # And once GitHub answers again, the same call finishes without reposting.
+    issue.error = None
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out["ok"] is True and out["notify"]["delivered"] is True, out
+    assert len(issue.posted(MARKER)) == 1
+
+
+async def test_intake_ack_will_not_advance_when_the_lookup_has_no_token(client, rpc, monkeypatch):
+    """Greptile P1 4141224494: an unconfigured gateway must not settle an attempted reply.
+
+    A reply that was never attempted is one thing — nothing was promised, and the ack says so
+    with delivered: false. But once an attempt has been made and the gateway can no longer ask
+    whether it landed, advancing marks the intake acknowledged on the chance that it did. If
+    it did not, the queue counts the request as answered and nobody ever told the requester.
+    """
+    from desk_gateway.store import Store
+    from desk_gateway.upstreams import HttpUpstream
+
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+
+    real_delivery = _flaky_delivery(monkeypatch, "delivered")
+    assert (await rpc.call("lead", "desk_intake_ack", args))["error"] == "internal"
+    assert len(issue.posted(MARKER)) == 1
+
+    # The token is gone by the time LEAD calls again.
+    monkeypatch.setattr(Store, "intake_delivery", real_delivery)
+    monkeypatch.setattr(HttpUpstream, "configured", property(lambda self: False))
+    out = await rpc.call("lead", "desk_intake_ack", args)
+    assert out["is_error"] is True and out["error"] == "notify_unknown", out
+    assert out["notify"]["error"] == "not_configured", out["notify"]
+    assert len(issue.posted(MARKER)) == 1
+    status = await rpc.call("lead", "desk_intake_next", {})
+    assert status["queue"] == {"claimed": 1}, "an unreadable outcome advanced the intake"
+
+
+async def test_concurrent_intake_acks_post_one_reply(client, rpc, monkeypatch):
+    """Greptile P1 4141224477: two acks in flight together must not both post.
+
+    The delivery record is read before the post and written after it, so two calls for the
+    same reply could both read a state from before either had posted — the second one's
+    lookup finding nothing precisely because the first one's comment had not landed yet — and
+    both would post. They are serialised per ack instead, and the second re-reads inside the
+    lock, where the first one's delivery is already recorded.
+    """
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+    args = {"intake_id": intake_id, **ACK}
+    issue.post_delay = 0.2          # hold the first post open long enough to overlap
+
+    first, second = await asyncio.gather(
+        rpc.call("lead", "desk_intake_ack", args),
+        rpc.call("lead", "desk_intake_ack", args),
+    )
+    assert len(issue.posted(MARKER)) == 1, f"both calls posted: {issue.bodies}"
+    assert first["ok"] is True and second["ok"] is True, (first, second)
+    assert {first["notify"]["posted"], second["notify"]["posted"]} == {True, False}
+    assert first["notify"]["delivered"] is True and second["notify"]["delivered"] is True
+
+
+async def test_intake_ack_still_posts_a_genuinely_different_ack(client, rpc, monkeypatch):
+    """Idempotence is per ack, not per intake: a later status is a reply the requester is owed."""
+    issue = _stub_github(monkeypatch)
+    intake_id = await _claim_one(client, rpc)
+
+    assert (await rpc.call("lead", "desk_intake_ack", {"intake_id": intake_id, **ACK}))["ok"] is True
+    out = await rpc.call("lead", "desk_intake_ack", {"intake_id": intake_id, "status": "done", "message": "shipped"})
+    assert len(issue.posted(MARKER)) == 2, issue.bodies
+    assert out["ok"] is True and out["intake"]["state"] == "done", out
+    assert out["notify"]["posted"] is True
+
+
 # ---------------------------------------------------------------------------
 # desk_play_staged_rollout — a track update is a PUT
 # ---------------------------------------------------------------------------
@@ -741,3 +1016,128 @@ async def test_railway_redeploy_proceeds_when_the_prior_deployment_still_stands(
     assert out["ok"] is True, out
     assert out["verified_prior_deployment"] is True and out["environment_id"] == "env-prod"
     assert redeploys == [("svc-1", "env-prod")]
+
+
+# ---------------------------------------------------------------------------
+# desk_railway_status / desk_railway_logs — a deployment belongs to one environment
+# ---------------------------------------------------------------------------
+
+def _two_env_project(env_order: list[dict], deployments: dict[str, str]) -> dict:
+    """One service deployed in several environments, with `env_order` as the API's listing order."""
+    return {"ok": True, "body": {"data": {"project": {
+        "id": "proj-1",
+        "name": "ultrathink",
+        "services": {"edges": [{"node": {
+            "id": "svc-1",
+            "name": "substrate-mcp",
+            "serviceInstances": {"edges": [
+                {"node": {"environmentId": env, "latestDeployment": {"id": dep, "status": "SUCCESS"}}}
+                for env, dep in deployments.items()
+            ]},
+        }}]},
+        "environments": {"edges": [{"node": e} for e in env_order]},
+    }}}}
+
+
+ENVS = [
+    {"id": "env-staging", "name": "staging"},
+    {"id": "env-prod", "name": "production"},
+]
+DEPLOYMENTS = {"env-staging": "dep-staging", "env-prod": "dep-prod"}
+
+
+def _stub_railway_envs(monkeypatch, project: dict, logged: list):
+    from desk_gateway.upstreams import Railway
+
+    async def fake_status(self, name):   # noqa: ARG001 — signature must match
+        return project
+
+    async def fake_logs(self, deployment_id, lines):   # noqa: ARG001
+        logged.append(deployment_id)
+        return {"ok": True, "body": {"data": {"deploymentLogs": [{"message": f"from {deployment_id}"}]}}}
+
+    monkeypatch.setattr(Railway, "project_id", lambda self, name: "proj-1")
+    monkeypatch.setattr(Railway, "project_status", fake_status)
+    monkeypatch.setattr(Railway, "logs", fake_logs)
+    _configure_upstreams(monkeypatch)
+
+
+async def test_railway_status_scopes_latest_deployment_to_production(rpc, monkeypatch):
+    """latest_deployment was whichever service instance the API listed first.
+
+    Instances come back per environment and in no guaranteed order, so on a service with a
+    staging environment the "latest deployment" could be staging's while every consumer of it
+    — logs, a redeploy check, a receipt — meant production. Scoped to one environment, and
+    named, so a reader can tell which.
+    """
+    _stub_railway_envs(monkeypatch, _two_env_project(ENVS, DEPLOYMENTS), [])
+
+    out = await rpc.call("infra", "desk_railway_status", {"project": "ultrathink"})
+    service = out["projects"][0]["services"][0]
+    assert service["latest_deployment"]["id"] == "dep-prod", service
+    assert service["environment_id"] == "env-prod"
+    assert service["deployments"] == {
+        "env-staging": {"id": "dep-staging", "status": "SUCCESS"},
+        "env-prod": {"id": "dep-prod", "status": "SUCCESS"},
+    }
+
+
+async def test_railway_status_falls_back_to_the_only_environment(rpc, monkeypatch):
+    """No environment named production: the single one listed is what an unqualified call means."""
+    envs = [{"id": "env-main", "name": "main"}]
+    _stub_railway_envs(monkeypatch, _two_env_project(envs, {"env-main": "dep-main"}), [])
+
+    out = await rpc.call("infra", "desk_railway_status", {"project": "ultrathink"})
+    service = out["projects"][0]["services"][0]
+    assert service["latest_deployment"]["id"] == "dep-main" and service["environment_id"] == "env-main"
+
+
+async def test_railway_logs_read_the_production_deployment(rpc, monkeypatch):
+    """The fallback deployment_id has to be the chosen environment's, whatever the API order.
+
+    staging listed first is enough to send someone debugging production at the wrong logs —
+    and they look right, because the service name matches.
+    """
+    logged: list = []
+    _stub_railway_envs(monkeypatch, _two_env_project(ENVS, DEPLOYMENTS), logged)
+
+    out = await rpc.call("infra", "desk_railway_logs", {"project": "ultrathink", "service": "substrate-mcp"})
+    assert logged == ["dep-prod"], logged
+    assert out["deployment_id"] == "dep-prod" and out["environment_id"] == "env-prod"
+    assert out["lines"] == [{"message": "from dep-prod"}]
+
+
+async def test_railway_logs_refuse_another_environments_deployment(rpc, monkeypatch):
+    """Nothing deployed in the chosen environment is not an invitation to read staging's."""
+    logged: list = []
+    _stub_railway_envs(monkeypatch, _two_env_project(ENVS, {"env-staging": "dep-staging"}), logged)
+
+    out = await rpc.call("infra", "desk_railway_logs", {"project": "ultrathink", "service": "substrate-mcp"})
+    assert out["error"] == "not_found" and "env-prod" in out["reason"], out
+    assert out["lines"] == [] and logged == [], "staging logs were served as the service's logs"
+
+    # Named explicitly, staging's logs are a legitimate read.
+    out = await rpc.call("infra", "desk_railway_logs", {"project": "ultrathink", "service": "substrate-mcp", "deployment_id": "dep-staging"})
+    assert out["deployment_id"] == "dep-staging" and logged == ["dep-staging"]
+
+
+async def test_railway_redeploy_compares_the_deployment_in_the_target_environment(rpc, monkeypatch):
+    """The staleness check and the redeploy have to be about the same environment.
+
+    prior_deployment_id is production's here; a check against whichever instance came first
+    would refuse the redeploy as stale against staging's deployment id.
+    """
+    from desk_gateway.upstreams import Railway
+
+    redeploys: list = []
+
+    async def fake_redeploy(self, service_id, environment_id):   # noqa: ARG001
+        redeploys.append((service_id, environment_id))
+        return {"ok": True, "body": {"data": {"serviceInstanceRedeploy": True}}}
+
+    _stub_railway_envs(monkeypatch, _two_env_project(ENVS, {"env-staging": "dep-staging", "env-prod": "dep-aaaaaa"}), [])
+    monkeypatch.setattr(Railway, "redeploy", fake_redeploy)
+
+    out = await rpc.call("infra", "desk_railway_redeploy", REDEPLOY)
+    assert out["ok"] is True, out
+    assert out["environment_id"] == "env-prod" and redeploys == [("svc-1", "env-prod")]

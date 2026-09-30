@@ -1,0 +1,105 @@
+# Tool pack: android.tools local device/build helpers (SPE-5160 QUALITY companion to PR #47).
+# Loaded for one ticket via desk_app_tools_load. Contract surface (QUALITY); consumer
+# bot-03-android.
+#
+# contracts/tool-rosters/android.yaml is already at the 15-tool ceiling (8 core + 7 seat; see
+# ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS) and stays there — no always-on tool is
+# retired to make room. The nine `python -m android.tools <cmd>` commands from PR #47
+# (bot-03-android/spe-5160-android-tools-metavr, android/tools/USAGE.md) are split across two
+# packs instead: this one for the five device/build commands, contracts/tool-packs/
+# androidmetavr.yaml for the four capture/UI ones (a pack holds at most five tools — see
+# contracts/README.md).
+#
+# Honesty note: `backend: android_cli.*` names the intended adapter only. No
+# services/desk-gateway/** module implements it yet (that tree has no android_cli.py, and
+# mobile.py is Play Console/App Store Connect only — reusing it here would misattribute this to
+# code that does not cover android/tools). Wiring android_cli.* to shell out to
+# `python -m android.tools <cmd>` is a SYSTEMS follow-up (services/desk-gateway/**,
+# bot-01-systems-backend), out of scope for this QUALITY contract change.
+version: 1.0.0
+app: androidlocal
+title: android.tools — local device/build
+seats: [android]
+tools:
+  - name: androidlocal_emu_boot
+    kind: write
+    gates: []
+    description: >-
+      Start (or, under dry_run, print the launch command for) an AVD emulator via `android.tools
+      emu_boot`. dry_run never spawns a process and never needs a device; a missing emulator
+      binary or a spawn failure is reported as skipped rather than raised.
+    backend: android_cli.emu_boot
+    input:
+      type: object
+      additionalProperties: false
+      required: [avd]
+      properties:
+        avd: { type: string, minLength: 1, maxLength: 200 }
+        timeout_sec: { type: integer, minimum: 0, maximum: 600, default: 0 }
+        dry_run: { type: boolean, default: false }
+
+  - name: androidlocal_adb_devices
+    kind: read
+    gates: []
+    description: List connected adb devices (`adb devices -l`) via `android.tools adb_devices`, as structured text or JSON.
+    backend: android_cli.adb_devices
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        as_json: { type: boolean, default: false }
+
+  - name: androidlocal_install_apk
+    kind: write
+    gates: [g6]
+    description: >-
+      Install an APK onto a device with `adb install -r` via `android.tools install_apk`.
+      Destructive-class: approval_id is required and echoed into the audit event. dry_run
+      prints the adb argv and installs nothing.
+    backend: android_cli.install_apk
+    input:
+      type: object
+      additionalProperties: false
+      required: [apk, approval_id]
+      properties:
+        apk: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        dry_run: { type: boolean, default: false }
+        approval_id: { type: string, minLength: 6, maxLength: 120 }
+
+  - name: androidlocal_unit_test
+    kind: write
+    gates: []
+    description: >-
+      Run `./gradlew test` for a module via `android.tools unit_test`. #47's CLI prints a skip
+      line and exits 0 (reported as success) when no Gradle wrapper is present — treat
+      "skipped:" in the output as not run, not as a pass; the CLI's own skip-is-exit-0 behavior
+      is ANDROID's to change, not this contract's.
+    backend: android_cli.unit_test
+    input:
+      type: object
+      additionalProperties: false
+      properties:
+        module: { type: string, maxLength: 300 }
+        gradle_args:
+          type: array
+          maxItems: 20
+          items: { type: string, maxLength: 200 }
+
+  - name: androidlocal_instrumented_run
+    kind: write
+    gates: []
+    description: >-
+      Run an instrumented test component with `adb shell am instrument -w` via `android.tools
+      instrumented_run`. dry_run prints the adb argv and runs nothing. Like unit_test, a
+      no-device skip is reported as exit 0 by #47's CLI — read the output, not just the exit
+      code.
+    backend: android_cli.instrumented_run
+    input:
+      type: object
+      additionalProperties: false
+      required: [component]
+      properties:
+        component: { type: string, minLength: 1, maxLength: 300 }
+        serial: { type: string, maxLength: 120 }
+        dry_run: { type: boolean, default: false }

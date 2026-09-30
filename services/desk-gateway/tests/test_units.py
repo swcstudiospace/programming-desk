@@ -201,27 +201,43 @@ def test_read_only_sql_still_refuses_writes(sql: str):
     assert read_only_sql(sql) is not None, f"{sql!r} was accepted"
 
 
-async def test_run_command_kills_the_child_on_timeout():
+async def test_run_command_kills_the_child_on_timeout(monkeypatch):
     """asyncio.wait_for stops waiting; it does not stop the process.
 
     Left unreaped, a slow gate or git command outlives the call that reported a timeout,
     under the gateway's root service user and holding its export tree open.
+
+    Identifies the child by the pid run_command actually started, not by matching process
+    names: the gates run on a shared self-hosted runner, so another job's `sleep 30` would
+    otherwise turn this red while this code was behaving correctly.
     """
     import asyncio
-    from desk_gateway.upstreams import run_command
+    import os
+    from desk_gateway import upstreams
 
-    result = await run_command(["sleep", "30"], timeout=0.5)
+    started: list[asyncio.subprocess.Process] = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def capturing_exec(*args, **kwargs):
+        proc = await real_exec(*args, **kwargs)
+        started.append(proc)
+        return proc
+
+    monkeypatch.setattr(upstreams.asyncio, "create_subprocess_exec", capturing_exec)
+
+    result = await upstreams.run_command(["sleep", "30"], timeout=0.5)
     assert result["exit_code"] == 124
     assert "timed out" in result["stderr"]
 
-    # The child is gone, not merely detached: nothing is left to reap.
-    await asyncio.sleep(0.2)
-    remaining = await asyncio.create_subprocess_exec(
-        "pgrep", "-f", "^sleep 30$",
-        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
-    )
-    out, _ = await remaining.communicate()
-    assert not out.strip(), f"sleep 30 survived the timeout: pids {out.decode().split()}"
+    assert len(started) == 1, f"expected one child, saw {len(started)}"
+    child = started[0]
+
+    # Reaped: returncode is set, so the process was waited on rather than left a zombie.
+    assert child.returncode is not None, "child was not reaped; returncode is still None"
+
+    # And genuinely gone: signal 0 probes for existence without delivering anything.
+    with pytest.raises(ProcessLookupError):
+        os.kill(child.pid, 0)
 
 
 def test_settings_fixture_ignores_ambient_upstream_credentials(monkeypatch, settings):

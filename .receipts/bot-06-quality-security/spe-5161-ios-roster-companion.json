@@ -58,6 +58,18 @@
       "exit_code": 0,
       "duration_s": 0.3,
       "output_tail": "ModuleNotFoundError: No module named 'desk_gateway.tools.ios'"
+    },
+    {
+      "cmd": "grep -n \"read_only\\|readOnlyHint\" services/desk-gateway/src/desk_gateway/rosters.py services/desk-gateway/src/desk_gateway/server.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "services/desk-gateway/src/desk_gateway/rosters.py:25:    def read_only(self) -> bool:\nservices/desk-gateway/src/desk_gateway/server.py:102:                annotations={\"readOnlyHint\": spec.read_only, \"destructiveHint\": \"g6\" in spec.gates},\nservices/desk-gateway/src/desk_gateway/server.py:140:        if error and spec.read_only and \"results\" not in payload and \"rows\" not in payload:\nservices/desk-gateway/src/desk_gateway/server.py:145:        return _result(redact_value(payload), is_error=bool(error) and not spec.read_only)"
+    },
+    {
+      "cmd": "python3 -c \"error='backend_missing'; print('read_only=True ->', bool(error) and not True); print('read_only=False ->', bool(error) and not False)\"",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": "read_only=True -> False\nread_only=False -> True"
     }
   ],
   "claims": [
@@ -98,6 +110,10 @@
     {
       "claim": "SECOND KNOWN BLOCKER, raised by Greptile review on PR #54 and reproduced here: the 8 new tools' `ios.*` backend prefix has no corresponding desk_gateway/tools/ios.py module. desk_gateway.tools.resolve() imports `desk_gateway.tools.<prefix>` (services/desk-gateway/src/desk_gateway/tools/__init__.py), so calling any of the 8 new tools raises ModuleNotFoundError even once G-7 capacity is fixed. services/desk-gateway/** is owned by bot-01-systems-backend (ownership.yaml line 327), not QUALITY, so adding that module is out of this change's ownership and 3-file scope. Now disclosed in the roster header and the change document.",
       "evidence_command_index": 8
+    },
+    {
+      "claim": "FIX APPLIED after a Greptile correction of my own earlier (wrong) reply: I had checked for a nonexistent `SeatRoster.is_read` and found no call sites, and concluded the kind:read/write distinction had no runtime effect. That was a bad grep, not a fact about the code — the real property is `ToolSpec.read_only` (rosters.py:25), and server.py's call_tool() DOES branch on it twice: readOnlyHint in list_tools(), and is_error=bool(error) and not spec.read_only in call_tool() (server.py:145). A read-kind tool's backend failure is therefore reported to the MCP caller as a non-error result. desk_ios_snapshot_diff, desk_ios_device_screenshot and desk_ios_ui_dump write an `out` artifact, so their kind was changed from read to write in this receipt's branch so their failures surface as real MCP errors; desk_ios_plist_lint, desk_ios_entitlements_scan and desk_ios_xcodebuild_receipt stay read (pure parse, no output artifact, fail-open is the intended behavior per _core.yaml's documented read/write convention).",
+      "evidence_command_index": 9
     }
   ],
   "unverified": [

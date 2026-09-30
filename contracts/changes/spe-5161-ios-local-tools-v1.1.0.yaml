@@ -19,6 +19,10 @@ summary: >
   prefix has no corresponding desk_gateway/tools/ios.py module (services/desk-gateway/** is
   owned by bot-01-systems-backend, confirmed via Greptile review on PR #54); calls will raise
   ModuleNotFoundError until that module is added. Both fixes are out of scope for this change.
+  FIXED (Greptile review on PR #54): snapshot_diff, device_screenshot and ui_dump were briefly
+  kind: read despite writing an `out` artifact; server.py's call_tool() sets is_error from
+  `bool(error) and not spec.read_only`, so a read-kind failure would report as a non-error MCP
+  result. Corrected to kind: write for those three.
 
 semantic_changes: []
 

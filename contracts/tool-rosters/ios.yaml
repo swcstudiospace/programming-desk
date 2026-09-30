@@ -181,11 +181,14 @@ tools:
         dry_run: { type: boolean, default: false }
 
   - name: desk_ios_snapshot_diff
-    kind: read
+    kind: write
     gates: []
     description: >-
       Hash-diff two fixture files or directories (sha256, plus width/height for PNG payloads)
-      and write the result to out. Not a pixel diff and does not render UI.
+      and write the result to out. Not a pixel diff and does not render UI. kind: write (not
+      read) because it writes an out artifact: server.py's call_tool() sets is_error from
+      `bool(error) and not spec.read_only`, so a read-kind tool's backend failure would be
+      reported as a non-error MCP result — wrong for a tool whose job is producing a file.
     backend: ios.snapshot_diff
     input:
       type: object
@@ -212,12 +215,14 @@ tools:
         log: { type: string, minLength: 1, maxLength: 500 }
 
   - name: desk_ios_device_screenshot
-    kind: read
+    kind: write
     gates: []
     description: >-
       Capture a device screenshot via a MetaVR `device_screenshot` executable found on PATH by
       that exact name. Skips (no device contacted, no stand-in image written) when the binary is
-      missing; never claims a Simulator was used.
+      missing; never claims a Simulator was used. kind: write (not read) because it writes an
+      out artifact and a skip/failure must surface as an MCP error, not a masked non-error
+      result (see server.py's read_only-gated is_error).
     backend: ios.device_screenshot
     input:
       type: object
@@ -228,12 +233,14 @@ tools:
         out: { type: string, minLength: 1, maxLength: 500 }
 
   - name: desk_ios_ui_dump
-    kind: read
+    kind: write
     gates: []
     description: >-
       Dump the on-device UI hierarchy via a MetaVR `ui_dump` executable found on PATH by that
       exact name. Skips (no device contacted) when the binary is missing; never fabricates a
-      stand-in dump.
+      stand-in dump. kind: write (not read) because it writes an out artifact and a skip/failure
+      must surface as an MCP error, not a masked non-error result (see server.py's
+      read_only-gated is_error).
     backend: ios.ui_dump
     input:
       type: object

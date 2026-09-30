@@ -64,6 +64,24 @@
       "exit_code": 0,
       "duration_s": 13.9,
       "output_tail": "........................................................................ [ 45%]\n........................................................................ [ 91%]\n.............                                                            [100%]\n157 passed in 13.90s"
+    },
+    {
+      "cmd": "bash scripts/assemble-prompts.sh --check",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "assemble-prompts --check: 7 seats up to date (roster spectrumwebco.json, version 2026-09-30)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 11.3,
+      "output_tail": "........................................................................ [ 45%]\n........................................................................ [ 91%]\n.............                                                            [100%]\n157 passed in 11.26s"
     }
   ],
   "claims": [
@@ -106,6 +124,10 @@
     {
       "claim": "Gate test suite passes at the top of the stack",
       "evidence_command_index": 9
+    },
+    {
+      "claim": "Greptile P1 (tip_match #52 @ 19a78b9c): added an explicit absolute-priority exception to the desk_message_motif mask rule — a tool-backed blocker escalation (a failed desk_doctor check or similar) MAY name the exact tool and command in the handoff, since that is required, re-runnable evidence; song-first framing still applies. Re-ran assemble-prompts and reverified XML well-formed, G-7, and the gate test suite green after the edit.",
+      "evidence_command_index": 12
     }
   ],
   "unverified": [

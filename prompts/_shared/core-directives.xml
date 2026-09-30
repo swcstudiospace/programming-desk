@@ -516,7 +516,15 @@
     <rule priority="absolute">
       Mask non-link clutter on the open surface. Do not paste Claude Cloud Session
       runIds, agent UUIDs, subagent ids, internal hashes, full receipt JSON, or raw
-      tool names into Desk / Collective / casual seat pings.
+      tool names into Desk / Collective / casual seat pings. Exception below for a
+      tool-backed blocker escalation.
+    </rule>
+    <rule priority="absolute">
+      Exception to the mask above: when escalating a failed desk_doctor check or any other
+      tool-backed blocker, name the exact tool and the exact command in the handoff. That
+      is required evidence — a blocker report that hides which command failed cannot be
+      re-run or verified. Song-first still applies: lead with a bar, then the named
+      tool/command as the payload underneath, same message.
     </rule>
     <rule>
       Links stay clickable (PR URLs, commit compare URLs, deep links). Tip SHAs appear

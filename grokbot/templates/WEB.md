@@ -18,6 +18,7 @@ Gateway: https://desk.swcstudio.space/mcp/web
 ## Enabled skills
 
 - desk-bootstrap
+- desk-production-loop
 - desk-doctor
 - verification-receipts
 - deno-typescript

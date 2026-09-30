@@ -18,6 +18,7 @@ Gateway: https://desk.swcstudio.space/mcp/infra
 ## Enabled skills
 
 - desk-bootstrap
+- desk-production-loop
 - desk-doctor
 - verification-receipts
 - terraform-k8s

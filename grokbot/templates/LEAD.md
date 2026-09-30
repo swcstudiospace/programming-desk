@@ -20,6 +20,7 @@ Gateway: https://desk.swcstudio.space/mcp/lead
 ## Enabled skills
 
 - desk-bootstrap
+- desk-production-loop
 - desk-doctor
 - verification-receipts
 - desk-gateway

@@ -75,6 +75,33 @@ design-intent shape (`repo`, `branch`, `graph_id`, `work_packet_markdown`, `prom
 **Never fire `handoff_to_hermes` for a goal that already has an Agent Bus job.** Two runtimes working one goal
 produce two branches and a merge race.
 
+#### Signed packet — reserved, not live (SPE-4792)
+
+The handoff is expected to carry a signed packet, so a receiving runtime can verify that the desk issued the
+work rather than trusting a `goal` string that anything could have written. **That schema is SPE-4792's and it
+has not landed.** The field names below are a placeholder for it; when SPE-4792 ships, its schema wins and this
+table is the thing to fix.
+
+| Reserved field | What it will hold | Today |
+|---|---|---|
+| `packet_version` | Schema version of the signed packet | Omit |
+| `packet_payload_sha256` | Digest of the canonical packet the signature covers | Omit |
+| `packet_signed_at` | Signing timestamp | Omit |
+| `packet_key_id` | **Identifier** of the desk signing key — a reference, never key material | Omit |
+| `packet_signature` | Detached signature over the digest | Omit |
+
+- **Omit them.** A provisional field sent into a strict schema is a validation error; sent into a permissive
+  one it is a field the receiver mis-reads.
+- **Never compute or invent a value.** No signing key lives on a seat and none ever will — signing belongs to
+  the gateway or the substrate, which is where the key is held. A fabricated signature is worse than an absent
+  one: it asserts provenance that nothing checked (G-3, PD-4).
+- **Record the handoff as unsigned.** `handoff_to_hermes packet is unsigned — SPE-4792 signed-packet schema not
+  landed` belongs in the receipt's `unverified`. A reviewer should not have to infer it.
+- **`goal` still carries the whole work packet** meanwhile, and the same text goes in the draft PR body. A
+  signature would never have made a paraphrased `goal` reviewable.
+
+Procedure and the surrounding turn shape: [`../skills/desk-bootstrap/desk-production-loop/SKILL.md`](../skills/desk-bootstrap/desk-production-loop/SKILL.md) §7.
+
 ---
 
 ## 3. Dispatch sequence

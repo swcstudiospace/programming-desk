@@ -1,0 +1,23 @@
+{
+  "_fixture": "NOT a real receipt. Evidence for skills/desk-bootstrap/desk-production-loop/SKILL.md §3.1, second row: the SAME turn ack with at + blast_radius added — the obvious way to satisfy the field check — makes G-6 PASS, because the gate pairs approvals to destructive operations by COUNT. The rm -rf below is now reported as approved by an ack that authorised a degraded memory brief. Expected: check_rollback.py exits 0. This passing exit is the defect, not a reassurance. See fixtures/README.md.",
+  "task_id": "fixture-g6-turn-ack-four-fields",
+  "bot": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "rm -rf build/",
+      "exit_code": 0,
+      "output_tail": "synthetic destructive command; this fixture is never executed"
+    }
+  ],
+  "claims": [],
+  "unverified": [],
+  "approved_by": "bot-06-quality-security",
+  "approvals": [
+    {
+      "operation": "degraded-loop: repo work without a memory brief",
+      "approved_by": "ove",
+      "at": "2026-09-30T09:00:00Z",
+      "blast_radius": "one turn on one ticket; no destructive operation was authorised by this ack"
+    }
+  ]
+}

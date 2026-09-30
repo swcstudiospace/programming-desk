@@ -1,0 +1,21 @@
+{
+  "_fixture": "NOT a real receipt. loop_acks is a list of strings rather than of objects \u2014 a plausible mistake. Expected: fixtures/check-loop-acks.py exits 1 with a FAIL line, and must NOT traceback: a checker that crashes on malformed input gives no verdict at all. This is the TypeError guard the QUALITY companion C-3 has to carry into G-2. See fixtures/README.md.",
+  "task_id": "fixture-loop-acks",
+  "bot": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "true",
+      "exit_code": 0,
+      "output_tail": "placeholder; this fixture is never executed as work"
+    }
+  ],
+  "claims": [],
+  "unverified": [
+    "fixture receipt; nothing here was verified"
+  ],
+  "approved_by": "bot-06-quality-security",
+  "approvals": [],
+  "loop_acks": [
+    "ack-0000-00-00-000"
+  ]
+}

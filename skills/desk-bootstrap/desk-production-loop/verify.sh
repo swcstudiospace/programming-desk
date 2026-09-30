@@ -61,6 +61,10 @@ V=load("docs/vps-agent-bus.md")
 R=load("grokbot/README.md")
 G=load("scripts/generate-templates.py")
 V_SELF=load("skills/desk-bootstrap/desk-production-loop/verify.sh")   # this script checks itself too
+VR=load("skills/verification-receipts/SKILL.md")      # the SHARED receipt contract (bot-06)
+G2=load("ci/gates/check_receipt.py")                  # the gate that reads loop_acks (bot-06)
+G6=load("ci/gates/check_rollback.py")                 # the gate that must NOT read it (bot-06)
+Q=load("services/desk-gateway/src/desk_gateway/tools/quality.py")   # receipt_approve (bot-01)
 # ...but only its HEADER for the honesty assertions below. An assertion that searches the whole file
 # for its own literal always passes, because the literal is in the assertion: a tautology that would
 # survive deleting the comment it was meant to protect. The header is everything above `set -euo`,
@@ -240,10 +244,52 @@ need("git "+"checkout -- SKILL.md` discards" in V_HEAD,"R8c hazard named in head
 # (d) loop_acks is described well enough for QUALITY to add it to the shared receipt contract
 i=S.index("| Field | Type | Holds |")
 loop_tbl=S[i:S.index("\n\n",i)]
-for f in ("condition","operation","ack_id","granted_by","at","scope"):
+for f in ("condition","operation","ack_id","human_granted_by","relayed_by","at","scope"):
     need("`"+f+"`" in loop_tbl,"R8d loop_acks field documented: "+f)
-need("No gate reads `loop_acks`" in fS,"R8d gate gap stated")
 need("How presence is checked" in fS,"R8d presence check stated")
+# --- round 9 ---------------------------------------------------------------------------------
+# (a) the grantor of a degraded-mode ack is a HUMAN. A seat id there is a turn with no human in it,
+# recorded as though it complied -- worse than an absent field, because it reads as compliance.
+need("human_granted_by" in S and "human_granted_by" in VR,"R9a human grantor field")
+need("relayed_by" in S and "relayed_by" in VR,"R9a relay field")
+need("The grantor is a human, and the relay is not the grantor" in fS,"R9a rule stated")
+need("LEAD is not exempt" in fS,"R9a LEAD not exempt")
+need("A single `granted_by` field could not express this" in fS,"R9a why one field failed")
+need(not re.search(r"\bgranted_by:\s*\"",S),"R9a bare granted_by in an example")
+# (b) loop_acks is in the SHARED receipt contract and G-2 checks its shape -- no longer LEAD-only
+need("loop_acks" in VR,"R9b loop_acks in shared contract")
+need("REQUIRED_LOOP_ACK_FIELDS" in G2,"R9b G-2 field list")
+need("SEAT_ID_RE" in G2,"R9b G-2 seat-id guard")
+need("loop_acks" not in G6,"R9b check_rollback must NOT read loop_acks")
+need("must never be taught to read `loop_acks`" in flat(VR),"R9b warning in shared contract")
+# (c) the first stamp works: the preflight gates the STAMPED candidate, not the fetched receipt
+need("candidate = dict(receipt)" in Q,"R9c stamp-into-candidate")
+i=Q.index("candidate = dict(receipt)")
+need("receipt_check(candidate" in Q[i:i+1200],"R9c gates run on the candidate")
+need("gate_failed" in Q and "once stamped" in Q,"R9c failure message updated")
+need("exists to change was the one state it refused" in Q,"R9c deadlock explained in place")
+# the old order must be gone: nothing may gate the fetched receipt before stamping
+need("does not pass G-2/G-3/G-5/G-6 before stamping" not in Q,"R9c old preflight message removed")
+# (d) the three G-6 fixtures, including the control that passes for the RIGHT reason
+for name,want in (("g6-turn-ack-in-approvals.json",1),
+                  ("g6-turn-ack-four-fields.json",0),
+                  ("g6-turn-ack-in-loop-acks.json",0)):
+    f=FIX/name
+    need(f.is_file(),"R9d fixture missing: "+name)
+    got=subprocess.run([sys.executable,"ci/gates/check_rollback.py","--receipt",str(f)],
+                       capture_output=True,text=True).returncode
+    need(got==want,f"R9d {name}: check_rollback exited {got}, expected {want}")
+# the failing fixture must carry a VALID approval for its destructive op, or it is not showing what
+# it claims -- it would just be an unapproved rm -rf
+d=json.loads((FIX/"g6-turn-ack-in-approvals.json").read_text())
+real=[a for a in d["approvals"] if all(a.get(k) for k in ("operation","approved_by","at","blast_radius"))]
+need(len(real)>=1,"R9d failing fixture has no valid destructive approval -- it would fail for the wrong reason")
+need(any("id" in a and not a.get("at") for a in d["approvals"]),"R9d failing fixture has no turn-ack entry")
+ctrl=json.loads((FIX/"g6-turn-ack-in-loop-acks.json").read_text())
+need(ctrl.get("loop_acks") and not any("degraded-loop" in a.get("operation","") for a in ctrl["approvals"]),
+     "R9d control fixture must hold the ack in loop_acks and NOT in approvals")
+need(ctrl["loop_acks"][0].get("human_granted_by") and not re.match(r"(?i)bot-0\d",ctrl["loop_acks"][0]["human_granted_by"]),
+     "R9d control fixture's ack names a human")
 # round 2 (b) — generated_at is a read timestamp, never an etag, no change detection
 need("read timestamp, not a revision id" in fS,"R2b skill")
 need("read timestamp, not a revision id" in fD,"R2b doc")
@@ -277,5 +323,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp deadlock, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R9b shared contract + G-2 shape check, R9c first stamp unblocked, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
 PY

@@ -305,7 +305,7 @@ without a recorded human acknowledgement:
 |---|---|
 | 1 | Stop before the first edit. Do not retry in a loop — one retry, then it is degraded. (Nothing to retry on the no-marker condition: the contract will not grow an etag between two calls.) |
 | 2 | Ask for the ack the way approvals are already routed: a build seat asks LEAD (priority false); LEAD asks Ove in the 1:1. State the tool, the condition, the verbatim `reason` **and the path that carried it** where there is one, and what you intend to edit. |
-| 3 | Record the returned ack id in the receipt under **`loop_acks`** — **not `approvals`**, see below — with the `operation` string for the condition, and put the verbatim `reason` plus its field path, or for the no-marker condition the absence of the marker, in `unverified`. |
+| 3 | Record the returned ack id in the receipt under **`loop_acks`** — **not `approvals`**, see below — with the `operation` string for the condition and **the human who granted it in `human_granted_by`** (the seat that relayed goes in `relayed_by`, which is not the grantor). Put the verbatim `reason` plus its field path, or for the no-marker condition the absence of the marker, in `unverified`. |
 | 4 | Act, and emit the **normal** kinds for what happened — `implementation.started`, then `implementation.completed` with the receipt path — each carrying the payload fields below. Degradation is a property of the turn, not its outcome (§6). |
 | 5 | Do **not** fire `handoff_to_hermes`. A handoff propagates an unknown memory state into another runtime, where it stops being visible. Hand off only if the ack says so in as many words. |
 
@@ -344,9 +344,30 @@ into a silent one, and a silent one in the gate that exists to stop unapproved d
 | `condition` | string | The blocker code — `brief_degraded` or `brief_no_revision_marker`. The same value as `payload.blocker` on the turn's events |
 | `operation` | string | The `operation` string for that condition, verbatim from §3 |
 | `ack_id` | string | The id the approver returned. **Never** a string the seat composed |
-| `granted_by` | string | Who granted it — a seat id for a LEAD ack, or the human's name for a 1:1 ack |
+| `human_granted_by` | string | **Required. The human who granted it.** A person, never a seat id — not `bot-00-programming-lead`, not "LEAD", not "the desk". If no human granted it, there is no ack and the field has no honest value |
+| `relayed_by` | string \| null | Optional, and only a relay: the seat that carried the ask to the human and the answer back, normally `bot-00-programming-lead`. `null` when the seat asked a human directly |
 | `at` | ISO-8601 | When it was granted, not when the receipt was written |
 | `scope` | string | The one ticket and one turn it covers, named. An ack does not generalise |
+
+**The grantor is a human, and the relay is not the grantor.** Degraded mode exists because the memory
+plane cannot tell the seat what the desk already decided; the whole value of the ack is that a person
+who *does* know said go ahead. A build seat asks LEAD and LEAD asks Ove (§3 step 2) — so on a build
+seat's receipt, `relayed_by` is `bot-00-programming-lead` and `human_granted_by` is **Ove**, the
+person at the end of that chain. A single `granted_by` field could not express this, and the shape it
+permitted — one complete-looking entry naming only a seat — is a degraded turn with no human in it at
+all, which is the thing §3 forbids, recorded as though it complied.
+
+So, fail closed:
+
+| `loop_acks` entry | Verdict |
+|---|---|
+| `human_granted_by` absent, or empty | **No ack.** The turn is blocked (§3, last row) — it is not an ack with a missing field |
+| `human_granted_by` matching `^bot-0[0-6]-` , or `LEAD`/`QUALITY`/a seat label | **No ack**, and worse than absent: it names a bot where a person is required, which reads as compliance to anyone skimming |
+| `human_granted_by` a person, `relayed_by` a seat or `null` | A recorded ack |
+
+**LEAD is not exempt.** LEAD's own degraded turns are acked by Ove in the 1:1, so LEAD's
+`human_granted_by` is Ove and its `relayed_by` is `null` — LEAD relays *for other seats*, and cannot
+relay for itself. A receipt where `human_granted_by` is a seat is invalid whichever seat wrote it.
 
 **No gate reads `loop_acks`, and that is deliberate but incomplete.** Deliberate, because
 `ci/gates/check_rollback.py` must not see it — being counted as a destructive-op approval is the
@@ -745,6 +766,7 @@ Rules that already bind, before the schema exists:
 | Mint an event kind | §6 — nothing consumes it |
 | Swap a kind to signal degradation | §6.2 — a finished turn labelled `ticket.blocked` reports a blocker for work that is ready for review, in `payload.event` and the summary where it is harder to spot |
 | Put a degraded-mode turn ack in `approvals[]` | §3.1 — G-6 validates every entry when a destructive command is present, and pairs approvals to destructive ops by count; a turn ack there either fails a properly-approved receipt or silently satisfies G-6 for an unrelated destructive op. It goes in `loop_acks` |
+| Record a seat id as the ack's grantor | §3.1 — degraded mode needs a *human*; a seat in `human_granted_by` is a turn with no human in it, recorded as though it complied. LEAD is not exempt: it relays for others and cannot relay for itself |
 | Invent an ack id, an `approval_id`, or a packet signature | PD-5, G-3 — a fabricated approval with an audit trail |
 | Claim done without a receipt | G-2. A claim without a command is a guess with confident phrasing |
 | Hand off a goal that already has an Agent Bus job | Two branches, one goal, a merge race a human untangles |
@@ -772,8 +794,9 @@ receipt stub: task_id, brief_read_at: 1790761742.31, cached: false   ← §2.2 r
    services/desk-gateway/src/…/intake.py. Ack to proceed?"   → ack-2026-09-30-011
 receipt: loop_acks[{condition: "brief_no_revision_marker",       ← NOT approvals[] — §3.1
   operation: "degraded-loop: repo work on a brief with no revision marker",
-  ack_id: "ack-2026-09-30-011", granted_by: "…", at: "2026-09-30T09:14:02Z",
-  scope: "one turn, ticket intake-ack-idempotent"}]
+  ack_id: "ack-2026-09-30-011", human_granted_by: "Ove",   ← a person, never a seat id
+  relayed_by: "bot-00-programming-lead",                   ← LEAD carried the ask; it did not grant it
+  at: "2026-09-30T09:14:02Z", scope: "one turn, ticket intake-ack-idempotent"}]
 desk_ownership_resolve {paths: ["services/desk-gateway/src/…/intake.py"]}  → bot-01  ✔ mine
 desk_event_emit {kind: "implementation.started", graph_id, task_id,
   payload: {degraded: true, blocker: "brief_no_revision_marker", ack: "ack-2026-09-30-011"}}
@@ -814,7 +837,8 @@ desk_brief {…} → {seat, generated_at: 1790762100.04,          ← no top-lev
    services/desk-gateway/src/…/intake.py. Ack to proceed?"   → LEAD ↔ Ove → ack-2026-09-30-004
 receipt: loop_acks[{condition: "brief_degraded",                 ← NOT approvals[] — §3.1
   operation: "degraded-loop: repo work without a memory brief",
-  ack_id: "ack-2026-09-30-004", granted_by: "ove", at: "2026-09-30T09:41:11Z",
+  ack_id: "ack-2026-09-30-004", human_granted_by: "Ove",
+  relayed_by: "bot-00-programming-lead", at: "2026-09-30T09:41:11Z",
   scope: "one turn, ticket intake-ack-idempotent"}];
   approvals: []                                                  ← no g5/g6 op in this turn
   unverified: ["substrate.reason 'substrate returned HTTP 502'; recall.error also set; prior
@@ -849,7 +873,8 @@ desk_brief {graph_id: "ut-…", task_id: "…"}
 → LEAD: "desk_brief degraded: error=unknown_tool, top-level reason='desk_brief is not on the
    systems roster…'. No brief tool on this seat at all. Intending to edit …. Ack to proceed?"
 receipt: loop_acks[{condition: "brief_degraded", operation: "degraded-loop: repo work without a
-  memory brief", ack_id: "…", granted_by: "…", at: "…", scope: "one turn, one ticket"}];
+  memory brief", ack_id: "…", human_granted_by: "Ove", relayed_by: "bot-00-programming-lead",
+  at: "…", scope: "one turn, one ticket"}];
   unverified: ["desk_brief returned error=unknown_tool at the top level (reason: '…'); the seat has
   no brief tool, so no prior decision on this ticket was read"]
 desk_event_emit {kind: "implementation.started", …, payload: {degraded: true,
@@ -939,6 +964,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | Loading or unloading a pack to inspect pack state | A write on a corrupt packs file reads `{}` and then overwrites it, destroying every seat's pack records | §2.1 — never diagnose with a write |
 | Empty brief read as "none" | Confident claim about an untouched ticket that was not untouched | Check `reason`; degraded mode (§3) |
 | Degraded work, no ack | No `loop_acks` entry; `unverified` silent on the brief | Get the ack before the edit; an ack cannot be back-dated |
+| `loop_acks` entry naming a seat as the grantor | `human_granted_by: "bot-00-programming-lead"` — a complete-looking entry with no human in it, which reads as compliance | §3.1 — the grantor is a person; the relaying seat goes in `relayed_by`. Fail closed: a seat id there is no ack at all |
 | Fabricated ack id | Receipt field satisfied, audit row matches no approval | PD-5 breach. Obtain a real one |
 | Turn ack recorded in `approvals[]` | G-6 fails a receipt whose destructive op was properly approved — or, with all four fields, passes one that was not | §3.1 — `loop_acks` for turn acks, `approvals[]` for g5/g6 only |
 | `approved_by` filled in to get `desk_receipt_approve` past its own preflight | The independent check is fabricated; an empty string fails identically | §4.1 — leave it unset. The approval is not a receipt-file stamp: it is sha-bound and commit-free, resolved from `approval_ref` |
@@ -967,6 +993,7 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 | No staleness claim the tool cannot support | PD-1, PD-6 | `generated_at` is when you read, not what you read; the gap goes in `unverified` |
 | Degradation goes in the payload, never in the event kind | G-4 | A mislabelled turn is a blocker nobody owns or work nobody reviews — and on the gateway path the label sits in `payload.event`, not in a routable kind (§6.1) |
 | One payload field per meaning: `blocker`, `upstream_reason`, `reason_path` | PD-1 | A single `reason` loses either the filterable code or the diagnostic |
+| A human named in `human_granted_by` on every `loop_acks` entry, the relaying seat only in `relayed_by` | G-2, PD-5 | Degraded repo work is authorised by a person who knows what the brief could not tell the seat; a seat id there authorises nothing |
 | Turn acks in `loop_acks`; `approvals[]` reserved for g5/g6 operations | G-6 | G-6 validates every `approvals` entry and pairs them to destructive ops by count — a turn ack there fails a good receipt or silently passes a bad one (§3.1) |
 | `approved_by` left unset by the authoring seat, whatever the approval tool does | G-2, PD-5 | A placeholder fabricates the independent check. An approval must be bound to a sha and must not create one, so it does not live in the receipt file at all (§4.1) |
 | Per-plane outcome of every `desk_memory_retain`, claimed no further than `results` supports | G-2, PD-1 | `ok` is `any()` over two planes, and an error is not proof that nothing was written |

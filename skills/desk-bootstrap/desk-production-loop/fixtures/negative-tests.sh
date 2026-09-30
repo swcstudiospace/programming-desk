@@ -18,6 +18,12 @@
 # no-op, the check would pass, and the negative test would report success while testing nothing --
 # a negative test that cannot fail is worse than none, because it is cited as evidence.
 #
+# What is still at HEAD in the scratch tree: everything NOT in OVERLAY below. That is deliberate --
+# the tree has to come from somewhere -- but it means a case whose rule depends on a working-tree
+# file nobody listed would be testing the committed version of it. `verify.sh` reads only the files
+# in OVERLAY plus the fixtures and templates copied beside it, so the set is complete today; adding
+# a new `load(...)` to verify.sh means adding its path here, and case [6] fails if that is forgotten.
+#
 #   bash skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh
 #
 # Exits 0 when every case failed as intended, 1 otherwise. Cited by
@@ -33,16 +39,38 @@ scratch=""
 cleanup() { [ -n "$scratch" ] && rm -rf "$scratch"; }
 trap cleanup EXIT
 
+# Everything verify.sh reads or executes. The scratch tree starts as `git archive HEAD`, so without
+# this list a case would be testing the COMMITTED version of a dependency while the rule under test
+# lives in the working tree -- and the two disagree exactly when it matters, mid-round. So every
+# input is overlaid from the working tree: the skill and its docs (asserted against), the generator
+# and the templates (the 7/7 assertions compare them), and check_rollback.py (the R8b assertions
+# execute it against the fixtures).
+OVERLAY=(
+  "$LOOP_DIR/SKILL.md"
+  "$LOOP_DIR/verify.sh"
+  "skills/desk-bootstrap/SKILL.md"
+  "docs/desk-operating-model.md"
+  "docs/vps-agent-bus.md"
+  "grokbot/README.md"
+  "scripts/generate-templates.py"
+  "ci/gates/check_rollback.py"
+  "ci/gates/check_receipt.py"
+  "skills/verification-receipts/SKILL.md"
+  "services/desk-gateway/src/desk_gateway/tools/quality.py"
+)
+
 new_scratch() {
   cleanup
   scratch=$(mktemp -d "${TMPDIR:-/tmp}/desk-loop-negtest.XXXXXX")
   git archive --format=tar HEAD | tar -x -C "$scratch"
-  # overlay the working-tree versions of the files under test
-  mkdir -p "$scratch/$LOOP_DIR/fixtures" "$scratch/docs"
-  cp "$REPO/$LOOP_DIR/SKILL.md" "$REPO/$VERIFY" "$scratch/$LOOP_DIR/"
+  local f
+  for f in "${OVERLAY[@]}"; do
+    mkdir -p "$scratch/$(dirname "$f")"
+    cp "$REPO/$f" "$scratch/$f"
+  done
+  mkdir -p "$scratch/$LOOP_DIR/fixtures" "$scratch/grokbot/templates"
   cp "$REPO/$LOOP_DIR/fixtures/"* "$scratch/$LOOP_DIR/fixtures/"
-  cp "$REPO/docs/desk-operating-model.md" "$scratch/docs/"
-  cp "$REPO/skills/desk-bootstrap/SKILL.md" "$scratch/skills/desk-bootstrap/"
+  cp "$REPO/grokbot/templates/"*.md "$scratch/grokbot/templates/"
 }
 
 # run verify.sh against the scratch tree; echo its exit code
@@ -117,6 +145,32 @@ d["approvals"][0].pop("blast_radius")      # now G-6 fails, so the documented ex
 p.write_text(json.dumps(d, indent=2))
 PY
 case_expect_fail "R8b fixture exit-code drift" "R8b g6-turn-ack-four-fields.json"
+
+echo "[6] R9a: name a seat as the human who granted a degraded-mode ack"
+new_scratch
+mutate "$LOOP_DIR/SKILL.md" \
+  '**The grantor is a human, and the relay is not the grantor.**' \
+  'The grantor may be whoever relayed the ask.' || { echo "  FAIL  mutation"; rc=1; }
+case_expect_fail "R9a human grantor required" "R9a"
+
+echo "[7] OVERLAY completeness: every file verify.sh loads is overlaid from the working tree"
+new_scratch
+missing=$(python3 - "$REPO/$VERIFY" "${OVERLAY[@]}" <<'PY'
+import re, sys
+verify, overlay = sys.argv[1], set(sys.argv[2:])
+# paths verify.sh reads via load("...") -- the fixtures dir and grokbot/templates are copied
+# wholesale by new_scratch, so they are covered without being listed individually
+loaded = set(re.findall(r'load\("([^"]+)"\)', open(verify).read()))
+print(" ".join(sorted(p for p in loaded if p not in overlay)))
+PY
+)
+if [ -z "$missing" ]; then
+  echo "  PASS  OVERLAY covers every load() in verify.sh"
+else
+  echo "  FAIL  OVERLAY is missing: $missing"
+  echo "        Those would be tested at HEAD, not at the working tree. Add them to OVERLAY."
+  rc=1
+fi
 
 echo
 if [ "$rc" = "0" ]; then echo "ok: every case failed as intended, and the working tree was never written to"

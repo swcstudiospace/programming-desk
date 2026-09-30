@@ -1,0 +1,40 @@
+# STUB — not installed. SPE-4792 INFRA half. Pairs with substrate-lease-reap.service.
+#
+# Sweeps expired leases on a quiet desk. Default cadence 45s, within a sanctioned 30–60s band:
+#
+#   30s   more responsive, ~2880 loopback calls/day, no measurable cost but more journal noise
+#   45s   DEFAULT — a lease is released within ~45s of expiring, which is well inside any TTL
+#         worth setting, and the sweep stays invisible in the log
+#   60s   the upper bound; past it an expired lease can sit long enough that a seat waiting on
+#         the claim notices the delay, which is the thing the sweeper exists to prevent
+#
+# Unlike the per-seat heartbeat timer, this cadence is NOT bound to LEASE_TTL_S: the sweeper does
+# not renew anything, so a missed tick delays a release rather than losing a lease. That is why it
+# gets a fixed default instead of a generated one — but the interval is still read from
+# SUBSTRATE_LEASE_REAP_INTERVAL_SEC so the env file stays the single place the cadence is written.
+#
+# One sweeper per host, not per seat: the tool reaps every expired lease in one call, so running
+# it seven times would be seven identical no-ops after the first.
+
+[Unit]
+Description=Periodic sweep for expired Programming Desk seat leases (SPE-4792)
+Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
+
+[Timer]
+OnBootSec=60
+# PLACEHOLDER — generate from SUBSTRATE_LEASE_REAP_INTERVAL_SEC at install time (default 45,
+# permitted 30–60). systemd cannot read it from an EnvironmentFile.
+OnUnitActiveSec=45
+# Small relative to the interval. Several desk hosts sweeping the same substrate in lockstep is
+# wasted work, not a correctness problem — the tool is idempotent — so the jitter is politeness.
+RandomizedDelaySec=5
+AccuracySec=1s
+# Persistent= is omitted, not set false: it replays missed activations for CALENDAR timers only,
+# so on a monotonic timer like this one it is a no-op either way, and writing it down would imply
+# a resume behaviour that is not on offer. Nothing is lost — a sweep missed while the host was
+# down is worthless on resume, because OnBootSec fires one a minute after boot and the next tick
+# does the same work seconds later.
+Unit=substrate-lease-reap.service
+
+[Install]
+WantedBy=timers.target

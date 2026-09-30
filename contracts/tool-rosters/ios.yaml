@@ -1,5 +1,15 @@
-# IOS roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-04-ios.
-version: 1.0.0
+# IOS roster: core 8 + 7 own = 15. Contract surface (QUALITY); consumer bot-04-ios.
+# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): the 8 local/MetaVR tools added
+# for SPE-5161 / PR #48 (bot-04-ios/spe-5161-ios-tools-metavr) would have put this roster at 23
+# effective tools against ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 ceiling (G-7).
+# Resolved by moving them out of the permanent roster into two tool-packs instead of raising the
+# ceiling: contracts/tool-packs/ios-local.yaml (5 filesystem-only tools, app ioslocal) and
+# contracts/tool-packs/ios-metavr.yaml (3 MetaVR device tools, app iosmetavr). ios seats load
+# either via desk_app_tools_load for the life of one ticket. See
+# contracts/changes/spe-5161-ios-local-tools-v1.1.0.yaml for the full change record, including a
+# second, still-open blocker: services/desk-gateway has no ios.py backend module, so calling
+# any of these tools today raises ModuleNotFoundError (bot-01-systems-backend's to fix).
+version: 1.1.0
 seat: bot-04-ios
 short: ios
 endpoint: /mcp/ios

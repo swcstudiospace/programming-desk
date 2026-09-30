@@ -1,0 +1,80 @@
+{
+  "task_id": "spe-4794-c1-c2-systems-approve-toctou",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-09-30T15:43:12Z",
+  "completed_at": "2026-09-30T17:35:00Z",
+  "branch": "bot-01-systems-backend/spe-4794-approve-toctou",
+  "summary": "SPE-4794 companion C-2+C-1 on desk_receipt_approve, hard-fixed against Greptile 3/5: fail closed when the tip can't be resolved instead of silently disabling the C-2 guard, gate the stamped candidate with check_receipt strict=True (not False), and this receipt's own claims now cite evidence_command_index instead of free-text evidence. Second hard-fix round (tip_match 3/5): replaced this receipt's own unescaped-bracket grep (recorded exit 0, actually exits 1) with a fixed-string grep -F that genuinely exits 0, and closed a second TOCTOU gap in _commit_file — the clone-time tip compare guarded expect_sha, but the actual push to the branch was unconditional, so a rewind landing between the clone and the push could still fast-forward and resurrect content the rewind removed. The push is now itself gated with --force-with-lease on the tip _commit_file observed at clone time, with a ls-remote fallback to report stale_read (not a raw push error) when the lease rejects. Does not edit programming-desk #40.",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/src/desk_gateway/tools/quality.py').read())\"",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "grep -nF 'await repo.receipt_check(candidate, candidate.get(\"bot\") or \"\", True, args[\"receipt_path\"])' services/desk-gateway/src/desk_gateway/tools/quality.py",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "uv run pytest tests/test_units.py -k test_receipt_approve_stamps_the_first_approval_and_pushes -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    },
+    {
+      "cmd": "uv run pytest tests/test_units.py -k test_receipt_approve_rejects_a_claim_with_free_text_evidence -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    },
+    {
+      "cmd": "uv run pytest tests/test_units.py -k test_commit_file_refuses_a_stale_tip_and_leaves_the_branch_untouched -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    },
+    {
+      "cmd": "uv run pytest tests/test_units.py -k test_commit_file_refuses_a_rewind_between_its_own_clone_and_push -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    },
+    {
+      "cmd": "uv run pytest -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "quality.py parses as valid Python 3 after the tip-check + strict=True hard-fix and the new push-side lease guard",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "receipt_approve gates the stamped candidate through check_receipt with strict=True, not strict=False (fixed-string grep -F match on the live source line; the prior bracket-unescaped grep in this same receipt recorded exit 0 but actually exits 1)",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "receipt_approve's first-stamp path (C-1) stamps approved_by/approved_at and pushes when the receipt's claims cite evidence_command_index and G-2/G-3/G-5-6 pass in strict mode, against a real bare git remote",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "check_receipt (G-2) refuses a claim that cites free-text 'evidence' instead of evidence_command_index with gate_failed, and the branch tip is left unmoved",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "_commit_file (C-2 TOCTOU) refuses the push with stale_read and leaves the remote branch tip unchanged when it moved after the receipt was read (read-to-clone race)",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "_commit_file's final push is itself conditional on the tip observed at clone time: when the branch is rewound to an ancestor between the internal clone and the internal push, the force-with-lease push is rejected and _commit_file reports stale_read instead of fast-forwarding over the rewind (clone-to-push race)",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "the full desk-gateway test suite (103 tests, including these 4 regressions) passes with no other regressions",
+      "evidence_command_index": 6
+    }
+  ],
+  "unverified": [
+    "no live desk_receipt_approve call against the deployed gateway process; all coverage here is direct unit calls to quality.receipt_approve/_commit_file against a local bare git remote built in tmp_path",
+    "the read_sha is None fail-closed guard (added alongside the strict-True fix) has no dedicated regression test: Repo.resolve_ref falls back to HEAD rather than surfacing None for an unresolvable ref, so triggering the None path without also changing resolve_ref is out of scope for this hard-fix"
+  ],
+  "approved_by": ""
+}

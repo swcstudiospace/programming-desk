@@ -1,0 +1,57 @@
+# STUB — not installed. SPE-4792 INFRA half, lease sweeper.
+#
+# One periodic call to the SYSTEMS-owned `coord_reap_leases` tool on the local substrate-mcp, so
+# leases whose holder died still get released on a quiet desk. INFRA schedules the call; it does
+# not implement it. The reap decision — which lease is expired, and the compare-and-set that
+# releases it — lives behind that tool, next to the claim schema, for the reason spelled out in
+# LEASE-HEARTBEAT.md §1: a second implementation of claim CAS is how a ticket gets double-claimed.
+#
+# This is a SWEEPER, not the primary path. On-demand reaping through the MCP tool is retained and
+# stays SYSTEMS' (LEASE-HEARTBEAT.md §6); the timer only covers the quiet-load case where nothing
+# calls the tool for a while and an expired lease would otherwise sit there unreleased.
+#
+# NO SECRETS IN THIS UNIT. The bearer lives in the curl config file named by
+# SUBSTRATE_LEASE_REAP_CURL_CONFIG (root:root 0600) — not in an Environment= line and not on the
+# command line, because a command line is visible in `ps` and in `systemctl show` to every local
+# user. Every value below comes from the EnvironmentFile; empty means the installer has not run.
+
+[Unit]
+Description=Reap expired Programming Desk seat leases (SPE-4792)
+Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
+After=network-online.target substrate-mcp.service
+Wants=substrate-mcp.service
+# Loopback only, so no network dependency beyond the substrate being up. If it is down the sweep
+# fails and the next tick retries: a missed sweep delays a release, it does not lose one.
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+# REQUIRED, no `-` prefix: without the env file every ${...} below expands empty and curl is
+# invoked with no URL, no config and no request body. Fail on the missing file instead.
+EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
+# A wrapper, not a bare curl, because `curl --fail-with-body` only fails on a non-2xx status and
+# MCP does not report tool failures that way: a failed `tools/call` answers HTTP 200 with
+# `isError: true` in the result, and a protocol failure answers 200 with a JSON-RPC `error`. Both
+# would leave systemd marking the sweep successful while expired leases stayed unreaped — a green
+# timer over a job that is not running. The wrapper checks the payload and exits non-zero unless
+# the tool actually ran and actually succeeded; its exit codes are listed in its own header and in
+# LEASE-HEARTBEAT.md §6. It also keeps the curl invocation out of a systemd command line, where
+# `%` is special and would have to be escaped.
+#
+# STUB: the request body and curl config are written by the installer; see LEASE-HEARTBEAT.md §6.
+ExecStart=/opt/programming-desk/infra/lease-heartbeat/substrate-lease-reap.sh
+# Keep below the timer interval, or a hung sweep occupies the next tick. Generated from
+# SUBSTRATE_LEASE_REAP_TIMEOUT_SEC at install time — PLACEHOLDER literal here.
+TimeoutStartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateNetwork=false
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=substrate-lease-reap
+
+[Install]
+WantedBy=multi-user.target

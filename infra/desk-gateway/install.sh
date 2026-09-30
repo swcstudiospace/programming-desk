@@ -2,10 +2,14 @@
 # Install or update the desk-gateway systemd service on the VPS. Safe to rerun.
 # Does not touch nginx, DNS or certificates — that is install-nginx.sh.
 #
-# Layout (Greptile P1 4141126594 / tip fixes incl. 4141252895, 4141252905):
+# Layout (Greptile P1 4141126594 / tip fixes incl. 4141252895, 4141252905, 4141292737):
 # Canonical desk checkout is /opt/programming-desk so a future DESK_GATE_USER can
 # traverse the tree and run ci/gates. Do NOT set DESK_GATE_USER in the live env
 # until that drop is verified separately.
+#
+# Dependencies (root install): uv at /root/.local/bin/uv, systemd, curl, and rsync.
+# rsync is required so syncs prune deleted paths under /opt (no tar fallback).
+# If missing, this script runs: apt-get install -y rsync
 set -euo pipefail
 
 [[ $EUID -eq 0 ]] || { echo "install.sh: must run as root" >&2; exit 1; }
@@ -27,14 +31,28 @@ UNIT=desk-gateway.service
 
 install -d -m 0755 -o root -g root /opt
 
-rsync_to_opt() {
-  local src=$1
+ensure_rsync() {
   # rsync --delete is required so removed paths disappear under /opt (4141252905).
-  # No tar fallback: non-deleting sync leaves stale gates/rosters deployed.
-  if ! command -v rsync >/dev/null 2>&1; then
-    echo "install.sh: rsync is required to sync/prune $GATEWAY_ROOT (apt install rsync)" >&2
+  # No tar fallback. Install via apt when missing (4141292737) — documented in header.
+  if command -v rsync >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "install.sh: rsync missing — installing with apt-get (required to sync/prune $GATEWAY_ROOT)"
+  if ! command -v apt-get >/dev/null 2>&1; then
+    echo "install.sh: apt-get not found; install rsync manually, then re-run" >&2
     exit 1
   fi
+  DEBIAN_FRONTEND=noninteractive apt-get update -y
+  DEBIAN_FRONTEND=noninteractive apt-get install -y rsync
+  command -v rsync >/dev/null 2>&1 || {
+    echo "install.sh: rsync still missing after apt-get install" >&2
+    exit 1
+  }
+}
+
+rsync_to_opt() {
+  local src=$1
+  ensure_rsync
   echo "install.sh: syncing $src -> $GATEWAY_ROOT"
   mkdir -p "$GATEWAY_ROOT"
   # Keep the live venv; uv sync refreshes deps after the tree update.

@@ -4,8 +4,8 @@
   "branch": "bot-05-infrastructure/desk-gate-install-layout",
   "pull_request": 34,
   "started_at": "2026-09-30T05:37:00Z",
-  "completed_at": "2026-09-30T06:01:35Z",
-  "summary": "Second tip fix on #34: in-memory compile probe (no py_compile) 4141252895; require rsync --delete (drop tar fallback) 4141252905; receipt evidence commands real/re-runnable 4141252913. DESK_GATE_USER unset; approved_by null until Path B.",
+  "completed_at": "2026-09-30T06:08:14Z",
+  "summary": "Third tip fix on #34: ensure_rsync apt-get installs rsync when missing + INSTALL.md docs (4141292737); receipt evidence remains real (4141252913 \u2014 GH thread reply+resolve). DESK_GATE_USER unset; approved_by null until Path B.",
   "approved_by": null,
   "approval_requested_from": "bot-06-quality-security",
   "commands": [
@@ -16,34 +16,34 @@
       "output_tail": "OK"
     },
     {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/desk-gateway/install.sh infra/desk-gateway/desk-gateway.service infra/desk-gateway/gateway.env.example .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.json .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.md",
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/desk-gateway/install.sh infra/desk-gateway/desk-gateway.service infra/desk-gateway/gateway.env.example infra/desk-gateway/INSTALL.md .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.json .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.md",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "G-1 PASS \u2014 bot-05-infrastructure: 5 file(s) within owned paths"
+      "output_tail": "G-1 PASS \u2014 bot-05-infrastructure: 6 file(s) within owned paths"
     },
     {
-      "cmd": "grep -nE 'rsync -a --delete|rsync is required|tar cf' infra/desk-gateway/install.sh",
+      "cmd": "grep -nE 'ensure_rsync|apt-get install -y rsync|Dependencies \\(root install\\)' infra/desk-gateway/install.sh",
       "exit_code": 0,
       "duration_s": 0.01,
-      "output_tail": "35:    echo \"install.sh: rsync is required to sync/prune $GATEWAY_ROOT (apt install rsync)\" >&2\n41:  rsync -a --delete \\"
+      "output_tail": "10:# Dependencies (root install): uv at /root/.local/bin/uv, systemd, curl, and rsync.\n12:# If missing, this script runs: apt-get install -y rsync\n34:ensure_rsync() {\n46:  DEBIAN_FRONTEND=noninteractive apt-get install -y rsync\n55:  ensure_rsync"
     },
     {
-      "cmd": "grep -nE 'py_compile|compile\\(p\\.read_text' infra/desk-gateway/install.sh",
+      "cmd": "grep -n rsync infra/desk-gateway/INSTALL.md",
       "exit_code": 0,
       "duration_s": 0.01,
-      "output_tail": "177:  'import pathlib, sys; p = pathlib.Path(sys.argv[1]); compile(p.read_text(encoding=\"utf-8\"), str(p), \"exec\")' \\"
+      "output_tail": "16:| `rsync` | **Required** to sync/prune `/opt/programming-desk` (`rsync -a --delete`). If missing, `install.sh` runs `apt-get install -y rsync`. |"
     },
     {
-      "cmd": "python3 -c \"import re; legacy='/root/src/repos/programming-desk'; target='/opt/programming-desk'; pat=re.compile(rf'^[ \\\\t]*DESK_REPO_DIR[ \\\\t]*=[ \\\\t]*[\\\"\\\\']?{re.escape(legacy)}[\\\"\\\\']?[ \\\\t]*$', re.M); assert pat.search('DESK_REPO_DIR=/root/src/repos/programming-desk'); assert pat.search('DESK_REPO_DIR=\\\"/root/src/repos/programming-desk\\\"'); print('DESK_REPO_DIR_migrate_ok')\"",
-      "exit_code": 0,
-      "duration_s": 0.05,
-      "output_tail": "DESK_REPO_DIR_migrate_ok"
-    },
-    {
-      "cmd": "grep -nE 'GATE_HOME=/var/lib/desk-gate|chmod -R a\\+rX' infra/desk-gateway/install.sh",
+      "cmd": "grep -nE 'compile\\(p.read_text|py_compile' infra/desk-gateway/install.sh",
       "exit_code": 0,
       "duration_s": 0.01,
-      "output_tail": "23:GATE_HOME=/var/lib/desk-gate"
+      "output_tail": "195:  'import pathlib, sys; p = pathlib.Path(sys.argv[1]); compile(p.read_text(encoding=\"utf-8\"), str(p), \"exec\")' \\"
+    },
+    {
+      "cmd": "grep -nE 'rsync -a --delete|tar cf' infra/desk-gateway/install.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "59:  rsync -a --delete \\"
     }
   ],
   "claims": [
@@ -52,36 +52,37 @@
       "evidence_command_index": 0
     },
     {
-      "claim": "All five touched paths remain inside bot-05-infrastructure ownership (G-1 PASS).",
+      "claim": "Touched INFRA paths including INSTALL.md remain inside bot-05-infrastructure ownership (G-1 PASS).",
       "evidence_command_index": 1
     },
     {
-      "claim": "Sync to /opt uses rsync -a --delete and fails closed without rsync; no tar fallback that retains deletes (4141252905).",
+      "claim": "install.sh documents rsync as a dependency and apt-get installs it via ensure_rsync when missing (4141292737).",
       "evidence_command_index": 2
     },
     {
-      "claim": "Gate probe parses source in memory via compile(read_text); py_compile is absent so install does not need write on ci/gates (4141252895).",
+      "claim": "infra/desk-gateway/INSTALL.md lists rsync as a required dependency with apt-get install behavior.",
       "evidence_command_index": 3
     },
     {
-      "claim": "DESK_REPO_DIR migration matches bare and double-quoted legacy /root paths.",
+      "claim": "Gate probe still uses in-memory compile(read_text); py_compile absent (4141252895).",
       "evidence_command_index": 4
     },
     {
-      "claim": "desk-gate home is /var/lib/desk-gate and install.sh has no chmod -R a+rX.",
+      "claim": "Sync still uses rsync -a --delete with no tar fallback (4141252905).",
       "evidence_command_index": 5
     }
   ],
   "unverified": [
     "Live VPS not re-installed in this tip \u2014 operator must rerun infra/desk-gateway/install.sh after merge",
-    "services/desk-gateway config.py default repo_dir still /root/... \u2014 SYSTEMS carry-forward; live DESK_REPO_DIR wins after install",
-    "DESK_GATE_USER privilege drop still disabled by design until a follow-up enable ticket",
+    "services/desk-gateway config.py default repo_dir still /root/... \u2014 SYSTEMS carry-forward",
+    "DESK_GATE_USER privilege drop still disabled until a follow-up enable ticket",
     "approved_by remains null until QUALITY Path B after tip_match CLEAR"
   ],
   "files_changed": [
     "infra/desk-gateway/install.sh",
     "infra/desk-gateway/desk-gateway.service",
     "infra/desk-gateway/gateway.env.example",
+    "infra/desk-gateway/INSTALL.md",
     ".receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.json",
     ".receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.md"
   ],
@@ -94,7 +95,8 @@
     "4141208711",
     "4141252895",
     "4141252905",
-    "4141252913"
+    "4141252913",
+    "4141292737"
   ],
   "p2s_addressed": [
     "4141208714",

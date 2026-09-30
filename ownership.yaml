@@ -163,6 +163,15 @@ ownership:
     owner: bot-05-infrastructure
   - pattern: ".github/workflows/**"
     owner: bot-05-infrastructure
+  # The distributable gate template. GitHub only reads workflows from the repository
+  # root, so ci/.github/workflows/gates.yml is the copy other repositories seed from
+  # and .github/workflows/gates.yml is the copy that runs. The two must always change
+  # together — .github/workflows/gates-template-sync.yml fails the build if they drift —
+  # so the template belongs to the same bot as the live workflow. Without this rule the
+  # path matches nothing: .github/workflows/** is anchored at the root, so the nested
+  # path was UNOWNED and no bot could touch the template at all.
+  - pattern: "ci/.github/workflows/**"
+    owner: bot-05-infrastructure
   - pattern: "scripts/dev/**"
     owner: bot-05-infrastructure
 

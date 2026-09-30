@@ -1,12 +1,14 @@
-# Quality gates. Copy to .github/workflows/gates.yml in the target repository.
+# Quality gates — the live workflow for this repository.
 #
 # Gates are required status checks — they block the merge rather than merely reporting.
 # A gate that can be merged past is a suggestion.
 #
-# Untrusted values (the branch-derived bot id, the receipt path) are passed to steps as
-# environment variables, never interpolated into shell source with ${{ }}. A branch may
-# legally contain $ and ( ), so interpolating a branch-derived value into a script is
-# remote code execution on the runner, reachable before any gate can reject the bot.
+# The distributable template is ci/.github/workflows/gates.yml. GitHub Actions only reads
+# workflows from .github/workflows at the repository root, so the template alone cannot
+# attach a required check — this file is what runs.
+#
+# The two must not diverge. .github/workflows/gates-template-sync.yml compares everything
+# below this comment block against the template and fails if they drift apart.
 
 name: Quality Gates
 

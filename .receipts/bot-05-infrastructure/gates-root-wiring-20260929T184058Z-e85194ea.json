@@ -1,0 +1,188 @@
+{
+  "task_id": "gates-root-wiring-20260929T184058Z-e85194ea",
+  "bot": "bot-05-infrastructure",
+  "started_at": "2026-09-29T18:41:00Z",
+  "completed_at": "2026-09-29T19:05:00Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "Wire the Quality Gates workflow at .github/workflows so GitHub Actions can run it and required status checks can attach. The gate definition previously existed only as the distributable template at ci/.github/workflows/gates.yml, which GitHub never reads. A Greptile review of the wiring then found a shell injection and three correctness defects in that gate definition; those are fixed here in both copies, because wiring the workflow is what made them live.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "observed": "G-1 manifest OK \u2014 7 bots, 90 rules"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "observed": "90 passed in 5.25s \u2014 the gate self-test suite the gate-self-test job runs"
+    },
+    {
+      "cmd": "python3 -c \"import sys;from pathlib import Path;g=lambda p:(lambda L: ''.join(L[next((i for i,l in enumerate(L) if l.strip() and not l.lstrip().startswith(chr(35))), len(L)):]))(Path(p).read_text().splitlines(True));a=g('.github/workflows/gates.yml');b=g('ci/.github/workflows/gates.yml');print('gate bodies identical:', a==b);sys.exit(0 if a==b else 1)\"",
+      "exit_code": 0,
+      "observed": "gate bodies identical: True \u2014 131 shared lines. Same comparison the gates-template-sync workflow performs; confirms the security fix landed in both copies."
+    },
+    {
+      "cmd": "python3 -c \"import re,yaml;wf=yaml.safe_load(open('.github/workflows/gates.yml'));bad=[(j,s.get('name'),m) for j,jd in wf['jobs'].items() for s in jd.get('steps',[]) for m in re.findall(chr(92)+chr(36)+chr(123)+chr(123)+'[^}]*'+chr(125)+chr(125), s.get('run','') or '')];print('interpolations inside run scripts ->', bad or 'NONE');raise SystemExit(1 if bad else 0)\"",
+      "exit_code": 0,
+      "observed": "interpolations inside run scripts -> NONE. No untrusted value is substituted into shell source any more; every one is passed via env:."
+    },
+    {
+      "cmd": "python3 -c \"import re;pat=chr(94)+'bot-0[0-6]-[a-z0-9-]+'+chr(36);bots=['bot-00-programming-lead','bot-01-systems-backend','bot-02-web-edge','bot-03-android','bot-04-ios','bot-05-infrastructure','bot-06-quality-security'];hostile=['bot-01-'+chr(36)+'(id)','main','bot-01-x;id'];bad=[b for b in bots if not re.match(pat,b)];acc=[h for h in hostile if re.match(pat,h)];print('legit rejected:',bad,'| hostile accepted:',acc);raise SystemExit(1 if bad or acc else 0)\"",
+      "exit_code": 0,
+      "observed": "legit rejected: [] | hostile accepted: [] \u2014 the anchored pattern accepts all seven declared bots (bot-00 included) and rejects command-substitution payloads and 'main'."
+    },
+    {
+      "cmd": "bash -c \"RECEIPT=$(git diff --name-only --diff-filter=d origin/main...HEAD -- .receipts/bot-05-infrastructure | grep -E '[.]json$' | head -n1); echo \\\"receipt selected from this diff: ${RECEIPT:-NONE}\\\"; test -n \\\"$RECEIPT\\\"\"",
+      "exit_code": 0,
+      "observed": "receipt selected from this diff: .receipts/bot-05-infrastructure/gates-root-wiring-20260929T184058Z-e85194ea.json \u2014 the new diff-based selection picks this change's own receipt, not whichever filename sorts first."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 1,
+      "observed": "G-1 FAIL \u2014 FOREIGN ownership.yaml (owned by bot-06-quality-security). The template is no longer UNOWNED; the remaining objection is the manifest edit itself, which is exactly what QUALITY ratifying resolves. Still a real blocker."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/gates-root-wiring-20260929T184058Z-e85194ea.json --bot bot-05-infrastructure --strict",
+      "exit_code": 0,
+      "observed": "G-2 PASS"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-3 PASS \u2014 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/gates-root-wiring-20260929T184058Z-e85194ea.json",
+      "exit_code": 0,
+      "observed": "G-5/G-6 PASS \u2014 no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "observed": "G-1 manifest OK \u2014 7 bots, 91 rules (was 90). The added rule is well-formed and duplicates no existing pattern."
+    },
+    {
+      "cmd": "python3 -c \"import subprocess,sys,yaml;sys.path.insert(0,'ci/gates');import check_ownership as c;g=lambda a:subprocess.run(a,capture_output=True,text=True,check=True).stdout;files=g(['git','ls-files']).split();new=yaml.safe_load(open('ownership.yaml'));old=yaml.safe_load(g(['git','show','origin/main:ownership.yaml']));ch=[(f,c.resolve_owner(f,old)[0],c.resolve_owner(f,new)[0]) for f in files if c.resolve_owner(f,old)[0]!=c.resolve_owner(f,new)[0]];print('tracked files:',len(files),'| owner changed:',ch);sys.exit(0 if ch==[('ci/.github/workflows/gates.yml',None,'bot-05-infrastructure')] else 1)\"",
+      "exit_code": 0,
+      "observed": "tracked files: 113 | owner changed: [('ci/.github/workflows/gates.yml', None, 'bot-05-infrastructure')] \u2014 exactly one path moved, unowned -> INFRA."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_ownership.py ci/hooks/pre-commit ownership.yaml SECURITY.md",
+      "exit_code": 0,
+      "observed": "G-1 PASS \u2014 bot-06-quality-security: 4 file(s) within owned paths. QUALITY keeps ci/gates/**, ci/hooks/**, ownership.yaml and SECURITY.md."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "No untrusted value is interpolated into shell source in the live workflow; the branch-derived bot id and the receipt path are passed through env: instead.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The anchored bot pattern rejects command-substitution payloads and 'main' while still attributing all seven declared bots, bot-00-programming-lead (LEAD) among them.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-2 and G-5/G-6 now read the receipt this change adds, selected from the diff, rather than whichever filename sorts first in the bot's directory.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The live workflow and the ci/ template carry the same gate definition after the fixes \u2014 the security change landed in both.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1 currently FAILS on this diff because ci/.github/workflows/gates.yml matches no ownership rule. The change is blocked on a manifest rule from bot-06-quality-security.",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "The ownership manifest itself still validates, so the gap is a missing rule rather than a malformed manifest.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The gate self-test suite passes against this tree after the workflow changes.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-2 passes on this receipt.",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-3 finds no committed secrets in this diff.",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-4 finds no contract surface touched by this diff.",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-5/G-6 pass: this change records no deployment or destructive operation.",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "The added ownership rule is well-formed and the manifest still self-validates.",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The rule moves exactly one path \u2014 ci/.github/workflows/gates.yml, from unowned to bot-05-infrastructure \u2014 and changes no other file's owner across all 113 tracked files.",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "bot-06-quality-security retains ownership of ci/gates/**, ci/hooks/**, ownership.yaml and SECURITY.md; the rule does not erode QUALITY's authority.",
+      "evidence_command_index": 13
+    }
+  ],
+  "unverified": [
+    "BLOCKER: G-1 fails on this diff, now reporting ownership.yaml as FOREIGN for bot-05-infrastructure rather than the template as UNOWNED. ownership.yaml belongs to bot-06-quality-security and QUALITY has not ratified the added rule. See cross_bot_request. This is a request to the owner under docs/cross-bot-protocol.md, not an approval.",
+    "No GitHub Actions run has been observed for either workflow. GitHub is not assigning runners to this repository: every job so far failed in 2-4 seconds with runner_id 0, no steps executed and logs returning HTTP 404, reproduced on a re-run. Everything recorded here is a local run.",
+    "The shell injection was reproduced and the fix verified locally by simulating GitHub's ${{ }} substitution. It has not been confirmed on a real runner, because no runner has started.",
+    "The diff-based receipt and contract-document selection has not run under a real pull_request event; the base ref and fetch depth behave differently under actions/checkout than in this working tree.",
+    "Unpinned action tags and unconstrained pip installs (Greptile P2) are not addressed. Pinning is a deliberate hardening pass across the gate tooling, not part of wiring the workflow.",
+    "Branch protection has not been configured \u2014 making these checks required status checks is a repository-settings action outside this diff.",
+    "bot-06-quality-security has not reviewed this change; the pull request is a draft.",
+    ".gitignore also resolves to no owner under ownership.yaml. Pre-existing, unrelated to this change, and QUALITY's call \u2014 deliberately not fixed here rather than widening an already cross-bot manifest edit."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    ".github/workflows/gates-template-sync.yml",
+    "ci/.github/workflows/gates.yml",
+    "ownership.yaml",
+    ".receipts/bot-05-infrastructure/gates-root-wiring-20260929T184058Z-e85194ea.json"
+  ],
+  "contract_changes": [],
+  "deployment": null,
+  "rollback_plan": "Revert in reverse order. The ownership rule: revert the one added rule in ownership.yaml \u2014 one line, under a minute, no data implications; ci/.github/workflows/gates.yml returns to unowned and G-1 reports UNOWNED again instead of FOREIGN. The workflows: `git revert -m 1 <sha>` of the merge, which takes effect on the next workflow dispatch. Data implications: none \u2014 the workflows write no state. One caveat: reverting restores ci/.github/workflows/gates.yml to its previous content, which reinstates the shell injection in the distributable template, so a full revert should be paired with either re-applying the env: changes to the template alone or removing the root workflow so nothing executes. Removing just .github/workflows/gates.yml and .github/workflows/gates-template-sync.yml is the safer partial rollback: it stops the gates running while leaving the hardened template in place.",
+  "approvals": [
+    {
+      "operation": "wire Quality Gates workflow at .github/workflows (PR-1, Wave 2 retry)",
+      "approved_by": "bot-00-programming-lead",
+      "at": "2026-09-29T18:40:58Z",
+      "blast_radius": "Adds two workflows at the repository root and hardens the gate definition in both copies. Once branch protection marks them required, every pull request to main must pass G-1 through G-6 and the template-sync check. The receipt and contract-document selection changes make G-2 and G-4 stricter: a change that adds no receipt for its own bot now fails where it previously reused an older one."
+    },
+    {
+      "operation": "add ownership.yaml rule ci/.github/workflows/** -> bot-05-infrastructure (QUALITY ratification pending)",
+      "approved_by": "bot-00-programming-lead",
+      "at": "2026-09-30T00:00:00Z",
+      "blast_radius": "One added pattern. Exactly one path changes owner, from unowned to INFRA, verified across all 113 tracked files. No existing rule is modified or removed and bot-06 keeps every path it held. Does NOT constitute QUALITY sign-off on editing ownership.yaml."
+    }
+  ],
+  "approved_by": "bot-00-programming-lead",
+  "notes": "Dispatched by Grok Bot, run 20260929T184058Z-e85194ea. The ci/ copy is kept as the distributable template rather than thinned to a pointer; .github/workflows/gates-template-sync.yml fails the build if the two gate definitions drift apart. The second commit responds to a Greptile review of the first: four findings fixed, one P2 deferred, and one structural blocker (the unowned template path) raised for bot-06-quality-security.",
+  "cross_bot_request": {
+    "protocol": "docs/cross-bot-protocol.md \u2014 'request to the owner'. ownership.yaml is not a contracts/ surface, so G-4 and the contract-PR mechanism do not apply; the protocol's other remedy for touching another bot's file is a request to its owner.",
+    "requesting_bot": "bot-05-infrastructure",
+    "owning_bot": "bot-06-quality-security",
+    "file": "ownership.yaml",
+    "request": "Ratify one added rule: ci/.github/workflows/** -> bot-05-infrastructure.",
+    "why": "The pattern .github/workflows/** is anchored at the repository root and never matched the nested template path, so ci/.github/workflows/gates.yml resolved to no owner. G-1 fails an unowned path for every bot, so no seat could edit the gate template at all \u2014 including to fix the shell injection closed in commit a2730a6.",
+    "why_infra": "INFRA already owns .github/workflows/**. The template and the live workflow must always change together, and gates-template-sync.yml fails the build when they drift. Assigning them to different bots would make every future gate change a cross-bot negotiation.",
+    "status": "PENDING \u2014 bot-06-quality-security has NOT ratified this. G-1 reports ownership.yaml as FOREIGN for bot-05-infrastructure, and that failure is the intended visible signal, not something to wave past.",
+    "authorised_by": "Repository operator, relayed through the LEAD dispatch for run 20260929T184058Z-e85194ea, after being asked to choose between adding the rule for QUALITY to ratify and waiting for bot-06 to add it.",
+    "anti_pattern_acknowledged": "The protocol lists 'I'll just edit their file, it's a one-liner' as an anti-pattern whose failure mode is being invisible to the owner. This edit is deliberately visible: G-1 blocks on it, this receipt records it, and the pull request asks QUALITY for sign-off. If QUALITY declines, reverting is one line and the template returns to unowned.",
+    "if_declined": "Revert the rule. The gate template then becomes untouchable again, so QUALITY would need to either apply the injection fix to ci/.github/workflows/gates.yml itself under its own seat, or assign that path to some other owner."
+  }
+}

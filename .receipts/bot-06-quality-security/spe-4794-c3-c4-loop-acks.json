@@ -259,6 +259,55 @@
       "duration_s": 0.1,
       "output_tail": "",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c \"import sys; sys.path.insert(0, 'ci/gates'); import check_receipt as cr; r={'task_id':'t','bot':'b','unverified':[],'commands':[{'cmd': \\\"test -f .env.example && grep -q '=[^=]' .env.example\\\", 'exit_code': 1}],'claims':[{'claim':'every value in .env.example is still empty','evidence_command_index':0,'expects_failure':True}]}; print(cr.check(r, None, strict=True))\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "[\"'approved_by' is missing — work must be reviewed by someone else\", \"claim[0] 'every value in .env.example is still empty' asserts exhaustiveness via a quiet search chained after an existence check (\\\"test -f .env.example && grep -q '=[^=]' .env.example\\\") with no captured output — \\u2026 Record a separate command in 'commands' that tests '.env.example' and exits 0, proving the file was actually there when the search ran\"] — in-process sanity check that a sole `test -f X && grep -q PATTERN X` command, with no separate command proving X existed, is now rejected as exhaustive evidence under --strict, confirming the missing-file short-circuit no longer passes as a quiet no-match"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 11.27,
+      "output_tail": "192 passed in 11.27s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k silent_grep_q -v",
+      "exit_code": 0,
+      "duration_s": 0.18,
+      "output_tail": "test_expects_failure_silent_grep_q_missing_file_is_not_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_with_confirmed_existence_is_exhaustive_evidence PASSED, test_expects_failure_silent_grep_q_unrelated_sibling_is_still_padding PASSED — 3 passed, 189 deselected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
+      "expects_failure": true
     }
   ],
   "claims": [
@@ -456,6 +505,39 @@
       "claim": "grep for the removed in-process identifiers (_load_candidate_check_receipt, TestG2StrictEvidenceInProcess, candidate_check_receipt) in test_gates.py returns zero matches — nothing of the removed import path remains",
       "evidence_command_index": 41,
       "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's missing-file/quiet-grep-ambiguity fix",
+      "evidence_command_index": 42
+    },
+    {
+      "claim": "Greptile's remaining technical P1 (tip_match 2/5, 'Missing file passes strict check'): a receipt whose ONLY command is `test -f X && grep -q PATTERN X` exiting 1, with no separate command proving X existed, is now rejected by --strict as exhaustive content evidence — the missing-file short-circuit and a real quiet no-match produced the identical exit code and empty output before this fix, and COMPOUND_EXISTENCE_GATE_RE's previous exemption for grep -q/--quiet accepted that ambiguity on faith",
+      "evidence_command_index": 43
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 192 tests (190 on the prior tip: test_expects_failure_silent_grep_q_is_exhaustive_evidence, which asserted the now-fixed bug's old behaviour, was replaced in place by 3 new cases covering the missing-file rejection, the sibling-confirmed acceptance, and an unrelated-sibling-is-still-padding regression), no regressions",
+      "evidence_command_index": 44
+    },
+    {
+      "claim": "The three new regression tests pass individually against the real candidate via run_candidate_gate(): the ambiguous sole quiet-grep compound is rejected ('quiet search' in the failure message); the same compound paired with a second, independent `test -f X` command that itself exits 0 is accepted as exhaustive evidence; and pairing it with an existence check on an unrelated path is still treated as padding, not corroboration ('cannot be what makes this claim exhaustive' in the failure message)",
+      "evidence_command_index": 45
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 46
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 47
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 48
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 49,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -469,8 +551,11 @@
     "The quoted-text-stripping fix for MISSING_TARGET_RE only strips simple single/double-quoted substrings (a regex, not a real shell tokenizer); a needle passed unquoted, or through nested/escaped quoting a real shell would still parse as one token, could still be misread as error text — this covers the common `grep \"pattern\" file` / `grep 'pattern' file` shapes named in the Greptile finding, not every possible shell quoting form",
     "_load_candidate_check_receipt() and TestG2StrictEvidenceInProcess (the prior round's in-process fallback) are removed outright by this round, per HARD_FIX instruction — the 'required job passes untested' gap they closed on hosts without a network namespace is now accepted as a real coverage gap rather than closed by importing PR-controlled gate code into the pytest process. On such a host, this PR's own G-2 strict-evidence changes (this round's items 2 and 3, plus the prior round's) go untested by the required job — they only run via run_candidate_gate(), which fails closed to a skip rather than executing unsandboxed. This trade-off (sandboxed-or-skip, never unsandboxed-in-process) is the one the HARD_FIX explicitly asked for.",
     "COMPOUND_EXISTENCE_GATE_RE's 'no captured output' rule only recognises `test -f/-e X && ...` and `[ -f/-e X ] && ...` lead-ins (matching EXISTENCE_ONLY_RE's own alternation); a content search chained after a `stat`/`ls` existence probe, or chained with `;` instead of `&&`, is not covered by this round's fix and would need a follow-up if that shape turns out to matter in practice",
-    "SILENT_SEARCH_RE recognises `grep -q`/`grep --quiet` specifically (including combined short flags like `-iq`); a different silent-by-design search tool (e.g. a custom script that also prints nothing) chained the same way would still be rejected for lacking output_tail — this was scoped to the exact tool Greptile's finding used, not every possible silent search command",
-    "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes — e.g. an absence claim that names neither a path noun nor one of the listed phrases — would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser"
+    "SILENT_SEARCH_RE recognises `grep -q`/`grep --quiet` specifically (including combined short flags like `-iq`); a different silent-by-design search tool (e.g. a custom script that also prints nothing) chained the same way is not covered by this round's sibling-existence-check requirement at all, so it still falls into the 'no captured output, not silent-search-shaped' rejection branch above it — this was scoped to the exact tool Greptile's finding used, not every possible silent search command",
+    "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes — e.g. an absence claim that names neither a path noun nor one of the listed phrases — would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser",
+    "This round's fix (Greptile's remaining technical P1, tip_match 2/5): a quiet-grep compound (`test -f X && grep -q PATTERN X` / `[ -f X ] && grep -q PATTERN X`) now requires a SEPARATE command in the same receipt that is a bare existence check (EXISTENCE_ONLY_RE) naming the same path and exiting 0, or it is rejected as exhaustive evidence — closing the gap where a missing file and a real quiet no-match produced the identical exit code and empty output. The sibling-existence-check exception to the pre-existing 'no other commands' padding rule is scoped narrowly (only a bare existence check on the exact same path counts; any other extra command, including one that also proves existence via a non-EXISTENCE_ONLY_RE shape like `find . -name X`, is still treated as padding and rejected) — this is intentionally conservative/fail-closed, consistent with the rest of this gate's heuristics, not an exhaustive parser of every way existence could be proven",
+    "The sibling-existence-check match (`_is_positive_existence_check`) tests `path in other_cmd` as a plain substring, not a shell-aware tokenizer — a sibling command whose argument differs only by quoting or an unrelated prefix/suffix overlap (e.g. testing `config/.env.example.bak` would substring-match a gate_path of `.env.example`) could in principle satisfy the corroboration requirement when it does not actually prove the same file existed; this mirrors the substring-based path matching already used elsewhere in this gate (e.g. MISSING_TARGET_RE's quoted-text stripping) rather than introducing a new class of approximation, but it was not specifically probed with an adversarial near-match path in this round's tests",
+    "This gate does not verify that the sibling existence-check command actually ran BEFORE the quiet-grep compound it corroborates — 'commands' is not asserted to be in chronological execution order anywhere else in this file either, so a receipt could record the corroborating `test -f X` after the compound command and still pass; this is a pre-existing property of the receipt schema (no command timestamps are required), not a new gap introduced by this fix, but it means the sibling check proves 'X existed at some recorded point', not strictly 'X existed when the compound ran'"
   ],
   "loop_acks": []
 }

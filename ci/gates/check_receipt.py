@@ -110,17 +110,31 @@ EXISTENCE_ONLY_RE = re.compile(
 # successful `test -d config` (or `test -r config.yaml`) is just as real a sibling probe as
 # `test -f`/`test -e` (Greptile P1, PR #45, "Valid filesystem probes rejected"). Captures both
 # the flag and the exact path token: the flag is what lets the caller require the sibling's
-# own predicate to match the compound's gate predicate (see _is_positive_existence_check) —
-# `test -d config` succeeding says nothing about whether `test -f config` would too (Greptile
-# P1, PR #45, "Mismatched probes corroborate searches") — and the path is compared after
-# normalization (see _normalize_path) rather than by substring containment.
+# own predicate to logically IMPLY the compound's gate predicate, not merely equal it (see
+# _is_positive_existence_check and _FLAG_IMPLIES) — `test -d config` succeeding says nothing
+# about whether `test -f config` would too (Greptile P1, PR #45, "Mismatched probes
+# corroborate searches"), while `test -f config` succeeding DOES prove `test -e config` would
+# (Greptile P1, PR #45, "Valid probes rejected") — and the path is compared, after
+# normalization (see _normalize_path), rather than by substring containment.
 FILE_EXISTENCE_PROBE_RE = re.compile(
     r"^\s*(?:test\s+-(?P<flag1>[fedr])\s+(?P<path1>\S+)|\[\s+-(?P<flag2>[fedr])\s+(?P<path2>\S+)\s+\])\s*$",
     re.IGNORECASE,
 )
 
 
-def _normalize_path(path: str) -> str:
+# Trailing-slash collapse is safe only for a flag whose predicate already REQUIRES the
+# target to be a directory: appending (or removing) a `/` cannot change the answer for `-d`,
+# because POSIX pathname resolution treats a trailing slash as appending `.` to the path,
+# which only succeeds when the path is already a directory — exactly what `-d` was going to
+# require anyway. It is NOT safe for `-f`/`-e`/`-r`: a trailing slash forces that same `.`
+# resolution on a path that is NOT necessarily a directory, so `test -f config.yaml/` fails
+# for a regular file even though `test -f config.yaml` succeeds — the slash changes the
+# answer, not just the spelling, for every flag except `-d` (Greptile P1, PR #45, "Directory
+# probes treated as different" / "Different paths treated as equal").
+_TRAILING_SLASH_SAFE_FLAGS = {"d"}
+
+
+def _normalize_path(path: str, flag: str | None = None) -> str:
     """Collapse equivalent relative spellings of the same path (`./config.yaml` vs
     `config.yaml`, or a doubled separator) so sibling-probe matching compares what the path
     actually points at instead of the exact characters used to write it — plain string
@@ -130,20 +144,27 @@ def _normalize_path(path: str) -> str:
     meaningful path token here, so that edge case falls back to the original string rather
     than collapsing every such probe onto the same normalized value.
 
-    A trailing slash is preserved rather than collapsed away: POSIX `test`/`[` requires a
-    path with a trailing slash to resolve to a directory, so `test -f config.yaml/` FAILS
-    even though `config.yaml` exists as a regular file — the slash changes what the check
-    actually proves, not just how the path is spelled. Treating `config.yaml` and
-    `config.yaml/` as the same normalized token would let a sibling on the bare path
-    corroborate a compound gated on the slashed one, whose own existence check can fail for a
-    reason that has nothing to do with content (Greptile P1, PR #45, "Different paths treated
-    as equal").
+    A trailing slash is preserved by default rather than collapsed away: POSIX `test`/`[`
+    requires a path with a trailing slash to resolve to a directory, so `test -f
+    config.yaml/` FAILS even though `config.yaml` exists as a regular file — the slash
+    changes what the check actually proves, not just how the path is spelled. Treating
+    `config.yaml` and `config.yaml/` as the same normalized token would let a sibling on the
+    bare path corroborate a compound gated on the slashed one, whose own existence check can
+    fail for a reason that has nothing to do with content (Greptile P1, PR #45, "Different
+    paths treated as equal"). That risk does not exist for `-d`: a directory check's own
+    predicate already requires the target to resolve as a directory, so the trailing slash
+    can never flip the answer — `test -d config` and `test -d config/` are the same check
+    (Greptile P1, PR #45, "Directory probes treated as different"). Pass the command's own
+    flag so only `-d` gets that collapse; every other flag keeps the slash significant.
     """
     has_trailing_slash = path.endswith("/") and path.strip() != "/"
     normalized = posixpath.normpath(path)
     if normalized in ("", "."):
         return path
-    return normalized + "/" if has_trailing_slash else normalized
+    flag_allows_collapse = flag is not None and flag.lower() in _TRAILING_SLASH_SAFE_FLAGS
+    return normalized if flag_allows_collapse else (
+        normalized + "/" if has_trailing_slash else normalized
+    )
 
 # A claim about a path's ABSENCE ("the file no longer exists", "path/to/x was removed") is
 # a different claim from one about its CONTENT ("the deprecated token was removed from
@@ -174,10 +195,11 @@ ABSENCE_CLAIM_RE = re.compile(
 # end-to-end like EXISTENCE_ONLY_RE above), since a content search is chained on after it.
 # The path AND flag each branch guards are captured so a quiet search (see SILENT_SEARCH_RE
 # below) can be checked against a separate, independent existence command for that same path
-# — tested with the same predicate. The flag matters as much as the path: a sibling `test -d
-# config` proves config is a directory, but the compound's own gate might be `test -f config
-# && ...`, which FAILS for a directory (short-circuiting before grep ever runs) even though
-# the sibling's `-d` check passed — comparing paths without also requiring the same flag lets
+# — tested with a predicate that implies this gate's own (see _FLAG_IMPLIES). The flag
+# matters as much as the path: a sibling `test -d config` proves config is a directory, but
+# the compound's own gate might be `test -f config && ...`, which FAILS for a directory
+# (short-circuiting before grep ever runs) even though the sibling's `-d` check passed —
+# comparing paths without also requiring the sibling's flag to imply this gate's flag lets
 # that mismatched pair corroborate a compound that never actually searched anything (Greptile
 # P1, PR #45, "Mismatched probes corroborate searches").
 COMPOUND_EXISTENCE_GATE_RE = re.compile(
@@ -201,27 +223,58 @@ COMPOUND_EXISTENCE_GATE_RE = re.compile(
 SILENT_SEARCH_RE = re.compile(r"\bgrep\b[^&|;]*(?:-[a-zA-Z]*q[a-zA-Z]*\b|--quiet\b)")
 
 
+# A sibling's flag corroborates a compound's gate flag when passing the sibling's test
+# GUARANTEES the gate's test would also have passed on the same path — a one-way logical
+# implication, not flag equality. `-f`/`-d`/`-r` each require the target to exist as a
+# precondition of their own, stricter test (regular file / directory / readable), so any of
+# them passing proves `-e` (bare existence) would pass too; `-f` and `-d` are mutually
+# exclusive type tests, and `-r` says nothing about type, so none of the three implies either
+# of the other two. `-e` implies only itself: existing proves nothing about being a regular
+# file, a directory, or readable. Requiring flag equality rejected the case where a stricter
+# sibling (`-f`) corroborates a weaker compound gate (`-e`) even though the implication holds
+# (Greptile P1, PR #45, "Valid probes rejected"); this lattice accepts that case while still
+# rejecting the unsound direction (an `-e` sibling must not corroborate an `-f`-gated
+# compound: existing doesn't prove being a regular file) and the unrelated-type case from the
+# prior round (`-d` must not corroborate `-f`, or vice versa).
+_FLAG_IMPLIES = {
+    "f": {"f", "e"},
+    "d": {"d", "e"},
+    "r": {"r", "e"},
+    "e": {"e"},
+}
+
+
+def _flag_implies(sibling_flag: str, gate_flag: str) -> bool:
+    return gate_flag.lower() in _FLAG_IMPLIES.get(sibling_flag.lower(), set())
+
+
 def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     """True if `cmd` is a real file-existence probe (`test -f`/`-e`/`-d`/`-r`, or the
-    `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path` with the exact same
-    `flag` as the compound it is meant to corroborate, that itself exited 0 — independent
-    proof the path passed THAT SPECIFIC test before the compound command ran, not inferred
-    from the exit code of a compound that might never have reached it.
+    `[ ... ]` equivalent — see FILE_EXISTENCE_PROBE_RE) naming `path`, whose own flag
+    logically implies the compound's gate `flag` (see `_FLAG_IMPLIES`), that itself exited 0
+    — independent proof the path would have passed the gate's own test before the compound
+    command ran, not inferred from the exit code of a compound that might never have reached
+    it.
 
     Three things a looser check would get wrong: a path match must be exact-token equality
     (after normalization), not substring (`config.yaml.bak` must not corroborate
     `config.yaml`); the flag must be a real filesystem test, not `test -n`/`-z` (those test a
     STRING's emptiness, not the filesystem, even when the string happens to be the path)
     (Greptile P1, PR #45, "Unrelated checks confirm missing files"); and the sibling's flag
-    must match the compound's own gate flag exactly — a `test -d config` passing proves
-    nothing about whether `test -f config` (a different predicate on the same path) would
-    also pass, so a `-d` sibling must not corroborate an `-f`-gated compound or vice versa
-    (Greptile P1, PR #45, "Mismatched probes corroborate searches"). Comparing normalized
-    paths means `test -f ./config.yaml` corroborates a sibling probe for `config.yaml` — the
-    same file, spelled differently — instead of being rejected as a different target
-    (Greptile P1, PR #45, "Equivalent paths reject valid evidence"); normalization preserves a
-    trailing slash's significance, so `config.yaml` and `config.yaml/` still compare unequal
-    (Greptile P1, PR #45, "Different paths treated as equal").
+    must IMPLY the compound's own gate flag, not merely equal it or be accepted regardless —
+    a `test -d config` passing proves nothing about whether `test -f config` (a different,
+    unimplied predicate on the same path) would also pass, so a `-d` sibling must not
+    corroborate an `-f`-gated compound or vice versa (Greptile P1, PR #45, "Mismatched probes
+    corroborate searches"), while a `test -f config` sibling DOES prove `test -e config` would
+    pass, since being a regular file requires existing (Greptile P1, PR #45, "Valid probes
+    rejected"). Comparing normalized paths means `test -f ./config.yaml` corroborates a
+    sibling probe for `config.yaml` — the same file, spelled differently — instead of being
+    rejected as a different target (Greptile P1, PR #45, "Equivalent paths reject valid
+    evidence"); each path is normalized under its OWN command's flag, so `test -d config` and
+    `test -d config/` still compare equal (Greptile P1, PR #45, "Directory probes treated as
+    different") while `config.yaml` and `config.yaml/` remain distinct for every flag where
+    the trailing slash can actually change the outcome (Greptile P1, PR #45, "Different paths
+    treated as equal").
     """
     if cmd.get("exit_code") != 0:
         return False
@@ -229,17 +282,18 @@ def _is_positive_existence_check(cmd: dict, path: str, flag: str) -> bool:
     if not match:
         return False
     matched_flag = match.group("flag1") or match.group("flag2")
-    if matched_flag.lower() != flag.lower():
+    if not _flag_implies(matched_flag, flag):
         return False
     matched_path = match.group("path1") or match.group("path2")
-    return _normalize_path(matched_path) == _normalize_path(path)
+    return _normalize_path(matched_path, matched_flag) == _normalize_path(path, flag)
 
 
 def _confirmed_by_sibling_existence_check(
     commands: list, path: str, flag: str, exclude_idx: int
 ) -> bool:
     """True if some EARLIER command (lower index than `exclude_idx`) independently proves
-    `path` passed the same `flag` test before the quiet-search compound at `exclude_idx` ran.
+    `path` would have passed the compound's own `flag` test before the quiet-search compound
+    at `exclude_idx` ran (see `_flag_implies` for what "would have passed" allows).
 
     This is the only evidence that can break the tie between a quiet-grep compound that
     actually ran and found nothing, and one whose leading existence check failed and never
@@ -248,8 +302,8 @@ def _confirmed_by_sibling_existence_check(
     quiet search only proves X exists NOW — it could have been created after the search ran
     and found nothing, which is the exact ambiguity this function exists to resolve, not
     corroborate (Greptile P1, PR #45, "Later check validates earlier search"). So only a
-    sibling strictly before `exclude_idx`, testing the exact same predicate as the compound's
-    own gate, counts.
+    sibling strictly before `exclude_idx`, whose own test implies the compound's gate flag,
+    counts.
     """
     return any(
         _is_positive_existence_check(other, path, flag)

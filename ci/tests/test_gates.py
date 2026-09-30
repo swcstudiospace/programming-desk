@@ -1009,6 +1009,100 @@ class TestG2Receipts:
         r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
         assert r.returncode == 0, r.stderr
 
+    def test_expects_failure_silent_grep_q_stricter_f_sibling_corroborates_e_gate(
+        self, tmp_path
+    ):
+        """A `test -f` sibling proves the path is a regular file, which REQUIRES it to exist
+        — so it also proves a weaker `test -e` gate on the same path would have passed. Exact
+        flag equality wrongly rejected this sound implication (Greptile P1, PR #45, "Valid
+        probes rejected"); the flag-implication lattice must accept it.
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -e config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_weaker_e_sibling_does_not_corroborate_f_gate(
+        self, tmp_path
+    ):
+        """The implication only runs one way: a `test -e` sibling passing does NOT prove a
+        stricter `test -f` gate on the same path would also pass (the target could be a
+        directory) — accepting `-f` as corroboration for `-e` must not be loosened into
+        accepting every flag pairing regardless of direction (Greptile P1, PR #45, "Valid
+        probes rejected", read narrowly).
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -e config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml && grep -q legacy config.yaml", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
+    def test_expects_failure_silent_grep_q_directory_probe_trailing_slash_is_corroboration(
+        self, tmp_path
+    ):
+        """`test -d config` (no trailing slash) must corroborate a compound gated on `test -d
+        config/` (trailing slash), and vice versa — unlike `-f`/`-e`/`-r`, a directory check's
+        own predicate already requires the target to resolve as a directory, so appending a
+        trailing slash can never change whether `-d` passes (Greptile P1, PR #45, "Directory
+        probes treated as different").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -d config", "exit_code": 0},
+                {"cmd": "test -d config/ && grep -R -q legacy config/", "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value under config is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_silent_grep_q_file_probe_trailing_slash_still_not_corroboration(
+        self, tmp_path
+    ):
+        """The trailing-slash collapse is specific to `-d`: a `test -f config.yaml` sibling
+        (no trailing slash) must still NOT corroborate a compound gated on `test -f
+        config.yaml/` (trailing slash) — for `-f`, the slash forces directory resolution and
+        changes the answer for a regular file, so this must keep failing even after the `-d`
+        fix (Greptile P1, PR #45, "Different paths treated as equal", regression guard).
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f config.yaml", "exit_code": 0},
+                {"cmd": "test -f config.yaml/ && grep -q legacy config.yaml/",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in config.yaml is still empty",
+                 "evidence_command_index": 1, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 1
+        assert "cannot be what makes this claim exhaustive" in r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

@@ -95,10 +95,10 @@
       "expects_failure": false
     },
     {
-      "cmd": "git ls-remote --tags https://github.com/zaproxy/action-baseline.git https://github.com/github/codeql-action.git https://github.com/projectdiscovery/nuclei.git https://github.com/gitleaks/gitleaks.git",
+      "cmd": "git ls-remote --tags https://github.com/zaproxy/action-baseline.git",
       "exit_code": 0,
       "duration_s": 1.5,
-      "output_tail": "v0.14.0 (zaproxy/action-baseline), v3 (github/codeql-action), v3.3.7 (nuclei), v8.21.2 (gitleaks) all confirmed present — only trivy-action's pin was wrong"
+      "output_tail": "refs/tags/v0.14.0 -> 2b5fc7f... (tag object), refs/tags/v0.14.0^{} -> 7c4deb1... (commit) — confirms only zaproxy/action-baseline's tag. Corrected 2026-09-30: the original version of this command passed 3 more repo URLs as extra arguments, but `git ls-remote` takes exactly one repository argument and treats the rest as refspec filters against that first repo, so codeql-action/nuclei/gitleaks were never actually queried by it. See commands[18-20] for the honest, separate per-repo verification Greptile's tip_match review (28132251) asked for."
     },
     {
       "cmd": "git clone --depth 1 --branch v0.28.0 https://github.com/aquasecurity/trivy-action.git && grep -n setup-trivy trivy-action/action.yaml",
@@ -117,12 +117,61 @@
       "exit_code": 0,
       "duration_s": 0.6,
       "output_tail": "3fb12ec12f41e471780db15c232d5dd185dcb514 refs/tags/v0.2.6 — the SHA trivy-action@v0.36.0 pins internally exists and matches a current setup-trivy tag"
+    },
+    {
+      "cmd": "pip-audit --help",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "-S/--strict: 'fail the entire audit if dependency collection fails' — no --severity or equivalent flag exists anywhere in the help output. Confirms pip-audit has no way to gate on HIGH+ only; --strict (as the pre-fix workflow used it) does not do what its own comment claimed."
+    },
+    {
+      "cmd": "semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error --exclude 'infra/unified-lsp-broker/fixtures' services ci infra scripts web",
+      "exit_code": 1,
+      "duration_s": 15.8,
+      "output_tail": "Ran 65 rules on 72 files: 1 finding (1 blocking) — python.lang.security.use-defused-xml.use-defused-xml in scripts/generate-templates.py:23. Scan skipped 4 files matching the new --exclude pattern (the infra/unified-lsp-broker/fixtures/ sample files). This is the exact command the fixed workflow now runs.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "bandit -r services ci --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif  # roots unchanged by this round's fix",
+      "exit_code": 0,
+      "duration_s": 3.2,
+      "output_tail": "0 HIGH-severity findings, exit 0 — reconfirmed unchanged. Bandit's scan roots were deliberately left at services/ci: Greptile's P1 (review 28132251) named only the Semgrep job, and infra/unified-lsp-broker/broker.py trips bandit's B324 (weak-hash) rule on a WebSocket-handshake SHA1 use mandated by RFC 6455 — not this task's file to fix or suppress (ownership.yaml: 'Bot 6's authority is the gates and the review, not the code')."
+    },
+    {
+      "cmd": "git ls-remote --tags https://github.com/aquasecurity/trivy-action.git | grep -E 'v0\\.36\\.0(\\^\\{\\})?$'",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "a9c7b0f... refs/tags/v0.36.0 (tag object); ed142fd0673e97e23eac54620cfb913e5ce36c25 refs/tags/v0.36.0^{} (commit) — this is the SHA now pinned in security-pr.yml."
+    },
+    {
+      "cmd": "git ls-remote --tags https://github.com/github/codeql-action.git | grep -E 'v3(\\^\\{\\})?$'",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "87ef0dc... refs/tags/v3 (tag object); 1190a975f95ce23525efb6a3fc21ea29567c1b52 refs/tags/v3^{} (commit) — confirms github/codeql-action/upload-sarif@v3 exists, queried on its own this time."
+    },
+    {
+      "cmd": "git ls-remote --tags https://github.com/projectdiscovery/nuclei.git | grep -E 'v3\\.3\\.7$'",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "bf01be1... refs/tags/v3.3.7 — confirms the nuclei release tag exists, queried on its own this time."
+    },
+    {
+      "cmd": "git ls-remote --tags https://github.com/gitleaks/gitleaks.git | grep -E 'v8\\.21\\.2(\\^\\{\\})?$'",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "a9e1950... refs/tags/v8.21.2 (tag object); 43fae355e6fe4d99d2a7b240a224b85e2903aeb4 refs/tags/v8.21.2^{} (commit) — confirms the gitleaks release tag exists, queried on its own this time."
+    },
+    {
+      "cmd": "python3 -c \"import yaml; d=yaml.safe_load(open('.github/workflows/security-pr.yml')); print([ (j, s.get('permissions')) for j,s in d['jobs'].items() ])\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "all four jobs (secrets, semgrep, bandit, dependencies) now declare their own {contents: read, security-events: write} instead of inheriting a workflow-root grant — confirms the permissions P2 fix and that the YAML still parses."
     }
   ],
   "claims": [
     {
       "claim": "ownership.yaml still validates with no duplicate pattern after adding the two QUALITY overrides, and every new path this change adds (workflows, ci/security/**, SECURITY.md, ownership.yaml itself, the receipt) resolves to bot-06-quality-security under G-1",
-      "evidence_command_index": 0
+      "evidence_command_index": 1
     },
     {
       "claim": "Running G-1 exactly as the work order's own verify command specifies (--bot bot-06-quality-security --base origin/main) passes for this branch's full diff against main",
@@ -179,7 +228,7 @@
       "evidence_command_index": 13
     },
     {
-      "claim": "Once the trivy-action tag was known to be the only wrong pin, the other three third-party pins used in these two workflows (zaproxy/action-baseline@v0.14.0, github/codeql-action/upload-sarif@v3, the nuclei v3.3.7 release asset) were independently confirmed to exist, closing the gap flagged earlier in unverified",
+      "claim": "zaproxy/action-baseline@v0.14.0 (used by security-nightly.yml) was independently confirmed to exist as a tag upstream. Corrected 2026-09-30: this claim originally also covered github/codeql-action, nuclei, and gitleaks, but command[14] never actually queried those three repos (see its corrected output_tail) — see claims[18-20] for their real verification.",
       "evidence_command_index": 14
     },
     {
@@ -193,6 +242,39 @@
     {
       "claim": "The commit SHA that trivy-action@v0.36.0 pins its setup-trivy dependency to actually exists upstream and corresponds to the current v0.2.6 tag, so this fix does not just move the same failure to a different tag name",
       "evidence_command_index": 17
+    },
+    {
+      "claim": "HARD_FIX (Greptile tip_match review 28132251, P1): the Semgrep job's scan roots were services/ci only, so infra/unified-lsp-broker/broker.py and web/mcp-unified-lsp/server.ts — the two files Greptile named — received no SAST coverage. Fixed by adding infra, scripts, web to the scan roots (vendor/ deliberately excluded as third-party code this repo can't remediate) with infra/unified-lsp-broker/fixtures/** excluded as synthetic test fixtures, not shipped code. Re-running the exact new command surfaces a real, pre-existing HIGH-equivalent finding in scripts/generate-templates.py — proof the fix actually works, not proof the fix is clean. That finding is not bot-06's to fix (see command[20]'s note) and will make this workflow's own next run red until the owning bot addresses or explicitly waives it; that is the correct, honest consequence of closing a real SAST gap, not a regression from this change.",
+      "evidence_command_index": 19,
+      "expects_failure": true
+    },
+    {
+      "claim": "HARD_FIX (Greptile tip_match review 28132251, P1): pip-audit's `--strict` flag does not impose a HIGH+ severity floor — it only fails the run on dependency-*resolution* errors — and pip-audit has no severity flag at all, so the pre-fix step hard-failed the job on any LOW/MEDIUM finding in a PR-added requirements*.txt, contrary to this gate's stated HIGH+/CRITICAL policy. Fixed by making the step continue-on-error (still runs, still visible in the log, no longer blocks) and relying on Trivy — which does support a real severity floor and also scans requirements*.txt under scan-ref: . — as the enforced blocking gate for dependency severity.",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "HARD_FIX (Greptile tip_match review 28132251, P1): the Trivy step's ignore-unfixed: true dropped HIGH/CRITICAL findings with no available fix before its exit code could block the PR, silently passing an unpatchable HIGH/CRITICAL dependency through a gate whose stated policy is HIGH+/CRITICAL, fixed or not. Fixed by setting ignore-unfixed: false. The Trivy scan step itself still was not executed in this sandbox (self-hosted docker action, no live target) — this remains in 'unverified' below, unchanged from the prior round — this claim covers only that the YAML now sets the correct value, confirmed by command[25]'s parse.",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "P2 (same file, cheap): security-events: write was declared at the workflow root, granting it to all four jobs though only their optional upload-sarif steps use it. Fixed by moving the grant to each job's own permissions block, per SECURITY.md's 'widen permissions one job at a time, never at the workflow root' rule.",
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "P2 (same file, cheap): aquasecurity/trivy-action was pinned by the mutable tag v0.36.0. Since this step's ignore-unfixed field was already being edited for the P1 fix above, also pinned the `uses:` line to that tag's own resolved commit SHA (ed142fd0673e97e23eac54620cfb913e5ce36c25), per SECURITY.md's 'pin what executes by commit SHA' rule.",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "github/codeql-action/upload-sarif@v3, used across all four jobs in this file, is confirmed to exist as a tag — queried on its own repo, not bundled into the multi-URL command Greptile flagged as misleading.",
+      "evidence_command_index": 22
+    },
+    {
+      "claim": "The nuclei v3.3.7 tag referenced by security-nightly.yml is confirmed to exist — queried on its own repo, not bundled into the multi-URL command Greptile flagged as misleading.",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "The gitleaks v8.21.2 release referenced by this file's Gitleaks job is confirmed to exist as a tag — queried on its own repo, not bundled into the multi-URL command Greptile flagged as misleading.",
+      "evidence_command_index": 24
     }
   ],
   "unverified": [
@@ -201,7 +283,9 @@
     "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif@v3) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox.",
     "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch — that limitation was reported, not worked around further.",
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
-    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve."
+    "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
+    "Expanding the Semgrep job's scan roots to infra/scripts/web (this round's P1 fix) surfaces a real, pre-existing finding in scripts/generate-templates.py (python.lang.security.use-defused-xml). That file is not owned by bot-06-quality-security under ownership.yaml ('Bot 6's authority is the gates and the review, not the code'), so it was deliberately not modified here. This means the security-pr job will fail the next time it runs against this tree until the owning bot fixes or explicitly waives that finding — flagged here rather than silently left for someone else to discover via a red check.",
+    "The Trivy step's ignore-unfixed: false change (this round's P1 fix) was verified only by reading and YAML-parsing the workflow — there is no local run of the actual aquasecurity/trivy-action step (self-hosted docker action) in this sandbox, consistent with the Trivy scan already being listed as unverified above."
   ],
   "files_changed": [
     "ownership.yaml",
@@ -215,5 +299,28 @@
     ".receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json"
   ],
   "contract_changes": [],
-  "rollback_plan": "Revert this commit. Nothing is deployed: the two new workflows only take effect on the next matching GitHub event (a pull_request for security-pr.yml, the daily schedule or a manual dispatch for security-nightly.yml) and neither has run yet, so there is no running state or external resource to unwind — removing the files returns CI to its pre-SPE-5162 gate set. The ownership.yaml addition is two lines; removing them returns ci/security/** and .github/workflows/security-*.yml to falling under the broader INFRA .github/workflows/** rule with no other rule affected."
+  "rollback_plan": "Revert this commit. Nothing is deployed: the two new workflows only take effect on the next matching GitHub event (a pull_request for security-pr.yml, the daily schedule or a manual dispatch for security-nightly.yml) and neither has run yet, so there is no running state or external resource to unwind — removing the files returns CI to its pre-SPE-5162 gate set. The ownership.yaml addition is two lines; removing them returns ci/security/** and .github/workflows/security-*.yml to falling under the broader INFRA .github/workflows/** rule with no other rule affected.",
+  "hard_fix_round": {
+    "greptile_review_id": 28132251,
+    "greptile_score_before": "0/5",
+    "pr": "https://github.com/swcstudiospace/programming-desk/pull/50",
+    "base_tip_sha": "973104ff399d49d83157b7cb69be0d5aecc842ad",
+    "p1s_fixed": [
+      "Executable code misses SAST (security-pr.yml ~L111): Semgrep scan roots expanded from 'services ci' to 'services ci infra scripts web', with infra/unified-lsp-broker/fixtures/** excluded as test fixtures.",
+      "Lower-severity findings block PRs (security-pr.yml ~L193): pip-audit step made continue-on-error since it has no severity floor; Trivy remains the enforced HIGH+/CRITICAL blocking gate for the same manifests.",
+      "Unfixed vulnerabilities bypass gate (security-pr.yml ~L211): Trivy's ignore-unfixed flipped from true to false, so an unpatchable HIGH/CRITICAL dependency can no longer silently pass."
+    ],
+    "p2s_also_fixed": [
+      "security-events: write moved from workflow-root permissions to a per-job permissions block on all four jobs.",
+      "aquasecurity/trivy-action pinned by commit SHA instead of the v0.36.0 tag, since that step was already being edited.",
+      "Receipt honesty: corrected claim[0]'s evidence pointer and the 4-repo-in-one-ls-remote-call command/claim Greptile flagged as misleading, per this round's own re-verification."
+    ],
+    "p2s_not_addressed_out_of_scope": [
+      "Lockfiles bypass secret checks (ci/security/gitleaks.toml) — different file than this round's mandate (security-pr.yml + this receipt only).",
+      "Blocking gate lacks rejection tests — would add new test files, more than a 'cheap, same file' change.",
+      "Missing scan reports go unnoticed (if-no-files-found: ignore) — left as-is; not part of the 3 required P1s and changing four upload steps' failure behavior is a larger behavior change than this pass's scope."
+    ],
+    "grantor_hold": "approved_by left null; PR left draft; no Path B / undraft / merge performed, per this round's explicit instructions.",
+    "completed_at": "2026-09-30T17:30:00Z"
+  }
 }

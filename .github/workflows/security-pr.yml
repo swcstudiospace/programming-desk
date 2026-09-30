@@ -26,16 +26,20 @@ on:
 
 permissions:
   contents: read
-  # Needed only for the optional upload-sarif step below. Uploading to code scanning requires
-  # GitHub Advanced Security on a private repo; on a repo without it the step is expected to
-  # fail and is marked continue-on-error so it never blocks the gate. The gate itself is
-  # enforced by each scanner's own exit code, not by this permission.
-  security-events: write
 
 jobs:
   secrets:
     name: Gitleaks (secrets)
     runs-on: [self-hosted, Linux, X64]
+    # security-events: write is granted per job, not at the workflow root, per SECURITY.md's
+    # "widen permissions one job at a time" rule — only the optional upload-sarif step below
+    # needs it. Uploading to code scanning requires GitHub Advanced Security on a private repo;
+    # on a repo without it the step is expected to fail and is marked continue-on-error so it
+    # never blocks the gate. The gate itself is enforced by each scanner's own exit code, not by
+    # this permission.
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -88,6 +92,9 @@ jobs:
   semgrep:
     name: Semgrep (SAST)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -101,6 +108,16 @@ jobs:
       - name: Semgrep — repo rules + registry security/secrets packs
         # --error makes the exit code depend on findings; --severity ERROR keeps the PR gate to
         # HIGH+ equivalent findings per SPE-5162, same intent as bandit's -lll below.
+        #
+        # Scan roots cover every top-level directory that ships executable code — services, ci,
+        # infra, scripts, web — not just services/ci. Confirmed by listing the tree: infra/ and
+        # web/ carry real Python and TypeScript (e.g. infra/unified-lsp-broker/broker.py,
+        # web/mcp-unified-lsp/server.ts) that a services/ci-only scan silently skipped; scripts/
+        # carries a real Python generator. vendor/ is excluded on purpose — that's vendored
+        # third-party code this repo doesn't author and can't remediate.
+        # infra/unified-lsp-broker/fixtures/** is excluded: those are synthetic sample files
+        # (one per language) that exist only to exercise the LSP broker in tests, not code this
+        # repo ships — scanning them is noise, not signal, for a HIGH+ PR gate.
         run: |
           semgrep \
             --config ci/security/semgrep.yml \
@@ -108,7 +125,8 @@ jobs:
             --config p/secrets \
             --sarif --output semgrep.sarif \
             --severity ERROR --error \
-            services ci
+            --exclude 'infra/unified-lsp-broker/fixtures' \
+            services ci infra scripts web
 
       - name: Upload SARIF artifact
         if: always()
@@ -129,6 +147,9 @@ jobs:
   bandit:
     name: Bandit (Python SAST)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -167,6 +188,9 @@ jobs:
   dependencies:
     name: pip-audit / Trivy (SCA)
     runs-on: [self-hosted, Linux, X64]
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -174,12 +198,24 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: pip-audit — requirements*.txt targets
+      - name: pip-audit — requirements*.txt targets (advisory, non-blocking)
         # pip-audit reads pip-style requirement files; this repo pins Python deps via
         # services/desk-gateway's uv-managed pyproject.toml, which pip-audit cannot parse as a
         # requirement file (confirmed locally — it errors on the [project] table). Trivy fs
-        # below is the SCA path for that manifest. This step covers any requirements*.txt this
-        # PR adds and is a no-op, not a false pass, when none exist.
+        # below is the SCA path for that manifest — and, since it also parses requirements*.txt
+        # under scan-ref: ., it independently covers HIGH+/CRITICAL findings in the same files
+        # this step targets. This step covers any requirements*.txt this PR adds and is a no-op,
+        # not a false pass, when none exist.
+        #
+        # continue-on-error is deliberate, not an oversight: pip-audit's CLI has no severity
+        # flag (confirmed via `pip-audit --help` — `-S/--strict` only fails the run when
+        # dependency *resolution* errors, not on finding severity) and its OSV/PyPI-backed
+        # findings don't carry a reliable severity field either, so there is no way to make this
+        # step fail on HIGH+ only. Letting it hard-fail on any match — as it did before — blocked
+        # PRs on LOW/MEDIUM findings, contrary to this gate's stated HIGH+/CRITICAL policy. It
+        # still runs and its output is visible in the job log; Trivy is the enforced blocking
+        # gate for dependency severity.
+        continue-on-error: true
         run: |
           set -euo pipefail
           pip install pip-audit
@@ -190,7 +226,7 @@ jobs:
           fi
           for f in "${REQ_FILES[@]}"; do
             echo "::group::pip-audit $f"
-            pip-audit -r "$f" --strict
+            pip-audit -r "$f"
             echo "::endgroup::"
           done
 
@@ -200,7 +236,10 @@ jobs:
         # action" failure. v0.36.0 pins its setup-trivy dependency by commit SHA instead of a
         # mutable tag (confirmed against the current upstream ref), which is both the fix and
         # the more correct form per SECURITY.md's own "pin what executes by commit SHA" rule.
-        uses: aquasecurity/trivy-action@v0.36.0
+        #
+        # Pinned to the v0.36.0 tag's own commit SHA (resolved via `git ls-remote --tags`), per
+        # this same SECURITY.md rule, since we're already touching this step.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -208,7 +247,13 @@ jobs:
           output: trivy.sarif
           severity: HIGH,CRITICAL
           exit-code: "1"
-          ignore-unfixed: true
+          # false (not the prior true): "ignore-unfixed: true" dropped HIGH/CRITICAL findings
+          # with no available fix from Trivy's results before its exit code could block the PR,
+          # so an unpatchable HIGH/CRITICAL dependency silently passed this gate. HIGH+/CRITICAL
+          # per SPE-5162 means all of them, fixed or not — an unfixed one still needs a human
+          # decision (mitigate, replace the dependency, or an explicit accepted-risk override),
+          # not a silent pass.
+          ignore-unfixed: false
 
       - name: Upload SARIF artifact
         if: always()

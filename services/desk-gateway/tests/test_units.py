@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -366,3 +370,238 @@ def test_merge_release_never_drops_a_release_it_was_handed(existing, expected):
     staged = {"versionCodes": ["9"], "status": "inProgress", "userFraction": 0.1}
     merged = _merge_release([dict(e) for e in existing], staged, "9")
     assert merged == [staged if e == "STAGED" else e for e in expected]
+
+
+# ---------------------------------------------------------------------------
+# quality.receipt_approve / _commit_file — the C-1 (stamp) + C-2 (TOCTOU) path
+#
+# Against a real bare "origin" and a real gateway checkout, not mocks: _commit_file shells
+# out to git clone/push, and the TOCTOU guard it exists for is exactly the kind of thing a
+# mock would quietly assume away.
+# ---------------------------------------------------------------------------
+
+
+def _git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", *args], cwd=str(cwd), check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+
+def _make_gateway_repo(tmp_path: Path) -> tuple[Path, Path]:
+    """A bare 'origin' plus a local gateway checkout of it.
+
+    Repo.run_gate() reads ci/gates/*.py from the gateway's own checkout dir, never from the
+    branch under review, so the checkout needs a real copy of the gate scripts to run G-2/G-3/
+    G-5-6 at all.
+    """
+    bare = tmp_path / "origin.git"
+    bare.mkdir()
+    _git(bare, "init", "--quiet", "--bare")
+    # git init's default HEAD (master/main per this host's init.defaultBranch) is not "trunk",
+    # and pushing to an empty bare repo does not repoint it — left alone, `gateway`'s clone
+    # would check out an empty tree with no ci/gates/*.py in it at all.
+    _git(bare, "symbolic-ref", "HEAD", "refs/heads/trunk")
+
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    _git(seed, "init", "--quiet")
+    _git(seed, "config", "user.email", "test@example.com")
+    _git(seed, "config", "user.name", "Test")
+    shutil.copytree(REPO / "ci", seed / "ci")
+    (seed / "README.md").write_text("seed\n")
+    _git(seed, "add", "-A")
+    _git(seed, "commit", "--quiet", "-m", "seed")
+    _git(seed, "branch", "-M", "trunk")
+    _git(seed, "remote", "add", "origin", str(bare))
+    _git(seed, "push", "--quiet", "-u", "origin", "trunk")
+
+    gateway = tmp_path / "gateway"
+    _git(tmp_path, "clone", "--quiet", str(bare), str(gateway))
+    return bare, gateway
+
+
+_push_counter = 0
+
+
+def _push_receipt(bare: Path, tmp_path: Path, branch: str, receipt_path: str, receipt: dict) -> str:
+    """Commit `receipt` to `receipt_path` on `branch` of `bare`, creating the branch if needed.
+
+    Returns the new commit sha, so a test can pin an earlier read against a later push.
+    """
+    global _push_counter
+    _push_counter += 1
+    work = tmp_path / f"push-{_push_counter}"
+    _git(tmp_path, "clone", "--quiet", str(bare), str(work))
+    exists = subprocess.run(
+        ["git", "ls-remote", "--exit-code", "--heads", str(bare), branch],
+        capture_output=True, text=True,
+    ).returncode == 0
+    if exists:
+        _git(work, "checkout", "--quiet", "-B", branch, f"origin/{branch}")
+    else:
+        _git(work, "checkout", "--quiet", "-b", branch)
+    target = work / receipt_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(receipt, indent=2) + "\n")
+    _git(work, "add", "-f", receipt_path)
+    _git(work, "-c", "user.email=test@example.com", "-c", "user.name=Test", "commit", "--quiet", "-m", "receipt")
+    _git(work, "push", "--quiet", "origin", branch)
+    return _git(work, "rev-parse", "HEAD")
+
+
+def _receipt_on_remote(bare: Path, branch: str, receipt_path: str) -> dict:
+    return json.loads(_git(bare, "show", f"{branch}:{receipt_path}"))
+
+
+def _ctx(gateway_dir: Path, bot_id: str = "bot-06-quality-security") -> "ToolContext":
+    from desk_gateway.repo import Repo
+    from desk_gateway.tools import ToolContext
+
+    settings = SimpleNamespace(repo_dir=gateway_dir, repo_remote="origin", repo_branch="trunk", gate_user="")
+    repo = Repo(settings)
+    return ToolContext(services=SimpleNamespace(repo=repo), seat=SimpleNamespace(bot_id=bot_id, short="quality"), spec=None)
+
+
+async def test_receipt_approve_stamps_the_first_approval_and_pushes(tmp_path: Path):
+    """First-stamp case: an unstamped receipt, gated post-stamp (C-1) and pushed (C-2)."""
+    from desk_gateway.tools import quality
+
+    bare, gateway = _make_gateway_repo(tmp_path)
+    branch = "bot-01-systems-backend/receipt-first-stamp"
+    receipt_path = ".receipts/bot-01-systems-backend/first-stamp.json"
+    receipt = {
+        "task_id": "first-stamp-regression",
+        "bot": "bot-01-systems-backend",
+        "commands": [{"cmd": "pytest -q services/desk-gateway/tests", "exit_code": 0}],
+        "claims": [{"claim": "unit tests pass", "evidence_command_index": 0}],
+        "unverified": ["no live run against the deployed gateway process"],
+        "approved_by": "",
+    }
+    _push_receipt(bare, tmp_path, branch, receipt_path, receipt)
+
+    ctx = _ctx(gateway)
+    out = await quality.receipt_approve(ctx, {"branch": branch, "receipt_path": receipt_path})
+
+    assert out["ok"] is True, out
+    assert out["approved_by"] == ctx.bot_id
+
+    stamped = _receipt_on_remote(bare, branch, receipt_path)
+    assert stamped["approved_by"] == ctx.bot_id
+    assert stamped["approved_at"]
+    assert stamped["claims"][0]["evidence_command_index"] == 0
+
+
+async def test_receipt_approve_rejects_a_claim_with_free_text_evidence(tmp_path: Path):
+    """G-2 requires evidence_command_index; a prose 'evidence' string cites no command."""
+    from desk_gateway.tools import quality
+
+    bare, gateway = _make_gateway_repo(tmp_path)
+    branch = "bot-01-systems-backend/receipt-free-text-evidence"
+    receipt_path = ".receipts/bot-01-systems-backend/free-text.json"
+    receipt = {
+        "task_id": "free-text-regression",
+        "bot": "bot-01-systems-backend",
+        "commands": [{"cmd": "pytest -q", "exit_code": 0}],
+        "claims": [{"claim": "unit tests pass", "evidence": "ran pytest, it was green"}],
+        "unverified": ["nothing else"],
+        "approved_by": "",
+    }
+    before = _push_receipt(bare, tmp_path, branch, receipt_path, receipt)
+
+    ctx = _ctx(gateway)
+    out = await quality.receipt_approve(ctx, {"branch": branch, "receipt_path": receipt_path})
+
+    assert out.get("error") == "gate_failed", out
+    # refused before ever touching the remote — the branch tip must not have moved
+    assert _git(bare, "rev-parse", branch) == before
+
+
+async def test_commit_file_refuses_a_stale_tip_and_leaves_the_branch_untouched(tmp_path: Path):
+    """Tip-mismatch case: the branch moved after the read this push's expect_sha pins."""
+    from desk_gateway.tools.quality import _commit_file
+
+    bare, gateway = _make_gateway_repo(tmp_path)
+    branch = "bot-01-systems-backend/receipt-tip-mismatch"
+    receipt_path = ".receipts/bot-01-systems-backend/tip-mismatch.json"
+    original = {
+        "task_id": "tip-mismatch-regression", "bot": "bot-01-systems-backend",
+        "commands": [], "claims": [], "unverified": [], "approved_by": "",
+    }
+    read_sha = _push_receipt(bare, tmp_path, branch, receipt_path, original)
+    read_text = json.dumps(original, indent=2) + "\n"
+
+    # Someone else pushes to the branch in the window between that read and this push —
+    # exactly the race _commit_file's expect_sha/expect_content pair exists to catch.
+    other = dict(original, approved_by="someone-else")
+    current_sha = _push_receipt(bare, tmp_path, branch, receipt_path, other)
+    assert current_sha != read_sha
+
+    ctx = _ctx(gateway)
+    stamped = dict(original, approved_by=ctx.bot_id)
+    push = await _commit_file(
+        ctx, branch, receipt_path, json.dumps(stamped, indent=2) + "\n", "QUALITY: approve (stale)",
+        expect_sha=read_sha, expect_content=read_text,
+    )
+
+    assert push["pushed"] is False
+    assert push["reason"] == "stale_read"
+    assert push["expected"] == read_sha
+    assert push["found"] == current_sha
+
+    # left untouched: the remote still carries the other push, not a blind overwrite
+    assert _receipt_on_remote(bare, branch, receipt_path)["approved_by"] == "someone-else"
+    assert _git(bare, "rev-parse", branch) == current_sha
+
+
+async def test_commit_file_refuses_a_rewind_between_its_own_clone_and_push(tmp_path: Path, monkeypatch):
+    """Tip-rewind case: the branch is force-rewound to an ancestor after _commit_file's internal
+    clone but before its push. A plain push would still be a fast-forward from the rewound tip
+    (our commit descends from the old, pre-rewind sha) and would silently resurrect what the
+    rewind removed. The push must be conditional on the tip _commit_file itself observed, not
+    just the clone-time compare against the caller's expect_sha.
+    """
+    from desk_gateway.tools import quality
+    from desk_gateway.tools.quality import _commit_file
+
+    bare, gateway = _make_gateway_repo(tmp_path)
+    branch = "bot-01-systems-backend/receipt-rewind-race"
+    receipt_path = ".receipts/bot-01-systems-backend/rewind-race.json"
+    original = {
+        "task_id": "rewind-race-regression", "bot": "bot-01-systems-backend",
+        "commands": [], "claims": [], "unverified": [], "approved_by": "",
+    }
+    sha_a = _push_receipt(bare, tmp_path, branch, receipt_path, original)
+    grown = dict(original, approval_note="grown")
+    sha_b = _push_receipt(bare, tmp_path, branch, receipt_path, grown)
+    read_text = json.dumps(grown, indent=2) + "\n"
+
+    real_run_command = quality.run_command
+    rewound = {"done": False}
+
+    async def spy(argv, **kwargs):
+        result = await real_run_command(argv, **kwargs)
+        if not rewound["done"] and len(argv) >= 2 and argv[0] == "git" and argv[1] == "clone":
+            # Simulate someone force-rewinding the branch back to sha_a in the window between
+            # _commit_file's clone (just completed) and its eventual push.
+            rewind_work = tmp_path / "rewinder"
+            await real_run_command(["git", "clone", "--quiet", str(bare), str(rewind_work)])
+            await real_run_command(["git", "checkout", "--quiet", sha_a], cwd=str(rewind_work))
+            await real_run_command(["git", "push", "--quiet", "--force", "origin", f"HEAD:{branch}"], cwd=str(rewind_work))
+            rewound["done"] = True
+        return result
+
+    monkeypatch.setattr(quality, "run_command", spy)
+
+    ctx = _ctx(gateway)
+    stamped = dict(grown, approved_by=ctx.bot_id)
+    push = await _commit_file(
+        ctx, branch, receipt_path, json.dumps(stamped, indent=2) + "\n", "QUALITY: approve (rewind race)",
+        expect_sha=sha_b, expect_content=read_text,
+    )
+
+    assert push["pushed"] is False
+    assert push["reason"] == "stale_read"
+    assert push["found"] == sha_a
+
+    # left untouched: the remote still carries the rewind, not our resurrected commit
+    assert _git(bare, "rev-parse", branch) == sha_a

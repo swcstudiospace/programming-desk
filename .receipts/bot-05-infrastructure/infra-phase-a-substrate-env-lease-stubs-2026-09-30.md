@@ -1,7 +1,7 @@
 # INFRA — Phase A half: substrate env placement + lease/drift install stubs
 
 - **Run:** `20260930T065532Z-29e26e2b` · **Tickets:** SPE-4789, SPE-4793 (env placement, docs), SPE-4792 (lease heartbeat / drift_scan support)
-- **Branch:** `claude/substrate-env-lease-stubs-1s6sf0` · **PR:** draft, hold
+- **Branch:** `claude/substrate-env-lease-stubs-1s6sf0` · **PR:** #36 (draft, hold)
 - **Approved by:** *null until QUALITY*
 - **Status:** docs and stubs. **Nothing installed, nothing restarted, no live env file edited.**
 

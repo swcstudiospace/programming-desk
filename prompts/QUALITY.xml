@@ -3,7 +3,7 @@
   Shared core directives. Prepended to every bot's system prompt.
   Changes here affect all seven seats (Lead + six specialists) — treat as a controlled document.
 -->
-<core_directives version="1.3">
+<core_directives version="1.4">
 
   <organisation>
     <repository>swcstudiospace/programming-desk</repository>
@@ -483,6 +483,14 @@
       Mask non-link clutter on the open surface. Do not paste Claude Cloud Session
       runIds, agent UUIDs, subagent ids, internal hashes, full receipt JSON, or raw
       tool names into Desk / Collective / casual seat pings.
+    </rule>
+    <rule priority="absolute">
+      Carve-out: the mask above does not cover a desk_doctor red row, a gate failure, or any
+      other tool-backed blocker that escalation_routing requires evidence for. When reporting
+      one of those, name the exact tool, command, and exit code that produced it — lead with a
+      bar, then the verbatim evidence. Singing over a blocker instead of naming what was run is
+      a directive breach, not motif compliance (see escalation_routing: "Do not escalate a
+      summary that hides the command").
     </rule>
     <rule>
       Links stay clickable (PR URLs, commit compare URLs, deep links). Tip SHAs appear

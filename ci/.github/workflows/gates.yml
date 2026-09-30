@@ -7,6 +7,21 @@
 # environment variables, never interpolated into shell source with ${{ }}. A branch may
 # legally contain $ and ( ), so interpolating a branch-derived value into a script is
 # remote code execution on the runner, reachable before any gate can reject the bot.
+#
+# SETUP PREREQUISITE — runs-on. Both jobs below target a self-hosted runner labelled
+# [self-hosted, Linux, X64], because the originating organisation's GitHub-hosted minutes are
+# blocked by a spending limit. Before seeding a repository from this template, either give it a
+# runner carrying all three of those labels, or change both runs-on lines to ubuntu-latest.
+#
+# Do not skip this. A runs-on that matches no available runner does not fail — the job sits
+# queued. As a required status check that presents as a pull request pending forever with no
+# error to read, which is a worse failure than a red gate. Verify a matching runner is online
+# before making these checks required.
+#
+# A self-hosted runner also reuses its filesystem between jobs, unlike an ephemeral hosted VM,
+# and these jobs check out the pull request head and run its scripts. Register the runner as
+# --ephemeral, or confine it to a container or throwaway user, before pointing it at a
+# repository whose pull requests are not all from trusted authors.
 
 name: Quality Gates
 
@@ -35,9 +50,14 @@ jobs:
         # Greptile P1 4140823500 / security: never execute PR-controlled ci/gates/*.py on the
         # shared self-hosted runner. Overlay gate implementations from the PR base (main);
         # the checked-out PR tree remains the data under test (diffs, receipts, paths).
+        env:
+          # Through env:, never interpolated into the script. The base ref is chosen by
+          # whoever opens the pull request, and git permits $, backtick, ( ) and ; in a ref
+          # name — so ${{ }} here would substitute a branch called main$(id) into shell
+          # source before bash parsed it. Same rule the acting-bot step follows.
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          BASE_REF="${{ github.base_ref || 'main' }}"
           git fetch --no-tags --depth=1 origin "$BASE_REF"
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF"
@@ -191,9 +211,14 @@ jobs:
       - name: Use trusted gate scripts from base ref
         if: github.event_name == 'pull_request'
         # Same trust rule as the gates job: PR-authored gate modules must not run here.
+        env:
+          # Through env:, never interpolated into the script. The base ref is chosen by
+          # whoever opens the pull request, and git permits $, backtick, ( ) and ; in a ref
+          # name — so ${{ }} here would substitute a branch called main$(id) into shell
+          # source before bash parsed it. Same rule the acting-bot step follows.
+          BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          BASE_REF="${{ github.base_ref || 'main' }}"
           git fetch --no-tags --depth=1 origin "$BASE_REF"
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"

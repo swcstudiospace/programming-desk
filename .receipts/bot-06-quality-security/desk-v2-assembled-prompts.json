@@ -99,5 +99,6 @@
   ],
   "unverified": [
     "Assembled prompts have not yet been installed into the seven live seats (desk_doctor install_prompt runs from origin/main once the stack merges)"
-  ]
+  ],
+  "approved_by": "human:Oveshen Govender"
 }

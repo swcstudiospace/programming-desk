@@ -920,7 +920,11 @@ class TestWorkflowShellInjection:
 
     @pytest.mark.parametrize("workflow", WORKFLOWS)
     def test_acting_bot_pattern_is_anchored_at_both_ends(self, workflow):
-        """An unanchored prefix match accepts bot-01-$(id) and carries it into later steps."""
+        """Secondary to the behavioural tests below, which run the shipped step itself.
+
+        Kept because it names the cause directly: when the behavioural tests go red this
+        says whether the pattern was the thing that changed.
+        """
         text = (REPO_ROOT / workflow).read_text()
         assert "^bot-0[0-6]-[a-z0-9-]+$" in text, (
             f"{workflow} does not validate the acting bot against an anchored pattern. "
@@ -928,7 +932,7 @@ class TestWorkflowShellInjection:
             "bot-01-$(id)/x, and the bot id is then used to build paths in later steps."
         )
 
-    @pytest.mark.parametrize("branch", [
+    INJECTION_BRANCHES = [
         "bot-01-$(id)/x",
         "bot-01-`whoami`/x",
         "bot-01-a;cat /etc/passwd/x",
@@ -936,44 +940,75 @@ class TestWorkflowShellInjection:
         'bot-01-a"; rm -rf /; #/x',
         "bot-07-nope/x",          # no such seat
         "claude/desk-v2-stack/x",  # no bot prefix at all
-    ])
-    def test_injection_payload_in_a_branch_name_is_rejected(self, branch):
-        """Behaviour, not text: run the workflow's own validation and require a refusal."""
-        r = self._resolve_acting_bot(branch)
-        assert r.returncode != 0, (
-            f"branch {branch!r} was accepted as an acting bot id; "
-            f"resolved to {r.stdout.strip()!r}"
-        )
+    ]
 
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    @pytest.mark.parametrize("branch", INJECTION_BRANCHES)
+    def test_injection_payload_in_a_branch_name_is_rejected(self, workflow, branch, tmp_path):
+        """Runs the shipped step, not a copy of it, and requires a refusal."""
+        code, bot = self._resolve_acting_bot(workflow, branch, tmp_path)
+        assert code != 0, f"branch {branch!r} was accepted; resolved to {bot!r}"
+        assert bot is None, f"branch {branch!r} still produced an output bot: {bot!r}"
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
     @pytest.mark.parametrize("branch,expected", [
         ("bot-00-programming-lead/desk-model", "bot-00-programming-lead"),
         ("bot-03-android/feat-push-notifications", "bot-03-android"),
         ("bot-06-quality-security/desk-v2-assembled-prompts", "bot-06-quality-security"),
     ])
-    def test_legitimate_branch_still_resolves(self, branch, expected):
-        """The negative cases above are worthless if the pattern also rejects real branches."""
-        r = self._resolve_acting_bot(branch)
-        assert r.returncode == 0, r.stderr
-        assert r.stdout.strip() == expected
+    def test_legitimate_branch_still_resolves(self, workflow, branch, expected, tmp_path):
+        """The refusals above are worthless if the step also rejects real branches."""
+        code, bot = self._resolve_acting_bot(workflow, branch, tmp_path)
+        assert code == 0, f"{branch!r} was refused by {workflow}"
+        assert bot == expected
 
     @staticmethod
-    def _resolve_acting_bot(branch: str) -> subprocess.CompletedProcess:
-        """The bot-resolution logic from the workflow, run standalone against one branch.
+    def _acting_bot_script(workflow: str) -> str:
+        """The `run:` body of the shipped 'Determine the acting bot' step.
 
-        Kept in step with the workflow by test_acting_bot_pattern_is_anchored_at_both_ends,
-        which fails if the pattern asserted here stops matching the one shipped.
+        Extracted rather than transcribed: a copy of the logic here would keep passing
+        while the workflow's own parsing or validation changed underneath it, which is the
+        one thing these tests exist to prevent.
         """
-        script = """
-        set -u
-        BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
-        BOT="${BRANCH%%/*}"
-        if [[ ! "$BOT" =~ ^bot-0[0-6]-[a-z0-9-]+$ ]]; then
-          exit 1
-        fi
-        printf '%s' "$BOT"
-        """
-        return subprocess.run(
-            ["bash", "-c", script],
-            capture_output=True, text=True,
-            env={"GITHUB_HEAD_REF": branch, "GITHUB_REF": "", "PATH": "/usr/bin:/bin"},
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        for job in doc["jobs"].values():
+            for step in job.get("steps") or []:
+                if step.get("id") == "bot" and step.get("run"):
+                    return step["run"]
+        raise AssertionError(
+            f"{workflow} has no step with id 'bot' that runs a script — the acting-bot "
+            "resolution these tests cover has moved or been renamed, so they are no "
+            "longer testing it."
         )
+
+    @classmethod
+    def _resolve_acting_bot(cls, workflow: str, branch: str,
+                            tmp_path: Path) -> tuple[int, str | None]:
+        """Run the shipped step against one branch. Returns (exit code, resolved bot).
+
+        Mirrors how Actions invokes it: `bash -e <file>` — the default shell on Linux
+        runners — with the branch in the environment and a real $GITHUB_OUTPUT to append
+        to. The bot is read back from that file rather than from stdout, because the step
+        publishes it there for later steps to consume.
+        """
+        script = tmp_path / "acting-bot.sh"
+        script.write_text(cls._acting_bot_script(workflow))
+        output = tmp_path / "github_output"
+        output.touch()
+
+        r = subprocess.run(
+            ["bash", "-e", str(script)],
+            capture_output=True, text=True,
+            env={
+                "GITHUB_HEAD_REF": branch,
+                "GITHUB_REF": "",
+                "GITHUB_OUTPUT": str(output),
+                "PATH": "/usr/bin:/bin",
+            },
+        )
+        bot = None
+        for line in output.read_text().splitlines():
+            if line.startswith("bot="):
+                bot = line[len("bot="):]
+        return r.returncode, bot

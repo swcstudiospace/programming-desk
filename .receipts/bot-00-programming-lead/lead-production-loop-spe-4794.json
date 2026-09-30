@@ -3,7 +3,7 @@
   "bot": "bot-00-programming-lead",
   "branch": "claude/spe-4794-production-loop-v4i18e",
   "started_at": "2026-09-30T06:54:22Z",
-  "completed_at": "2026-09-30T08:58:00Z",
+  "completed_at": "2026-09-30T09:20:00Z",
   "runtime": "claude-cloud",
   "lane": "A",
   "repo": "https://github.com/swcstudiospace/programming-desk",
@@ -13,7 +13,7 @@
     "SPE-4790"
   ],
   "agent_id": null,
-  "pr_url": null,
+  "pr_url": "https://github.com/swcstudiospace/programming-desk/pull/37",
   "brief_etag": null,
   "change_summary": "SPE-4794: make brief -> act -> memory_write -> events_emit -> handoff_to_hermes the default production turn for every desk seat without waiting on Phase 0.5 code. Adds the LEAD-owned seat skill skills/desk-bootstrap/desk-production-loop/SKILL.md (memory_brief plus its etag required before any repo work; degraded mode needs a recorded human ack; docs and memory only through the substrate or the gateway; skills list/invoke only until skills.approve; handoff_to_hermes signed-packet fields stubbed for SPE-4792 and omitted rather than fabricated), wires it into BASE_SKILLS in scripts/generate-templates.py so all seven regenerated grokbot templates enable it, and documents the loop and the seat defaults in grokbot/README.md, docs/desk-operating-model.md and docs/vps-agent-bus.md.",
   "commands": [
@@ -290,7 +290,8 @@
     "approved_by is intentionally empty. G-2 --strict fails closed on this receipt until QUALITY stamps it. That failure is the designed state, not a passed approval.",
     "The Greptile fixes are documentation-level and were verified by content assertions plus the repo's own gates, not by running a seat through the loop against a live gateway. Whether a seat actually follows the corrected §3 and §6 is observable only once the loop runs on a real ticket.",
     "Whether the substrate memory_brief reached through the Hermes connector nests its upstream failure the same way desk_brief does is unverified — the connector was not reachable. The skill therefore states the rule concretely for desk_brief (substrate.error / recall.error, verified from the gateway source) and, for memory_brief, tells the seat to find the field that says the upstream failed rather than accept the envelope. That instruction is a discipline, not a transcribed field name.",
-    "verify.sh asserts that the rules are PRESENT in the prose and that superseded wording is gone. It cannot assert that the rules are correct, or that a seat follows them. Two review rounds have now corrected rules that the earlier version of this check would have passed, which is the honest measure of its limits."
+    "verify.sh asserts that the rules are PRESENT in the prose and that superseded wording is gone. It cannot assert that the rules are correct, or that a seat follows them. Two review rounds have now corrected rules that the earlier version of this check would have passed, which is the honest measure of its limits.",
+    "The PR body was rewritten for head 7f3a69c after both review rounds, because the original body still described the superseded rules (etag-before-repo-work, 'no etag -> degraded', 11 commands, 14 files) that rounds 1 and 2 corrected. The round-by-round table in the body is the record of what changed; a reviewer reading only the first version of the body would have been misled about what this PR asserts."
   ],
   "blockers": [
     "SPE-4792 (signed handoff packet schema) has not landed, so handoff_to_hermes stays unsigned and the packet fields stay omitted. Documented, not worked around.",
@@ -373,6 +374,41 @@
         "disposition": "valid — fixed in this push (committed verify.sh, with a negative control)"
       }
     ],
-    "note": "Round 2 corrected an over-correction from round 1: tightening the degraded-mode trigger off 'no etag' had left the success test reading the envelope instead of the nested error fields. Not a Greptile pass and not a merge claim; the verdict on the post-fix head was not observed when this receipt was written."
-  }
+    "note": "Round 2 corrected an over-correction from round 1: tightening the degraded-mode trigger off 'no etag' had left the success test reading the envelope instead of the nested error fields. Not a Greptile pass and not a merge claim; the verdict on the post-fix head was not observed when this receipt was written.",
+    "recheck_on_head": {
+      "head": "7f3a69c97488dc72ef23505c90c68eb8c3a2804e",
+      "comment": "https://github.com/swcstudiospace/programming-desk/pull/37#discussion_r4142002993",
+      "verdict": {
+        "4141919305": "fixed — confirmed by the reviewer on this head (success now read from nested substrate.error/recall.error, tool availability and deadline status)",
+        "4141919330": "fixed — confirmed (brief_read_at + cached; generated_at treated as a read timestamp, not an etag)",
+        "4141919348": "fixed — confirmed (receipt cites the committed, rerunnable verify.sh incl. the negative control)",
+        "4141824957": "REMAINS OPEN — the doctor's _declared_skills() still appends only verification-receipts, desk-doctor, desk-bootstrap. Not fixable by LEAD (bot-01 path). Raised as a SYSTEMS ticket, see followups."
+      },
+      "note": "The reviewer's earlier round-2 comments cited 7f3a69c before it was pushed, because LEAD wrote the thread replies ahead of the push. The reviewer was correct that the SHA was absent from the ref at that moment; the push followed and the re-check above is against it."
+    }
+  },
+  "followups": [
+    {
+      "ticket": "https://github.com/swcstudiospace/programming-desk/issues/39",
+      "owner": "bot-01-systems-backend",
+      "title": "desk_doctor does not require desk-production-loop — _declared_skills() misses the new base skill",
+      "why_not_here": "services/** and **/*.py resolve to bot-01 under ownership.yaml; LEAD typing the fix is a G-1 FOREIGN failure. docs/desk-operating-model.md: a fix small enough to type is still not LEAD's — write the ticket.",
+      "depends_on": "Must land after desk-production-loop reaches the templates, or every seat's doctor goes red on a skill that does not exist yet."
+    },
+    {
+      "owner": "bot-06-quality-security",
+      "title": "ownership.yaml last-match rule for skills/desk-production-loop/** plus the skills/README.md map row",
+      "why_not_here": "ownership.yaml and skills/README.md are QUALITY's. The prior carve-out precedent is .receipts/bot-06-quality-security/g1-lead-intake-e2e-carveout.json."
+    },
+    {
+      "owner": "bot-06-quality-security",
+      "title": "Thread the brief etag through contracts/tool-rosters/** (desk_brief output, desk_memory_retain / desk_event_emit input)",
+      "why_not_here": "Contract surface with every seat as consumer (G-4). Until it lands, desk_brief supports no change detection and the skill says so."
+    },
+    {
+      "owner": "bot-05-infrastructure",
+      "title": "Re-scope or remove the raw hindsight / ragflow HTTP MCP servers in the root .mcp.json",
+      "why_not_here": ".mcp.json is INFRA's. It is Lane A cloud-session tooling rather than a desk seat default; this PR documents the boundary instead of editing it."
+    }
+  ]
 }

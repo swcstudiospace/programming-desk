@@ -33,7 +33,17 @@ set -euo pipefail
 TIMEOUT_SEC="${SUBSTRATE_LEASE_REAP_TIMEOUT_SEC:-30}"
 # How much of a failing body reaches the journal. Bounded so a large error payload cannot fill the
 # disk one sweep at a time.
+#
+# Validated as a non-negative integer, because the cap is applied by `head -c "$LOG_BYTES"` and by
+# a Python slice, and BOTH invert on a negative number: `head -c -50` means "all but the last 50
+# bytes" and `raw[:-50]` the same, so a single stray minus sign turns the cap into "log almost
+# everything" — on every failing tick, which is exactly when the payload is largest.
 LOG_BYTES="${SUBSTRATE_LEASE_REAP_LOG_BYTES:-2000}"
+if [[ ! "$LOG_BYTES" =~ ^[0-9]+$ ]]; then
+  printf 'substrate-lease-reap: SUBSTRATE_LEASE_REAP_LOG_BYTES must be a non-negative integer, got: %s\n' \
+    "$LOG_BYTES" >&2
+  exit 1
+fi
 
 body=$(mktemp)
 trap 'rm -f "$body"' EXIT
@@ -74,18 +84,49 @@ def messages(text):
 
     Streamable-HTTP MCP may answer either way for the same call, and a sweeper that understood
     only one of them would silently stop checking results the day the server switched framing.
+
+    The SSE half follows the spec rather than the common case: an event's data is *all* of its
+    `data:` lines joined with newlines, dispatched at the blank line that ends the event. Parsing
+    each line on its own works only while the server happens to emit compact one-line JSON — the
+    moment it pretty-prints or wraps a long result, every line is a JSON fragment, the parse
+    fails, and the sweep is reported failed on every tick while the substrate is perfectly fine.
     """
     stripped = text.strip()
     if stripped.startswith("{") or stripped.startswith("["):
         yield json.loads(stripped)
         return
+
     found = False
+    buf = []
+
+    def flush(buf):
+        payload = "\n".join(buf)
+        if payload and payload != "[DONE]":
+            return json.loads(payload)
+        return None
+
     for line in text.splitlines():
         if line.startswith("data:"):
-            chunk = line[5:].strip()
-            if chunk and chunk != "[DONE]":
-                yield json.loads(chunk)
-                found = True
+            # One optional space after the colon belongs to the framing, not the data.
+            chunk = line[5:]
+            if chunk.startswith(" "):
+                chunk = chunk[1:]
+            buf.append(chunk)
+        elif line.strip() == "":
+            if buf:
+                msg = flush(buf)
+                buf = []
+                if msg is not None:
+                    found = True
+                    yield msg
+        # Any other field (event:, id:, retry:, a comment line) is framing we do not need.
+
+    if buf:  # last event with no trailing blank line
+        msg = flush(buf)
+        if msg is not None:
+            found = True
+            yield msg
+
     if not found:
         raise ValueError("no JSON object and no SSE data: frame in response")
 

@@ -55,6 +55,19 @@ Exercised against a local fake MCP server in all seven response shapes (plain-JS
 `isError`, JSON-RPC `error`, SSE success, SSE `isError`, HTTP 500, unparseable body) plus an
 unreachable endpoint and missing required env.
 
+**SSE framing follows the spec, not the common case.** An event's data is *all* of its `data:`
+lines joined with newlines, dispatched at the blank line that ends the event. Parsing each line
+alone works only while the server emits compact one-line JSON — the moment it pretty-prints or
+wraps a long result, every line is a fragment, the parse fails, and a healthy sweep is reported
+failed on every tick. Covered: multiline success and `isError`, no space after the colon, no
+trailing blank line, two events in one response, and a `[DONE]` sentinel.
+
+**`SUBSTRATE_LEASE_REAP_LOG_BYTES` is validated as a non-negative integer** before any request.
+Both `head -c "$N"` and the Python slice invert on a negative number — on a 10000-byte body
+`head -c -2000` yields 8000 bytes, not 2000 — so one stray minus sign would have turned the
+journal cap into "log almost everything", on exactly the failing ticks where payloads are
+largest.
+
 ## Secrets
 
 **None in the unit, none on a command line, none in this repo.** The bearer lives only in the

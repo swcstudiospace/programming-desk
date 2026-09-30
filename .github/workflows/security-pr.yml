@@ -238,12 +238,13 @@ jobs:
         # PR adds and is a no-op, not a false pass, when none exist.
         #
         # pip-audit has no severity flag or threshold at all (checked its full --help): it fails
-        # on ANY known vulnerability in a scanned file, not just HIGH+. That's stricter than this
-        # gate's stated "fail on HIGH+" policy, not weaker, so it's left as-is rather than
-        # papering over a tool gap with a severity filter pip-audit's own data often can't back
-        # (CVSS/severity isn't reliably present in PyPI/OSV advisories). Trivy below is the
-        # actual HIGH+-filtered SCA gate; treat this step as a stricter supplementary check that
-        # only fires once this repo adds a requirements*.txt file.
+        # on ANY known vulnerability in a scanned file, not just HIGH+, and CVSS/severity isn't
+        # reliably present in PyPI/OSV advisories to filter on after the fact. Left un-gated,
+        # that means a LOW or MEDIUM finding blocks the PR even though this gate's policy is
+        # "fail on HIGH+" — continue-on-error keeps this step informational (findings still print
+        # in the log and the step shows a warning) while Trivy below remains the actual
+        # HIGH+-filtered, blocking SCA gate for this manifest class.
+        continue-on-error: true
         run: |
           set -euo pipefail
           pip install pip-audit

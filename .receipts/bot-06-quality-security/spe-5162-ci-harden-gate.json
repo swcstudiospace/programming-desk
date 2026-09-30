@@ -189,6 +189,32 @@
       "exit_code": 0,
       "duration_s": 10.5,
       "output_tail": "169 passed (168 pre-existing + 1 new: test_scoped_to_pr_changed_files_not_whole_repo)"
+    },
+    {
+      "cmd": "HARD-FIX ROUND (tip_match review 28140379 / PR #50 discussion_r4147142620,4147142638,4147142651 on commit 973104f, the last commit Greptile had scored when this round started): re-checked each of the 3 open P1s against the actual current tree, not just the review text, before touching anything — python3 -c \"import yaml; w=yaml.safe_load(open('.github/workflows/security-pr.yml')); print(w['jobs']['semgrep']['steps'][2]['run'])\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "Confirms Issue 1 (Semgrep scans only services/ci) is ALREADY CLOSED as of commit edef078 (before this round started): the Semgrep step's target is '.' (whole repo) with --baseline-commit, not 'services ci'. Greptile's cached review text quotes an older revision; re-verified against the live file rather than trusted at face value."
+    },
+    {
+      "cmd": "grep -n 'ignore-unfixed' .github/workflows/security-pr.yml; echo exit=$?",
+      "exit_code": 1,
+      "duration_s": 0.02,
+      "output_tail": "exit=1 (grep found no match) — confirms Issue 3 (Trivy ignore-unfixed bypass) is ALREADY CLOSED as of commit 9777715/36ea388: no ignore-unfixed key anywhere in the workflow, and ci/tests/test_security_workflows.py::TestTrivyBlocks::test_ignore_unfixed_not_set asserts it stays that way.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "grep -n 'pip-audit -r' .github/workflows/security-pr.yml -A2 -B12 | grep -c continue-on-error",
+      "exit_code": 1,
+      "duration_s": 0.02,
+      "output_tail": "0 matches before this round's edit — confirms Issue 2 (pip-audit has no severity threshold, so a LOW/MEDIUM finding blocks the PR) was the one P1 still genuinely open. pip-audit's --help has no severity flag; fixed by marking the step continue-on-error: true so it stays advisory while Trivy (already HIGH+-filtered, already blocking) remains the real SCA gate.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('.github/workflows/security-pr.yml'))\" && python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.8,
+      "output_tail": "YAML still parses; 171 passed (169 pre-existing + 2 new: TestPipAuditNonBlocking::test_continue_on_error_set, test_still_runs_pip_audit)"
     }
   ],
   "claims": [
@@ -313,6 +339,26 @@
     {
       "claim": "The full gate suite (169 tests) still passes after this fix, including the new test asserting Bandit stays diff-scoped rather than regressing to a whole-repo scan",
       "evidence_command_index": 28
+    },
+    {
+      "claim": "HARD-FIX ROUND, not a full re-review: of the 3 P1s reported against this branch (tip_match on commit 973104f / PR #50 discussion threads r4147142620, r4147142638, r4147142651), 2 (Semgrep scope, Trivy ignore-unfixed) were already closed by commits edef078/9777715/36ea388 before this round started — verified by reading the live file, not by trusting the review's cached text, which still quotes the pre-edef078 revision. Only Issue 2 (pip-audit has no severity threshold, so it blocks on any-severity findings) was still open; this round closes it and adds a regression test so it can't silently revert.",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Issue 1 (Semgrep scans only services/ci) does not apply to the current tree",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Issue 3 (Trivy ignore-unfixed bypass) does not apply to the current tree, and a regression test already guards it",
+      "evidence_command_index": 30
+    },
+    {
+      "claim": "Issue 2 (pip-audit lower-severity findings block the PR) was real: pip-audit has no severity flag and fails on any known vulnerability. Fixed by making the step continue-on-error: true, keeping Trivy (already HIGH+-filtered, already blocking) as the actual enforcement point for this policy",
+      "evidence_command_index": 31
+    },
+    {
+      "claim": "The fixed workflow still parses as valid YAML and the full gate suite is green, including 2 new tests guarding the pip-audit fix against a silent revert",
+      "evidence_command_index": 32
     }
   ],
   "unverified": [
@@ -322,7 +368,8 @@
     "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch \u2014 that limitation was reported, not worked around further.",
     "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
     "G-2 fails on this receipt's own approved_by being null — expected and by design (bot-06-quality-security cannot self-approve, and no Path B stamp is in scope for this ticket), but it means the 'gates' check on this PR will stay red until a human or another bot reviews and stamps approval; that is not something further pushes from this session can resolve.",
-    "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
+    "RESOLVED this round (was previously left as an accepted divergence, then flagged as Greptile P1 4147142638/discussion_r4147142638): pip-audit's own CLI (checked its full --help output) has no severity flag at all, so it used to fail the job on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — a LOW/MEDIUM finding could block a PR even though the gate's stated policy is 'fail on HIGH+'. Fixed by adding continue-on-error: true to that step: pip-audit still runs and its output still prints (and the step still shows a visible warning on any finding), but it no longer fails the job. Trivy remains the actual HIGH+-filtered, blocking SCA gate; this step only fires once a requirements*.txt file exists, which none do today. Not independently verified against a real vulnerable requirements*.txt file in this sandbox (none exists in the repo to test against) — only that continue-on-error is present in the parsed YAML and the new regression test asserts it.",
+    "This round's fix (pip-audit continue-on-error) and the receipt edits documenting it land AFTER approved_at (2026-09-30T17:06:07Z) and are NOT covered by bot-00-programming-lead's approval, which was for the tree as of commit 9777715. approved_by/approved_at are left unchanged per this task's instructions to preserve them, not because this new diff has been re-reviewed — it has not. This is not a CLEAR or re-approved state; G-2 (or a human) still needs to review this round's diff on its own merits before it can be trusted to be covered by that stamp.",
     "This receipt previously accepted the whole-repo Bandit scan as a known-but-unclosed gap ('zero pre-existing findings today'). That was wrong — infra/unified-lsp-broker/broker.py already had a HIGH finding (B324), and PR #50's own CI failed on it immediately, the same run this fix responds to. The gap is now closed by scoping Bandit to this PR's changed .py files (a computed git-diff file list, not bandit's own -b/--baseline JSON-snapshot mechanism, which needs a stored baseline artifact this workflow doesn't have anywhere to keep). What's still genuinely unverified: whether a PR that changes MANY .py files across unrelated areas could hit bandit's argv length limits passing them all as positional args — not exercised here since this PR only ever touched one.",
     "This receipt's own bandit -r . entry (now corrected) was recorded with the wrong exit code because of `command | tail -N` piping reporting tail's exit status instead of the piped command's — the exact class of evidence error Greptile's review caught elsewhere in an earlier revision of this file. Prompted by finding it, audited every other command in this receipt for the same `| tail` / `| head` pattern: one other command pipes through `| tail -5` (the trivy-action tag listing at index 13), but its exit code was never load-bearing for a pass/fail claim — it's an informational tag listing, not a '0 findings' assertion — so it isn't the same bug. No other instance found."
   ],

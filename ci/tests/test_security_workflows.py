@@ -103,6 +103,23 @@ class TestBanditBlocks:
         assert "bandit \"${PY_FILES[@]}\"" in step["run"]
 
 
+class TestPipAuditNonBlocking:
+    """pip-audit has no severity flag (checked its --help): it fails on ANY known vuln, not just
+    HIGH+, so left gating the job it would block a PR on a LOW/MEDIUM finding — contradicting this
+    gate's "fail on HIGH+" policy (Greptile P1 4147142638). continue-on-error keeps it advisory
+    while Trivy (TestTrivyBlocks below) stays the actual HIGH+-filtered, blocking SCA gate.
+    """
+
+    def test_continue_on_error_set(self, workflow):
+        step = _step(_job(workflow, "dependencies"), "pip-audit — requirements*.txt targets")
+        assert step.get("continue-on-error") is True
+
+    def test_still_runs_pip_audit(self, workflow):
+        # Guards against "fix" the regression by deleting the scan instead of un-gating it.
+        step = _step(_job(workflow, "dependencies"), "pip-audit — requirements*.txt targets")
+        assert "pip-audit -r" in step["run"]
+
+
 class TestTrivyBlocks:
     def test_severity_and_exit_code(self, workflow):
         job = _job(workflow, "dependencies")

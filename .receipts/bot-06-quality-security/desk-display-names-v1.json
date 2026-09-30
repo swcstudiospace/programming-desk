@@ -103,6 +103,7 @@
   ],
   "unverified": [
     "display_name/title_chip/role were added as a QUALITY-owned shared reference in core-directives.xml rather than edited into each seat's own prompts/bot-0N-*.xml identity block (those files are owned by their respective seats, not QUALITY); if per-seat <identity><role> text must also change to match, that is a cross-bot change routed through docs/cross-bot-protocol.md, not this receipt.",
-    "The updated core-directives.xml/prompts-assembled output has not yet been installed into the seven live seats (desk_doctor install_prompt runs from origin/main once this PR merges)."
+    "The updated core-directives.xml/prompts-assembled output has not yet been installed into the seven live seats (desk_doctor install_prompt runs from origin/main once this PR merges).",
+    "grokbot/templates/*.md still render the pre-desk_display_names `## Name` values (e.g. 'Quality & Security (QUALITY)' instead of 'Security Engineer'), sourced from the SEATS name column in scripts/generate-templates.py. Both grokbot/** and scripts/generate-templates.py are owned by bot-00-programming-lead (ownership.yaml lines 340 and 344), not QUALITY, so G-1 blocks a QUALITY edit to either. Fix path: bot-00-programming-lead updates the SEATS name tuples in scripts/generate-templates.py to the desk_display_names values above (Team Lead, Backend Engineer, Web Developer, Android Developer, iOS Engineer, Solutions Architect, Security Engineer) and re-runs `python3 scripts/generate-templates.py` to regenerate grokbot/templates/*.md, per docs/cross-bot-protocol.md."
   ]
 }

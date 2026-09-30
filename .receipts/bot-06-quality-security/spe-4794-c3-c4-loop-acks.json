@@ -482,6 +482,68 @@
       "duration_s": 0.1,
       "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 1,
+      "duration_s": 3.08,
+      "output_tail": "2 failed, 52 passed, 154 deselected — FAILED test_expects_failure_silent_grep_q_stricter_f_sibling_corroborates_e_gate (assert 1 == 0: the unfixed candidate wrongly REJECTED a compound gated on 'test -e config.yaml' corroborated by a passing 'test -f config.yaml' sibling), FAILED test_expects_failure_silent_grep_q_directory_probe_trailing_slash_is_corroboration (assert 1 == 0: the unfixed candidate wrongly REJECTED a compound gated on 'test -d config/' corroborated by a passing 'test -d config' sibling) — run_candidate_gate() archives HEAD via 'git archive', not the working tree, so these 2 new candidate-gate tests correctly failed against the still-unfixed committed check_receipt.py before this round's commit landed; the other 2 new tests (weaker -e sibling still rejected against an -f gate, -f trailing-slash mismatch still rejected) already passed pre-fix since they assert behaviour that was never broken",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git add ci/gates/check_receipt.py ci/tests/test_gates.py && git commit -m 'QUALITY: SPE-4794 #45 hard-fix flag-implication corroboration + -d trailing slash'",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "[claude/spe-4794-c3-c4-round9-hardfix 613d795] QUALITY: SPE-4794 #45 hard-fix flag-implication corroboration + -d trailing slash\n 2 files changed, 184 insertions(+), 36 deletions(-)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k TestG2Receipts -q",
+      "exit_code": 0,
+      "duration_s": 2.71,
+      "output_tail": "54 passed in 2.71s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 12.74,
+      "output_tail": "208 passed in 12.74s"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py ci/tests/test_gates.py skills/verification-receipts/SKILL.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else",
+      "expects_failure": true
+    },
+    {
+      "cmd": "cd /tmp/slashtest && touch config.yaml && mkdir -p config && test -f config.yaml; echo f_no_slash=$?; test -f config.yaml/; echo f_slash=$?; test -e config.yaml; echo e_no_slash=$?; test -e config.yaml/; echo e_slash=$?; test -d config; echo d_no_slash=$?; test -d config/; echo d_slash=$?; test -r config.yaml; echo r_no_slash=$?; test -r config.yaml/; echo r_slash=$?",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "f_no_slash=0 f_slash=1 e_no_slash=0 e_slash=1 d_no_slash=0 d_slash=0 r_no_slash=0 r_slash=1 — empirically confirms the exact assumption this round's fix bakes in: on this container's shell, a trailing slash flips the exit code for -f/-e/-r on a regular file (0 to 1) but NOT for -d on a directory (0 to 0), so collapsing the trailing slash only for -d in _normalize_path() matches this shell's real behaviour rather than resting on an unverified reading of the POSIX spec"
     }
   ],
   "claims": [
@@ -830,6 +892,48 @@
       "claim": "This receipt correctly still has no approved_by — left unset per this round's task instructions ('grantor P1 is LEAD G-2 stamp later — do NOT write approved_by'), and self-approval remains blocked by G-2 pending LEAD's independent review",
       "evidence_command_index": 77,
       "expects_failure": true
+    },
+    {
+      "claim": "Greptile review 28224030, tip_match 2/5 on d5f9a4e, technical P1 ('Valid probes rejected', ci/gates/check_receipt.py:232) and technical P1 ('Directory probes treated as different', ci/gates/check_receipt.py:142-146): before this round's fix committed, 2 of the 4 new regression tests failed against the still-unfixed HEAD (run_candidate_gate() archives HEAD via 'git archive', not the working tree) — confirming those two tests actually exercise the committed candidate rather than passing vacuously. The other 2 new tests (weaker -e sibling still rejected against an -f gate; -f trailing-slash mismatch still rejected) already passed pre-fix since they assert behaviour that was never broken",
+      "evidence_command_index": 78,
+      "expects_failure": true
+    },
+    {
+      "claim": "This round's fix is committed to the seat branch: _FLAG_IMPLIES replaces exact flag equality in _is_positive_existence_check() with a one-way implication lattice (-f/-d/-r each imply -e, since their own stricter test requires existence as a precondition; -e implies only itself) via a new _flag_implies() helper, so a passing 'test -f config.yaml' sibling now corroborates a compound gated on 'test -e config.yaml' while the unsound reverse (-e sibling corroborating an -f gate) and the unrelated-type case (-d vs -f) both remain rejected. Separately, _normalize_path() now takes the command's own flag and collapses a trailing slash ONLY for '-d' — since a directory check's own predicate already requires the target to resolve as a directory, the slash can never change the answer — so 'test -d config' and 'test -d config/' now compare equal, while every other flag (where the slash CAN change the outcome, e.g. '-f' on a regular file) keeps it significant exactly as the prior round fixed",
+      "evidence_command_index": 79
+    },
+    {
+      "claim": "Full ci/tests/test_gates.py -k TestG2Receipts suite passes on this tip: 54 tests (50 on the prior tip + 4 new: stricter -f sibling corroborates weaker -e gate, weaker -e sibling still does not corroborate stricter -f gate, -d sibling/gate trailing-slash mismatch now corroborates, -f sibling/gate trailing-slash mismatch still does not corroborate), no regressions",
+      "evidence_command_index": 80
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 208 tests (204 on the prior tip + 4 new regression tests above), no regressions",
+      "evidence_command_index": 81
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's flag-implication and -d-trailing-slash changes",
+      "evidence_command_index": 82
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 83
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, test_gates.py, verification-receipts/SKILL.md, updated to document flag-implication and the -d-only trailing-slash collapse) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 84
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 85
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by — left unset per this round's task instructions ('do NOT write approved_by — grantor G-2 is LEAD later'), and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 86,
+      "expects_failure": true
+    },
+    {
+      "claim": "The -d-only trailing-slash collapse matches this container's actual shell behaviour, not just a reading of the POSIX spec: empirically, a trailing slash flips the exit code for -f/-e/-r on a regular file (0 to 1, i.e. the check now fails) but leaves -d on a directory unchanged (0 to 0, i.e. still passes) — exactly the asymmetry _TRAILING_SLASH_SAFE_FLAGS = {'d'} relies on",
+      "evidence_command_index": 87
     }
   ],
   "unverified": [
@@ -847,10 +951,12 @@
     "ABSENCE_CLAIM_RE now requires a path/file/directory noun next to the ambiguous words (exists/absent/removed/deleted/gone), or one of a fixed set of unambiguous phrases (no longer exists/no longer present/not present/does not exist); a differently-worded content-vs-path distinction outside both of those shapes — e.g. an absence claim that names neither a path noun nor one of the listed phrases — would still fall through to the existence-only rejection, and a content-removal claim that happens to mention the word 'file' in passing (e.g. 'the token was removed from the file's header comment') could still wrongly pass; this was scoped to the exact ambiguity Greptile's finding demonstrated, not an exhaustive claim-intent parser",
     "Superseded twice: first by the sibling-path-exactness/ordering round (restricting the exception to test -f/-e via FILE_EXISTENCE_PROBE_RE, exact path-token equality, sibling strictly earlier than the compound), then by this round, which extends FILE_EXISTENCE_PROBE_RE to -f/-e/-d/-r and normalizes path tokens (./X vs X) before comparing. As of this round: a test -d or test -r sibling now corroborates the same as -f/-e, and an equivalent relative spelling of the same path now matches. What is still NOT covered, and remains fail-closed as padding: any other flag (test -n/-z, ...), a substring/near-match path even after normalization, a non-test-shaped existence probe like `find . -name X`, a path made equivalent only by resolving `..` against a working directory the gate does not know (normpath collapses `./` and doubled separators lexically, it does not consult the filesystem), and a same-path match recorded AFTER the compound. Still intentionally conservative/fail-closed, not an exhaustive parser of every way existence could be proven.",
     "The ordering requirement added this round (sibling command index < quiet-search command index) is enforced on the receipt's own array order, not on wall-clock timestamps — no per-command timestamp is recorded anywhere in this schema, so a receipt author who lists commands out of true execution order could still satisfy the check by construction. This trusts array order as a proxy for execution order, the same trust this gate already places in 'commands' elsewhere (e.g. nothing stops a receipt from listing any command in a fabricated sequence); closing that would need per-command timestamps in the schema, which is out of scope for this round's fix.",
-    "Superseded by this round's fix (see new commands/claims below): _normalize_path() no longer collapses a trailing slash — collapsing it away was itself a Greptile P1 ('Different paths treated as equal'), since POSIX test/[ requires a trailing-slash path to resolve to a directory, so 'config.yaml' and 'config.yaml/' behave differently for -f/-e even though they are 'the same file' in every other sense. _normalize_path() still does not touch case, does not resolve symlinks, and does not consult the filesystem at all, so two paths that are the same file only via a symlink, a case-insensitive filesystem, or a mount bind are still compared as different tokens and would not corroborate each other — that remains out of scope, unlike the trailing-slash case which was a real correctness bug, not an acceptable limitation.",
-    "The sibling-flag-matching fix (this round) requires the sibling's test flag to be byte-for-byte the same letter as the compound gate's flag (case-insensitively); it does not model any semantic relationship between flags (e.g. that -e is a strict superset of what -f/-d test, so an -e sibling passing is IMPLIED by an -f or -d sibling passing on the same path). A receipt with only an -e sibling for a path whose compound is gated on -f is correctly rejected as a flag mismatch even though, in the one narrow case where -e and -f might be shown equivalent by other means, this is more conservative than strictly necessary. This was scoped to closing the false-corroboration bug Greptile demonstrated, not to building a semantic model of POSIX test flag relationships.",
+    "Superseded twice more by later rounds (see new commands/claims below for the latest): the round-8 fix first stopped _normalize_path() from collapsing ANY trailing slash — right for -f/-e/-r, where the slash can flip the answer, but it also (wrongly) made 'test -d config' and 'test -d config/' compare unequal, since a directory check's own predicate already requires the target to resolve as a directory and the slash can never change ITS answer (Greptile P1, 'Directory probes treated as different'). This round's fix makes the collapse flag-aware via _TRAILING_SLASH_SAFE_FLAGS = {'d'}: only -d collapses the slash; -f/-e/-r keep it significant, exactly as round 8 intended for them. _normalize_path() still does not touch case, does not resolve symlinks, and does not consult the filesystem at all, so two paths that are the same file only via a symlink, a case-insensitive filesystem, or a mount bind are still compared as different tokens and would not corroborate each other — that remains out of scope, a real limitation but not a correctness bug the way the trailing-slash cases were.",
+    "Superseded by this round's fix (see new commands/claims below): the round-8 sibling-flag check required byte-for-byte flag equality between a sibling and the compound's own gate, which was itself flagged as a bug (Greptile P1, 'Valid probes rejected') because it rejected the sound case where a stricter sibling (-f, -d, -r) corroborates a weaker -e gate on the same path — passing -f proves -e would pass too, since being a regular file requires existing. This round replaces exact equality with the one-way _FLAG_IMPLIES lattice (documented above) that accepts that sound direction while still rejecting the unsound one (-e sibling corroborating an -f gate) and cross-type mismatches (-d vs -f). The lattice only models existence-implication, not any deeper semantic relationship (e.g. it does not know that a file's -r and -f might both be independently provable some other way); a receipt relying on any predicate relationship this lattice doesn't encode is still correctly rejected as a flag mismatch. This was scoped to the exact soundness gap Greptile demonstrated, not to building an exhaustive semantic model of every POSIX test flag relationship.",
     "The full ci/tests/test_gates.py suite (200 tests, this round) only ran clean locally after installing pyyaml into the isolated uv-managed pytest tool venv (`uv pip install --python <pytest's interpreter> pyyaml`) — that venv had no pyyaml at all, which is an environment/tooling gap in this development container unrelated to this round's check_receipt.py/test_gates.py changes (confirmed: the same ~60 TestG7DeskIntegrity/TestReceiptDirectoryOwnership tests failed identically with the same 'pyyaml is required' error on a worktree checked out at the prior tip f673f219, before this round's changes). Not fixed as part of this HARD_FIX; flagging in case the organisation's actual CI runner has the same gap in whatever environment runs `ci/tests/`.",
-    "The candidate-gate before/after comparison for this round's two P1s (evidence_command_index 59-61) was captured by running the already-written new tests against the seat branch before committing this round's check_receipt.py fix, then again after — not by checking out the pre-fix commit into a separate worktree with this round's test file copied in. Both approaches rely on the same underlying mechanism (run_candidate_gate() extracts ci/gates/ from 'git archive HEAD', so an uncommitted working-tree fix is invisible to it until committed), and the observed failure-then-pass transition matches exactly what the mechanism predicts, but this is noted for transparency about the exact reproduction method used."
+    "The candidate-gate before/after comparison for this round's two P1s (evidence_command_index 59-61) was captured by running the already-written new tests against the seat branch before committing this round's check_receipt.py fix, then again after — not by checking out the pre-fix commit into a separate worktree with this round's test file copied in. Both approaches rely on the same underlying mechanism (run_candidate_gate() extracts ci/gates/ from 'git archive HEAD', so an uncommitted working-tree fix is invisible to it until committed), and the observed failure-then-pass transition matches exactly what the mechanism predicts, but this is noted for transparency about the exact reproduction method used.",
+    "_FLAG_IMPLIES (this round) is a hand-written lattice over exactly the four flags FILE_EXISTENCE_PROBE_RE recognises (f/e/d/r); it is not derived from, or checked against, any formal model of POSIX test(1) semantics, so a fifth flag added to that regex in the future would need its implications added to the lattice by hand too — nothing enforces that the two stay in sync beyond code review. The three-round history on this exact file (exact-path-string round, exact-flag-string round, now an implication-lattice round) suggests this area is worth a property-based or exhaustively-enumerated test over the flag×flag matrix rather than one example receipt per pair, but that refactor is out of scope for this HARD_FIX, which was limited to the two named P1s.",
+    "The -d-only trailing-slash collapse was verified empirically against this development container's own shell (see the new test/-f/-e/-d/-r probe command and its matching claim above), which confirmed the exact asymmetry the fix relies on. This was one shell on one container, not the organisation's actual receipts CI runner — if that runner's shell ever disagreed with POSIX pathname resolution here (unlikely, since this is standard behaviour across bash/dash/coreutils, but not independently confirmed on that specific host), the -f/-e/-r trailing-slash-significant behavior would rest on an assumption unverified on that host specifically."
   ],
   "loop_acks": []
 }

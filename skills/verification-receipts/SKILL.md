@@ -163,24 +163,32 @@ a human reviewer (`approved_by`) to judge, the same as any other evidence-matchi
 `test -f X && grep -q PATTERN X` (or `--quiet`) prints nothing whether it matches or finds nothing —
 that silence is indistinguishable from `test -f X` failing and the chain short-circuiting before
 grep ever runs, so on its own this compound cannot back an exhaustive claim at all. To use one, add a
-**second command, recorded earlier in `commands`,** that tests the exact same path **with the same
-flag** and itself exits 0 — a bare `test -f X`/`-e`/`-d`/`-r`, or the `[ ... ]` equivalent, nothing
-chained after it. That sibling is the one command this gate does not count as padding, because it is
-the only thing that can prove X actually passed that specific check when the quiet search ran. Get
-any part wrong and the gate still rejects it: a sibling recorded AFTER the quiet search only proves X
-exists *now*, not that it did when the search ran (it could have been created in between); a sibling
-naming a different path — even one that merely contains the target as a substring, like
-`config.yaml.bak` next to `config.yaml` — proves nothing about the target at all; and a sibling using a
-*different flag* than the compound's own gate — `test -d config` next to a compound gated on `test -f
-config` — proves nothing either, because a directory existing says nothing about whether `test -f` on
-that same path would also succeed (it wouldn't). Equivalent relative spellings of the *same* path do
-still match — `test -f ./config.yaml` corroborates a compound gated on `config.yaml` — since path
-tokens are normalized (leading `./`, doubled separators) before comparison, but a **trailing slash is
-never normalized away**: POSIX `test`/`[` requires a trailing-slash path to resolve to a directory, so
-`test -f config.yaml/` fails for a regular file no matter whether it exists, and a bare `test -f
-config.yaml` sibling must not be read as corroborating that different, stricter gate. A `test -n X`
-sibling doesn't count either: `-n` tests whether a *string* is non-empty, not whether a file exists,
-so it says nothing about the filesystem no matter what its operand is.
+**second command, recorded earlier in `commands`,** that tests the exact same path with a flag whose
+predicate **implies** the compound's own gate flag, and itself exits 0 — a bare `test -f X`/`-e`/`-d`/
+`-r`, or the `[ ... ]` equivalent, nothing chained after it. That sibling is the one command this gate
+does not count as padding, because it is the only thing that can prove X would have passed the gate's
+own check when the quiet search ran. "Implies" is a one-way relationship, not flag equality: `-f`
+(regular file), `-d` (directory) and `-r` (readable) each require the target to exist as a
+precondition of their own stricter test, so any of them passing on X also proves a weaker `-e` gate on
+X would pass — a `test -f config.yaml` sibling DOES corroborate a compound gated on `test -e
+config.yaml`. It does not run the other way: `-e` implies only itself, and `-f`/`-d`/`-r` do not imply
+each other (a directory existing says nothing about whether `test -f` on that same path would also
+succeed — it wouldn't), so an `-e` sibling must not corroborate an `-f`-gated compound, and `test -d
+config` next to a compound gated on `test -f config` still proves nothing. Get any part wrong and the
+gate still rejects it: a sibling recorded AFTER the quiet search only proves X exists *now*, not that
+it did when the search ran (it could have been created in between); a sibling naming a different path
+— even one that merely contains the target as a substring, like `config.yaml.bak` next to
+`config.yaml` — proves nothing about the target at all. Equivalent relative spellings of the *same*
+path do still match — `test -f ./config.yaml` corroborates a compound gated on `config.yaml` — since
+path tokens are normalized (leading `./`, doubled separators) before comparison. A **trailing slash**
+is normalized away only for `-d`: `test -d config` and `test -d config/` are the same check, because a
+directory check's own predicate already requires the target to resolve as a directory, so the slash
+can never change the answer. Every other flag keeps the slash significant: POSIX `test`/`[` requires a
+trailing-slash path to resolve to a directory, so `test -f config.yaml/` fails for a regular file no
+matter whether it exists, and a bare `test -f config.yaml` sibling must not be read as corroborating
+that different, stricter gate. A `test -n X` sibling doesn't count either: `-n` tests whether a
+*string* is non-empty, not whether a file exists, so it says nothing about the filesystem no matter
+what its operand is.
 
 Being the receipt's only command (or paired only with that one preceding sibling) is necessary but
 not sufficient: the gate also rejects the two shapes of thin evidence that pattern most often. A

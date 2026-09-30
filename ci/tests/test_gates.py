@@ -881,28 +881,67 @@ WORKFLOWS = [
 
 
 class TestEveryGateIsWired:
-    """A gate script nothing invokes is not a gate.
+    """A gate no step runs is not a gate.
 
     The template-sync check cannot catch a gate being dropped, because it compares the two
     workflow copies to each other: delete a step from both and it stays green. That is not
     hypothetical — a commit whose subject was only about switching to a self-hosted runner
     removed the G-7 step from both files, and sync passed.
+
+    Keyed on the *invocation* rather than the step name, so renaming or reordering a step is
+    free while removing the check it performs is not. One script can carry more than one
+    gate — check_ownership.py runs the manifest self-check and the path-ownership check as
+    separate steps — so a per-filename test would stay green after either was deleted, the
+    other's mention being enough to satisfy it.
     """
 
+    # (label, script, a flag that distinguishes this invocation from others of the same script)
+    REQUIRED = [
+        ("G-1 manifest self-check", "check_ownership.py", "--validate-manifest"),
+        ("G-1 path ownership", "check_ownership.py", "--bot"),
+        ("G-2 verification receipt", "check_receipt.py", None),
+        ("G-3 committed secrets", "check_secrets.py", None),
+        ("G-4 contract-first changes", "check_contracts.py", None),
+        ("G-5/G-6 rollback and destructive ops", "check_rollback.py", None),
+        ("G-7 desk integrity", "check_desk_integrity.py", None),
+    ]
+
+    @staticmethod
+    def _run_bodies(workflow: str) -> list[str]:
+        yaml = pytest.importorskip("yaml")
+        doc = yaml.safe_load((REPO_ROOT / workflow).read_text())
+        return [
+            step["run"]
+            for job in doc["jobs"].values()
+            for step in (job.get("steps") or [])
+            if step.get("run")
+        ]
+
     @pytest.mark.parametrize("workflow", WORKFLOWS)
-    def test_every_gate_script_is_invoked(self, workflow):
+    def test_every_required_gate_check_has_a_step(self, workflow):
+        bodies = self._run_bodies(workflow)
+        missing = [
+            label for label, script, flag in self.REQUIRED
+            if not any(script in b and (flag is None or flag in b) for b in bodies)
+        ]
+        assert not missing, (
+            f"{workflow} has no step running: {'; '.join(missing)}. "
+            "Each is a required check — one the workflow never runs blocks nothing, and "
+            "template sync will not notice, because it only compares the two copies to each "
+            "other. Restore the step, or drop the gate deliberately and update this list."
+        )
+
+    @pytest.mark.parametrize("workflow", WORKFLOWS)
+    def test_no_gate_script_is_left_unwired(self, workflow):
+        """Catches a *new* gate script that was added without being wired into the workflow."""
         scripts = {p.name for p in GATES.glob("check_*.py")}
         assert scripts, "no gate scripts found — this test is not looking where it thinks"
 
-        text = (REPO_ROOT / workflow).read_text()
-        missing = sorted(s for s in scripts if s not in text)
-
-        assert not missing, (
-            f"{workflow} does not invoke: {', '.join(missing)}. "
-            "Every ci/gates/check_*.py is a required check; a gate the workflow never runs "
-            "blocks nothing, and the template-sync check will not notice because it only "
-            "compares the two copies to each other. Add the step, or delete the script and "
-            "the gate it claims to enforce."
+        bodies = self._run_bodies(workflow)
+        unwired = sorted(s for s in scripts if not any(s in b for b in bodies))
+        assert not unwired, (
+            f"{workflow} never runs: {', '.join(unwired)}. A gate script in ci/gates/ that no "
+            "step invokes enforces nothing. Wire it up, add it to REQUIRED above, or delete it."
         )
 
 

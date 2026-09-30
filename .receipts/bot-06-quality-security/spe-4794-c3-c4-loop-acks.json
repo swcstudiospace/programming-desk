@@ -89,6 +89,54 @@
       "duration_s": 0.1,
       "output_tail": "OSError: [Errno 101] Network is unreachable — confirms the network namespace run_candidate_gate() now wraps candidate execution in actually blocks egress on this host, not merely in theory",
       "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -q",
+      "exit_code": 0,
+      "duration_s": 10.87,
+      "output_tail": "185 passed in 10.87s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py -k \"search_needle_is_not_mistaken_for_missing_target or compound_content_search_is_exhaustive_evidence\" -q",
+      "exit_code": 0,
+      "duration_s": 0.46,
+      "output_tail": "2 passed, 183 deselected in 0.25s"
+    },
+    {
+      "cmd": "PATH=\"/tmp/fake_bin:$PATH\" python3 -m pytest ci/tests/test_gates.py -q  # /tmp/fake_bin/unshare is a stub that always exits 1, shadowing the real unshare so _probe_network_isolation() sees a userns-incapable host without touching any other tool on PATH",
+      "exit_code": 0,
+      "duration_s": 9.77,
+      "output_tail": "161 passed, 24 skipped in 9.77s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 103 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ci/gates/check_receipt.py skills/verification-receipts/SKILL.md ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/spe-4794-c3-c4-loop-acks.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
     }
   ],
   "claims": [
@@ -169,6 +217,39 @@
       "claim": "The unprivileged network namespace run_candidate_gate() now wraps candidate execution in genuinely blocks outbound connections on this host — not merely a resource-limit best-effort — confirmed by a direct socket connect from inside the same 'unshare -r -n' wrapper failing with ENETUNREACH",
       "evidence_command_index": 13,
       "expects_failure": true
+    },
+    {
+      "claim": "check_receipt.py and the further-updated test_gates.py still compile cleanly after this round's strict-false-positive and namespace-degrade changes",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "Full ci/tests gate suite passes on this tip, 185 tests (183 on the prior tip + 2 new regression tests: the 'not found' search-needle case and the test -f && grep compound-command case), no regressions",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "The two new regression tests pass in isolation: a strict expects_failure claim whose only command is 'grep -c \"not found\" build.log' (the search needle, not a real error) is accepted as exhaustive evidence, and a strict expects_failure claim whose only command is 'test -f .env.example && grep ... .env.example' (a real content search chained after an existence check) is also accepted, where before this fix both were wrongly rejected",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "With the real 'unshare' binary shadowed by a stub that always exits 1 — reproducing exactly what _probe_network_isolation() would observe on a host whose kernel rejects unprivileged user/network namespaces — the required gate-self-test suite still exits 0 (161 passed, 24 skipped) instead of failing outright; every test that depends on run_candidate_gate() actually executing the candidate now skips instead of failing the whole suite, while the candidate still never runs unsandboxed (confirmed separately by test_run_candidate_gate_skips_closed_without_network_isolation, included in this same skipped set via monkeypatch when unshare IS available, and for real via this command when it is not)",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "ownership.yaml manifest is still internally valid after this round's changes",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "All files touched by this round (check_receipt.py, verification-receipts/SKILL.md, test_gates.py) plus this receipt remain within bot-06-quality-security's owned paths",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "No secret shapes in the files touched by this round",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "This receipt correctly still has no approved_by, and self-approval remains blocked by G-2 pending LEAD's independent review",
+      "evidence_command_index": 21,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -177,7 +258,9 @@
     "CI's exact receipt-selection step (.github/workflows/gates.yml) was not run end-to-end on a runner; only the underlying gate scripts and their unit tests were re-run locally",
     "The two adjacent Greptile threads on this PR ('Missing required PR receipt' and 'Deploy approval guidance is inaccurate') were left untouched — they were not in the enumerated list of QUALITY-owned items for this HARD_FIX and concern G-5 deploy-approval documentation, not loop_acks",
     "Filesystem isolation for run_candidate_gate() is still partial: the candidate runs in a throwaway cwd with a stripped environment, but there is no chroot or mount-namespace, so it can read whatever the runner's normal file permissions allow. Closing that gap needs a container or mount-namespace sandbox and is flagged as an infra-owned follow-up in the code comment, not fixed by this round.",
-    "The network-namespace wrapper (unshare -r -n) was verified on this development container, not on the organisation's actual self-hosted VPS runner named in gates.yml; if unprivileged user namespaces are disabled there (kernel.unprivileged_userns_clone=0), run_candidate_gate() will fail closed as designed, but that fail-closed path itself was only exercised by monkeypatching NETWORK_ISOLATION_AVAILABLE in a test, not by disabling user namespaces on a real host"
+    "The network-namespace wrapper (unshare -r -n) was verified on this development container, not on the organisation's actual self-hosted VPS runner named in gates.yml; if unprivileged user namespaces are disabled there (kernel.unprivileged_userns_clone=0), run_candidate_gate() will fail closed as designed, but that fail-closed path itself was only exercised by monkeypatching NETWORK_ISOLATION_AVAILABLE in a test, not by disabling user namespaces on a real host",
+    "The no-userns simulation for this round's namespace-degrade fix shadowed the 'unshare' binary on PATH with a stub that always exits 1, which reproduces what _probe_network_isolation() observes when the kernel rejects the unshare(2) call — it does not cover the separate 'unshare binary entirely absent' branch of that probe (shutil.which returning None), though that branch's code path is unchanged by this round and was already covered by the existing test_network_isolation_probe_is_a_clean_bool test plus manual reading, not by a dedicated absent-binary simulation",
+    "The quoted-text-stripping fix for MISSING_TARGET_RE only strips simple single/double-quoted substrings (a regex, not a real shell tokenizer); a needle passed unquoted, or through nested/escaped quoting a real shell would still parse as one token, could still be misread as error text — this covers the common `grep \"pattern\" file` / `grep 'pattern' file` shapes named in the Greptile finding, not every possible shell quoting form"
   ],
   "loop_acks": []
 }

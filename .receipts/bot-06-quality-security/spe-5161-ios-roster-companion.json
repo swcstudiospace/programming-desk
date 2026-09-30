@@ -111,8 +111,12 @@
       "evidence_command_index": 8
     },
     {
-      "claim": "REVERTED (Greptile P1, comment 4147725446 on PR #54, confirmed valid): iosmetavr_ui_tap's required x/y device-point coordinates were checked directly against PR #48's ios/tools/cli.py and found undeliverable by any backend, not merely unimplemented — _add_metavr() gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out arguments only, with no coordinate parameter anywhere in that CLI. Reverted to required: [serial, out], matching the CLI and the tool's original (desk_ios_ui_tap) shape. Re-ran YAML parse, G-7, and the full test suite after the revert; all still pass (command 10). Directed-tap targeting needs an ios/tools/metavr_bridge.py and cli.py change on PR #48 — bot-04-ios's to add, not this seat's.",
+      "claim": "REVERTED (Greptile P1, comment 4147725446 on PR #54, confirmed valid): iosmetavr_ui_tap's required x/y device-point coordinates were checked directly against PR #48's ios/tools/cli.py and found undeliverable by any backend, not merely unimplemented — _add_metavr() gives device_screenshot, ui_dump AND ui_tap the identical --serial/--out arguments only, with no coordinate parameter anywhere in that CLI. Reverted to required: [serial, out], matching the CLI and the tool's original (desk_ios_ui_tap) shape. Directed-tap targeting needs an ios/tools/metavr_bridge.py and cli.py change on PR #48 — bot-04-ios's to add, not this seat's.",
       "evidence_command_index": 9
+    },
+    {
+      "claim": "Re-ran YAML parse, G-7, and the full test suite after the tap-schema revert; all still pass.",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [

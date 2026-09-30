@@ -1,0 +1,17 @@
+{
+  "bot": "bot-05-infrastructure",
+  "task": "SPE/Ove-GO: run programming-desk Quality Gates on org VPS self-hosted runner srv1778002",
+  "date": "2026-09-30",
+  "claim": "Workflows gates.yml, gates-template-sync.yml, and ci template use runs-on [self-hosted, Linux, X64] instead of ubuntu-latest so jobs bypass GitHub-hosted billing block",
+  "evidence": [
+    "VPS service actions.runner.swcstudiospace.srv1778002.service active at /opt/actions-runner",
+    "Org-registered runner agentName srv1778002 (Default pool)",
+    "Replaced runs-on ubuntu-latest in live + template + sync workflows; live/template bodies kept identical"
+  ],
+  "rollback": {
+    "command": "revert this PR / restore runs-on: ubuntu-latest in the three workflow files",
+    "limits": "Restoring ubuntu-latest re-blocks checks while org Actions spending limit remains"
+  },
+  "destructive": false,
+  "secrets_committed": false
+}

@@ -1,5 +1,11 @@
-# IOS roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-04-ios.
-version: 1.0.0
+# IOS roster: core 8 + 15 = 23. Contract surface (QUALITY); consumer bot-04-ios.
+# NOTE (SPE-5161 QUALITY companion, bot-06-quality-security): the 15 own tools below already
+# exceed ci/gates/check_desk_integrity.py's ROSTER_MAX_TOOLS=15 ceiling once summed with the
+# 8 core tools (23 effective). This is a disclosed, known G-7 failure — see the receipt at
+# .receipts/bot-06-quality-security/spe-5161-ios-roster-companion.json for the blocker and the
+# proposed follow-up (split desk_ios_* into a contracts/tool-packs/ios-local.yaml pack, or raise
+# ROSTER_MAX_TOOLS). Not resolved here: that follow-up is outside this change's file scope.
+version: 1.1.0
 seat: bot-04-ios
 short: ios
 endpoint: /mcp/ios
@@ -109,3 +115,137 @@ tools:
         app: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
         task_id: { type: string, minLength: 3, maxLength: 120 }
         unload: { type: boolean, default: false }
+
+  # --- SPE-5161 / PR #48 local iOS tool companion (bot-04-ios/spe-5161-ios-tools-metavr, tip
+  # 7dfb11e) ----------------------------------------------------------------------------------
+  # All eight run on Linux against files already on disk, or a MetaVR executable of the exact
+  # given name found on PATH. None boots a Simulator, invokes xcodebuild, or submits to the App
+  # Store; see ios/tools/IOS_TOOLS.md on that branch for the underlying CLI these wrap.
+  - name: desk_ios_plist_lint
+    kind: read
+    gates: []
+    description: >-
+      Lint an Info.plist already on disk: blank usage-description strings, and an
+      always-location entitlement present without its when-in-use counterpart. Linux-safe pure
+      parse; does not invoke Xcode, xcodebuild, or a Simulator.
+    backend: ios.plist_lint
+    input:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 500 }
+        as_json: { type: boolean, default: true }
+
+  - name: desk_ios_entitlements_scan
+    kind: read
+    gates: []
+    description: >-
+      Scan .entitlements and Info.plist files under a path on disk for entitlement keys and
+      usage-description keys, or diff that inventory between diff_base and diff_head paths.
+      Filesystem-only and Linux-safe. Distinct from desk_entitlements_diff, which diffs two git
+      refs rather than two paths already checked out.
+    backend: ios.entitlements_scan
+    input:
+      type: object
+      additionalProperties: false
+      required: []
+      properties:
+        path: { type: string, minLength: 1, maxLength: 500 }
+        diff_base: { type: string, minLength: 1, maxLength: 500 }
+        diff_head: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: desk_ios_spm_test_linux
+    kind: write
+    gates: []
+    description: >-
+      Run `swift test` for a Swift package when a Swift toolchain is on PATH; skips rather than
+      failing when the toolchain is missing. dry_run prints the planned command without running
+      it. Never invokes xcodebuild and never boots a Simulator.
+    backend: ios.spm_test_linux
+    input:
+      type: object
+      additionalProperties: false
+      required: [package]
+      properties:
+        package: { type: string, minLength: 1, maxLength: 500 }
+        dry_run: { type: boolean, default: false }
+
+  - name: desk_ios_snapshot_diff
+    kind: read
+    gates: []
+    description: >-
+      Hash-diff two fixture files or directories (sha256, plus width/height for PNG payloads)
+      and write the result to out. Not a pixel diff and does not render UI.
+    backend: ios.snapshot_diff
+    input:
+      type: object
+      additionalProperties: false
+      required: [before, after, out]
+      properties:
+        before: { type: string, minLength: 1, maxLength: 500 }
+        after: { type: string, minLength: 1, maxLength: 500 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: desk_ios_xcodebuild_receipt
+    kind: read
+    gates: []
+    description: >-
+      Parse a saved xcodebuild log file for its final TEST/BUILD SUCCEEDED/FAILED line, scheme,
+      destination, and error lines. Reads the log file only; does not invoke xcodebuild and does
+      not boot a Simulator.
+    backend: ios.xcodebuild_receipt
+    input:
+      type: object
+      additionalProperties: false
+      required: [log]
+      properties:
+        log: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: desk_ios_device_screenshot
+    kind: read
+    gates: []
+    description: >-
+      Capture a device screenshot via a MetaVR `device_screenshot` executable found on PATH by
+      that exact name. Skips (no device contacted, no stand-in image written) when the binary is
+      missing; never claims a Simulator was used.
+    backend: ios.device_screenshot
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: desk_ios_ui_dump
+    kind: read
+    gates: []
+    description: >-
+      Dump the on-device UI hierarchy via a MetaVR `ui_dump` executable found on PATH by that
+      exact name. Skips (no device contacted) when the binary is missing; never fabricates a
+      stand-in dump.
+    backend: ios.ui_dump
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }
+
+  - name: desk_ios_ui_tap
+    kind: write
+    gates: []
+    description: >-
+      Send a tap to a device via a MetaVR `ui_tap` executable found on PATH by that exact name.
+      Skips (no device contacted) when the binary is missing; never claims a tap was delivered
+      when it was not invoked.
+    backend: ios.ui_tap
+    input:
+      type: object
+      additionalProperties: false
+      required: [serial, out]
+      properties:
+        serial: { type: string, minLength: 1, maxLength: 200 }
+        out: { type: string, minLength: 1, maxLength: 500 }

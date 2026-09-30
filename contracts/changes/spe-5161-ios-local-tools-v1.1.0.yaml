@@ -1,0 +1,22 @@
+change_id: spe-5161-ios-local-tools-v1.1.0
+proposed_by: bot-06-quality-security
+surface: contracts/tool-rosters/ios.yaml
+
+breaking: false
+version: 1.1.0
+previous_version: 1.0.0
+
+summary: >
+  Additive: appends 8 desk_ios_* local/MetaVR tools (plist_lint, entitlements_scan,
+  spm_test_linux, snapshot_diff, xcodebuild_receipt, device_screenshot, ui_dump, ui_tap) to the
+  ios roster, wrapping the Linux-safe CLI added in SPE-5161 / PR #48
+  (bot-04-ios/spe-5161-ios-tools-metavr, tip 7dfb11e). No existing tool, field or endpoint is
+  renamed or removed; desk_entitlements_diff is unchanged and stays distinct from the new
+  desk_ios_entitlements_scan. KNOWN ISSUE: the roster now carries 15 own tools, which with the
+  8 core tools totals 23 effective tools against ci/gates/check_desk_integrity.py's
+  ROSTER_MAX_TOOLS=15 ceiling (G-7). That capacity fix (split into a tool-pack, or raise the
+  ceiling) is out of scope for this change document and is tracked in the accompanying receipt.
+
+semantic_changes: []
+
+acknowledgements: []

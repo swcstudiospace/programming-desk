@@ -1,0 +1,107 @@
+{
+  "task_id": "infra-desk-gate-install-layout-2026-09-30",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/desk-gate-install-layout",
+  "pull_request": 34,
+  "started_at": "2026-09-30T05:37:00Z",
+  "completed_at": "2026-09-30T06:08:14Z",
+  "summary": "Third tip fix on #34: ensure_rsync apt-get installs rsync when missing + INSTALL.md docs (4141292737); receipt evidence remains real (4141252913 \u2014 GH thread reply+resolve). DESK_GATE_USER unset; approved_by null until Path B.",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "bash -n infra/desk-gateway/install.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "OK"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/desk-gateway/install.sh infra/desk-gateway/desk-gateway.service infra/desk-gateway/gateway.env.example infra/desk-gateway/INSTALL.md .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.json .receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.md",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS \u2014 bot-05-infrastructure: 6 file(s) within owned paths"
+    },
+    {
+      "cmd": "grep -nE 'ensure_rsync|apt-get install -y rsync|Dependencies \\(root install\\)' infra/desk-gateway/install.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "10:# Dependencies (root install): uv at /root/.local/bin/uv, systemd, curl, and rsync.\n12:# If missing, this script runs: apt-get install -y rsync\n34:ensure_rsync() {\n46:  DEBIAN_FRONTEND=noninteractive apt-get install -y rsync\n55:  ensure_rsync"
+    },
+    {
+      "cmd": "grep -n rsync infra/desk-gateway/INSTALL.md",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "16:| `rsync` | **Required** to sync/prune `/opt/programming-desk` (`rsync -a --delete`). If missing, `install.sh` runs `apt-get install -y rsync`. |"
+    },
+    {
+      "cmd": "grep -nE 'compile\\(p.read_text|py_compile' infra/desk-gateway/install.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "195:  'import pathlib, sys; p = pathlib.Path(sys.argv[1]); compile(p.read_text(encoding=\"utf-8\"), str(p), \"exec\")' \\"
+    },
+    {
+      "cmd": "grep -nE 'rsync -a --delete|tar cf' infra/desk-gateway/install.sh",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "59:  rsync -a --delete \\"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "install.sh passes bash -n after the tip fix.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Touched INFRA paths including INSTALL.md remain inside bot-05-infrastructure ownership (G-1 PASS).",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "install.sh documents rsync as a dependency and apt-get installs it via ensure_rsync when missing (4141292737).",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "infra/desk-gateway/INSTALL.md lists rsync as a required dependency with apt-get install behavior.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Gate probe still uses in-memory compile(read_text); py_compile absent (4141252895).",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Sync still uses rsync -a --delete with no tar fallback (4141252905).",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "Live VPS not re-installed in this tip \u2014 operator must rerun infra/desk-gateway/install.sh after merge",
+    "services/desk-gateway config.py default repo_dir still /root/... \u2014 SYSTEMS carry-forward",
+    "DESK_GATE_USER privilege drop still disabled until a follow-up enable ticket",
+    "approved_by remains null until QUALITY Path B after tip_match CLEAR"
+  ],
+  "files_changed": [
+    "infra/desk-gateway/install.sh",
+    "infra/desk-gateway/desk-gateway.service",
+    "infra/desk-gateway/gateway.env.example",
+    "infra/desk-gateway/INSTALL.md",
+    ".receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.json",
+    ".receipts/bot-05-infrastructure/infra-desk-gate-install-layout-2026-09-30.md"
+  ],
+  "destructive": false,
+  "secrets_committed": false,
+  "p1s_addressed": [
+    "4141126594",
+    "4141208698",
+    "4141208705",
+    "4141208711",
+    "4141252895",
+    "4141252905",
+    "4141252913",
+    "4141292737"
+  ],
+  "p2s_addressed": [
+    "4141208714",
+    "4141208717",
+    "4141208723"
+  ],
+  "p1s_deferred": []
+}

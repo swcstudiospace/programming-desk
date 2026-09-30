@@ -25,7 +25,11 @@ WorkingDirectory=/opt/programming-desk
 EnvironmentFile=-/etc/desk-lease-heartbeat/heartbeat.env
 # STUB: SYSTEMS entrypoint, not yet present.
 ExecStart=/opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat renew
-# Bounded so a hung renewal cannot hold the timer's next tick. Keep below LEASE_INTERVAL_S.
+# PLACEHOLDER — generate from LEASE_TIMEOUT_S at install time, the same way the timer's
+# OnUnitActiveSec is generated from LEASE_INTERVAL_S. A fixed literal here is wrong as soon as
+# SYSTEMS picks an interval below it: at LEASE_INTERVAL_S=15 this 30s would let a hung renewal
+# occupy the next two ticks, which is exactly the recovery guarantee LEASE-HEARTBEAT.md §3
+# claims. systemd cannot read it from the EnvironmentFile, so the installer must write it.
 TimeoutStartSec=30
 NoNewPrivileges=true
 PrivateTmp=true

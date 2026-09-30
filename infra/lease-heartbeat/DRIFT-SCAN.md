@@ -66,15 +66,33 @@ nothing, opens no authenticated connection, and writes no file.
 ```
 
 Env inputs (`lease-heartbeat.env.example`): `DRIFT_REPO_DIR`, `DRIFT_GIT_REMOTE`,
-`DRIFT_GIT_BRANCH`, `DRIFT_REACH_TARGETS`, `DRIFT_PROBE_TIMEOUT_S`.
+`DRIFT_GIT_BRANCH`, `DRIFT_REACH_TARGETS`, `DRIFT_PROBE_TIMEOUT_S`, `DRIFT_GIT_TIMEOUT_S`.
 
 ### Exit status is about the probe, not the result
 
-**0** means every probe ran and the JSON is complete. An unreachable target is `"reachable": false`
-with exit **0** — "the desk cannot see Greptime" is an answer `drift_scan` needs, not a script
-failure, and collapsing the two would make an outage indistinguishable from a broken probe.
-Non-zero means a probe could not be attempted (bad arguments, no such checkout) and the JSON must
-not be trusted.
+| Exit | Meaning |
+|---|---|
+| **0** | Every probe ran; trust the JSON. An unreachable target is `"reachable": false` **with exit 0** — "the desk cannot see Greptime" is an answer `drift_scan` needs, not a script failure, and collapsing the two would make an outage indistinguishable from a broken probe. |
+| **2** | Usage error. |
+| **3** | A probe could not be **attempted**: no such checkout, an empty target list, or a malformed target. |
+
+The empty-target case is why 3 exists separately. An empty `DRIFT_REACH_TARGETS` would otherwise
+exit 0 with `"targets": []`, so a misconfiguration that checked *no plane at all* would read
+exactly like a clean reachability result — the one confusion a drift scan cannot afford. A
+malformed target is counted the same way: it is reported in its own object with `"probed": false`
+so the well-formed targets beside it still get probed, but it is never silently forgiven.
+
+Every level carries the same answer in the JSON as `ok`, plus `targets_requested` and
+`targets_malformed` on the reachability probe, so a caller that parses the output does not have to
+shell out to learn whether to trust it.
+
+### Bounded, always
+
+`git ls-remote` has no timeout of its own, so it gets `DRIFT_GIT_TIMEOUT_S` (default:
+`DRIFT_PROBE_TIMEOUT_S`) and runs with `GIT_TERMINAL_PROMPT=0` and ssh `BatchMode=yes`. Unbounded,
+an unresponsive git remote hangs `all` *before* the reachability half starts, so a stalled git
+server would present as a stalled desk. A timed-out lookup is a probe **result**, not a probe that
+could not be attempted: `relation` stays `unknown`, `note` says it timed out, and the exit stays 0.
 
 ### `relation` and the deliberate `unknown_no_fetch`
 
@@ -107,21 +125,27 @@ the host the substrate is actually pointed at.
 {
   "drift_probe": 1,
   "checked_at": "2026-09-30T00:00:00Z",
+  "ok": true,
   "git_tip": {
     "probe": "git_tip", "ok": true, "repo_dir": "/opt/programming-desk",
     "branch": "main", "local_tip": "<sha>", "dirty": false,
     "remote": "origin", "remote_branch": "main", "remote_tip": "<sha>",
-    "relation": "same|ahead|behind|diverged|unknown_no_fetch|unknown"
+    "relation": "same|ahead|behind|diverged|unknown_no_fetch|unknown",
+    "note": ""
   },
   "reachability": {
-    "probe": "reachability", "timeout_s": 5,
+    "probe": "reachability", "timeout_s": 5, "ok": true,
+    "targets_requested": 2, "targets_malformed": 0,
     "targets": [
       { "target": "host:port", "host": "host", "port": 4000,
-        "reachable": true, "latency_ms": 9 }
+        "reachable": true, "probed": true, "latency_ms": 9 }
     ]
   }
 }
 ```
+
+The top-level `ok` is false whenever either sub-probe could not be attempted, and the script exits
+3 in the same case — one answer, available to a caller that parses and to one that checks `$?`.
 
 This is INFRA's suggestion for what `coord.drift_scan(repo)` consumes, offered so SYSTEMS has
 something concrete to accept or reject. It is **not** a contract change: the tool rosters under

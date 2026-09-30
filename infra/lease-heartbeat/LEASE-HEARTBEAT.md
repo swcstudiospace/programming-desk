@@ -78,20 +78,28 @@ against the same lease. The wrapper must source the env file because cron has no
 ## 3. Cadence invariant
 
 ```
-LEASE_TIMEOUT_S  <  LEASE_INTERVAL_S  <=  LEASE_TTL_S / 3
+LEASE_TIMEOUT_S   <   LEASE_INTERVAL_S
+LEASE_INTERVAL_S  +   LEASE_JITTER_S   <=   LEASE_TTL_S / 3
 ```
 
-- **`INTERVAL <= TTL/3`** so two consecutive missed renewals do not expire a live lease. One missed
-  tick is a network blip; three is a dead holder. At `INTERVAL = TTL/2` a single slow tick plus one
-  blip loses a lease the seat still holds, and the seat finds out by having its claim taken.
+- **`INTERVAL + JITTER <= TTL/3`** so two consecutive missed renewals do not expire a live lease.
+  One missed tick is a network blip; three is a dead holder. At `INTERVAL = TTL/2` a single slow
+  tick plus one blip loses a lease the seat still holds, and the seat finds out by having its
+  claim taken.
+  **The jitter is inside the bound, not on top of it.** `RandomizedDelaySec` is added to every
+  tick, so bounding `INTERVAL` alone and then adding jitter puts the real gap past a third of the
+  TTL at the permitted boundary — the margin is gone before the renewal starts. Jitter is part of
+  the cadence, so it is part of the invariant.
 - **`TIMEOUT < INTERVAL`** so a hung renewal cannot eat the tick that would have recovered from it.
-  `TimeoutStartSec` in the unit is the backstop for the same reason.
-- `LEASE_JITTER_S` / `RandomizedDelaySec` spread the ticks. Seven seats restarted together
-  otherwise renew in lockstep forever, which turns one substrate hiccup into seven lost leases.
+- `LEASE_JITTER_S` exists because seven seats restarted together otherwise renew in lockstep
+  forever, which turns one substrate hiccup into seven lost leases.
 
-systemd cannot read an interval out of an `EnvironmentFile`, so the timer's `OnUnitActiveSec` is
-**generated from `LEASE_INTERVAL_S`** at install time rather than hand-maintained. A hand-edited
-timer and an env file disagreeing about the interval is a TTL nobody can compute from the repo.
+systemd cannot read any of these out of an `EnvironmentFile`, so **all three unit literals are
+generated at install time**, never hand-maintained: `OnUnitActiveSec` from `LEASE_INTERVAL_S`,
+`RandomizedDelaySec` from `LEASE_JITTER_S`, and `TimeoutStartSec` from `LEASE_TIMEOUT_S`. A
+hand-edited unit and an env file disagreeing about the cadence is a TTL nobody can compute from
+the repo — and a `TimeoutStartSec` left at a fixed literal silently breaks the `TIMEOUT < INTERVAL`
+guarantee the moment SYSTEMS picks a shorter interval.
 
 ## 4. Why there is no `install.sh` yet
 
@@ -105,9 +113,13 @@ Install once SYSTEMS lands the entrypoint. At that point the installer, matching
 1. Create `/etc/desk-lease-heartbeat/heartbeat.env` from `lease-heartbeat.env.example` **once**,
    `0600 root:root`, and never overwrite it — an installer that rewrites a live env file is an
    installer that drops the token on upgrade.
-2. Refuse to proceed when `LEASE_TTL_S` or `LEASE_INTERVAL_S` is empty, or when the §3 invariant
-   does not hold. Guessing a cadence means a lease expiring at a time nobody agreed to.
-3. Generate `OnUnitActiveSec` from `LEASE_INTERVAL_S` rather than shipping the placeholder.
+2. Refuse to proceed when `LEASE_TTL_S`, `LEASE_INTERVAL_S`, `LEASE_TIMEOUT_S` or `LEASE_JITTER_S`
+   is empty, or when **either** §3 inequality fails — including the jitter term. Guessing a
+   cadence means a lease expiring at a time nobody agreed to.
+3. Generate all three unit literals rather than shipping the placeholders: `OnUnitActiveSec` from
+   `LEASE_INTERVAL_S`, `RandomizedDelaySec` from `LEASE_JITTER_S`, and `TimeoutStartSec` from
+   `LEASE_TIMEOUT_S`. Leaving any of them at its literal is how the §3 guarantee quietly stops
+   holding.
 4. `mkdir -p /var/lib/desk-lease-heartbeat` (matching `ReadWritePaths=` in the unit) for
    `LEASE_STATE_DIR`.
 5. `systemctl enable --now desk-lease-heartbeat.timer`, then verify with `systemctl list-timers`

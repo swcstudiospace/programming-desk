@@ -3,11 +3,19 @@
 # OnUnitActiveSec, not OnCalendar: the interval is "since the last renewal finished", which is what
 # a lease TTL is measured against. OnCalendar would drift against a renewal that took 20s.
 #
-# The literal below is a PLACEHOLDER cadence for review, not an agreed value. SYSTEMS owns
-# LEASE_TTL_S and LEASE_INTERVAL_S (see lease-heartbeat.env.example); systemd cannot read an
-# interval from an EnvironmentFile, so whoever installs this generates the timer from
-# LEASE_INTERVAL_S rather than hand-editing it out of sync with the env. The invariant that must
-# hold: OnUnitActiveSec <= LEASE_TTL_S / 3.
+# Both literals below are PLACEHOLDER values for review, not agreed ones. SYSTEMS owns
+# LEASE_TTL_S, LEASE_INTERVAL_S and LEASE_JITTER_S (see lease-heartbeat.env.example); systemd
+# cannot read an interval from an EnvironmentFile, so whoever installs this generates both from
+# the env rather than hand-editing them out of sync with it.
+#
+# The invariant that must hold is on the SUM, not on OnUnitActiveSec alone:
+#
+#     OnUnitActiveSec + RandomizedDelaySec  <=  LEASE_TTL_S / 3
+#
+# RandomizedDelaySec is added to each tick, so at the permitted boundary
+# LEASE_INTERVAL_S = LEASE_TTL_S / 3 the real gap is INTERVAL + JITTER — already past a third of
+# the TTL before the renewal even starts, which eats the margin the third-of-TTL rule exists to
+# buy. Jitter is part of the cadence, so it is part of the invariant. LEASE-HEARTBEAT.md §3.
 
 [Unit]
 Description=Renew the Programming Desk seat lease (SPE-4792)
@@ -17,7 +25,8 @@ Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT
 OnBootSec=30
 # PLACEHOLDER — generate from LEASE_INTERVAL_S at install time.
 OnUnitActiveSec=60
-# Spread ticks so N seats restarted together do not renew in lockstep.
+# PLACEHOLDER — generate from LEASE_JITTER_S. Spreads ticks so N seats restarted together do not
+# renew in lockstep; counted against the invariant above, never added on top of it.
 RandomizedDelaySec=5
 AccuracySec=1s
 # A missed window (host asleep, unit masked) renews on resume instead of waiting for the next slot.

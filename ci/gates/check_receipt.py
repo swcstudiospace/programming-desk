@@ -75,11 +75,26 @@ MISSING_TARGET_RE = re.compile(
     re.IGNORECASE,
 )
 
+# A quoted argument is the text a command searches FOR, not text describing what happened
+# when it ran — `grep "not found" build.log` exiting 1 means "not found" appears nowhere in
+# build.log, which is valid negative evidence, not a missing-target error. Stripped out
+# before MISSING_TARGET_RE looks at the command text itself (Greptile P1, PR #45, "Search
+# text mistaken for error").
+_QUOTED_RE = re.compile(r'"(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'')
+
+
+def _strip_quoted(text: str) -> str:
+    return _QUOTED_RE.sub("", text)
+
+
 # A command that only tests whether a path exists (test -e/-f, [ -e/-f ], stat, a bare ls)
 # never looks at content, so it cannot be the "whole scope searched" evidence an exhaustive
-# content claim needs, however its exit code lands.
+# content claim needs, however its exit code lands. Anchored end-to-end so a command that
+# CHAINS a real content search after the existence check — `test -f X && grep ... X` failing
+# because grep found nothing in an X that does exist — is not misread as existence-only just
+# because it starts with one (Greptile P1, PR #45, "Compound content searches rejected").
 EXISTENCE_ONLY_RE = re.compile(
-    r"^\s*(?:test\s+-[a-z]\s|\[\s+-[a-z]\s|stat\s|ls\s+[^|;&]*$)",
+    r"^\s*(?:test\s+-[a-z]\s+\S+|\[\s+-[a-z]\s+\S+\s+\]|stat\s+\S+|ls\s+[^|;&]*)\s*$",
     re.IGNORECASE,
 )
 
@@ -238,7 +253,9 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
                     output_tail = (
                         str(cited.get("output_tail", "")) if isinstance(cited, dict) else ""
                     )
-                    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(cmd_text):
+                    if MISSING_TARGET_RE.search(output_tail) or MISSING_TARGET_RE.search(
+                        _strip_quoted(cmd_text)
+                    ):
                         problems.append(
                             f"claim[{i}] {text!r} sets expects_failure and asserts "
                             f"exhaustiveness, but command[{idx}]'s evidence reads as the "

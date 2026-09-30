@@ -182,13 +182,22 @@ def run_candidate_gate(script: str, *args: str) -> subprocess.CompletedProcess:
         pytest.fail(message)
 
     if not NETWORK_ISOLATION_AVAILABLE:
-        pytest.fail(
+        # Missing kernel support for unprivileged user/network namespaces is a HOST property,
+        # not something a PR's diff can control — unlike a missing candidate (which a
+        # malicious PR could engineer on purpose), no attacker can make a runner's kernel stop
+        # supporting unshare(). So degrading this to a skip does not reopen the "quietly pass
+        # an untrusted candidate" hole _candidate_gate_unavailable_reason() guards against: it
+        # still means "the candidate never ran unsandboxed", it just stops a runner that simply
+        # lacks this kernel feature from permanently red-lining the whole required
+        # gate-self-test suite (Greptile P1, PR #45, "Namespace prerequisite blocks builds").
+        pytest.skip(
             "cannot create an unprivileged network namespace (unshare -r -n) on this host — "
-            "refusing to run PR-controlled ci/gates/ code from HEAD without it. A self-hosted "
+            "refusing to run PR-controlled ci/gates/ code from HEAD without it, so this "
+            "candidate-gate check is skipped rather than executed unsandboxed. A self-hosted "
             "runner is shared infrastructure; resource limits alone do not stop a malicious "
             "gate script from reaching the network. Enable unprivileged user+network "
-            "namespaces on the runner (kernel.unprivileged_userns_clone=1) to unblock this "
-            "required check."
+            "namespaces on the runner (kernel.unprivileged_userns_clone=1) to exercise this "
+            "check for real."
         )
 
     workdir = Path(tempfile.mkdtemp(prefix="gate-sandbox-"))
@@ -530,6 +539,45 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "exist" in r.stderr.lower()
 
+    def test_expects_failure_search_needle_is_not_mistaken_for_missing_target(self, tmp_path):
+        """A grep whose PATTERN happens to be "not found" (or "does not exist") is searching
+        FOR that literal text, not reporting that its own target is missing. Exiting 1 there
+        means the phrase appears nowhere in the file — valid exhaustive negative evidence,
+        not a missing-target error (Greptile P1, PR #45, "Search text mistaken for error").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "grep -c 'not found' build.log", "exit_code": 1,
+                 "output_tail": "0"},
+            ],
+            claims=[
+                {"claim": "every line in build.log is free of 'not found' errors",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
+    def test_expects_failure_compound_content_search_is_exhaustive_evidence(self, tmp_path):
+        """`test -f X && grep ... X` fails when X exists but the grep finds nothing — that is
+        a real content search, not a bare existence check, even though it starts with one
+        (Greptile P1, PR #45, "Compound content searches rejected").
+        """
+        p = write_receipt(
+            tmp_path,
+            commands=[
+                {"cmd": "test -f .env.example && grep -c '=[^=]' .env.example",
+                 "exit_code": 1},
+            ],
+            claims=[
+                {"claim": "every value in .env.example is still empty",
+                 "evidence_command_index": 0, "expects_failure": True},
+            ],
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p), "--strict")
+        assert r.returncode == 0, r.stderr
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)
@@ -547,8 +595,15 @@ class TestCandidateGateTrust:
         """This repo checkout has .git/, so a missing candidate here can only mean
         extraction itself failed (e.g. HEAD has no ci/gates/) — that must fail the required
         check, not skip it open for a PR that deletes ci/gates/.
+
+        This assertion only applies when .git/ is actually present; a bare source export
+        (no .git/ at all) is the legitimate skip case _candidate_gate_unavailable_reason()
+        itself carves out, so this test skips rather than assert-failing on one (Greptile P2,
+        PR #45, "source export without .git").
         """
-        assert _has_git()
+        if not _has_git():
+            pytest.skip("no .git/ present; cannot exercise the git-present fail-closed path "
+                        "(e.g. a bare source export)")
         message, is_skip = _candidate_gate_unavailable_reason()
         assert is_skip is False
         assert "must not" in message
@@ -557,15 +612,18 @@ class TestCandidateGateTrust:
         result = _probe_network_isolation()
         assert isinstance(result, bool)
 
-    def test_run_candidate_gate_fails_closed_without_network_isolation(self, monkeypatch):
+    def test_run_candidate_gate_skips_closed_without_network_isolation(self, monkeypatch):
         """When the host can't provide network isolation, run_candidate_gate() must refuse
         to execute the candidate at all rather than silently falling back to running it
-        unisolated.
+        unisolated. It degrades to a skip, not a hard failure, so a runner that simply lacks
+        kernel support for unprivileged user/network namespaces doesn't permanently block the
+        required gate-self-test suite (Greptile P1, PR #45, "Namespace prerequisite blocks
+        builds") — the candidate still never runs unsandboxed either way.
         """
         if CANDIDATE_GATES is None:
             pytest.skip("no candidate extracted in this environment")
         monkeypatch.setattr(sys.modules[__name__], "NETWORK_ISOLATION_AVAILABLE", False)
-        with pytest.raises(pytest.fail.Exception):
+        with pytest.raises(pytest.skip.Exception):
             run_candidate_gate("check_receipt.py", "--receipt", "/dev/null")
 
     def test_extract_candidate_gates_registers_cleanup(self, monkeypatch):

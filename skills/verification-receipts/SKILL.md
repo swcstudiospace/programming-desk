@@ -161,12 +161,17 @@ human reviewer (`approved_by`) to judge, the same as any other evidence-matching
 
 Being the receipt's only command is necessary but not sufficient: the gate also rejects the two
 shapes of thin evidence that pattern most often. A failure that reads back as the target being
-missing ("no such file or directory", "not found", ...) — in the command's own text or its
-`output_tail` — is not the same fact as "the target was searched and found empty"; "file missing"
-must never stand in for "every value empty". And a command that only tests whether a path exists
-(`test -f`, `[ -e ... ]`, `stat`, a bare `ls`) never inspects content either way, so it cannot back
-a claim about what that content is. Neither check can verify that the command's scope truly covers
-"every"/"all" — that judgment call still belongs to `approved_by`.
+missing ("no such file or directory", "not found", ...) — in `output_tail`, or in the command's own
+text outside any quoted argument — is not the same fact as "the target was searched and found
+empty"; "file missing" must never stand in for "every value empty". A quoted argument is exempted
+from that command-text check because it is what the command searches *for*, not a report of what
+happened: `grep -c "not found" build.log` exiting 1 means the phrase is nowhere in the file, which
+is exhaustive negative evidence, not a missing-target error. And a command that *only* tests
+whether a path exists (`test -f X`, `[ -e X ]`, `stat X`, a bare `ls X`, and nothing chained after
+it) never inspects content either way, so it cannot back a claim about what that content is — but a
+real content search chained onto one, like `test -f X && grep ... X`, is judged on the whole
+command, not just its existence-checking prefix. Neither check can verify that the command's scope
+truly covers "every"/"all" — that judgment call still belongs to `approved_by`.
 
 ### §3 Matching evidence to claims
 

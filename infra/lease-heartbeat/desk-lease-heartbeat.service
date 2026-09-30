@@ -1,0 +1,37 @@
+# STUB — not installed. SPE-4792 INFRA half.
+#
+# ExecStart points at a SYSTEMS-owned entrypoint that does not exist yet
+# (services/** is bot-01-systems-backend). Nothing installs this unit: there is no install.sh in
+# this directory on purpose, because a timer that fires a missing binary logs a failure every tick
+# and teaches the operator to ignore the unit. Install once SYSTEMS lands the entrypoint.
+#
+# Paired with desk-lease-heartbeat.timer. Type=oneshot: the timer owns the cadence, not a sleep
+# loop inside the process. A crashed oneshot is retried by the next tick; a crashed daemon with a
+# sleep loop is a lease that silently stops renewing.
+
+[Unit]
+Description=Programming Desk seat lease heartbeat (SPE-4792)
+Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
+After=network-online.target substrate-mcp.service
+Wants=network-online.target
+# The heartbeat talks to substrate-mcp over loopback. If the substrate is down the tick fails and
+# is retried; it is not an ordering bug, so this is Wants-level, not Requires.
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/programming-desk
+EnvironmentFile=-/etc/desk-lease-heartbeat/heartbeat.env
+# STUB: SYSTEMS entrypoint, not yet present.
+ExecStart=/opt/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat renew
+# Bounded so a hung renewal cannot hold the timer's next tick. Keep below LEASE_INTERVAL_S.
+TimeoutStartSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/desk-lease-heartbeat
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=desk-lease-heartbeat

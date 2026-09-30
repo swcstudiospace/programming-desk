@@ -21,6 +21,16 @@ gate checks for. With no recorded command and no exit code it asserted the chang
 without evidence that anything ran — the exact failure G-2 exists to catch. It would have
 failed the gate on five counts at once.
 
+A third revision arrived from a parallel run as commit `8e9d51b` while this one was being
+written. Its `approved_by` is not carried forward, and that is a deliberate disagreement
+rather than a merge accident — see [Approval](#approval). Its other three findings were
+real and are folded into [Not verified](#not-verified): the serial-queue throughput
+regression, the extra `ai-cluster` label on the runner registration, and billing being
+routed around rather than fixed. Its runner-service check is recorded under
+`evidence.service_state` as a second-hand report, because the command embedded the VPS IP
+address and neither CI nor this container can re-execute it — and a command nobody can
+re-run is not the evidence G-2 asks for.
+
 ## Why
 
 The org's GitHub spending limit is exhausted, so every GitHub-hosted job dies in about
@@ -157,7 +167,17 @@ The full list is in the JSON. What matters before anyone calls the gates restore
 4. **The runner's configuration was never inspected** — this container has no path to the VPS.
    Not whether it is ephemeral, not which user it runs as, not what else shares the host.
 5. **Whether `srv1778002` is the only runner carrying these three labels is unestablished.**
-   If another org runner matches, gate jobs may land on a host nobody has vetted.
+   If another org runner matches, gate jobs may land on a host nobody has vetted. The
+   registration reportedly also carries an `ai-cluster` label these workflows do not request,
+   so the label set is broader than the three used here and nothing pins these jobs to this
+   host specifically.
+6. **Throughput is a real regression and was not considered.** One runner serves this
+   repository serially, so concurrent pull requests queue behind whichever job holds it where
+   hosted jobs would have run in parallel. With three open pull requests already wanting
+   gates, one slow or hung job delays every other pull request's required checks.
+7. **The billing problem itself is untouched.** This routes around the exhausted spending
+   limit rather than fixing it, so any workflow still on `ubuntu-latest` keeps failing in
+   seconds.
 
 Also: open pull requests **#29** and **#30** are untouched. `pull_request` events read
 workflow files from the *head* ref, so both still request `ubuntu-latest` and keep failing
@@ -175,6 +195,23 @@ diff, so it is recorded in the receipt's `task` field rather than laundered into
 [`claude-mcp-json-hindsight-20260930T023348Z-239b2b18.json`](./claude-mcp-json-hindsight-20260930T023348Z-239b2b18.json),
 which emptied the same field after greptile P1 4140306040 correctly called a
 named-but-absent reviewer a recorded approval that never happened.
+
+### The parallel run set this field; the merge does not keep it
+
+Commit `8e9d51b` set `approved_by` to `bot-06-quality-security` while its own `unverified`
+list said *"QUALITY review of this PR not yet recorded — approved_by is the intended reviewer
+seat."* Both statements are in the same file: it records an approval and admits the approval
+did not happen.
+
+That would have turned G-2 green on a false record, which is worse than the red gate it
+replaces — a green G-2 is the signal a reviewer trusts, and this is the one failure mode G-2
+exists to catch. It is also the identical finding greptile P1 4140306040 raised against the
+mcp-json receipt, which this repository resolved by emptying the field rather than by
+defending it.
+
+So the merge keeps `null`. That is a deliberate disagreement with the other run, not a
+conflict resolved carelessly, and it is surfaced here and on the pull request for Ove rather
+than settled quietly. Everything else that run contributed was correct and is folded in.
 
 QUALITY (`bot-06-quality-security`) or Ove stamping `approved_by` is what turns G-2 green.
 Nothing else in the receipt has to change.

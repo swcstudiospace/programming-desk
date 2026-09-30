@@ -36,7 +36,10 @@ async def railway_status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
             node = edge.get("node") or {}
             instances = [(e.get("node") or {}) for e in ((node.get("serviceInstances") or {}).get("edges") or [])]
             latest = next((i.get("latestDeployment") for i in instances if i.get("latestDeployment")), None)
-            services.append({"id": node.get("id"), "name": node.get("name"), "latest_deployment": latest})
+            # Per environment as well as the first one found: "the service's current deployment"
+            # is only a well-defined thing within one environment, and a redeploy names one.
+            by_env = {i["environmentId"]: i["latestDeployment"] for i in instances if i.get("environmentId") and i.get("latestDeployment")}
+            services.append({"id": node.get("id"), "name": node.get("name"), "latest_deployment": latest, "deployments": by_env})
         out.append({"project": name, "id": project.get("id"), "services": services, "environments": [(e.get("node") or {}) for e in ((project.get("environments") or {}).get("edges") or [])]})
     if not out:
         return {"projects": [], **failure("not_configured", "no Railway project ids configured")}
@@ -82,16 +85,50 @@ async def railway_variable_names(ctx: ToolContext, args: dict[str, Any]) -> dict
 
 
 async def railway_redeploy(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Redeploy a service, but only if it is still on the deployment the caller looked at.
+
+    prior_deployment_id is the caller's evidence of what it inspected before asking for the
+    write. Echoing it back without checking made that evidence false: between the status read
+    and this call the service can have been redeployed or rolled forward by somebody else, and
+    the receipt would then claim a redeploy of a deployment that was no longer there. Compared
+    within the target environment, because that is the only scope in which "current" means
+    anything.
+
+    approval_id stays separate and unverified by design — the gateway records who claimed the
+    approval, it does not adjudicate it.
+    """
     railway = ctx.services.railway
     if not railway.http.configured:
         return failure("not_configured", "Railway API token is not configured on the gateway")
     found = await _find_service(ctx, args["project"], args["service"])
     if not found:
         return failure("not_found", "service not found")
-    result = await railway.redeploy(found["service"]["id"], found["environment_id"])
+    environment_id = found["environment_id"]
+    current = ((found["service"].get("deployments") or {}).get(environment_id)) or {}
+    current_id = current.get("id")
+    if current_id != args["prior_deployment_id"]:
+        return failure(
+            "stale_deployment",
+            f"{args['service']} is on deployment {current_id or 'unknown'}, not the "
+            f"{args['prior_deployment_id']} this call was approved against; re-read desk_railway_status "
+            "and confirm the new deployment before redeploying",
+            service_id=found["service"]["id"],
+            environment_id=environment_id,
+            current_deployment_id=current_id,
+            prior_deployment_id=args["prior_deployment_id"],
+        )
+    result = await railway.redeploy(found["service"]["id"], environment_id)
     if result.get("error"):
         return failure(result["error"], result.get("reason", "redeploy failed"))
-    return {"ok": True, "approval_id": args["approval_id"], "prior_deployment_id": args["prior_deployment_id"], "result": result.get("body")}
+    return {
+        "ok": True,
+        "approval_id": args["approval_id"],
+        "prior_deployment_id": args["prior_deployment_id"],
+        "verified_prior_deployment": True,
+        "environment_id": environment_id,
+        "result": result.get("body"),
+        "unverified": ["approval_id is recorded as given; the gateway does not verify the approval itself"],
+    }
 
 
 async def tailscale_status(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:

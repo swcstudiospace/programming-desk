@@ -669,3 +669,75 @@ async def test_play_staged_rollout_will_not_write_a_track_it_could_not_read(rpc,
     out = await rpc.call("android", "desk_play_staged_rollout", ROLLOUT)
     assert out["is_error"] is True and out["error"] == "upstream_error", out
     assert writes == [], "the track was written without being read"
+
+
+# ---------------------------------------------------------------------------
+# desk_railway_redeploy — prior_deployment_id is evidence, so it gets checked
+# ---------------------------------------------------------------------------
+
+def _railway_project(deployment_id: str) -> dict:
+    return {"ok": True, "body": {"data": {"project": {
+        "id": "proj-1",
+        "name": "ultrathink",
+        "services": {"edges": [{"node": {
+            "id": "svc-1",
+            "name": "substrate-mcp",
+            "serviceInstances": {"edges": [{"node": {
+                "environmentId": "env-prod",
+                "latestDeployment": {"id": deployment_id, "status": "SUCCESS"},
+            }}]},
+        }}]},
+        "environments": {"edges": [{"node": {"id": "env-prod", "name": "production"}}]},
+    }}}}
+
+
+REDEPLOY = {
+    "project": "ultrathink",
+    "service": "substrate-mcp",
+    "prior_deployment_id": "dep-aaaaaa",
+    "rollback_plan": "redeploy dep-aaaaaa, the deployment this call was approved against",
+    "approval_id": "APR-2026-0930-08",
+}
+
+
+def _stub_railway(monkeypatch, current_deployment: str, redeploys: list):
+    from desk_gateway.upstreams import Railway
+
+    async def fake_status(self, name):
+        return _railway_project(current_deployment)
+
+    async def fake_redeploy(self, service_id, environment_id):
+        redeploys.append((service_id, environment_id))
+        return {"ok": True, "body": {"data": {"serviceInstanceRedeploy": True}}}
+
+    monkeypatch.setattr(Railway, "project_id", lambda self, name: "proj-1")
+    monkeypatch.setattr(Railway, "project_status", fake_status)
+    monkeypatch.setattr(Railway, "redeploy", fake_redeploy)
+    _configure_upstreams(monkeypatch)
+
+
+async def test_railway_redeploy_refuses_when_the_service_moved_on(rpc, monkeypatch):
+    """prior_deployment_id was echoed back without ever being compared to anything.
+
+    It is the caller's evidence of the state it inspected, and a receipt quoting it claimed a
+    redeploy of that deployment. Between the status read and this call anything can have been
+    deployed, so the claim was unfounded and the redeploy was of whatever is there now.
+    """
+    redeploys: list = []
+    _stub_railway(monkeypatch, "dep-zzzzzz", redeploys)
+
+    out = await rpc.call("infra", "desk_railway_redeploy", REDEPLOY)
+    assert out["is_error"] is True, out
+    assert out["error"] == "stale_deployment", out
+    assert out["current_deployment_id"] == "dep-zzzzzz" and out["prior_deployment_id"] == "dep-aaaaaa"
+    assert redeploys == [], "the redeploy went ahead against a deployment nobody approved"
+
+
+async def test_railway_redeploy_proceeds_when_the_prior_deployment_still_stands(rpc, monkeypatch):
+    redeploys: list = []
+    _stub_railway(monkeypatch, "dep-aaaaaa", redeploys)
+
+    out = await rpc.call("infra", "desk_railway_redeploy", REDEPLOY)
+    assert out["ok"] is True, out
+    assert out["verified_prior_deployment"] is True and out["environment_id"] == "env-prod"
+    assert redeploys == [("svc-1", "env-prod")]

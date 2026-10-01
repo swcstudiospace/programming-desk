@@ -1,6 +1,6 @@
-# Tool pack: SYSTEMS lease coordination (SPE-5715 SYSTEMS companion; parent SPE-4792).
-# Loaded for one ticket via desk_app_tools_load. Contract surface (QUALITY); consumer
-# bot-01-systems-backend.
+# Tool pack: lease coordination (SPE-5715 SYSTEMS companion; parent SPE-4792).
+# SYSTEMS loads it onto its main surface via desk_app_tools_load. Contract surface (QUALITY);
+# consumers bot-01-systems-backend, bot-00-programming-lead.
 #
 # contracts/tool-rosters/systems.yaml is already at 14 of the 15-tool ceiling (8 core + 6 seat;
 # ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS), and graph_heartbeat plus coord_drift_scan
@@ -14,10 +14,20 @@
 # tools `graph_heartbeat` and `coord_drift_scan` (packages/mcp-server/src/mcp.ts, lease.ts,
 # drift.ts — SPE-4792 #6) through Substrate.call_tool, the same path `lead.graph_state` already
 # uses for graph_claim/graph_release/graph_complete.
-version: 1.0.0
+#
+# `lead` in seats: (PR #59 review, Greptile P1 — LEAD cannot access coordination tools): LEAD is
+# the seat that actually runs claim -> heartbeat -> complete, so a SYSTEMS-only pack left it
+# unable to renew a lease it claimed, or to scan for drift before claiming. lead.yaml is already
+# at the 15-tool ceiling and has no `desk_app_tools_load`/`packs_allowed`, so LEAD does not merge
+# this pack onto its main surface the way SYSTEMS does; it reaches the same two tools directly at
+# the per-pack endpoint (/mcp/lead/packs/coordination), which `rosters.pack_surface()` and the
+# SeatRouter already serve from this file's own `seats:` list regardless of packs_allowed — see
+# `test_pack_endpoint_serves_only_the_pack` for the existing precedent on that path. No roster
+# file changes; this is the minimal, additive fix.
+version: 1.1.0
 app: coordination
-title: SYSTEMS lease coordination — heartbeat + drift scan
-seats: [systems]
+title: Lease coordination — heartbeat + drift scan
+seats: [systems, lead]
 tools:
   - name: coordination_graph_heartbeat
     kind: write

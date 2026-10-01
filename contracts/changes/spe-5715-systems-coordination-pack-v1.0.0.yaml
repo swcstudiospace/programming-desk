@@ -27,7 +27,7 @@ surfaces:
   - contracts/tool-rosters/lead.yaml
 
 breaking: false
-version: 1.0.0
+version: 1.1.0
 previous_version: null
 
 summary: >
@@ -52,10 +52,17 @@ summary: >
   lease_id (what graph_claim returned) instead of session_id, since that is what the substrate's
   graph_heartbeat authenticates the holder with, and additive since it is a new enum value plus
   two new optional properties on an existing tool, not a new one — lead.yaml stays at 15/15.
-  coordination_drift_scan is NOT extended to LEAD in this change: LEAD's roster is already at the
-  15-tool ceiling, so giving it desk_app_tools_load (the only way to reach a pack) means retiring
-  one of LEAD's other six tools, a roster trade-off this change does not make unilaterally. Noted
-  below as an open LEAD/QUALITY decision, not silently dropped.
+  coordination.yaml's seats: now also includes `lead` (1.0.0 -> 1.1.0; Greptile P1, PR #59: "LEAD
+  cannot access coordination tools"), the claim-owning seat that otherwise could not heartbeat a
+  lease it claimed via the pack, or scan for drift before claiming. This does NOT change lead.yaml
+  or give LEAD desk_app_tools_load/packs_allowed — its roster is already at the 15-tool ceiling,
+  and retiring one of its other six tools to make room is a trade-off this change still does not
+  make unilaterally. Instead LEAD reaches the same two pack tools directly at the per-pack
+  endpoint, /mcp/lead/packs/coordination, which contracts/tool-packs/coordination.yaml's own
+  seats: list already gates independently of packs_allowed/desk_app_tools_load (see
+  services/desk-gateway/src/desk_gateway/rosters.py's pack_surface() and the SeatRouter, and the
+  pre-existing test_pack_endpoint_serves_only_the_pack precedent). LEAD's main surface (/mcp/lead,
+  15/15) is unaffected; this is additive to the pack only.
 
   New pack surface, no prior version to either changed roster's new fields: no seat loses a tool,
   and no existing field on any pre-existing tool is renamed, narrowed or re-typed.
@@ -65,7 +72,9 @@ semantic_changes: []
 acknowledgements: []
 
 migration_note: >
-  None required. New pack, additive only, seats: [systems] — no other seat's tools/list changes.
+  None required. New pack, additive only, seats: [systems, lead] — the pack endpoint
+  (/mcp/<seat>/packs/coordination) is new for both; no existing seat's /mcp/<seat> tools/list
+  changes, including LEAD's (it never merges this pack onto its main surface).
 
 notes:
   - "Backend is real, not a placeholder: services/desk-gateway/src/desk_gateway/tools/systems.py
@@ -98,3 +107,20 @@ notes:
     here. A second exclusivity test in this PR's smoke would test the same substrate behavior
     PR #58 already covers, not anything specific to graph_heartbeat or coord_drift_scan."
   - "PR #58 (LEAD, SPE-5715 gap report, draft, do-not-edit) is left untouched."
+  - "Greptile P1 fix round (PR #59): both P1s are now resolved on this branch — Issue 1 via
+    coordination.yaml's seats: [systems, lead] (above); Issue 2 (rejected heartbeat reported as
+    ok: true) was already fixed in the prior review-fix round and is now test-covered for all
+    three rejection reasons (lost, expired, unheld), not just expired, via
+    test_coordination_graph_heartbeat_rejected_lease_is_a_failed_call."
+  - "Greptile P2s (PR #59, this round): Issues 3-5 (coordination-drift-smoke.py registration
+    ordering, attributable-findings strictness, concurrent-claim proof) are left unaddressed here
+    and flagged, not silently dropped — the fixture already straddles SYSTEMS and the lease
+    semantics PR #58's lease-cas-drift-smoke.py (LEAD-owned) covers for case (a), so hardening it
+    further on this branch risks stepping on ownership this change does not have; see the PR
+    comment on #59 for the explicit flag to QUALITY/LEAD. Issue 6 (mocked configured-substrate
+    coverage through /mcp/systems) was already done in the prior round and is unaffected. Issue 7
+    (consumers_required) needs no further change: the prior round already dropped the explicit
+    override so G-4 resolves consumers from the union of this document's surfaces, and
+    contract_consumers['contracts/tool-rosters/**'] already names every roster seat (including
+    LEAD, INFRA, QUALITY) for both contracts/tool-rosters/systems.yaml and
+    contracts/tool-rosters/lead.yaml."

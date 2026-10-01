@@ -1,5 +1,5 @@
 # LEAD roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-00-programming-lead.
-version: 1.0.0
+version: 1.1.0
 seat: bot-00-programming-lead
 short: lead
 endpoint: /mcp/lead
@@ -69,7 +69,12 @@ tools:
   - name: desk_graph_state
     kind: write
     gates: []
-    description: Claim, release or complete a graph node; mirrors Linear and the Notion Issue row through the substrate.
+    description: >-
+      Claim, release, complete or heartbeat a graph node; mirrors Linear and the Notion Issue row
+      through the substrate. heartbeat (SPE-5715) renews a lease this seat already holds and
+      requires lease_id, the one claim returned — it proves the holder the way session_id does
+      for the other three actions. ok:false (lease lost, expired or unheld) is returned as a
+      failed call, not a quiet success, so a rejected renewal is unmissable.
     backend: lead.graph_state
     input:
       type: object
@@ -78,9 +83,11 @@ tools:
       properties:
         graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
         node_id: { type: string, pattern: "^n[1-8]$" }
-        action: { type: string, enum: [claim, release, complete] }
+        action: { type: string, enum: [claim, release, complete, heartbeat] }
         surface: { type: string, pattern: "^[a-z][a-z0-9-]{1,40}$" }
         note: { type: string, maxLength: 1000 }
+        lease_id: { type: string, minLength: 1, maxLength: 200 }
+        ttl_seconds: { type: integer, minimum: 30, maximum: 86400 }
 
   - name: desk_bus_start_job
     kind: write

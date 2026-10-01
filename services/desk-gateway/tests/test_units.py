@@ -26,7 +26,16 @@ def test_rosters_load_from_contracts():
         assert "desk_brief" in seat.tools and "desk_doctor" in seat.tools
     assert rosters.seats["lead"].tools["desk_intake_next"]
     assert "desk_intake_next" not in rosters.seats["ios"].tools
-    assert set(rosters.packs) == {"kanbanos", "desklanes", "clippyos"}
+    # Computed from each pack file's own `app:` field, not a hardcoded list or the filename
+    # (ios-local.yaml declares app: ioslocal — the two are not the same string): the hardcoded
+    # form went stale across the SPE-5160/5161 android/ios pack additions and was never caught
+    # until SPE-5715 added another pack and this assertion was looked at again.
+    import yaml as _yaml
+    expected_apps = {
+        _yaml.safe_load(p.read_text())["app"]
+        for p in (REPO / "contracts" / "tool-packs").glob("*.yaml")
+    }
+    assert set(rosters.packs) == expected_apps
     assert len(rosters.surface("ios", ["kanbanos"])) == 20
 
 

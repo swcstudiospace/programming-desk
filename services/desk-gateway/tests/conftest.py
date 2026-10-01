@@ -111,8 +111,8 @@ class Rpc:
         assert resp.status_code == 200, resp.text
         return [t["name"] for t in resp.json()["result"]["tools"]]
 
-    async def call(self, seat: str, name: str, args: dict, key: str | None = None) -> dict:
-        resp = await self.raw(seat, key or PASS[seat], "tools/call", {"name": name, "arguments": args})
+    async def call(self, seat: str, name: str, args: dict, key: str | None = None, path: str | None = None) -> dict:
+        resp = await self.raw(seat, key or PASS[seat], "tools/call", {"name": name, "arguments": args}, path=path)
         assert resp.status_code == 200, resp.text
         result = resp.json()["result"]
         return {"is_error": result.get("isError", False), **(result.get("structuredContent") or {})}

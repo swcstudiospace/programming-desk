@@ -1,0 +1,134 @@
+# Contract change: new SYSTEMS tool pack exposing graph_heartbeat + coord_drift_scan
+# (SPE-5715, parent SPE-4792). SYSTEMS companion to the gap report in draft PR #58 (LEAD), which
+# found neither tool wired anywhere in programming-desk — not in docs/upgrade-plan-desk-v2.md's
+# 13-tool substrate list, not in any contract, not in any gateway module — and declined to
+# invent signatures or a drift-kind vocabulary rather than fabricate them. PR #58 is left
+# untouched by this change; it stays as the record of what was unknown before the signatures
+# below were confirmed.
+#
+# Signatures and the DriftKind enum below are copied verbatim from
+# swcstudiospace/agent-substrate@main packages/mcp-server/src/mcp.ts, lease.ts and drift.ts
+# (SPE-4792 #6), as confirmed by the ticket requester outside this session's GitHub access
+# (scoped to swcstudiospace/programming-desk only). This session did not and could not
+# independently re-derive them from agent-substrate; see the receipt for exactly what was and
+# was not checked directly.
+#
+# Verify before merging:
+#   python3 ci/gates/check_contracts.py --base origin/main \
+#       --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml
+#   python3 ci/gates/check_desk_integrity.py
+
+change_id: spe-5715-systems-coordination-pack-v1.0.0
+proposed_by: bot-01-systems-backend
+
+surface: contracts/tool-packs/coordination.yaml
+surfaces:
+  - contracts/tool-rosters/systems.yaml
+  - contracts/tool-rosters/lead.yaml
+
+breaking: false
+version: 1.1.0
+previous_version: null
+
+summary: >
+  Adds a new SYSTEMS-only tool pack, contracts/tool-packs/coordination.yaml, exposing two tools
+  — coordination_graph_heartbeat and coordination_drift_scan — backed by the agent-substrate MCP
+  tools graph_heartbeat and coord_drift_scan (SPE-4792 #6). A pack rather than a direct
+  contracts/tool-rosters/systems.yaml addition for those two tools, because that roster is
+  already at 14 of the 15-tool ceiling (ROSTER_MAX_TOOLS, ci/gates/check_desk_integrity.py) and
+  both together would push it to 16; same ceiling, same fix as the SPE-5160/5161 android/ios
+  precedent (contracts/tool-packs/androidlocal.yaml). systems.yaml itself gets one small,
+  additive change instead: `desk_app_tools_load` (packs.app_tools_load, identical schema to
+  android.yaml's and ios.yaml's) plus `packs_allowed: true`, 1.0.0 -> 1.1.0, bringing it to
+  exactly 15 of 15 — SYSTEMS could not load any pack at all without this, android/ios/web being
+  the only seats that already carry it. No existing SYSTEMS tool is removed, renamed or
+  renarrowed.
+
+  Also extends lead.yaml's existing `desk_graph_state` with a fourth action, `heartbeat`
+  (1.0.0 -> 1.1.0): LEAD already holds the claim/release/complete lifecycle for a node (the same
+  tool, same backend function), and review on this change (Greptile, PR #59) correctly pointed
+  out that a SYSTEMS-only pack leaves LEAD unable to renew a lease it claimed, which breaks the
+  claim -> heartbeat -> complete loop for the seat that actually runs it today. heartbeat takes
+  lease_id (what graph_claim returned) instead of session_id, since that is what the substrate's
+  graph_heartbeat authenticates the holder with, and additive since it is a new enum value plus
+  two new optional properties on an existing tool, not a new one — lead.yaml stays at 15/15.
+  coordination.yaml's seats: now also includes `lead` (1.0.0 -> 1.1.0; Greptile P1, PR #59: "LEAD
+  cannot access coordination tools"), the claim-owning seat that otherwise could not heartbeat a
+  lease it claimed via the pack, or scan for drift before claiming. This does NOT change lead.yaml
+  or give LEAD desk_app_tools_load/packs_allowed — its roster is already at the 15-tool ceiling,
+  and retiring one of its other six tools to make room is a trade-off this change still does not
+  make unilaterally. Instead LEAD reaches the same two pack tools directly at the per-pack
+  endpoint, /mcp/lead/packs/coordination, which contracts/tool-packs/coordination.yaml's own
+  seats: list already gates independently of packs_allowed/desk_app_tools_load (see
+  services/desk-gateway/src/desk_gateway/rosters.py's pack_surface() and the SeatRouter, and the
+  pre-existing test_pack_endpoint_serves_only_the_pack precedent). LEAD's main surface (/mcp/lead,
+  15/15) is unaffected; this is additive to the pack only.
+
+  New pack surface, no prior version to either changed roster's new fields: no seat loses a tool,
+  and no existing field on any pre-existing tool is renamed, narrowed or re-typed.
+
+semantic_changes: []
+
+acknowledgements: []
+
+migration_note: >
+  None required, but one tools/list change to be precise about: SYSTEMS' main surface
+  (/mcp/systems) does gain a tool — desk_app_tools_load, 14 -> 15 effective tools — since that is
+  the only way to reach a pack at all. LEAD's main surface (/mcp/lead) does NOT change; it never
+  merges this pack and reaches it only at the dedicated pack endpoint
+  (/mcp/lead/packs/coordination), which is new for both seats. No seat loses a tool, and no
+  existing tool on any seat is renamed, narrowed or re-typed.
+
+notes:
+  - "Backend is real, not a placeholder: services/desk-gateway/src/desk_gateway/tools/systems.py
+    in this same change implements graph_heartbeat and drift_scan, calling the substrate tools
+    through Substrate.call_tool — the same path lead.graph_state already uses for
+    graph_claim/graph_release/graph_complete."
+  - "ownership.yaml is unchanged: every touched path in this change (contracts/tool-packs/**,
+    contracts/tool-rosters/**, contracts/changes/**, services/desk-gateway/**) already resolves
+    under an existing pattern to bot-06-quality-security (contract_surface: true) or
+    bot-01-systems-backend. No new ownership rule is needed, and none is added."
+  - "DriftKind vocabulary coordination_drift_scan's findings use (not enumerated in the pack's
+    input schema, since it is the substrate response shape, not this tool's input, that carries
+    it): git.tip_unlogged, ledger.commit_unknown_to_git, ledger.silent, lease.expired,
+    lease.idle, lease.orphaned, work.unclaimed, edge.requires_incomplete, edge.gate_open —
+    copied verbatim from agent-substrate drift.ts per the ticket requester; not independently
+    observed in this session."
+  - "Not done here, and deliberately: skills/desk-bootstrap/desk-production-loop/** (LEAD-owned,
+    bot-00-programming-lead) is untouched. Wiring the production loop to claim -> optional
+    drift_scan -> work -> heartbeat -> complete/handoff is LEAD's edit against this contract
+    once it merges, not a SYSTEMS one — flagged here for LEAD/QUALITY follow-up rather than
+    written under ownership bot-01 does not have."
+  - "Both graph_heartbeat backends (systems.graph_heartbeat for the pack, lead.graph_state's new
+    heartbeat action) treat a rejected renewal — the substrate answering ok: false with reason
+    lost, expired or unheld — as a failed tool call (error: lease_rejected), not a success. An
+    earlier revision of this change folded that response into a blanket ok: true; caught on
+    review (Greptile, PR #59) before merge."
+  - "Smoke coverage in this change is cases (b) expired-lease drift and (c) tip/event
+    disagreement only, per the ticket's own split: case (a) exclusivity (two concurrent
+    graph_claim calls, exactly one holder) is PR #58's lease-cas-drift-smoke.py, not duplicated
+    here. A second exclusivity test in this PR's smoke would test the same substrate behavior
+    PR #58 already covers, not anything specific to graph_heartbeat or coord_drift_scan."
+  - "PR #58 (LEAD, SPE-5715 gap report, draft, do-not-edit) is left untouched."
+  - "Greptile P1 fix round (PR #59): both P1s are now resolved on this branch — Issue 1 via
+    coordination.yaml's seats: [systems, lead] (above); Issue 2 (rejected heartbeat reported as
+    ok: true) was already fixed in the prior review-fix round and is now test-covered for all
+    three rejection reasons (lost, expired, unheld), not just expired, via
+    test_coordination_graph_heartbeat_rejected_lease_is_a_failed_call."
+  - "Greptile P2s (PR #59): Issue 3 (coordination-drift-smoke.py registration ordering —
+    graph_register before graph_claim, setup failures FAIL not SKIP) and Issue 4
+    (attributable-findings strictness — graph_id+node_id-filtered lease findings, hard FAIL
+    instead of a soft NOTE on a missing finding) were BOTH already fixed, in the round before this
+    one. Issue 5 (concurrent-claim proof) is the only one of the three left unaddressed, and
+    deliberately: it is case (a) in this ticket's own split, already covered live by PR #58's
+    lease-cas-drift-smoke.py (LEAD-owned), so duplicating it here would test the same substrate
+    CAS behavior again rather than anything specific to graph_heartbeat or coord_drift_scan —
+    Greptile agreed and withdrew that finding on the PR. A later smoke bug (the finally cleanup
+    sending tests_pass: true regardless of whether the smoke actually passed) was caught in a
+    further review round and is also fixed. Issue 6 (mocked configured-substrate coverage through
+    /mcp/systems) was already done in the prior round and is unaffected. Issue 7
+    (consumers_required) needs no further change: the prior round already dropped the explicit
+    override so G-4 resolves consumers from the union of this document's surfaces, and
+    contract_consumers['contracts/tool-rosters/**'] already names every roster seat (including
+    LEAD, INFRA, QUALITY) for both contracts/tool-rosters/systems.yaml and
+    contracts/tool-rosters/lead.yaml."

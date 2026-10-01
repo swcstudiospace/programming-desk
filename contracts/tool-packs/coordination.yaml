@@ -1,0 +1,70 @@
+# Tool pack: lease coordination (SPE-5715 SYSTEMS companion; parent SPE-4792).
+# SYSTEMS loads it onto its main surface via desk_app_tools_load. Contract surface (QUALITY);
+# consumers bot-01-systems-backend, bot-00-programming-lead.
+#
+# contracts/tool-rosters/systems.yaml is already at 14 of the 15-tool ceiling (8 core + 6 seat;
+# ci/gates/check_desk_integrity.py ROSTER_MAX_TOOLS), and graph_heartbeat plus coord_drift_scan
+# together would push it to 16 — over the ceiling, with no existing SYSTEMS tool retired to make
+# room. Same shape as the SPE-5160/5161 android/ios precedent (contracts/tool-packs/
+# androidlocal.yaml): both new tools go in a pack instead of the always-on roster.
+#
+# Unlike that precedent, the backend here is real, not a placeholder: `systems.graph_heartbeat`
+# and `systems.drift_scan` are implemented in this same change
+# (services/desk-gateway/src/desk_gateway/tools/systems.py), calling the agent-substrate MCP
+# tools `graph_heartbeat` and `coord_drift_scan` (packages/mcp-server/src/mcp.ts, lease.ts,
+# drift.ts — SPE-4792 #6) through Substrate.call_tool, the same path `lead.graph_state` already
+# uses for graph_claim/graph_release/graph_complete.
+#
+# `lead` in seats: (PR #59 review, Greptile P1 — LEAD cannot access coordination tools): LEAD is
+# the seat that actually runs claim -> heartbeat -> complete, so a SYSTEMS-only pack left it
+# unable to renew a lease it claimed, or to scan for drift before claiming. lead.yaml is already
+# at the 15-tool ceiling and has no `desk_app_tools_load`/`packs_allowed`, so LEAD does not merge
+# this pack onto its main surface the way SYSTEMS does; it reaches the same two tools directly at
+# the per-pack endpoint (/mcp/lead/packs/coordination), which `rosters.pack_surface()` and the
+# SeatRouter already serve from this file's own `seats:` list regardless of packs_allowed — see
+# `test_pack_endpoint_serves_only_the_pack` for the existing precedent on that path. No roster
+# file changes; this is the minimal, additive fix.
+version: 1.1.0
+app: coordination
+title: Lease coordination — heartbeat + drift scan
+seats: [systems, lead]
+tools:
+  - name: coordination_graph_heartbeat
+    kind: write
+    gates: []
+    description: >-
+      Renew a lease this seat already holds, via the substrate's graph_heartbeat. lease_id must
+      be the one graph_claim (desk_graph_state action: claim) returned. ok:false with reason
+      lost, expired or unheld means stop working that node rather than retry the heartbeat.
+    backend: systems.graph_heartbeat
+    input:
+      type: object
+      additionalProperties: false
+      required: [graph_id, node_id, lease_id]
+      properties:
+        graph_id: { type: string, pattern: "^ut-[a-z0-9]+-[0-9a-f]{8}$" }
+        node_id: { type: string, pattern: "^n[1-8]$" }
+        lease_id: { type: string, minLength: 1, maxLength: 200 }
+        ttl_seconds: { type: integer, minimum: 30, maximum: 86400 }
+
+  - name: coordination_drift_scan
+    kind: read
+    gates: []
+    description: >-
+      Read-only coord_drift_scan(repo) snapshot: one call, one checked_at, every finding typed
+      by DriftKind (agent-substrate drift.ts). Reports only — does not claim, release or alter
+      anything. Call before the first claim of a turn and gate on its findings, not on silence:
+      an unavailable plane is reported, never folded into an empty result.
+    backend: systems.drift_scan
+    input:
+      type: object
+      additionalProperties: false
+      required: [repo]
+      properties:
+        repo: { type: string, pattern: "^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$" }
+        path: { type: string, maxLength: 500 }
+        git_tip: { type: string, pattern: "^[0-9a-f]{7,40}$" }
+        branch: { type: string, maxLength: 200 }
+        idle_seconds: { type: integer, minimum: 60 }
+        limit: { type: integer, minimum: 1, maximum: 2000 }
+        format: { type: string, enum: [json, text] }

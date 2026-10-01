@@ -12,9 +12,9 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from tests.conftest import INTAKE_TOKEN, MCP_HEADERS, PASS
+from tests.conftest import INTAKE_TOKEN, MCP_HEADERS, PASS, REPO
 
-EXPECTED = {"lead": 15, "systems": 14, "web": 15, "android": 15, "ios": 15, "infra": 15, "quality": 15}
+EXPECTED = {"lead": 15, "systems": 15, "web": 15, "android": 15, "ios": 15, "infra": 15, "quality": 15}
 
 
 async def test_health(client):
@@ -22,7 +22,14 @@ async def test_health(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["service"] == "desk-gateway" and body["seats"]["quality"] == "/mcp/quality"
-    assert body["packs"] == ["clippyos", "desklanes", "kanbanos"]
+    # Computed from each pack file's own `app:` field (not the filename — ios-local.yaml
+    # declares app: ioslocal) rather than hardcoded. See test_units.py's matching fix.
+    import yaml as _yaml
+    expected_apps = sorted(
+        _yaml.safe_load(p.read_text())["app"]
+        for p in (REPO / "contracts" / "tool-packs").glob("*.yaml")
+    )
+    assert body["packs"] == expected_apps
 
 
 @pytest.mark.parametrize("seat", list(EXPECTED))
@@ -158,6 +165,160 @@ async def test_pack_endpoint_serves_only_the_pack(rpc):
     names = await rpc.tools("android", path="/mcp/android/packs/desklanes")
     assert names == sorted(names) or True
     assert set(names) == {"desklanes_api_smoke", "desklanes_scoreboard_get", "desklanes_push_test", "desklanes_store_listing_get", "desklanes_crash_reports"}
+
+
+async def test_coordination_pack_loads_and_calls_graph_heartbeat_and_drift_scan(rpc):
+    """SPE-5715: graph_heartbeat is write (fails closed), coord_drift_scan is read (fails open) —
+    same without-upstream contract every other backend in this suite is held to."""
+    load = await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    assert load["ok"] and load["live_tools"] == 17
+    assert set(load["tools"]) == {"coordination_graph_heartbeat", "coordination_drift_scan"}
+    assert len(await rpc.tools("systems")) == 17
+
+    out = await rpc.call("systems", "coordination_graph_heartbeat", {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is True and out["error"] == "not_configured"
+
+    out = await rpc.call("systems", "coordination_drift_scan", {"repo": "swcstudiospace/programming-desk"})
+    assert out["is_error"] is False and out["error"] == "not_configured"
+
+    names = await rpc.tools("systems", path="/mcp/systems/packs/coordination")
+    assert set(names) == {"coordination_graph_heartbeat", "coordination_drift_scan"}
+
+    # android has desk_app_tools_load (it loads its own packs) but is not in coordination.yaml's
+    # seats: [systems, lead] — the right seat to prove "declared tool, undeclared pack" with. web
+    # has no desk_app_tools_load at all, which would prove the wrong thing (unknown_tool, not
+    # forbidden).
+    out = await rpc.call("android", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    assert out["error"] == "forbidden"
+
+
+async def test_coordination_pack_is_reachable_by_lead_at_the_pack_endpoint(rpc):
+    """SPE-5715, Greptile P1 (PR #59): LEAD claims and completes nodes via desk_graph_state, so a
+    SYSTEMS-only pack left it unable to heartbeat a lease it claimed or scan for drift before
+    claiming. lead.yaml has no desk_app_tools_load/packs_allowed (already 15/15), so LEAD never
+    merges this pack onto its main surface the way SYSTEMS does — it reaches the same two tools
+    directly at /mcp/lead/packs/coordination, which coordination.yaml's own seats: now permit."""
+    names = await rpc.tools("lead", path="/mcp/lead/packs/coordination")
+    assert set(names) == {"coordination_graph_heartbeat", "coordination_drift_scan"}
+
+    out = await rpc.call("lead", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"},
+                         path="/mcp/lead/packs/coordination")
+    assert out["is_error"] is True and out["error"] == "not_configured"
+
+    out = await rpc.call("lead", "coordination_drift_scan", {"repo": "swcstudiospace/programming-desk"},
+                         path="/mcp/lead/packs/coordination")
+    assert out["is_error"] is False and out["error"] == "not_configured"
+
+    # LEAD's main surface (no pack suffix) is untouched: the pack's tools do not leak onto it.
+    assert "coordination_graph_heartbeat" not in await rpc.tools("lead")
+    assert "coordination_drift_scan" not in await rpc.tools("lead")
+
+
+async def test_coordination_graph_heartbeat_through_a_configured_substrate_as_lead(rpc, monkeypatch):
+    """Success-path regression for the LEAD pack-endpoint ACL: a renewed lease still reports
+    ok: true through /mcp/lead/packs/coordination, same as it does for SYSTEMS."""
+    calls = []
+
+    async def fake_heartbeat(args):
+        calls.append(args)
+        return {"ok": True, "content": [{"ok": True, "ttl_seconds": args.get("ttl_seconds", 900)}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    out = await rpc.call("lead", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"},
+                         path="/mcp/lead/packs/coordination")
+    assert out["is_error"] is False and out["ok"] is True
+    assert calls == [{"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"}]
+
+
+def _stub_substrate(monkeypatch, responses):
+    """responses: {tool_name: async(arguments) -> raw Substrate.call_tool-shaped result}.
+    Makes Substrate report configured without a real SUBSTRATE_URL/SUBSTRATE_TOKEN anywhere near
+    the test, the same shape _configure_upstreams gives the generic HttpUpstream-backed tools."""
+    from desk_gateway.upstreams import Substrate
+
+    async def fake_call_tool(self, name, arguments, timeout=12.0):
+        return await responses[name](arguments)
+
+    monkeypatch.setattr(Substrate, "configured", property(lambda self: True))
+    monkeypatch.setattr(Substrate, "call_tool", fake_call_tool)
+
+
+async def test_coordination_graph_heartbeat_through_a_configured_substrate(rpc, monkeypatch):
+    calls = []
+
+    async def fake_heartbeat(args):
+        calls.append(args)
+        return {"ok": True, "content": [{"ok": True, "ttl_seconds": args.get("ttl_seconds", 900)}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is False and out["ok"] is True
+    assert calls == [{"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"}]
+
+
+@pytest.mark.parametrize("reason", ["lost", "expired", "unheld"])
+async def test_coordination_graph_heartbeat_rejected_lease_is_a_failed_call(rpc, monkeypatch, reason):
+    """A rejected renewal (ok: false, reason lost/expired/unheld) is a normal substrate response,
+    not a transport error — the backend has to unwrap and check it itself (PR #59 review). Every
+    rejection reason fails the call closed, never a blanket ok: true (Greptile P1, PR #59)."""
+    async def fake_heartbeat(args):
+        return {"ok": True, "content": [{"ok": False, "reason": reason}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is True
+    assert out["error"] == "lease_rejected" and reason in out["reason"]
+
+
+async def test_coordination_drift_scan_through_a_configured_substrate(rpc, monkeypatch):
+    async def fake_drift_scan(args):
+        assert args == {"repo": "swcstudiospace/programming-desk"}
+        return {"ok": True, "content": [{"checked_at": "2026-10-01T00:00:00Z",
+                                          "findings": [{"kind": "lease.expired", "graph_id": "g1", "node_id": "n1"}]}]}
+
+    _stub_substrate(monkeypatch, {"coord_drift_scan": fake_drift_scan})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_drift_scan", {"repo": "swcstudiospace/programming-desk"})
+    assert out["is_error"] is False and out["ok"] is True
+    assert out["substrate"][0]["findings"][0]["kind"] == "lease.expired"
+
+
+async def test_lead_graph_state_heartbeat_action(rpc, monkeypatch):
+    """heartbeat (SPE-5715) proves the holder with lease_id, not session_id like the other three
+    desk_graph_state actions — LEAD can renew without SYSTEMS' coordination pack."""
+    calls = []
+
+    async def fake_heartbeat(args):
+        calls.append(args)
+        return {"ok": True, "content": [{"ok": True}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    out = await rpc.call("lead", "desk_graph_state",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat", "lease_id": "lease-1"})
+    assert out["is_error"] is False and out["ok"] is True and out["action"] == "heartbeat"
+    assert calls == [{"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"}]
+
+
+async def test_lead_graph_state_heartbeat_rejected_lease_is_a_failed_call(rpc, monkeypatch):
+    async def fake_heartbeat(args):
+        return {"ok": True, "content": [{"ok": False, "reason": "lost"}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    out = await rpc.call("lead", "desk_graph_state",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat", "lease_id": "lease-1"})
+    assert out["is_error"] is True
+    assert out["error"] == "lease_rejected" and "lost" in out["reason"]
+
+
+async def test_lead_graph_state_heartbeat_requires_lease_id(rpc):
+    out = await rpc.call("lead", "desk_graph_state", {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat"})
+    assert out["is_error"] is True and out["error"] == "invalid_args"
 
 
 async def test_doctor_register_and_check(rpc, app):

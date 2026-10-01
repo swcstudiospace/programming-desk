@@ -105,3 +105,11 @@ def resolve(backend: str) -> ToolFn:
 
 def failure(code: str, reason: str, **extra: Any) -> dict[str, Any]:
     return {"error": code, "reason": reason, **extra}
+
+
+def unwrap_content(result: dict[str, Any]) -> Any:
+    """The first parsed JSON block of a Substrate.call_tool result, or the raw content if it
+    was not a list. Call only after result.get("error") has already been checked: a
+    transport-level failure has no content worth unwrapping."""
+    content = result.get("content")
+    return content[0] if isinstance(content, list) and content else content

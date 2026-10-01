@@ -10,7 +10,7 @@ from typing import Any
 
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.repo import safe_path
-from desk_gateway.tools import ToolContext, failure
+from desk_gateway.tools import ToolContext, failure, unwrap_content
 from desk_gateway.upstreams import run_command
 
 TIER1 = {"tsjs": (".ts", ".tsx", ".js", ".jsx"), "python": (".py",), "go": (".go",)}
@@ -185,3 +185,45 @@ async def design_artifact_get(ctx: ToolContext, args: dict[str, Any]) -> dict[st
     if text is None:
         return failure("not_found", f"{args['path']} is not on origin/main")
     return {"path": args["path"], "content": text[:60000], "truncated": len(text) > 60000}
+
+
+async def graph_heartbeat(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Renew a lease this seat already holds, via the substrate's graph_heartbeat (SPE-4792,
+    agent-substrate packages/mcp-server lease.ts). lease_id must be the one graph_claim
+    (lead.graph_state, action: claim) returned — it is what proves the holder.
+
+    The substrate answers a rejected renewal (reason lost, expired or unheld) as a normal,
+    non-error MCP result whose body carries ok: false — Substrate.call_tool only sets
+    result["error"] for a transport or protocol-level failure, so that body has to be read
+    explicitly. Folding it into a blanket {"ok": True} would report, and audit, a successful
+    renewal for a lease that was not renewed."""
+    payload: dict[str, Any] = {
+        "graph_id": args["graph_id"],
+        "node_id": args["node_id"],
+        "lease_id": args["lease_id"],
+    }
+    if args.get("ttl_seconds") is not None:
+        payload["ttl_seconds"] = args["ttl_seconds"]
+    result = await ctx.services.substrate.call_tool("graph_heartbeat", payload, timeout=10)
+    if result.get("error"):
+        return failure(result["error"], result.get("reason", "graph_heartbeat failed"), detail=result.get("content"))
+    body = unwrap_content(result)
+    if isinstance(body, dict) and body.get("ok") is False:
+        return failure("lease_rejected", f"graph_heartbeat refused: {body.get('reason') or 'unknown'}", substrate=body)
+    return {"ok": True, "substrate": result.get("content")}
+
+
+async def drift_scan(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only coord_drift_scan(repo) snapshot (SPE-4792, agent-substrate drift.ts): one call,
+    one checked_at, every finding typed by the DriftKind enum. Reports only — never claims,
+    releases or alters anything. Empty findings is not the same as agreement: a snapshot whose
+    `unavailable` list is non-empty means a plane could not be read, and that is the caller's to
+    weigh, not something this backend resolves on their behalf."""
+    payload: dict[str, Any] = {"repo": args["repo"]}
+    for key in ("path", "git_tip", "branch", "idle_seconds", "limit", "format"):
+        if args.get(key) is not None:
+            payload[key] = args[key]
+    result = await ctx.services.substrate.call_tool("coord_drift_scan", payload, timeout=10)
+    if result.get("error"):
+        return failure(result["error"], result.get("reason", "coord_drift_scan failed"), detail=result.get("content"))
+    return {"ok": True, "substrate": result.get("content")}

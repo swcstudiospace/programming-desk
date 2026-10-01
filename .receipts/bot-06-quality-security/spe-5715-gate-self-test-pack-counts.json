@@ -1,0 +1,83 @@
+{
+    "task_id": "spe-5715-gate-self-test-pack-counts",
+    "bot": "bot-06-quality-security",
+    "branch": "bot-06-quality-security/spe-5715-gate-self-test-pack-counts",
+    "started_at": "2026-10-01T01:40:00Z",
+    "completed_at": "2026-10-01T01:46:42Z",
+    "commands": [
+        {
+            "cmd": "ls contracts/tool-rosters/*.yaml | wc -l",
+            "exit_code": 0,
+            "duration_s": 0.0,
+            "output_tail": "8"
+        },
+        {
+            "cmd": "ls contracts/tool-packs/*.yaml | wc -l",
+            "exit_code": 0,
+            "duration_s": 0.0,
+            "output_tail": "7"
+        },
+        {
+            "cmd": "python3 -m pytest ci/tests/test_gates.py::TestG7DeskIntegrity -v",
+            "exit_code": 0,
+            "duration_s": 4.95,
+            "output_tail": "29 passed in 4.95s"
+        },
+        {
+            "cmd": "grep -rn \"7 rosters, 5 packs\" ci/",
+            "exit_code": 1,
+            "duration_s": 0.0,
+            "output_tail": "STALE STRING GONE (no matches)"
+        },
+        {
+            "cmd": "python3 ci/gates/check_desk_integrity.py --repo . --rosters-dir contracts/tool-rosters --packs-dir contracts/tool-packs --prompts-dir /tmp/g7check/prompts --assembled-dir /tmp/g7check/assembled --templates-dir /tmp/g7check/templates",
+            "exit_code": 0,
+            "duration_s": 0.1,
+            "output_tail": "G-7 PASS — desk integrity: 7 rosters, 7 packs, 0 prompt files checked"
+        },
+        {
+            "cmd": "python3 -m pytest ci/tests/test_gates.py::TestG7DeskIntegrity -v",
+            "exit_code": 0,
+            "duration_s": 7.04,
+            "output_tail": "29 passed in 7.04s"
+        }
+    ],
+    "claims": [
+        {
+            "claim": "ci/tests/test_gates.py::TestG7DeskIntegrity::test_real_rosters_and_packs_pass no longer hardcodes '7 rosters, 5 packs'; it now computes n_rosters/n_packs from self.ROSTERS/self.PACKS, mirroring check_desk_integrity.py's rule of skipping _core.yaml for rosters and counting every *.yaml for packs",
+            "evidence_command_index": 2
+        },
+        {
+            "claim": "On current main (8 roster files incl. _core.yaml -> 7 counted rosters, 7 pack files), the dynamic assert matches check_desk_integrity.py's actual G-7 PASS output ('7 rosters, 7 packs')",
+            "evidence_command_index": 4
+        },
+        {
+            "claim": "Full TestG7DeskIntegrity suite (29 tests) passes with the change",
+            "evidence_command_index": 2
+        },
+        {
+            "claim": "The stale '7 rosters, 5 packs' substring no longer appears anywhere under ci/",
+            "evidence_command_index": 3,
+            "expects_failure": true
+        },
+        {
+            "claim": "test_real_rosters_and_packs_pass asserts both self.ROSTERS.is_dir() and self.PACKS.is_dir() before computing n_rosters/n_packs, so a disappeared contracts directory fails loudly instead of silently zero-counting; full suite re-run confirms no regression",
+            "evidence_command_index": 5
+        }
+    ],
+    "unverified": [
+        "Not independently verified against PR #59's coordination.yaml tip (8 packs); the fix is derived purely from self.ROSTERS/self.PACKS globs so it is expected to track whatever pack count exists at test time without further edits, per the dynamic-count design, but that PR's branch was not checked out or touched by this task",
+        "check_desk_integrity.py itself is unmodified; this receipt only covers the self-test assertion in ci/tests/test_gates.py"
+    ],
+    "scope": {
+        "paths_changed": [
+            "ci/tests/test_gates.py",
+            ".receipts/bot-06-quality-security/spe-5715-gate-self-test-pack-counts.json"
+        ],
+        "foreign_paths_touched": [],
+        "branches_touched": [
+            "bot-06-quality-security/spe-5715-gate-self-test-pack-counts"
+        ]
+    },
+    "approved_by": "bot-00-programming-lead"
+}

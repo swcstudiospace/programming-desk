@@ -1,0 +1,102 @@
+{
+  "task_id": "spe-5715-systems-coordination-pack",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-10-01T00:00:00Z",
+  "completed_at": "2026-10-01T00:52:34Z",
+  "branch": "bot-01-systems-backend/spe-5715-graph-heartbeat-drift-scan",
+  "summary": "SPE-5715 SYSTEMS companion (parent SPE-4792): implements and exposes graph_heartbeat and coord_drift_scan against the agent-substrate MCP server. Discovery first established that neither tool exists anywhere in programming-desk's own docs, contracts or gateway code (zero grep hits repo-wide; docs/upgrade-plan-desk-v2.md's 13-tool substrate list omits both; infra/lease-heartbeat/{LEASE-HEARTBEAT,DRIFT-SCAN}.md describe both as unresolved SYSTEMS work), matching the independent conclusion already recorded in draft PR #58 (LEAD). The ticket requester then confirmed verbatim signatures and the DriftKind enum from swcstudiospace/agent-substrate@main (packages/mcp-server/src/mcp.ts, lease.ts, drift.ts; SPE-4792 #6) outside this session's repo-scoped GitHub access (swcstudiospace/programming-desk only) — those signatures are implemented here as given, not independently re-derived against agent-substrate itself. Ships: systems.graph_heartbeat and systems.drift_scan backends calling Substrate.call_tool; a new contracts/tool-packs/coordination.yaml (seats: [systems]) rather than a direct contracts/tool-rosters/systems.yaml addition for the two tools, because that roster was already at 14 of the 15-tool ROSTER_MAX_TOOLS ceiling and both together would have pushed it to 16 (same fix as the SPE-5160/5161 android/ios precedent); one small additive edit to systems.yaml itself (desk_app_tools_load + packs_allowed: true, 1.0.0 -> 1.1.0, to exactly 15/15) since SYSTEMS could not load any pack at all without it; the companion contracts/changes/*.yaml document covering all three touched contract-surface files; gateway tests for the pack load and both tools' fails-open/fails-closed behavior with no upstream configured; and an opt-in, skip-clean-by-default live smoke (services/desk-gateway/tests/fixtures/coordination-drift-smoke.py) for cases (b) expired-lease drift and (c) tip/event disagreement, gated on DESK_COORD_SMOKE_LIVE=1 plus SUBSTRATE_URL/SUBSTRATE_TOKEN. Also fixes two pre-existing, already-stale hardcoded tool-pack-list assertions (test_server.py::test_health, test_units.py::test_rosters_load_from_contracts) in files this change already touches — both were failing on origin/main before this branch, from the SPE-5160/5161 pack additions, and are now computed from each pack file's own `app:` field instead. Deliberately not shipped: contracts/tool-rosters/** changes beyond the one additive systems.yaml edit, and skills/desk-bootstrap/desk-production-loop/** (LEAD-owned) wiring of claim -> optional drift_scan -> work -> heartbeat -> complete/handoff — flagged in the change document as LEAD/QUALITY follow-up against this contract once it merges, not written here under ownership bot-01 does not have. PR #58 (LEAD, SPE-5715 gap report, draft) is left untouched.",
+  "commands": [
+    {
+      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/src/desk_gateway/tools/systems.py').read())\"",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/tests/fixtures/coordination-drift-smoke.py').read())\"",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/coordination.yaml'))\"",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml'))\"",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    },
+    {
+      "cmd": "uv run pytest -q",
+      "exit_code": 0,
+      "cwd": "programming-desk/services/desk-gateway"
+    },
+    {
+      "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u DESK_COORD_SMOKE_LIVE python3 services/desk-gateway/tests/fixtures/coordination-drift-smoke.py",
+      "exit_code": 0,
+      "cwd": "programming-desk"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "systems.py (graph_heartbeat, drift_scan) and the new smoke script both parse as valid Python 3",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "coordination.yaml and the new change document both parse as valid YAML",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-7 passes with the new coordination pack and the updated systems.yaml: 7 rosters, 8 packs (coordination added), systems.yaml at exactly 15/15 effective tools",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-1 passes for bot-01-systems-backend over this branch's full diff; the three contract-surface files touched (coordination.yaml, systems.yaml, the change document) are flagged as a NOTE requiring G-4, not a FOREIGN failure — no file outside bot-01's or the contract-surface carve-out's ownership is touched",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-4 passes: the change document declares both touched contract surfaces (surface + surfaces), resolves consumers, and is non-breaking with semantic_changes: []",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-3 (secret scan) finds nothing across all seven touched/added files",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "the full desk-gateway suite (104 tests, including the new coordination pack test and the two drive-by fixes to pre-existing stale pack-list assertions) passes with no regressions",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "the opt-in live smoke for drift-scan cases (b)/(c) skip-cleans with exit 0 and a printed reason when DESK_COORD_SMOKE_LIVE/SUBSTRATE_URL/SUBSTRATE_TOKEN are unset, per the agreed q2 default — it was not run live in this session (no substrate-mcp available here)",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "graph_heartbeat and coord_drift_scan signatures, and the DriftKind enum, were not independently confirmed against swcstudiospace/agent-substrate by this session (out of this session's repo-scoped GitHub access); they are implemented exactly as given by the ticket requester and are only as reliable as that confirmation.",
+    "coordination-drift-smoke.py cases (b) and (c) have never been run against a live substrate-mcp in this session; only the skip-clean path (no live env) was exercised. The script's live path (claim, sleep past TTL, scan, scan with a fabricated git_tip, release) is untested beyond local syntax parsing.",
+    "no live call to coordination_graph_heartbeat or coordination_drift_scan through the deployed gateway process; all coverage is the local pytest suite against an unconfigured (not_configured) Substrate stub, which exercises the fails-open/fails-closed envelope but not a real substrate response shape.",
+    "the production-loop skill wiring (claim -> optional drift_scan -> work -> heartbeat -> complete/handoff) is not implemented in this change; it is LEAD-owned (skills/desk-bootstrap/desk-production-loop/**) and is flagged in the change document as a follow-up, not fabricated here under ownership bot-01 does not have.",
+    "no QUALITY acknowledgement has been collected yet for the contract change (acknowledgements: [] — informational only since the change is non-breaking); consumers_required follows the contracts/tool-packs/** pattern in ownership.yaml's contract_consumers verbatim."
+  ],
+  "approved_by": ""
+}

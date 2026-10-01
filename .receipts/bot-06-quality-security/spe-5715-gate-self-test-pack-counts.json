@@ -45,7 +45,8 @@
     },
     {
       "claim": "The stale '7 rosters, 5 packs' substring no longer appears anywhere under ci/",
-      "evidence_command_index": 3
+      "evidence_command_index": 3,
+      "expects_failure": true
     }
   ],
   "unverified": [

@@ -138,6 +138,7 @@ async def _run() -> None:
     # From here on, the fixture graph/node exists on the substrate. Nothing below may return or
     # raise without going through the `finally` in run(), which closes it out — see that
     # function's docstring note on why an earlier revision left these behind.
+    passed = False
     try:
         # --- case (b): expired-lease drift ---------------------------------------------
         claim = await substrate.call_tool(
@@ -198,15 +199,21 @@ async def _run() -> None:
                         f"git_tip={fake_tip!r}, which cannot be this repo's real tip — the condition was constructed "
                         "and the scan reported itself complete, so a disagreement should have surfaced")
         print(f"case (c) PASS: {[f['kind'] for f in tip_findings]}")
+        passed = True
     finally:
         # Unconditional: runs whether the two cases above passed, raised _Fail, or raised
         # anything else (a timeout, a KeyError in a malformed response). graph_complete rather
         # than graph_release: release only drops the lease and leaves the node "open", which is
-        # the unclaimed-work shape this cleanup exists to avoid, not fix.
+        # the unclaimed-work shape this cleanup exists to avoid, not fix. tests_pass reflects the
+        # actual outcome — `passed` is only set True after both cases print PASS, so an exception
+        # anywhere above (including a _Fail raised mid-case) leaves it False, never hardcoded true
+        # regardless of outcome.
         complete = await substrate.call_tool(
             "graph_complete",
             {"graph_id": graph_id, "node_id": node_id,
-             "result": {"summary": "coordination-drift-smoke fixture cleanup", "tests_pass": True}},
+             "result": {"summary": "coordination-drift-smoke fixture cleanup"
+                                    + ("" if passed else " — smoke FAILED, see logs"),
+                        "tests_pass": passed}},
             timeout=10,
         )
         if complete.get("error"):

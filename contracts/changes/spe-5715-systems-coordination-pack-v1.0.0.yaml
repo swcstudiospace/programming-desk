@@ -72,9 +72,12 @@ semantic_changes: []
 acknowledgements: []
 
 migration_note: >
-  None required. New pack, additive only, seats: [systems, lead] — the pack endpoint
-  (/mcp/<seat>/packs/coordination) is new for both; no existing seat's /mcp/<seat> tools/list
-  changes, including LEAD's (it never merges this pack onto its main surface).
+  None required, but one tools/list change to be precise about: SYSTEMS' main surface
+  (/mcp/systems) does gain a tool — desk_app_tools_load, 14 -> 15 effective tools — since that is
+  the only way to reach a pack at all. LEAD's main surface (/mcp/lead) does NOT change; it never
+  merges this pack and reaches it only at the dedicated pack endpoint
+  (/mcp/lead/packs/coordination), which is new for both seats. No seat loses a tool, and no
+  existing tool on any seat is renamed, narrowed or re-typed.
 
 notes:
   - "Backend is real, not a placeholder: services/desk-gateway/src/desk_gateway/tools/systems.py
@@ -112,13 +115,18 @@ notes:
     ok: true) was already fixed in the prior review-fix round and is now test-covered for all
     three rejection reasons (lost, expired, unheld), not just expired, via
     test_coordination_graph_heartbeat_rejected_lease_is_a_failed_call."
-  - "Greptile P2s (PR #59, this round): Issues 3-5 (coordination-drift-smoke.py registration
-    ordering, attributable-findings strictness, concurrent-claim proof) are left unaddressed here
-    and flagged, not silently dropped — the fixture already straddles SYSTEMS and the lease
-    semantics PR #58's lease-cas-drift-smoke.py (LEAD-owned) covers for case (a), so hardening it
-    further on this branch risks stepping on ownership this change does not have; see the PR
-    comment on #59 for the explicit flag to QUALITY/LEAD. Issue 6 (mocked configured-substrate
-    coverage through /mcp/systems) was already done in the prior round and is unaffected. Issue 7
+  - "Greptile P2s (PR #59): Issue 3 (coordination-drift-smoke.py registration ordering —
+    graph_register before graph_claim, setup failures FAIL not SKIP) and Issue 4
+    (attributable-findings strictness — graph_id+node_id-filtered lease findings, hard FAIL
+    instead of a soft NOTE on a missing finding) were BOTH already fixed, in the round before this
+    one. Issue 5 (concurrent-claim proof) is the only one of the three left unaddressed, and
+    deliberately: it is case (a) in this ticket's own split, already covered live by PR #58's
+    lease-cas-drift-smoke.py (LEAD-owned), so duplicating it here would test the same substrate
+    CAS behavior again rather than anything specific to graph_heartbeat or coord_drift_scan —
+    Greptile agreed and withdrew that finding on the PR. A later smoke bug (the finally cleanup
+    sending tests_pass: true regardless of whether the smoke actually passed) was caught in a
+    further review round and is also fixed. Issue 6 (mocked configured-substrate coverage through
+    /mcp/systems) was already done in the prior round and is unaffected. Issue 7
     (consumers_required) needs no further change: the prior round already dropped the explicit
     override so G-4 resolves consumers from the union of this document's surfaces, and
     contract_consumers['contracts/tool-rosters/**'] already names every roster seat (including

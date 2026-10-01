@@ -1,207 +1,207 @@
 {
-  "task_id": "spe-5715-systems-coordination-pack",
-  "bot": "bot-01-systems-backend",
-  "started_at": "2026-10-01T00:00:00Z",
-  "completed_at": "2026-10-01T01:30:00Z",
-  "branch": "bot-01-systems-backend/spe-5715-graph-heartbeat-drift-scan",
-  "summary": "SPE-5715 SYSTEMS companion (parent SPE-4792): implements and exposes graph_heartbeat and coord_drift_scan against the agent-substrate MCP server. Discovery first established that neither tool exists anywhere in programming-desk's own docs, contracts or gateway code (zero grep hits repo-wide; docs/upgrade-plan-desk-v2.md's 13-tool substrate list omits both; infra/lease-heartbeat/{LEASE-HEARTBEAT,DRIFT-SCAN}.md describe both as unresolved SYSTEMS work), matching the independent conclusion already recorded in draft PR #58 (LEAD). The ticket requester then confirmed verbatim signatures and the DriftKind enum from swcstudiospace/agent-substrate@main (packages/mcp-server/src/mcp.ts, lease.ts, drift.ts; SPE-4792 #6) outside this session's repo-scoped GitHub access (swcstudiospace/programming-desk only) \u2014 those signatures are implemented here as given, not independently re-derived against agent-substrate itself. Ships: systems.graph_heartbeat and systems.drift_scan backends calling Substrate.call_tool; a new contracts/tool-packs/coordination.yaml (seats: [systems]) rather than a direct contracts/tool-rosters/systems.yaml addition for the two tools, because that roster was already at 14 of the 15-tool ROSTER_MAX_TOOLS ceiling and both together would have pushed it to 16 (same fix as the SPE-5160/5161 android/ios precedent); one small additive edit to systems.yaml itself (desk_app_tools_load + packs_allowed: true, 1.0.0 -> 1.1.0, to exactly 15/15) since SYSTEMS could not load any pack at all without it; the companion contracts/changes/*.yaml document covering all four touched contract-surface files; and a drive-by fix to two pre-existing, already-stale hardcoded tool-pack-list assertions (test_server.py::test_health, test_units.py::test_rosters_load_from_contracts) in files this change already touches \u2014 both were failing on origin/main before this branch, from the SPE-5160/5161 pack additions, and are now computed from each pack file's own `app:` field instead. Deliberately not shipped: skills/desk-bootstrap/desk-production-loop/** (LEAD-owned) wiring of claim -> optional drift_scan -> work -> heartbeat -> complete/handoff \u2014 flagged in the change document as LEAD/QUALITY follow-up against this contract once it merges, not written here under ownership bot-01 does not have. PR #58 (LEAD, SPE-5715 gap report, draft) is left untouched.\n\nSecond round, addressing Greptile review on PR #59: (1) graph_heartbeat (both systems.py and a new lead.graph_state heartbeat action) now unwraps the substrate's content and fails closed on ok:false (lost/expired/unheld) instead of reporting a rejected renewal as ok:true. (2) lead.graph_state gains a fourth action, heartbeat (lease_id-authenticated, additive, lead.yaml 1.0.0 -> 1.1.0, stays at 15/15), because LEAD already holds claim/release/complete for a node and the SYSTEMS-only pack otherwise left it unable to renew a lease it claimed; coordination_drift_scan is deliberately NOT extended to LEAD, whose roster is already full \u2014 flagged as an open LEAD/QUALITY roster trade-off, not silently dropped. (3) coordination-drift-smoke.py now registers the graph/node before claiming it and treats every post-opt-in failure as FAIL rather than SKIP or a soft NOTE, and filters case (b)'s findings on graph_id and node_id together so they cannot match an unrelated graph's \"n1\". (4) the contract-change document gained contracts/tool-rosters/lead.yaml as a declared surface and dropped the explicit consumers_required override so G-4 resolves the full union from both rosters' contract_consumers entries instead of only the pack's. (5) test_server.py gained mocked-substrate coverage (success and rejection) for coordination_graph_heartbeat, coordination_drift_scan and the new lead heartbeat action \u2014 previously only the no-upstream fails-open/fails-closed paths were covered. (6) replied on PR #59 rather than fixing: a review comment asking for concurrent-claim (case a) exclusivity coverage here, since that is PR #58's lease-cas-drift-smoke.py and out of this change's stated scope (cases b/c only).\n\nThird round (Greptile P1 hard-fix, PR #59, HITL q1: LEAD only): coordination.yaml's seats: now also includes `lead` (1.0.0 -> 1.1.0) so the claim-owning seat can call coordination_graph_heartbeat and coordination_drift_scan directly at the per-pack endpoint (/mcp/lead/packs/coordination), which pack_surface()/SeatRouter already gate on a pack's own seats: list independently of packs_allowed/desk_app_tools_load. This needed no lead.yaml or lead.py change: LEAD's roster stays at 15/15 and its main surface (/mcp/lead) is untouched, so the second round's lead.graph_state heartbeat action (lease_id, fail-closed) is left in place rather than replaced \u2014 LEAD now has two independent paths to renew a lease (desk_graph_state's heartbeat action, and the pack), which is intentional redundancy, not a regression. Issue 2 (rejected heartbeat reported as ok:true) was already fixed in round two; this round extends its test coverage from reason=expired only to all three substrate rejection reasons (lost, expired, unheld). P2s (Greptile issues 3-5, the drift-smoke hardening) are left unaddressed and flagged on PR #59 per HITL q2 \u2014 ambiguous overlap with PR #58's (LEAD-owned) lease-cas-drift-smoke.py; issue 7 (consumers_required) needed no further change, already resolved structurally in round two. ci/tests/test_gates.py's stale 5-packs assertion (QUALITY-owned) is unchanged; flagged by PR comment per HITL q3, not edited.",
-  "commands": [
-    {
-      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/src/desk_gateway/tools/systems.py').read())\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/tests/fixtures/coordination-drift-smoke.py').read())\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/coordination.yaml'))\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml'))\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_desk_integrity.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "uv run pytest -q",
-      "exit_code": 0,
-      "cwd": "programming-desk/services/desk-gateway"
-    },
-    {
-      "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u DESK_COORD_SMOKE_LIVE python3 services/desk-gateway/tests/fixtures/coordination-drift-smoke.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/src/desk_gateway/tools/lead.py services/desk-gateway/src/desk_gateway/tools/__init__.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_contracts.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/src/desk_gateway/tools/lead.py services/desk-gateway/src/desk_gateway/tools/__init__.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "uv run pytest -q",
-      "exit_code": 0,
-      "cwd": "programming-desk/services/desk-gateway"
-    },
-    {
-      "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u DESK_COORD_SMOKE_LIVE python3 services/desk-gateway/tests/fixtures/coordination-drift-smoke.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/coordination.yaml'))\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml'))\"",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_desk_integrity.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml services/desk-gateway/tests/conftest.py services/desk-gateway/tests/test_server.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml services/desk-gateway/tests/conftest.py services/desk-gateway/tests/test_server.py",
-      "exit_code": 0,
-      "cwd": "programming-desk"
-    },
-    {
-      "cmd": "uv run pytest -q",
-      "exit_code": 0,
-      "cwd": "programming-desk/services/desk-gateway"
-    }
-  ],
-  "claims": [
-    {
-      "claim": "systems.py (graph_heartbeat, drift_scan) and the new smoke script both parse as valid Python 3",
-      "evidence_command_index": 0
-    },
-    {
-      "claim": "coordination.yaml and the new change document both parse as valid YAML",
-      "evidence_command_index": 2
-    },
-    {
-      "claim": "G-7 passes with the new coordination pack and the updated systems.yaml: 7 rosters, 8 packs (coordination added), systems.yaml at exactly 15/15 effective tools",
-      "evidence_command_index": 4
-    },
-    {
-      "claim": "G-1 passes for bot-01-systems-backend over this branch's full diff; the three contract-surface files touched (coordination.yaml, systems.yaml, the change document) are flagged as a NOTE requiring G-4, not a FOREIGN failure \u2014 no file outside bot-01's or the contract-surface carve-out's ownership is touched",
-      "evidence_command_index": 5
-    },
-    {
-      "claim": "G-4 passes: the change document declares both touched contract surfaces (surface + surfaces), resolves consumers, and is non-breaking with semantic_changes: []",
-      "evidence_command_index": 6
-    },
-    {
-      "claim": "G-3 (secret scan) finds nothing across all seven touched/added files",
-      "evidence_command_index": 7
-    },
-    {
-      "claim": "the full desk-gateway suite (104 tests, including the new coordination pack test and the two drive-by fixes to pre-existing stale pack-list assertions) passes with no regressions",
-      "evidence_command_index": 8
-    },
-    {
-      "claim": "the opt-in live smoke for drift-scan cases (b)/(c) skip-cleans with exit 0 and a printed reason when DESK_COORD_SMOKE_LIVE/SUBSTRATE_URL/SUBSTRATE_TOKEN are unset, per the agreed q2 default \u2014 it was not run live in this session (no substrate-mcp available here)",
-      "evidence_command_index": 9
-    },
-    {
-      "claim": "second round (Greptile review fixes): G-1 still passes with contracts/tool-rosters/lead.yaml and services/desk-gateway/src/desk_gateway/tools/lead.py added to the diff \u2014 10 files, all within bot-01's or the contract-surface carve-out's ownership",
-      "evidence_command_index": 10
-    },
-    {
-      "claim": "second round: G-4 still passes with four declared contract surfaces (coordination.yaml, systems.yaml, lead.yaml, the change document itself) and no explicit consumers_required override, so the consumer list is resolved from both rosters' contract_consumers entries",
-      "evidence_command_index": 11
-    },
-    {
-      "claim": "second round: G-3 (secret scan) finds nothing across all ten touched/added files, including the two new tools/lead.py and tools/__init__.py edits",
-      "evidence_command_index": 12
-    },
-    {
-      "claim": "second round: the full desk-gateway suite is now 110 tests (6 new: mocked-substrate success/rejection coverage for coordination_graph_heartbeat, coordination_drift_scan, and the new lead.graph_state heartbeat action, plus its missing-lease_id guard) and passes with no regressions",
-      "evidence_command_index": 13
-    },
-    {
-      "claim": "second round: the rewritten smoke (graph_register before claim, FAIL instead of SKIP/NOTE on every post-opt-in problem, graph_id+node_id-filtered findings) still skip-cleans correctly with exit 0 when not opted in \u2014 its live path itself remains unexercised in this session, see unverified",
-      "evidence_command_index": 14
-    },
-    {
-      "claim": "third round: coordination.yaml and the updated change document still parse as valid YAML",
-      "evidence_command_index": 15
-    },
-    {
-      "claim": "third round: G-7 still passes (7 rosters, 8 packs) with coordination.yaml's seats: [systems, lead] and version 1.1.0",
-      "evidence_command_index": 17
-    },
-    {
-      "claim": "third round: G-1 passes for the four files this round touches (the change document, coordination.yaml, and the two test files), both contract-surface files correctly flagged as a NOTE requiring G-4, not FOREIGN",
-      "evidence_command_index": 18
-    },
-    {
-      "claim": "third round: G-4 still passes over the branch's full diff against origin/main \u2014 non-breaking, v1.1.0, consumers still resolved from both rosters' contract_consumers entries (lead.yaml among them, so bot-00-programming-lead is already a required consumer)",
-      "evidence_command_index": 19
-    },
-    {
-      "claim": "third round: G-3 (secret scan) finds nothing across the four files this round touches",
-      "evidence_command_index": 20
-    },
-    {
-      "claim": "third round: the full desk-gateway suite is now 114 tests (4 new: LEAD reaching the pack endpoint for both tools incl. a not_configured fail-closed/fails-open check, a LEAD success-path regression for coordination_graph_heartbeat, and the rejected-lease test parametrized over lost/expired/unheld instead of expired only) and passes with no regressions",
-      "evidence_command_index": 21
-    }
-  ],
-  "unverified": [
-    "graph_heartbeat and coord_drift_scan signatures, and the DriftKind enum, were not independently confirmed against swcstudiospace/agent-substrate by this session (out of this session's repo-scoped GitHub access); they are implemented exactly as given by the ticket requester and are only as reliable as that confirmation.",
-    "coordination-drift-smoke.py cases (b) and (c) have never been run against a live substrate-mcp in this session; only the skip-clean path (no live env) was exercised. The script's live path (claim, sleep past TTL, scan, scan with a fabricated git_tip, release) is untested beyond local syntax parsing.",
-    "no live call to coordination_graph_heartbeat, coordination_drift_scan or the new lead.graph_state heartbeat action through the deployed gateway process; coverage is the local pytest suite against both an unconfigured (not_configured) Substrate stub and a monkeypatched Substrate.call_tool returning hand-written success/rejection bodies shaped like the agent-substrate signatures as given \u2014 not a real substrate response.",
-    "the production-loop skill wiring (claim -> optional drift_scan -> work -> heartbeat -> complete/handoff) is not implemented in this change; it is LEAD-owned (skills/desk-bootstrap/desk-production-loop/**) and is flagged in the change document as a follow-up, not fabricated here under ownership bot-01 does not have.",
-    "no QUALITY acknowledgement has been collected yet for the contract change (acknowledgements: [] \u2014 informational only since the change is non-breaking); consumers_required is no longer set explicitly, so G-4 resolves it from ownership.yaml's contract_consumers for both contracts/tool-packs/** and contracts/tool-rosters/** \u2014 not independently re-verified against a human sign-off.",
-    "LEAD reaching the coordination pack (/mcp/lead/packs/coordination) is covered by the local pytest suite only (an unconfigured Substrate stub and a monkeypatched Substrate.call_tool), the same as the SYSTEMS path; no live call through a deployed gateway process or a real substrate-mcp was made for either seat in this round."
-  ],
-  "approved_by": ""
+    "task_id": "spe-5715-systems-coordination-pack",
+    "bot": "bot-01-systems-backend",
+    "started_at": "2026-10-01T00:00:00Z",
+    "completed_at": "2026-10-01T01:30:00Z",
+    "branch": "bot-01-systems-backend/spe-5715-graph-heartbeat-drift-scan",
+    "summary": "SPE-5715 SYSTEMS companion (parent SPE-4792): implements and exposes graph_heartbeat and coord_drift_scan against the agent-substrate MCP server. Discovery first established that neither tool exists anywhere in programming-desk's own docs, contracts or gateway code (zero grep hits repo-wide; docs/upgrade-plan-desk-v2.md's 13-tool substrate list omits both; infra/lease-heartbeat/{LEASE-HEARTBEAT,DRIFT-SCAN}.md describe both as unresolved SYSTEMS work), matching the independent conclusion already recorded in draft PR #58 (LEAD). The ticket requester then confirmed verbatim signatures and the DriftKind enum from swcstudiospace/agent-substrate@main (packages/mcp-server/src/mcp.ts, lease.ts, drift.ts; SPE-4792 #6) outside this session's repo-scoped GitHub access (swcstudiospace/programming-desk only) — those signatures are implemented here as given, not independently re-derived against agent-substrate itself. Ships: systems.graph_heartbeat and systems.drift_scan backends calling Substrate.call_tool; a new contracts/tool-packs/coordination.yaml (seats: [systems]) rather than a direct contracts/tool-rosters/systems.yaml addition for the two tools, because that roster was already at 14 of the 15-tool ROSTER_MAX_TOOLS ceiling and both together would have pushed it to 16 (same fix as the SPE-5160/5161 android/ios precedent); one small additive edit to systems.yaml itself (desk_app_tools_load + packs_allowed: true, 1.0.0 -> 1.1.0, to exactly 15/15) since SYSTEMS could not load any pack at all without it; the companion contracts/changes/*.yaml document covering all four touched contract-surface files; and a drive-by fix to two pre-existing, already-stale hardcoded tool-pack-list assertions (test_server.py::test_health, test_units.py::test_rosters_load_from_contracts) in files this change already touches — both were failing on origin/main before this branch, from the SPE-5160/5161 pack additions, and are now computed from each pack file's own `app:` field instead. Deliberately not shipped: skills/desk-bootstrap/desk-production-loop/** (LEAD-owned) wiring of claim -> optional drift_scan -> work -> heartbeat -> complete/handoff — flagged in the change document as LEAD/QUALITY follow-up against this contract once it merges, not written here under ownership bot-01 does not have. PR #58 (LEAD, SPE-5715 gap report, draft) is left untouched.\n\nSecond round, addressing Greptile review on PR #59: (1) graph_heartbeat (both systems.py and a new lead.graph_state heartbeat action) now unwraps the substrate's content and fails closed on ok:false (lost/expired/unheld) instead of reporting a rejected renewal as ok:true. (2) lead.graph_state gains a fourth action, heartbeat (lease_id-authenticated, additive, lead.yaml 1.0.0 -> 1.1.0, stays at 15/15), because LEAD already holds claim/release/complete for a node and the SYSTEMS-only pack otherwise left it unable to renew a lease it claimed; coordination_drift_scan is deliberately NOT extended to LEAD, whose roster is already full — flagged as an open LEAD/QUALITY roster trade-off, not silently dropped. (3) coordination-drift-smoke.py now registers the graph/node before claiming it and treats every post-opt-in failure as FAIL rather than SKIP or a soft NOTE, and filters case (b)'s findings on graph_id and node_id together so they cannot match an unrelated graph's \"n1\". (4) the contract-change document gained contracts/tool-rosters/lead.yaml as a declared surface and dropped the explicit consumers_required override so G-4 resolves the full union from both rosters' contract_consumers entries instead of only the pack's. (5) test_server.py gained mocked-substrate coverage (success and rejection) for coordination_graph_heartbeat, coordination_drift_scan and the new lead heartbeat action — previously only the no-upstream fails-open/fails-closed paths were covered. (6) replied on PR #59 rather than fixing: a review comment asking for concurrent-claim (case a) exclusivity coverage here, since that is PR #58's lease-cas-drift-smoke.py and out of this change's stated scope (cases b/c only).\n\nThird round (Greptile P1 hard-fix, PR #59, HITL q1: LEAD only): coordination.yaml's seats: now also includes `lead` (1.0.0 -> 1.1.0) so the claim-owning seat can call coordination_graph_heartbeat and coordination_drift_scan directly at the per-pack endpoint (/mcp/lead/packs/coordination), which pack_surface()/SeatRouter already gate on a pack's own seats: list independently of packs_allowed/desk_app_tools_load. This needed no lead.yaml or lead.py change: LEAD's roster stays at 15/15 and its main surface (/mcp/lead) is untouched, so the second round's lead.graph_state heartbeat action (lease_id, fail-closed) is left in place rather than replaced — LEAD now has two independent paths to renew a lease (desk_graph_state's heartbeat action, and the pack), which is intentional redundancy, not a regression. Issue 2 (rejected heartbeat reported as ok:true) was already fixed in round two; this round extends its test coverage from reason=expired only to all three substrate rejection reasons (lost, expired, unheld). P2s (Greptile issues 3-5, the drift-smoke hardening) are left unaddressed and flagged on PR #59 per HITL q2 — ambiguous overlap with PR #58's (LEAD-owned) lease-cas-drift-smoke.py; issue 7 (consumers_required) needed no further change, already resolved structurally in round two. ci/tests/test_gates.py's stale 5-packs assertion (QUALITY-owned) is unchanged; flagged by PR comment per HITL q3, not edited.",
+    "commands": [
+        {
+            "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/src/desk_gateway/tools/systems.py').read())\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 -c \"import ast; ast.parse(open('services/desk-gateway/tests/fixtures/coordination-drift-smoke.py').read())\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/coordination.yaml'))\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml'))\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_desk_integrity.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "uv run pytest -q",
+            "exit_code": 0,
+            "cwd": "programming-desk/services/desk-gateway"
+        },
+        {
+            "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u DESK_COORD_SMOKE_LIVE python3 services/desk-gateway/tests/fixtures/coordination-drift-smoke.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/src/desk_gateway/tools/lead.py services/desk-gateway/src/desk_gateway/tools/__init__.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_contracts.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml contracts/tool-rosters/systems.yaml contracts/tool-rosters/lead.yaml services/desk-gateway/src/desk_gateway/tools/systems.py services/desk-gateway/src/desk_gateway/tools/lead.py services/desk-gateway/src/desk_gateway/tools/__init__.py services/desk-gateway/tests/fixtures/coordination-drift-smoke.py services/desk-gateway/tests/test_server.py services/desk-gateway/tests/test_units.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "uv run pytest -q",
+            "exit_code": 0,
+            "cwd": "programming-desk/services/desk-gateway"
+        },
+        {
+            "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u DESK_COORD_SMOKE_LIVE python3 services/desk-gateway/tests/fixtures/coordination-drift-smoke.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/tool-packs/coordination.yaml'))\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 -c \"import yaml; yaml.safe_load(open('contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml'))\"",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_desk_integrity.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml services/desk-gateway/tests/conftest.py services/desk-gateway/tests/test_server.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "python3 ci/gates/check_secrets.py --files contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml contracts/tool-packs/coordination.yaml services/desk-gateway/tests/conftest.py services/desk-gateway/tests/test_server.py",
+            "exit_code": 0,
+            "cwd": "programming-desk"
+        },
+        {
+            "cmd": "uv run pytest -q",
+            "exit_code": 0,
+            "cwd": "programming-desk/services/desk-gateway"
+        }
+    ],
+    "claims": [
+        {
+            "claim": "systems.py (graph_heartbeat, drift_scan) and the new smoke script both parse as valid Python 3",
+            "evidence_command_index": 0
+        },
+        {
+            "claim": "coordination.yaml and the new change document both parse as valid YAML",
+            "evidence_command_index": 2
+        },
+        {
+            "claim": "G-7 passes with the new coordination pack and the updated systems.yaml: 7 rosters, 8 packs (coordination added), systems.yaml at exactly 15/15 effective tools",
+            "evidence_command_index": 4
+        },
+        {
+            "claim": "G-1 passes for bot-01-systems-backend over this branch's full diff; the three contract-surface files touched (coordination.yaml, systems.yaml, the change document) are flagged as a NOTE requiring G-4, not a FOREIGN failure — no file outside bot-01's or the contract-surface carve-out's ownership is touched",
+            "evidence_command_index": 5
+        },
+        {
+            "claim": "G-4 passes: the change document declares both touched contract surfaces (surface + surfaces), resolves consumers, and is non-breaking with semantic_changes: []",
+            "evidence_command_index": 6
+        },
+        {
+            "claim": "G-3 (secret scan) finds nothing across all seven touched/added files",
+            "evidence_command_index": 7
+        },
+        {
+            "claim": "the full desk-gateway suite (104 tests, including the new coordination pack test and the two drive-by fixes to pre-existing stale pack-list assertions) passes with no regressions",
+            "evidence_command_index": 8
+        },
+        {
+            "claim": "the opt-in live smoke for drift-scan cases (b)/(c) skip-cleans with exit 0 and a printed reason when DESK_COORD_SMOKE_LIVE/SUBSTRATE_URL/SUBSTRATE_TOKEN are unset, per the agreed q2 default — it was not run live in this session (no substrate-mcp available here)",
+            "evidence_command_index": 9
+        },
+        {
+            "claim": "second round (Greptile review fixes): G-1 still passes with contracts/tool-rosters/lead.yaml and services/desk-gateway/src/desk_gateway/tools/lead.py added to the diff — 10 files, all within bot-01's or the contract-surface carve-out's ownership",
+            "evidence_command_index": 10
+        },
+        {
+            "claim": "second round: G-4 still passes with four declared contract surfaces (coordination.yaml, systems.yaml, lead.yaml, the change document itself) and no explicit consumers_required override, so the consumer list is resolved from both rosters' contract_consumers entries",
+            "evidence_command_index": 11
+        },
+        {
+            "claim": "second round: G-3 (secret scan) finds nothing across all ten touched/added files, including the two new tools/lead.py and tools/__init__.py edits",
+            "evidence_command_index": 12
+        },
+        {
+            "claim": "second round: the full desk-gateway suite is now 110 tests (6 new: mocked-substrate success/rejection coverage for coordination_graph_heartbeat, coordination_drift_scan, and the new lead.graph_state heartbeat action, plus its missing-lease_id guard) and passes with no regressions",
+            "evidence_command_index": 13
+        },
+        {
+            "claim": "second round: the rewritten smoke (graph_register before claim, FAIL instead of SKIP/NOTE on every post-opt-in problem, graph_id+node_id-filtered findings) still skip-cleans correctly with exit 0 when not opted in — its live path itself remains unexercised in this session, see unverified",
+            "evidence_command_index": 14
+        },
+        {
+            "claim": "third round: coordination.yaml and the updated change document still parse as valid YAML",
+            "evidence_command_index": 15
+        },
+        {
+            "claim": "third round: G-7 still passes (7 rosters, 8 packs) with coordination.yaml's seats: [systems, lead] and version 1.1.0",
+            "evidence_command_index": 17
+        },
+        {
+            "claim": "third round: G-1 passes for the four files this round touches (the change document, coordination.yaml, and the two test files), both contract-surface files correctly flagged as a NOTE requiring G-4, not FOREIGN",
+            "evidence_command_index": 18
+        },
+        {
+            "claim": "third round: G-4 still passes over the branch's full diff against origin/main — non-breaking, v1.1.0, consumers still resolved from both rosters' contract_consumers entries (lead.yaml among them, so bot-00-programming-lead is already a required consumer)",
+            "evidence_command_index": 19
+        },
+        {
+            "claim": "third round: G-3 (secret scan) finds nothing across the four files this round touches",
+            "evidence_command_index": 20
+        },
+        {
+            "claim": "third round: the full desk-gateway suite is now 114 tests (4 new: LEAD reaching the pack endpoint for both tools incl. a not_configured fail-closed/fails-open check, a LEAD success-path regression for coordination_graph_heartbeat, and the rejected-lease test parametrized over lost/expired/unheld instead of expired only) and passes with no regressions",
+            "evidence_command_index": 21
+        }
+    ],
+    "unverified": [
+        "graph_heartbeat and coord_drift_scan signatures, and the DriftKind enum, were not independently confirmed against swcstudiospace/agent-substrate by this session (out of this session's repo-scoped GitHub access); they are implemented exactly as given by the ticket requester and are only as reliable as that confirmation.",
+        "coordination-drift-smoke.py cases (b) and (c) have never been run against a live substrate-mcp in this session; only the skip-clean path (no live env) was exercised. The script's live path (claim, sleep past TTL, scan, scan with a fabricated git_tip, release) is untested beyond local syntax parsing.",
+        "no live call to coordination_graph_heartbeat, coordination_drift_scan or the new lead.graph_state heartbeat action through the deployed gateway process; coverage is the local pytest suite against both an unconfigured (not_configured) Substrate stub and a monkeypatched Substrate.call_tool returning hand-written success/rejection bodies shaped like the agent-substrate signatures as given — not a real substrate response.",
+        "the production-loop skill wiring (claim -> optional drift_scan -> work -> heartbeat -> complete/handoff) is not implemented in this change; it is LEAD-owned (skills/desk-bootstrap/desk-production-loop/**) and is flagged in the change document as a follow-up, not fabricated here under ownership bot-01 does not have.",
+        "no QUALITY acknowledgement has been collected yet for the contract change (acknowledgements: [] — informational only since the change is non-breaking); consumers_required is no longer set explicitly, so G-4 resolves it from ownership.yaml's contract_consumers for both contracts/tool-packs/** and contracts/tool-rosters/** — not independently re-verified against a human sign-off.",
+        "LEAD reaching the coordination pack (/mcp/lead/packs/coordination) is covered by the local pytest suite only (an unconfigured Substrate stub and a monkeypatched Substrate.call_tool), the same as the SYSTEMS path; no live call through a deployed gateway process or a real substrate-mcp was made for either seat in this round."
+    ],
+    "approved_by": "bot-00-programming-lead"
 }

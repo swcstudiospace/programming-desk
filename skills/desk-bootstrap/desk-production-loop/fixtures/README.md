@@ -80,14 +80,16 @@ Not run by `verify.sh` — it needs a live substrate-mcp and a real bearer token
 belongs in a check that runs with no credentials and no network. Proves exclusivity (two concurrent
 `graph_claim` calls on one node, exactly one holder) against a real substrate when
 `DESK_LEASE_SMOKE_LIVE=1`, `SUBSTRATE_URL` and `SUBSTRATE_TOKEN` are all set. Only
-`DESK_LEASE_SMOKE_LIVE` unset skips cleanly (exit 0, printed reason) — once it is set to opt in,
-a missing `SUBSTRATE_URL`/`SUBSTRATE_TOKEN` or any other broken precondition is a FAIL (exit 1),
-not a skip, so an operator or CI running a partially configured live smoke gets a failure, not a
-false clean exit. It does not attempt the expired-lease or tip/event-disagreement cases — see the
-script's own docstring and the "SPE-5715" section of `../SKILL.md` for why neither tool exists yet
-to exercise.
+`DESK_LEASE_SMOKE_LIVE` unset or empty skips cleanly (exit 0, printed reason) — a value set to
+anything other than `1`/`true`/`yes` (a typo such as `tru`) is refused with a FAIL rather than
+silently treated as unset, so a misconfigured opt-in cannot finish green without ever attempting a
+claim. Once opted in, a missing `SUBSTRATE_URL`/`SUBSTRATE_TOKEN` or any other broken precondition
+is also a FAIL (exit 1), not a skip, so an operator or CI running a partially configured live smoke
+gets a failure, not a false clean exit. It does not attempt the expired-lease or
+tip/event-disagreement cases — see the script's own docstring and the "SPE-5715" section of
+`../SKILL.md` for why neither tool exists yet to exercise.
 
 ```sh
 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py   # 0, SKIP printed, no env set
-DESK_LEASE_SMOKE_LIVE=1 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py   # 1, FAIL printed, opted in but no SUBSTRATE_TOKEN
+env -u SUBSTRATE_TOKEN DESK_LEASE_SMOKE_LIVE=1 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py   # 1, FAIL printed, opted in but no SUBSTRATE_TOKEN (SUBSTRATE_TOKEN explicitly unset so this stays a safe check even in a credentialed shell)
 ```

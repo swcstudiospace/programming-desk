@@ -42,7 +42,12 @@
     {
       "cmd": "python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
       "exit_code": 0,
-      "output_tail": "SKIP: DESK_LEASE_SMOKE_LIVE is not set to 1 -- this smoke only runs opt-in against a live substrate-mcp, never off ambient credentials alone"
+      "output_tail": "SKIP: DESK_LEASE_SMOKE_LIVE is unset -- this smoke only runs opt-in against a live substrate-mcp, never off ambient credentials alone"
+    },
+    {
+      "cmd": "DESK_LEASE_SMOKE_LIVE=tru python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
+      "exit_code": 1,
+      "output_tail": "FAIL: DESK_LEASE_SMOKE_LIVE is set to 'tru', which is not one of 1/true/yes -- refusing to guess whether that means yes or no. Treating an unrecognized value the same as unset would let a misspelled CI opt-in (e.g. 'tru') finish green without ever attempting a claim"
     },
     {
       "cmd": "DESK_LEASE_SMOKE_LIVE=1 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
@@ -58,6 +63,11 @@
       "cmd": "DESK_LEASE_SMOKE_LIVE=1 SUBSTRATE_TOKEN=fake SUBSTRATE_URL=http://127.0.0.1:7410 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
       "exit_code": 1,
       "output_tail": "FAIL: unexpected error during the live smoke, not a controlled outcome: ModuleNotFoundError(\"No module named 'mcp.client.client'\")"
+    },
+    {
+      "cmd": "SUBSTRATE_TOKEN=ambient-looking-token env -u SUBSTRATE_TOKEN DESK_LEASE_SMOKE_LIVE=1 python3 skills/desk-bootstrap/desk-production-loop/fixtures/lease-cas-drift-smoke.py",
+      "exit_code": 1,
+      "output_tail": "FAIL: SUBSTRATE_TOKEN is unset -- no live substrate-mcp to prove exclusivity against"
     }
   ],
   "claims": [
@@ -86,22 +96,32 @@
       "evidence_command_index": 6
     },
     {
-      "claim": "The exclusivity smoke script skips cleanly (exit 0) only when the opt-in itself (DESK_LEASE_SMOKE_LIVE) is absent",
+      "claim": "The exclusivity smoke script skips cleanly (exit 0) only when DESK_LEASE_SMOKE_LIVE is unset or empty",
       "evidence_command_index": 7
     },
     {
-      "claim": "Once opt-in is set, a missing SUBSTRATE_TOKEN is a FAIL (exit 1), not a skip -- addressing Greptile comment_id 4150358073",
+      "claim": "A DESK_LEASE_SMOKE_LIVE value other than 1/true/yes (a typo such as 'tru') is rejected as a FAIL, not silently treated the same as unset -- addressing Greptile comment_id 4150448648",
       "evidence_command_index": 8,
       "expects_failure": true
     },
     {
-      "claim": "Once opt-in is set, a missing SUBSTRATE_URL is also a FAIL (exit 1), not a silent fall-through to the loopback default -- addressing Greptile comment_id 4150358036",
+      "claim": "Once opt-in is set, a missing SUBSTRATE_TOKEN is a FAIL (exit 1), not a skip -- addressing Greptile comment_id 4150358073",
       "evidence_command_index": 9,
       "expects_failure": true
     },
     {
-      "claim": "An exception raised deep inside Substrate.call_tool's own lazy import (one level below desk_gateway's own imports, which the original except ImportError block did not reach) is now caught by the try/except wrapped around the whole live body and reported as a clean FAIL rather than an unhandled traceback -- found during this session's own re-verification, beyond what review flagged. This sandbox has neither a live substrate-mcp nor the mcp package installed, which is why this exact path (a missing dependency) was the one available to demonstrate the wrapper against, rather than a genuine network or protocol failure",
+      "claim": "Once opt-in is set, a missing SUBSTRATE_URL is also a FAIL (exit 1), not a silent fall-through to the loopback default -- addressing Greptile comment_id 4150358036",
       "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "An exception raised deep inside Substrate.call_tool's own lazy import (one level below desk_gateway's own imports, which the original except ImportError block did not reach) is now caught by the try/except wrapped around the whole live body and reported as a clean FAIL rather than an unhandled traceback -- found during this session's own re-verification, beyond what review flagged. This sandbox has neither a live substrate-mcp nor the mcp package installed, which is why this exact path (a missing dependency) was the one available to demonstrate the wrapper against, rather than a genuine network or protocol failure",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "The fixtures README's failure example (env -u SUBSTRATE_TOKEN ...) fails deterministically on the advertised missing-token reason even when SUBSTRATE_TOKEN is already exported in the ambient shell, so the example cannot accidentally opt into a real live run in a credentialed shell -- addressing Greptile comment_id 4150448641",
+      "evidence_command_index": 12,
       "expects_failure": true
     }
   ],

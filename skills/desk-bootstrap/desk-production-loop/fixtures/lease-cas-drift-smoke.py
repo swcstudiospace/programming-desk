@@ -17,15 +17,17 @@ runs off ambient credentials alone: `services/desk-gateway/tests/conftest.py` de
 tests from ambient upstream env vars for the same reason, and this script follows that convention
 by requiring an explicit opt-in on top of the credential.
 
-Requires ALL of the following. Only `DESK_LEASE_SMOKE_LIVE` unset is a clean **SKIP** (exit 0,
-reason printed, never a silent pass and never a hang) — that is the sole "never asked to run at
-all" case. Once `DESK_LEASE_SMOKE_LIVE=1` is set, every other missing or broken precondition
-(`SUBSTRATE_URL`, `SUBSTRATE_TOKEN`, an unimportable gateway package, `Substrate.configured` still
-false, or any unexpected exception in the live body) is a **FAIL** (exit 1), never a skip: a run
-that explicitly asked to go live and could not must not report the same clean exit as a run that
-never asked to run at all.
+Requires ALL of the following. Only `DESK_LEASE_SMOKE_LIVE` unset or empty is a clean **SKIP**
+(exit 0, reason printed, never a silent pass and never a hang) — that is the sole "never asked to
+run at all" case. A value set to anything other than `1`/`true`/`yes` (case-insensitive) — a typo
+such as `tru` — is **not** treated as unset: it is a **FAIL**, because silently reading it as "no
+opt-in" would let a misconfigured CI variable finish green without ever attempting a claim. Once
+opted in, every other missing or broken precondition (`SUBSTRATE_URL`, `SUBSTRATE_TOKEN`, an
+unimportable gateway package, `Substrate.configured` still false, or any unexpected exception in
+the live body) is likewise a **FAIL** (exit 1), never a skip: a run that explicitly asked to go
+live and could not must not report the same clean exit as a run that never asked to run at all.
 
-    DESK_LEASE_SMOKE_LIVE=1     explicit opt-in; the other two vars alone are not enough
+    DESK_LEASE_SMOKE_LIVE=1     explicit opt-in, exactly 1/true/yes; any other value is a FAIL
     SUBSTRATE_URL               e.g. http://127.0.0.1:7410 -- must be set explicitly. Settings
                                  defaults this to the loopback address even when unset, so without
                                  this separate check a live-opt-in run with only SUBSTRATE_TOKEN set
@@ -91,10 +93,18 @@ async def _release_best_effort(substrate: "Substrate", graph_id: str, session_id
 
 
 async def _run() -> int:
-    if os.environ.get("DESK_LEASE_SMOKE_LIVE", "").strip().lower() not in {"1", "true", "yes"}:
+    live_flag = os.environ.get("DESK_LEASE_SMOKE_LIVE", "").strip()
+    if not live_flag:
         _skip(
-            "DESK_LEASE_SMOKE_LIVE is not set to 1 -- this smoke only runs opt-in against a live "
+            "DESK_LEASE_SMOKE_LIVE is unset -- this smoke only runs opt-in against a live "
             "substrate-mcp, never off ambient credentials alone"
+        )
+    if live_flag.lower() not in {"1", "true", "yes"}:
+        _fail(
+            f"DESK_LEASE_SMOKE_LIVE is set to {live_flag!r}, which is not one of 1/true/yes -- "
+            "refusing to guess whether that means yes or no. Treating an unrecognized value the "
+            "same as unset would let a misspelled CI opt-in (e.g. 'tru') finish green without ever "
+            "attempting a claim"
         )
     # From here on, live execution was explicitly requested: any further missing prerequisite is a
     # FAIL, not a skip, so an automated run cannot finish "successfully" without attempting a claim.

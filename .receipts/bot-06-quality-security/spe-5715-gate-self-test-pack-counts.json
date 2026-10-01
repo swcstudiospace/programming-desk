@@ -1,7 +1,7 @@
 {
   "task_id": "spe-5715-gate-self-test-pack-counts",
   "bot": "bot-06-quality-security",
-  "branch": "claude/task-0oeb9d",
+  "branch": "bot-06-quality-security/spe-5715-gate-self-test-pack-counts",
   "started_at": "2026-10-01T01:40:00Z",
   "completed_at": "2026-10-01T01:46:42Z",
   "commands": [
@@ -58,6 +58,6 @@
       ".receipts/bot-06-quality-security/spe-5715-gate-self-test-pack-counts.json"
     ],
     "foreign_paths_touched": [],
-    "branches_touched": ["claude/task-0oeb9d"]
+    "branches_touched": ["bot-06-quality-security/spe-5715-gate-self-test-pack-counts"]
   }
 }

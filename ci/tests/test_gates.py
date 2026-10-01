@@ -1733,6 +1733,7 @@ class TestG7DeskIntegrity:
             "--templates-dir", str(tmp_path / "templates"),
         )
         n_rosters = sum(1 for p in self.ROSTERS.glob("*.yaml") if p.name != "_core.yaml")
+        assert self.PACKS.is_dir(), "pack directory is missing"
         n_packs = sum(1 for p in self.PACKS.glob("*.yaml"))
         assert r.returncode == 0, r.stderr
         assert "G-7 PASS" in r.stdout

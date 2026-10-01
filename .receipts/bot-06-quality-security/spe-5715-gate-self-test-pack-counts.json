@@ -28,6 +28,12 @@
       "exit_code": 1,
       "duration_s": 0.0,
       "output_tail": "STALE STRING GONE (no matches)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo . --rosters-dir contracts/tool-rosters --packs-dir contracts/tool-packs --prompts-dir /tmp/g7check/prompts --assembled-dir /tmp/g7check/assembled --templates-dir /tmp/g7check/templates",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 7 packs, 0 prompt files checked"
     }
   ],
   "claims": [
@@ -37,7 +43,7 @@
     },
     {
       "claim": "On current main (8 roster files incl. _core.yaml -> 7 counted rosters, 7 pack files), the dynamic assert matches check_desk_integrity.py's actual G-7 PASS output ('7 rosters, 7 packs')",
-      "evidence_command_index": 0
+      "evidence_command_index": 4
     },
     {
       "claim": "Full TestG7DeskIntegrity suite (29 tests) passes with the change",

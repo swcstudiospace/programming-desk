@@ -1732,9 +1732,13 @@ class TestG7DeskIntegrity:
             "--assembled-dir", str(tmp_path / "assembled"),
             "--templates-dir", str(tmp_path / "templates"),
         )
+        assert self.ROSTERS.is_dir(), "roster directory is missing"
+        n_rosters = sum(1 for p in self.ROSTERS.glob("*.yaml") if p.name != "_core.yaml")
+        assert self.PACKS.is_dir(), "pack directory is missing"
+        n_packs = sum(1 for p in self.PACKS.glob("*.yaml"))
         assert r.returncode == 0, r.stderr
         assert "G-7 PASS" in r.stdout
-        assert "7 rosters, 5 packs" in r.stdout
+        assert f"{n_rosters} rosters, {n_packs} packs" in r.stdout
 
     def test_fixture_copy_passes(self, tmp_path):
         """The unaltered fixture passes, so every failure below is caused by its one edit."""

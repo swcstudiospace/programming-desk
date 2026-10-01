@@ -191,6 +191,93 @@ async def test_coordination_pack_loads_and_calls_graph_heartbeat_and_drift_scan(
     assert out["error"] == "forbidden"
 
 
+def _stub_substrate(monkeypatch, responses):
+    """responses: {tool_name: async(arguments) -> raw Substrate.call_tool-shaped result}.
+    Makes Substrate report configured without a real SUBSTRATE_URL/SUBSTRATE_TOKEN anywhere near
+    the test, the same shape _configure_upstreams gives the generic HttpUpstream-backed tools."""
+    from desk_gateway.upstreams import Substrate
+
+    async def fake_call_tool(self, name, arguments, timeout=12.0):
+        return await responses[name](arguments)
+
+    monkeypatch.setattr(Substrate, "configured", property(lambda self: True))
+    monkeypatch.setattr(Substrate, "call_tool", fake_call_tool)
+
+
+async def test_coordination_graph_heartbeat_through_a_configured_substrate(rpc, monkeypatch):
+    calls = []
+
+    async def fake_heartbeat(args):
+        calls.append(args)
+        return {"ok": True, "content": [{"ok": True, "ttl_seconds": args.get("ttl_seconds", 900)}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is False and out["ok"] is True
+    assert calls == [{"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"}]
+
+
+async def test_coordination_graph_heartbeat_rejected_lease_is_a_failed_call(rpc, monkeypatch):
+    """A rejected renewal (ok: false, reason lost/expired/unheld) is a normal substrate response,
+    not a transport error — the backend has to unwrap and check it itself (PR #59 review)."""
+    async def fake_heartbeat(args):
+        return {"ok": True, "content": [{"ok": False, "reason": "expired"}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_graph_heartbeat",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is True
+    assert out["error"] == "lease_rejected" and "expired" in out["reason"]
+
+
+async def test_coordination_drift_scan_through_a_configured_substrate(rpc, monkeypatch):
+    async def fake_drift_scan(args):
+        assert args == {"repo": "swcstudiospace/programming-desk"}
+        return {"ok": True, "content": [{"checked_at": "2026-10-01T00:00:00Z",
+                                          "findings": [{"kind": "lease.expired", "graph_id": "g1", "node_id": "n1"}]}]}
+
+    _stub_substrate(monkeypatch, {"coord_drift_scan": fake_drift_scan})
+    await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    out = await rpc.call("systems", "coordination_drift_scan", {"repo": "swcstudiospace/programming-desk"})
+    assert out["is_error"] is False and out["ok"] is True
+    assert out["substrate"][0]["findings"][0]["kind"] == "lease.expired"
+
+
+async def test_lead_graph_state_heartbeat_action(rpc, monkeypatch):
+    """heartbeat (SPE-5715) proves the holder with lease_id, not session_id like the other three
+    desk_graph_state actions — LEAD can renew without SYSTEMS' coordination pack."""
+    calls = []
+
+    async def fake_heartbeat(args):
+        calls.append(args)
+        return {"ok": True, "content": [{"ok": True}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    out = await rpc.call("lead", "desk_graph_state",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat", "lease_id": "lease-1"})
+    assert out["is_error"] is False and out["ok"] is True and out["action"] == "heartbeat"
+    assert calls == [{"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"}]
+
+
+async def test_lead_graph_state_heartbeat_rejected_lease_is_a_failed_call(rpc, monkeypatch):
+    async def fake_heartbeat(args):
+        return {"ok": True, "content": [{"ok": False, "reason": "lost"}]}
+
+    _stub_substrate(monkeypatch, {"graph_heartbeat": fake_heartbeat})
+    out = await rpc.call("lead", "desk_graph_state",
+                         {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat", "lease_id": "lease-1"})
+    assert out["is_error"] is True
+    assert out["error"] == "lease_rejected" and "lost" in out["reason"]
+
+
+async def test_lead_graph_state_heartbeat_requires_lease_id(rpc):
+    out = await rpc.call("lead", "desk_graph_state", {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat"})
+    assert out["is_error"] is True and out["error"] == "invalid_args"
+
+
 async def test_doctor_register_and_check(rpc, app):
     out = await rpc.call("ios", "desk_doctor", {"action": "register", "agent_uuid": "a2d933ec-c6cf-43b7-a060-bec226475fb6"})
     assert out["ok"] and out["registered"] == ["ios"] and "lead" in out["missing"]

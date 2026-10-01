@@ -24,6 +24,7 @@ proposed_by: bot-01-systems-backend
 surface: contracts/tool-packs/coordination.yaml
 surfaces:
   - contracts/tool-rosters/systems.yaml
+  - contracts/tool-rosters/lead.yaml
 
 breaking: false
 version: 1.0.0
@@ -41,12 +42,23 @@ summary: >
   android.yaml's and ios.yaml's) plus `packs_allowed: true`, 1.0.0 -> 1.1.0, bringing it to
   exactly 15 of 15 — SYSTEMS could not load any pack at all without this, android/ios/web being
   the only seats that already carry it. No existing SYSTEMS tool is removed, renamed or
-  renarrowed. New pack surface, no prior version, additive only: no seat loses a tool.
+  renarrowed.
 
-consumers_required:
-  - bot-02-web-edge
-  - bot-03-android
-  - bot-04-ios
+  Also extends lead.yaml's existing `desk_graph_state` with a fourth action, `heartbeat`
+  (1.0.0 -> 1.1.0): LEAD already holds the claim/release/complete lifecycle for a node (the same
+  tool, same backend function), and review on this change (Greptile, PR #59) correctly pointed
+  out that a SYSTEMS-only pack leaves LEAD unable to renew a lease it claimed, which breaks the
+  claim -> heartbeat -> complete loop for the seat that actually runs it today. heartbeat takes
+  lease_id (what graph_claim returned) instead of session_id, since that is what the substrate's
+  graph_heartbeat authenticates the holder with, and additive since it is a new enum value plus
+  two new optional properties on an existing tool, not a new one — lead.yaml stays at 15/15.
+  coordination_drift_scan is NOT extended to LEAD in this change: LEAD's roster is already at the
+  15-tool ceiling, so giving it desk_app_tools_load (the only way to reach a pack) means retiring
+  one of LEAD's other six tools, a roster trade-off this change does not make unilaterally. Noted
+  below as an open LEAD/QUALITY decision, not silently dropped.
+
+  New pack surface, no prior version to either changed roster's new fields: no seat loses a tool,
+  and no existing field on any pre-existing tool is renamed, narrowed or re-typed.
 
 semantic_changes: []
 
@@ -75,4 +87,14 @@ notes:
     drift_scan -> work -> heartbeat -> complete/handoff is LEAD's edit against this contract
     once it merges, not a SYSTEMS one — flagged here for LEAD/QUALITY follow-up rather than
     written under ownership bot-01 does not have."
+  - "Both graph_heartbeat backends (systems.graph_heartbeat for the pack, lead.graph_state's new
+    heartbeat action) treat a rejected renewal — the substrate answering ok: false with reason
+    lost, expired or unheld — as a failed tool call (error: lease_rejected), not a success. An
+    earlier revision of this change folded that response into a blanket ok: true; caught on
+    review (Greptile, PR #59) before merge."
+  - "Smoke coverage in this change is cases (b) expired-lease drift and (c) tip/event
+    disagreement only, per the ticket's own split: case (a) exclusivity (two concurrent
+    graph_claim calls, exactly one holder) is PR #58's lease-cas-drift-smoke.py, not duplicated
+    here. A second exclusivity test in this PR's smoke would test the same substrate behavior
+    PR #58 already covers, not anything specific to graph_heartbeat or coord_drift_scan."
   - "PR #58 (LEAD, SPE-5715 gap report, draft, do-not-edit) is left untouched."

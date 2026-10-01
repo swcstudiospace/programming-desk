@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from desk_gateway.config import SEAT_LABEL, SEATS
-from desk_gateway.tools import ToolContext, failure
+from desk_gateway.tools import ToolContext, failure, unwrap_content
 from desk_gateway.upstreams import NOT_CONFIGURED
 
 GITHUB_ISSUE = re.compile(r"^https://github\.com/([A-Za-z0-9._-]+/[A-Za-z0-9._-]+)/issues/(\d+)$")
@@ -265,14 +265,41 @@ async def graph_register(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
 
 
 async def graph_state(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    tool = {"claim": "graph_claim", "release": "graph_release", "complete": "graph_complete"}[args["action"]]
-    session_id = f"grok-bot:{args.get('surface') or 'lead'}:{args['graph_id']}"
-    payload: dict[str, Any] = {"graph_id": args["graph_id"], "node_id": args["node_id"], "session_id": session_id}
-    if args["action"] == "complete":
-        payload["result"] = {"summary": args.get("note") or "completed via desk gateway", "tests_pass": False}
+    """claim/release/complete prove the holder with session_id; heartbeat proves it with the
+    lease_id graph_claim returned instead — the substrate's graph_heartbeat takes no session_id
+    (SPE-4792, agent-substrate lease.ts). Added so LEAD, which already holds the claim/complete
+    lifecycle, can renew a lease without needing SYSTEMS' coordination pack (SPE-5715)."""
+    tool = {
+        "claim": "graph_claim",
+        "release": "graph_release",
+        "complete": "graph_complete",
+        "heartbeat": "graph_heartbeat",
+    }[args["action"]]
+    if args["action"] == "heartbeat":
+        if not args.get("lease_id"):
+            return failure("invalid_args", "heartbeat requires lease_id (the one graph_claim returned)")
+        payload: dict[str, Any] = {
+            "graph_id": args["graph_id"],
+            "node_id": args["node_id"],
+            "lease_id": args["lease_id"],
+        }
+        if args.get("ttl_seconds") is not None:
+            payload["ttl_seconds"] = args["ttl_seconds"]
+    else:
+        session_id = f"grok-bot:{args.get('surface') or 'lead'}:{args['graph_id']}"
+        payload = {"graph_id": args["graph_id"], "node_id": args["node_id"], "session_id": session_id}
+        if args["action"] == "complete":
+            payload["result"] = {"summary": args.get("note") or "completed via desk gateway", "tests_pass": False}
     result = await ctx.services.substrate.call_tool(tool, payload, timeout=10)
     if result.get("error"):
         return failure(result["error"], result.get("reason", f"{tool} failed"), detail=result.get("content"))
+    if args["action"] == "heartbeat":
+        # A rejected renewal (lost/expired/unheld) is a normal, non-error MCP result whose body
+        # carries ok: false — see systems.graph_heartbeat's docstring for why this is checked
+        # explicitly rather than folded into a blanket {"ok": True}.
+        body = unwrap_content(result)
+        if isinstance(body, dict) and body.get("ok") is False:
+            return failure("lease_rejected", f"graph_heartbeat refused: {body.get('reason') or 'unknown'}", substrate=body)
     return {"ok": True, "action": args["action"], "substrate": result.get("content")}
 
 

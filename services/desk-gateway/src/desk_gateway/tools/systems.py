@@ -10,7 +10,7 @@ from typing import Any
 
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.repo import safe_path
-from desk_gateway.tools import ToolContext, failure
+from desk_gateway.tools import ToolContext, failure, unwrap_content
 from desk_gateway.upstreams import run_command
 
 TIER1 = {"tsjs": (".ts", ".tsx", ".js", ".jsx"), "python": (".py",), "go": (".go",)}
@@ -190,10 +190,13 @@ async def design_artifact_get(ctx: ToolContext, args: dict[str, Any]) -> dict[st
 async def graph_heartbeat(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     """Renew a lease this seat already holds, via the substrate's graph_heartbeat (SPE-4792,
     agent-substrate packages/mcp-server lease.ts). lease_id must be the one graph_claim
-    (lead.graph_state, action: claim) returned — it is what proves the holder. The substrate
-    answers ok:false with reason lost, expired or unheld for a lease this call no longer holds;
-    that is a normal response, not a transport failure, so it is passed through under
-    `substrate` rather than mapped onto `error`."""
+    (lead.graph_state, action: claim) returned — it is what proves the holder.
+
+    The substrate answers a rejected renewal (reason lost, expired or unheld) as a normal,
+    non-error MCP result whose body carries ok: false — Substrate.call_tool only sets
+    result["error"] for a transport or protocol-level failure, so that body has to be read
+    explicitly. Folding it into a blanket {"ok": True} would report, and audit, a successful
+    renewal for a lease that was not renewed."""
     payload: dict[str, Any] = {
         "graph_id": args["graph_id"],
         "node_id": args["node_id"],
@@ -204,6 +207,9 @@ async def graph_heartbeat(ctx: ToolContext, args: dict[str, Any]) -> dict[str, A
     result = await ctx.services.substrate.call_tool("graph_heartbeat", payload, timeout=10)
     if result.get("error"):
         return failure(result["error"], result.get("reason", "graph_heartbeat failed"), detail=result.get("content"))
+    body = unwrap_content(result)
+    if isinstance(body, dict) and body.get("ok") is False:
+        return failure("lease_rejected", f"graph_heartbeat refused: {body.get('reason') or 'unknown'}", substrate=body)
     return {"ok": True, "substrate": result.get("content")}
 
 

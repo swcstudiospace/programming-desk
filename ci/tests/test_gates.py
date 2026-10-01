@@ -1732,6 +1732,7 @@ class TestG7DeskIntegrity:
             "--assembled-dir", str(tmp_path / "assembled"),
             "--templates-dir", str(tmp_path / "templates"),
         )
+        assert self.ROSTERS.is_dir(), "roster directory is missing"
         n_rosters = sum(1 for p in self.ROSTERS.glob("*.yaml") if p.name != "_core.yaml")
         assert self.PACKS.is_dir(), "pack directory is missing"
         n_packs = sum(1 for p in self.PACKS.glob("*.yaml"))

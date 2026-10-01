@@ -185,3 +185,39 @@ async def design_artifact_get(ctx: ToolContext, args: dict[str, Any]) -> dict[st
     if text is None:
         return failure("not_found", f"{args['path']} is not on origin/main")
     return {"path": args["path"], "content": text[:60000], "truncated": len(text) > 60000}
+
+
+async def graph_heartbeat(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Renew a lease this seat already holds, via the substrate's graph_heartbeat (SPE-4792,
+    agent-substrate packages/mcp-server lease.ts). lease_id must be the one graph_claim
+    (lead.graph_state, action: claim) returned — it is what proves the holder. The substrate
+    answers ok:false with reason lost, expired or unheld for a lease this call no longer holds;
+    that is a normal response, not a transport failure, so it is passed through under
+    `substrate` rather than mapped onto `error`."""
+    payload: dict[str, Any] = {
+        "graph_id": args["graph_id"],
+        "node_id": args["node_id"],
+        "lease_id": args["lease_id"],
+    }
+    if args.get("ttl_seconds") is not None:
+        payload["ttl_seconds"] = args["ttl_seconds"]
+    result = await ctx.services.substrate.call_tool("graph_heartbeat", payload, timeout=10)
+    if result.get("error"):
+        return failure(result["error"], result.get("reason", "graph_heartbeat failed"), detail=result.get("content"))
+    return {"ok": True, "substrate": result.get("content")}
+
+
+async def drift_scan(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    """Read-only coord_drift_scan(repo) snapshot (SPE-4792, agent-substrate drift.ts): one call,
+    one checked_at, every finding typed by the DriftKind enum. Reports only — never claims,
+    releases or alters anything. Empty findings is not the same as agreement: a snapshot whose
+    `unavailable` list is non-empty means a plane could not be read, and that is the caller's to
+    weigh, not something this backend resolves on their behalf."""
+    payload: dict[str, Any] = {"repo": args["repo"]}
+    for key in ("path", "git_tip", "branch", "idle_seconds", "limit", "format"):
+        if args.get(key) is not None:
+            payload[key] = args[key]
+    result = await ctx.services.substrate.call_tool("coord_drift_scan", payload, timeout=10)
+    if result.get("error"):
+        return failure(result["error"], result.get("reason", "coord_drift_scan failed"), detail=result.get("content"))
+    return {"ok": True, "substrate": result.get("content")}

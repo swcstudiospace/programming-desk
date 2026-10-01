@@ -12,9 +12,9 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from tests.conftest import INTAKE_TOKEN, MCP_HEADERS, PASS
+from tests.conftest import INTAKE_TOKEN, MCP_HEADERS, PASS, REPO
 
-EXPECTED = {"lead": 15, "systems": 14, "web": 15, "android": 15, "ios": 15, "infra": 15, "quality": 15}
+EXPECTED = {"lead": 15, "systems": 15, "web": 15, "android": 15, "ios": 15, "infra": 15, "quality": 15}
 
 
 async def test_health(client):
@@ -22,7 +22,14 @@ async def test_health(client):
     assert resp.status_code == 200
     body = resp.json()
     assert body["service"] == "desk-gateway" and body["seats"]["quality"] == "/mcp/quality"
-    assert body["packs"] == ["clippyos", "desklanes", "kanbanos"]
+    # Computed from each pack file's own `app:` field (not the filename — ios-local.yaml
+    # declares app: ioslocal) rather than hardcoded. See test_units.py's matching fix.
+    import yaml as _yaml
+    expected_apps = sorted(
+        _yaml.safe_load(p.read_text())["app"]
+        for p in (REPO / "contracts" / "tool-packs").glob("*.yaml")
+    )
+    assert body["packs"] == expected_apps
 
 
 @pytest.mark.parametrize("seat", list(EXPECTED))
@@ -158,6 +165,30 @@ async def test_pack_endpoint_serves_only_the_pack(rpc):
     names = await rpc.tools("android", path="/mcp/android/packs/desklanes")
     assert names == sorted(names) or True
     assert set(names) == {"desklanes_api_smoke", "desklanes_scoreboard_get", "desklanes_push_test", "desklanes_store_listing_get", "desklanes_crash_reports"}
+
+
+async def test_coordination_pack_loads_and_calls_graph_heartbeat_and_drift_scan(rpc):
+    """SPE-5715: graph_heartbeat is write (fails closed), coord_drift_scan is read (fails open) —
+    same without-upstream contract every other backend in this suite is held to."""
+    load = await rpc.call("systems", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    assert load["ok"] and load["live_tools"] == 17
+    assert set(load["tools"]) == {"coordination_graph_heartbeat", "coordination_drift_scan"}
+    assert len(await rpc.tools("systems")) == 17
+
+    out = await rpc.call("systems", "coordination_graph_heartbeat", {"graph_id": "ut-abc-12345678", "node_id": "n1", "lease_id": "lease-1"})
+    assert out["is_error"] is True and out["error"] == "not_configured"
+
+    out = await rpc.call("systems", "coordination_drift_scan", {"repo": "swcstudiospace/programming-desk"})
+    assert out["is_error"] is False and out["error"] == "not_configured"
+
+    names = await rpc.tools("systems", path="/mcp/systems/packs/coordination")
+    assert set(names) == {"coordination_graph_heartbeat", "coordination_drift_scan"}
+
+    # android has desk_app_tools_load (it loads its own packs) but is not in coordination.yaml's
+    # seats: [systems] — the right seat to prove "declared tool, undeclared pack" with. web has no
+    # desk_app_tools_load at all, which would prove the wrong thing (unknown_tool, not forbidden).
+    out = await rpc.call("android", "desk_app_tools_load", {"app": "coordination", "task_id": "spe-5715"})
+    assert out["error"] == "forbidden"
 
 
 async def test_doctor_register_and_check(rpc, app):

@@ -1,0 +1,78 @@
+# Contract change: new SYSTEMS tool pack exposing graph_heartbeat + coord_drift_scan
+# (SPE-5715, parent SPE-4792). SYSTEMS companion to the gap report in draft PR #58 (LEAD), which
+# found neither tool wired anywhere in programming-desk — not in docs/upgrade-plan-desk-v2.md's
+# 13-tool substrate list, not in any contract, not in any gateway module — and declined to
+# invent signatures or a drift-kind vocabulary rather than fabricate them. PR #58 is left
+# untouched by this change; it stays as the record of what was unknown before the signatures
+# below were confirmed.
+#
+# Signatures and the DriftKind enum below are copied verbatim from
+# swcstudiospace/agent-substrate@main packages/mcp-server/src/mcp.ts, lease.ts and drift.ts
+# (SPE-4792 #6), as confirmed by the ticket requester outside this session's GitHub access
+# (scoped to swcstudiospace/programming-desk only). This session did not and could not
+# independently re-derive them from agent-substrate; see the receipt for exactly what was and
+# was not checked directly.
+#
+# Verify before merging:
+#   python3 ci/gates/check_contracts.py --base origin/main \
+#       --change contracts/changes/spe-5715-systems-coordination-pack-v1.0.0.yaml
+#   python3 ci/gates/check_desk_integrity.py
+
+change_id: spe-5715-systems-coordination-pack-v1.0.0
+proposed_by: bot-01-systems-backend
+
+surface: contracts/tool-packs/coordination.yaml
+surfaces:
+  - contracts/tool-rosters/systems.yaml
+
+breaking: false
+version: 1.0.0
+previous_version: null
+
+summary: >
+  Adds a new SYSTEMS-only tool pack, contracts/tool-packs/coordination.yaml, exposing two tools
+  — coordination_graph_heartbeat and coordination_drift_scan — backed by the agent-substrate MCP
+  tools graph_heartbeat and coord_drift_scan (SPE-4792 #6). A pack rather than a direct
+  contracts/tool-rosters/systems.yaml addition for those two tools, because that roster is
+  already at 14 of the 15-tool ceiling (ROSTER_MAX_TOOLS, ci/gates/check_desk_integrity.py) and
+  both together would push it to 16; same ceiling, same fix as the SPE-5160/5161 android/ios
+  precedent (contracts/tool-packs/androidlocal.yaml). systems.yaml itself gets one small,
+  additive change instead: `desk_app_tools_load` (packs.app_tools_load, identical schema to
+  android.yaml's and ios.yaml's) plus `packs_allowed: true`, 1.0.0 -> 1.1.0, bringing it to
+  exactly 15 of 15 — SYSTEMS could not load any pack at all without this, android/ios/web being
+  the only seats that already carry it. No existing SYSTEMS tool is removed, renamed or
+  renarrowed. New pack surface, no prior version, additive only: no seat loses a tool.
+
+consumers_required:
+  - bot-02-web-edge
+  - bot-03-android
+  - bot-04-ios
+
+semantic_changes: []
+
+acknowledgements: []
+
+migration_note: >
+  None required. New pack, additive only, seats: [systems] — no other seat's tools/list changes.
+
+notes:
+  - "Backend is real, not a placeholder: services/desk-gateway/src/desk_gateway/tools/systems.py
+    in this same change implements graph_heartbeat and drift_scan, calling the substrate tools
+    through Substrate.call_tool — the same path lead.graph_state already uses for
+    graph_claim/graph_release/graph_complete."
+  - "ownership.yaml is unchanged: every touched path in this change (contracts/tool-packs/**,
+    contracts/tool-rosters/**, contracts/changes/**, services/desk-gateway/**) already resolves
+    under an existing pattern to bot-06-quality-security (contract_surface: true) or
+    bot-01-systems-backend. No new ownership rule is needed, and none is added."
+  - "DriftKind vocabulary coordination_drift_scan's findings use (not enumerated in the pack's
+    input schema, since it is the substrate response shape, not this tool's input, that carries
+    it): git.tip_unlogged, ledger.commit_unknown_to_git, ledger.silent, lease.expired,
+    lease.idle, lease.orphaned, work.unclaimed, edge.requires_incomplete, edge.gate_open —
+    copied verbatim from agent-substrate drift.ts per the ticket requester; not independently
+    observed in this session."
+  - "Not done here, and deliberately: skills/desk-bootstrap/desk-production-loop/** (LEAD-owned,
+    bot-00-programming-lead) is untouched. Wiring the production loop to claim -> optional
+    drift_scan -> work -> heartbeat -> complete/handoff is LEAD's edit against this contract
+    once it merges, not a SYSTEMS one — flagged here for LEAD/QUALITY follow-up rather than
+    written under ownership bot-01 does not have."
+  - "PR #58 (LEAD, SPE-5715 gap report, draft, do-not-edit) is left untouched."

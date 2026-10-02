@@ -114,7 +114,8 @@ history. Removing it from the working tree is not remediation.
 **Rule.** A breaking change to a contract surface requires a version bump, a migration note, and
 an acknowledgement from every consumer in `contract_consumers`. Any change, breaking or not,
 requires a change document whose declared surfaces (`surface`, plus an optional `surfaces` list)
-cover every contract-surface file in the diff.
+cover every contract-surface file in the diff, other than the change document itself and the
+rest of `contracts/changes/`.
 
 That coverage requirement is what binds a document to a change. Callers select the document by
 globbing `contracts/changes/`, so without it a document left behind after its own change merged

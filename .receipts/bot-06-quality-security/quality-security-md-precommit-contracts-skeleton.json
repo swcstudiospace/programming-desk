@@ -127,6 +127,54 @@
       "exit_code": 0,
       "duration_s": 0.1,
       "output_tail": "G-3 PASS — 16 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "........................................................................ [ 80%]\n..................                                                       [100%]\n90 passed in 4.76s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-1 manifest OK — 7 bots, 100 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files contracts/api/notifications.yaml --change contracts/changes/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 1,
+      "duration_s": null,
+      "output_tail": "      contracts/changes/ validates a change it never described — or the\n      paths above belong in its 'surfaces:' list.\n  See docs/cross-bot-protocol.md and skills/contract-first-changes/SKILL.md"
+    },
+    {
+      "cmd": "bash ci/hooks/g4-preflight.sh openapi.yaml",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "G-4 — 1 contract surface file(s) touched:\n    openapi.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "bash ci/hooks/g4-preflight.sh .receipts/bot-06-quality-security/quality-security-md-precommit-contracts-skeleton.json contracts/changes/archive/contracts-skeleton-v0.1.0.yaml",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "    contracts/changes/archive/contracts-skeleton-v0.1.0.yaml\nG-4 PASS — contracts-skeleton-v0.1.0: non-breaking, v0.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "..................                                                       [100%]\n90 passed in 4.81s"
+    },
+    {
+      "cmd": "bash ci/hooks/g4-preflight.test.sh",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "  ok    two active documents, one supplied -> still refused\n8 passed, 0 failed"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": null,
+      "output_tail": "..................                                                       [100%]\n90 passed in 4.72s"
     }
   ],
   "claims": [
@@ -201,6 +249,39 @@
     {
       "claim": "G-3 PASS across the whole change",
       "evidence_command_index": 16
+    },
+    {
+      "claim": "On merged main, the 90 gate self-tests still pass",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "On merged main, the manifest validates at 100 rules",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "On merged main, the G-4 surface-coverage tightening is live: the skeleton change document can no longer validate an unrelated contract change",
+      "evidence_command_index": 19,
+      "expects_failure": true
+    },
+    {
+      "claim": "On merged main, the G-4 pre-flight resolves the active change document and passes",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Archiving the merged change document now passes the G-4 pre-flight. It did not before: archiving removes the active document while still touching contracts/**, so the resolver fell through to the no-document path and failed closed — an archive-only change could never pass the hook this PR's predecessor shipped",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "90 gate self-tests still pass with the resolver change",
+      "evidence_command_index": 22
+    },
+    {
+      "claim": "The pre-flight wrapper now has its own test suite — 8 cases covering the selection order, the one-active-document guard both ways round, the archive-only move, and the fail-closed path. Run against the pre-fix wrapper it fails exactly the two cases Greptile reported and no others, so the tests detect those regressions rather than merely accompanying the fix",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "90 gate self-tests still pass with the bookkeeping exclusion in check_contracts.py",
+      "evidence_command_index": 24
     }
   ],
   "unverified": [
@@ -215,7 +296,9 @@
     "This receipt was committed with `git add -f`. .gitignore line 5 ignores .receipts/**/*.json, yet all 22 existing receipts are tracked and both G-2 and the CI template require a committed receipt — so -f is how the existing ones got in, not a workaround invented here. Not fixed in this change: it is a one-line .gitignore question affecting every seat, and .gitignore matches no pattern in ownership.yaml, so G-1 reports it UNOWNED and any edit to it needs a manifest rule first.",
     "A narrower case of the P1 class survives: if a later change happens to touch a path the stale document also declares, coverage is satisfied and the stale document validates it. The complete fix is to require the change document to appear in the diff, which every existing G-4 test would fail — they all write the document to a tmp_path outside the file list — and ci/tests/test_gates.py is owned by bot-01-systems-backend. Needs that owner to update the fixtures alongside the gate.",
     "No regression test was added for the new surface-coverage rule, for the same ownership reason: the gate self-test suite lives in bot-01's path. The behaviour is evidenced by the before/after pair above rather than by a committed test, which is weaker — a future edit to check_contracts.py could silently undo it.",
-    "The root cause Greptile named, `ls -1 contracts/changes/*.yaml | head -n1` in ci/.github/workflows/gates.yml, is NOT fixed. That file matches no pattern in ownership.yaml (verified UNOWNED), Actions are out of scope for this change, and the workflow is a template not installed as CI. The gate-level and hook-level guards make the mis-selection fail rather than pass; the selector itself is INFRA's to fix."
+    "The root cause Greptile named, `ls -1 contracts/changes/*.yaml | head -n1` in ci/.github/workflows/gates.yml, is NOT fixed. That file matches no pattern in ownership.yaml (verified UNOWNED), Actions are out of scope for this change, and the workflow is a template not installed as CI. The gate-level and hook-level guards make the mis-selection fail rather than pass; the selector itself is INFRA's to fix.",
+    "The CI state above is read from the GitHub Actions API, not from a command in this receipt. Job logs returned HTTP 404 for every failed job, which is consistent with runs that produced no logs.",
+    "Whether the runner failure is billing, a runner-group setting or an org policy was not determined — none of that is visible from this session."
   ],
   "g1_g6_notes": {
     "G-1": "PASS — 10 files, all bot-06-quality-security. No manifest change required.",
@@ -246,6 +329,75 @@
       "verdict": "VALID — reproduced, failed even with a valid change document present",
       "disposition": "FIXED: ci/hooks/g4-preflight.sh resolves and passes the document, and refuses more than one active document.",
       "residual": null
+    },
+    {
+      "id": "4140544602",
+      "priority": "P1",
+      "pr": 28,
+      "title": "Active-document guard is bypassed",
+      "verdict": "VALID — a change supplying its own document skipped the count check entirely",
+      "disposition": "FIXED: the guard runs first and unconditionally. It is a statement about the repository, not about how this run picked its document.",
+      "residual": null
+    },
+    {
+      "id": "4140544606",
+      "priority": "P1",
+      "pr": 28,
+      "title": "Archived document can win selection",
+      "verdict": "VALID — and worse than described: bash `case` patterns match `/`, so contracts/changes/*.yaml already matched archive paths and the archive branch was unreachable",
+      "disposition": "FIXED: an active document in the change outranks an archived one, with the archive pattern tested first so it can match at all. The gate also no longer counts contracts/changes/ toward surface coverage, so archiving the previous document is not something the new one has to declare.",
+      "residual": null
+    },
+    {
+      "id": "4140544612",
+      "priority": "P2",
+      "pr": 28,
+      "title": "Test command cannot be rerun",
+      "verdict": "VALID — the receipt builder truncated long argv to four elements and appended an ellipsis. A command a reader cannot re-run is not evidence, which is the whole point of G-2",
+      "disposition": "FIXED: both truncated entries re-run in full and recorded whole; asserted no ellipsis survives anywhere in commands[].",
+      "residual": null
+    },
+    {
+      "id": "4140544617",
+      "priority": "P2",
+      "pr": 28,
+      "title": "New wrapper branches lack tests",
+      "verdict": "VALID — ci/tests/test_gates.py calls check_contracts.py directly with an explicit --change, so it never reaches the wrapper",
+      "disposition": "FIXED: ci/hooks/g4-preflight.test.sh, in QUALITY's own path rather than bot-01's ci/tests/, wired into pre-commit on ^ci/hooks/. This also closes the 'no regression test for the new rule' gap recorded earlier for the wrapper half.",
+      "residual": "check_contracts.py's surface-coverage rule still has no test in ci/tests/; that file remains bot-01's."
     }
+  ],
+  "corrections": [
+    "WITHDRAWN: '.github/workflows/ does not exist in this repository.' True at this branch's fork point (65f62e5); false by the time the pull request was reviewed. main commit 1738ec4 wired the Quality Gates workflow at .github/workflows/, and gates-template-sync.yml holds it identical to the ci/.github/workflows/ template. CI is live on this repository. The statement appears in the merged pull request body and in this receipt's earlier unverified list; both are wrong.",
+    "WITHDRAWN: 'ci/.github/workflows/gates.yml is UNOWNED.' main commit dcc4e03 assigned ci/.github/workflows to bot-05-infrastructure. FOREIGN to QUALITY, not unowned — still not QUALITY's to edit, for a different reason than the one given.",
+    "SCOPE CORRECTED on Greptile P1: main's live workflow already selected the change document from the diff (git diff --name-only ... -- contracts/changes) rather than by globbing the directory, fixed independently in a2730a6 before this branch merged main in. The selector half of that finding was therefore already closed upstream. The gate-level surface-coverage check is defence in depth, not the sole barrier — it binds a document to its change for every caller that gets no diff-based selection: the manual pre-flight, run_all.py, and a human running the gate by hand.",
+    "STILL HOLDS: '.gitignore is UNOWNED', re-verified against the merged 100-rule manifest."
+  ],
+  "post_merge": {
+    "pr": 27,
+    "merged_at": "2026-09-30T03:17:54Z",
+    "merged_head": "3fd739eeff176baa58add7877ac1173b46534c9d",
+    "merge_commit": "5fc0244",
+    "merged_by_this_session": false,
+    "note": "PR #27 was opened as a draft and explicitly scoped draft-only, not to be merged. It was undrafted and merged by the repository account at 03:17:54, roughly three seconds after the Cursor Approval Agent: Pull Request Router check reported. This session did not undraft and did not merge it. Recorded because a receipt that let the merge pass unmentioned would misrepresent how the change reached main.",
+    "not_in_the_merge": "The merge took head 3fd739e. Two later commits on the branch were not included: the merge of origin/main and the withdrawal of the three claims above. This receipt carries those corrections forward as a fresh change on a branch restarted from main."
+  },
+  "ci_state": {
+    "observation": "Every Quality Gates workflow run in this repository concludes 'failure' within 3-5 seconds, on pull requests and on pushes to main alike, with no runner assigned (runner_id 0, runner_name empty, no step records). Runs 2 through 7 inclusive, covering PRs #15, #16 and #27 and two pushes to main. The base branch is red for the same reason this branch was.",
+    "assessment": "Infrastructural — the jobs never reach checkout, so no gate or test actually ran. Not attributable to any of these changes. Locally the same jobs pass: pytest 90 passed, and the template-sync body comparison matches.",
+    "separate_and_real": "Independently of the runner problem, the gates job would reject this branch at attribution: it requires ^bot-0[0-6]-[a-z0-9-]+$ as the branch prefix and this branch is claude/security-precommit-contracts-gjqopu. Not fixable from inside the branch, and renaming it was outside this session's instructions.",
+    "run_ids": [
+      36616274892,
+      36662124388,
+      36663358296,
+      36663380880,
+      36663520505,
+      36663763129
+    ]
+  },
+  "followup_scope": [
+    "Archives contracts/changes/contracts-skeleton-v0.1.0.yaml, which PR #27 left active on main — step 6 of the protocol, and the precondition for the one-active-document rule.",
+    "Fixes a defect in ci/hooks/g4-preflight.sh, shipped by PR #27: it selected only from the active directory, so an archive-only change could never pass. It now selects a change document from the files in the change first, matching .github/workflows/gates.yml, and falls back to the single active document.",
+    "Carries forward the three withdrawn claims that were not in the merged head."
   ]
 }

@@ -20,8 +20,10 @@ sign-off into a merge condition instead of a thread nobody can find later.
 `change_id`, `proposed_by`, `surface`, `breaking`, `version`, `summary`, and `semantic_changes`.
 
 `surfaces` is optional and holds any further contract paths the change touches. Together with
-`surface` it must cover **every** contract-surface file in the diff, excluding the change
-document itself — G-4 fails and names the undeclared paths otherwise. List them individually;
+`surface` it must cover **every** contract-surface file in the diff, except the change document
+itself and anything else under `contracts/changes/` — G-4 fails and names the undeclared paths
+otherwise. This directory is the protocol's own bookkeeping, not a surface anyone builds
+against, so archiving the previous document does not have to be declared as a change to it. List them individually;
 `contracts/**` satisfies the check while describing nothing, which is the failure the check
 exists to catch.
 

@@ -117,6 +117,20 @@ repos:
         pass_filenames: false
 
       # -------------------------------------------------------------------------------
+      # The pre-flight wrapper decides which change document G-4 validates, and
+      # ci/tests/test_gates.py does not reach it — those tests call check_contracts.py
+      # directly with an explicit --change. Without this, the selection order and the
+      # one-active-document guard could break with every gate test still green.
+      # -------------------------------------------------------------------------------
+      - id: preflight-self-test
+        name: "Pre-flight wrapper self-test (ci/hooks)"
+        entry: bash ci/hooks/g4-preflight.test.sh
+        language: python
+        additional_dependencies: ["pyyaml"]
+        files: ^ci/hooks/
+        pass_filenames: false
+
+      # -------------------------------------------------------------------------------
       # G-4 — contract-first pre-flight. MANUAL stage on purpose: it is advisory here and
       # blocking in CI.
       #
@@ -128,10 +142,15 @@ repos:
       #
       #     pre-commit run --hook-stage manual g4-contract-preflight --all-files
       #
-      # It runs through ci/hooks/g4-preflight.sh, which resolves the active change document
-      # from contracts/changes/ and passes it to the gate. Calling the gate directly would
-      # report "no change document supplied" on every run — including runs where the
-      # contributor has written a valid one — so the pre-flight could never report ready.
+      # It runs through ci/hooks/g4-preflight.sh, which resolves the change document and
+      # passes it to the gate. Calling the gate directly would report "no change document
+      # supplied" on every run — including runs where the contributor has written a valid
+      # one — so the pre-flight could never report ready.
+      #
+      # The wrapper selects in the same order .github/workflows/gates.yml does: a change
+      # document among the files in this change first, then the single active document in
+      # contracts/changes/. Two different rules for choosing a change document would be the
+      # same class of bug as two workflows drifting apart.
       #
       # The wrapper also fails when contracts/changes/ holds more than one document: the
       # gate's caller selects one by globbing that directory, so a second, already-merged

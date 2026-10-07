@@ -115,6 +115,16 @@ def lint_tree(root: Path) -> dict:
     }
 
 
+def lint_path(path: Path) -> dict:
+    """lint_tree() with the exit code `python -m ios.tools plist_lint` returns.
+
+    lint_tree already accepts a single file or a directory, so this only adds the exit code.
+    """
+    result = lint_tree(path)
+    status = str(result.get("status") or "")
+    return {**result, "exit_code": {"ok": 0, "failed": 1}.get(status, 2)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Lint Info.plist usage strings and entitlements")
     parser.add_argument("root", type=Path)

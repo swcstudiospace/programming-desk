@@ -24,12 +24,25 @@ def parse_log(text: str, source: str) -> dict:
     schemes = SCHEME_RE.findall(text)
     destinations = DEST_RE.findall(text)
     errors = ERROR_RE.findall(text)
+    failures = [m for m in results if m.group(2) == "FAILED"]
+    # Attribute the scheme/destination to the invocation that produced the banner we report on,
+    # which is the last one appearing BEFORE it. Reading the file's last -scheme names whichever
+    # target happened to run last, not the one that failed (Greptile P1, PR #57).
+    anchor = (failures[0] if failures else results[-1]).start() if results else len(text)
+    before = text[:anchor]
+    scoped_schemes = SCHEME_RE.findall(before) or schemes
+    scoped_destinations = DEST_RE.findall(before) or destinations
     base = {
         "source": source,
         "xcodebuild_invoked": False,
         "simulator_booted": False,
-        "scheme": schemes[-1] if schemes else None,
-        "destination": destinations[-1] if destinations else None,
+        # The log naming a simulator destination is not the same as one having been booted: this
+        # tool never runs xcodebuild, so it reports the mention and leaves the boot claim false.
+        "simulator_mentioned": any("simulator" in d.lower() for d in destinations),
+        "any_failed": bool(failures),
+        "banner_count": len(results),
+        "scheme": scoped_schemes[-1] if scoped_schemes else None,
+        "destination": scoped_destinations[-1] if scoped_destinations else None,
         "error_lines": errors[:20],
         "error_count": len(errors),
     }
@@ -43,7 +56,12 @@ def parse_log(text: str, source: str) -> dict:
             }
         )
         return base
-    action, result = results[-1].group(1), results[-1].group(2)
+    # Any FAILED banner means the run failed, and the FIRST one names the target that broke.
+    # Reading only the last banner lets a later "** TEST SUCCEEDED **" from a subsequent target
+    # mask an earlier failure, and reports the wrong target when it does (Greptile P1, PR #57).
+    failures = [m for m in results if m.group(2) == "FAILED"]
+    chosen = failures[0] if failures else results[-1]
+    action, result = chosen.group(1), chosen.group(2)
     base.update(
         {
             "status": "passed" if result == "SUCCEEDED" else "failed",
@@ -87,6 +105,13 @@ def parse_path(path: Path) -> dict:
     parsed = parse_log(raw, str(path))
     parsed["artifact_format"] = "text-log"
     return parsed
+
+
+def parse_file(path: Path) -> dict:
+    """parse_path() with the exit code `python -m ios.tools xcodebuild_receipt` returns."""
+    parsed = parse_path(path)
+    status = str(parsed.get("status") or "")
+    return {**parsed, "exit_code": {"passed": 0, "failed": 1}.get(status, 2)}
 
 
 def main(argv: list[str] | None = None) -> int:

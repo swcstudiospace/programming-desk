@@ -1,0 +1,86 @@
+{
+  "task_id": "spe-5161-ios-tools-metavr",
+  "bot": "bot-04-ios",
+  "started_at": "2026-10-07T18:20:00Z",
+  "completed_at": "2026-10-07T18:45:00Z",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest ios/tools/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 0.86,
+      "output_tail": "44 passed in 0.86s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ android/tools/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 15.39,
+      "output_tail": "244 passed in 15.39s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-04-ios --files ios/__init__.py ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/entitlements.py ios/tools/metavr_bridge.py ios/tools/tests/test_cli.py ios/tools/IOS_TOOLS.md ios/tools/plist_lint.py ios/tools/snapshot_diff.py ios/tools/spm_linux.py ios/tools/xcodebuild_receipt.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-04-ios: 12 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ios/__init__.py ios/tools/__init__.py ios/tools/__main__.py ios/tools/cli.py ios/tools/entitlements.py ios/tools/metavr_bridge.py ios/tools/tests/test_cli.py ios/tools/IOS_TOOLS.md ios/tools/plist_lint.py ios/tools/snapshot_diff.py ios/tools/spm_linux.py ios/tools/xcodebuild_receipt.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 12 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files ios/tools/cli.py ios/tools/IOS_TOOLS.md",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The 44 cases under ios/tools/tests pass together: the five module test files landed by PR #46 plus the CLI test file restacked from PR #48/#57",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The ci and android suites still pass after the shared ios/tools modules were edited, so this restack did not regress them",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-1: the restacked ios/tools files are within bot-04-ios owned paths",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-3: no secret shapes in the restacked files",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-4: no contract surface was edited",
+      "evidence_command_index": 4
+    }
+  ],
+  "unverified": [
+    "No approved_by. Nobody has reviewed this restack; the field is left absent rather than filled with a seat that did not review it, so G-2 fails by design and the merge needs either a reviewer or an explicit owner override.",
+    "spm_test_linux was not run against a real Swift toolchain. Only the skip (exit 3) and dry-run paths are covered by tests.",
+    "device_screenshot, ui_dump and ui_tap were not invoked. metavr_bridge only checks PATH and returns exit 3 when the name is absent. No screenshot artifact was written.",
+    "xcodebuild was not invoked and no Simulator was booted. The xcodebuild_receipt tests parse log strings only.",
+    "ios/tools/README.md was not added. ownership.yaml has a bare README.md rule owned by bot-06-quality-security that matches at any depth, so the note lives at ios/tools/IOS_TOOLS.md instead.",
+    "PNG comparison reads the IHDR width and height only. It is not a pixel diff and will not detect a visual change at identical dimensions beyond the sha256 mismatch."
+  ],
+  "files_changed": [
+    "ios/__init__.py",
+    "ios/tools/__init__.py",
+    "ios/tools/__main__.py",
+    "ios/tools/cli.py",
+    "ios/tools/entitlements.py",
+    "ios/tools/metavr_bridge.py",
+    "ios/tools/tests/test_cli.py",
+    "ios/tools/IOS_TOOLS.md",
+    "ios/tools/plist_lint.py",
+    "ios/tools/snapshot_diff.py",
+    "ios/tools/spm_linux.py",
+    "ios/tools/xcodebuild_receipt.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

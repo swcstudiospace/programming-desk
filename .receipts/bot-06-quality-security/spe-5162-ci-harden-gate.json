@@ -1,0 +1,522 @@
+{
+  "task_id": "spe-5162-ci-harden-gate",
+  "bot": "bot-06-quality-security",
+  "approved_by": "bot-00-programming-lead",
+  "approved_at": "2026-09-30T17:06:07Z",
+  "branch": "bot-06-quality-security/spe-5162-ci-harden-gate",
+  "started_at": "2026-09-30T15:55:00Z",
+  "completed_at": "2026-09-30T16:05:00Z",
+  "runtime": "claude-cloud",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 105 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 8 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS \u2014 8 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; [yaml.safe_load(open(f)) for f in ['.github/workflows/security-pr.yml','.github/workflows/security-nightly.yml','ci/security/semgrep.yml']]\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "no exception \u2014 all three YAML files parse"
+    },
+    {
+      "cmd": "python3 -c \"import tomllib; tomllib.load(open('ci/security/gitleaks.toml','rb'))\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "no exception \u2014 gitleaks.toml parses"
+    },
+    {
+      "cmd": "pip install bandit bandit-sarif-formatter && bandit -r services ci --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 3.5,
+      "output_tail": "[formatter] INFO SARIF output written to file: bandit.sarif \u2014 0 HIGH-severity findings"
+    },
+    {
+      "cmd": "pip install semgrep && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error services ci",
+      "exit_code": 0,
+      "duration_s": 14.2,
+      "output_tail": "Ran 58 rules on 38 files: 0 findings."
+    },
+    {
+      "cmd": "curl -sSL -o gitleaks.tar.gz https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz && tar xzf gitleaks.tar.gz gitleaks && ./gitleaks detect --source . --config ci/security/gitleaks.toml --log-opts=\"origin/main..HEAD\" --report-format sarif --report-path gitleaks.sarif -v",
+      "exit_code": 0,
+      "duration_s": 2.1,
+      "output_tail": "1 commits scanned. no leaks found"
+    },
+    {
+      "cmd": "./gitleaks detect --source . --config ci/security/gitleaks.toml --no-git --report-format json --report-path gitleaks-full.json -v",
+      "exit_code": 1,
+      "duration_s": 0.4,
+      "output_tail": "leaks found: 12 (all in ci/tests/test_gates.py and services/desk-gateway/tests/test_units.py \u2014 pre-existing G-3 fixtures marked 'pragma: allowlist secret' for the repo's own scanner, not this PR's diff)",
+      "expects_failure": true
+    },
+    {
+      "cmd": "mapfile -t REQ_FILES < <(git ls-files -- 'services/**/requirements*.txt' 'ci/**/requirements*.txt'); echo count=${#REQ_FILES[@]}",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "count=0 \u2014 no requirements*.txt in the repo today, confirming the workflow's skip branch is the live path, not dead code"
+    },
+    {
+      "cmd": "pip-audit -r services/desk-gateway/pyproject.toml",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "ERROR:pip_audit._cli:requirement file ... contains invalid specifier at line 1 \u2014 confirms pip-audit cannot read this repo's uv-managed pyproject.toml, hence Trivy fs is the SCA path for it, not pip-audit",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 3 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "pip install pytest && python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.6,
+      "output_tail": "157 passed in 9.56s"
+    },
+    {
+      "cmd": "git ls-remote --tags https://github.com/aquasecurity/trivy-action.git | grep -oE 'refs/tags/[^ ]+' | sed 's#refs/tags/##' | sort -V | tail -5",
+      "exit_code": 0,
+      "duration_s": 0.8,
+      "output_tail": "v0.33.1 v0.34.0 v0.35.0 v0.36.0 v0.36.0^{} \u2014 confirms tags are v-prefixed, not bare 0.28.0",
+      "expects_failure": false
+    },
+    {
+      "cmd": "for repo in zaproxy/action-baseline github/codeql-action projectdiscovery/nuclei gitleaks/gitleaks; do git ls-remote --tags \"https://github.com/$repo.git\" | grep -E 'v(0\\.14\\.0|3|3\\.3\\.7|8\\.21\\.2)(\\^\\{\\})?$'; done",
+      "exit_code": 0,
+      "duration_s": 1.5,
+      "output_tail": "v0.14.0 (zaproxy/action-baseline), v3 + its ^{} peeled commit (github/codeql-action), v3.3.7 (nuclei), v8.21.2 + its ^{} peeled commit (gitleaks) each individually confirmed present \u2014 a single git ls-remote invocation only ever queries its FIRST positional argument as the repository and treats the rest as ref-pattern filters, so this is a loop of four separate real queries, not one command against four repos",
+      "expects_failure": false
+    },
+    {
+      "cmd": "git clone --depth 1 --branch v0.28.0 https://github.com/aquasecurity/trivy-action.git && grep -n setup-trivy trivy-action/action.yaml",
+      "exit_code": 0,
+      "duration_s": 1.2,
+      "output_tail": "uses: aquasecurity/setup-trivy@v0.2.1 \u2014 this tag no longer exists upstream (git ls-remote for aquasecurity/setup-trivy shows only v0.2.6, v0.3.0, v0.3.1), which is the actual root cause PR #50's second CI run hit: 'Unable to resolve action aquasecurity/setup-trivy@v0.2.1'"
+    },
+    {
+      "cmd": "for v in v0.29.0 v0.30.0 v0.31.0 v0.32.0 v0.33.0 v0.33.1 v0.34.0 v0.35.0 v0.36.0; do curl -sSL https://raw.githubusercontent.com/aquasecurity/trivy-action/$v/action.yaml | grep setup-trivy; done",
+      "exit_code": 0,
+      "duration_s": 4.5,
+      "output_tail": "v0.29.0/v0.30.0 pin setup-trivy@v0.2.2 (a tag, same failure mode); v0.31.0 onward pin by commit SHA instead of a tag; v0.36.0 pins 3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6"
+    },
+    {
+      "cmd": "git ls-remote https://github.com/aquasecurity/setup-trivy.git | grep 3fb12ec12f41e471780db15c232d5dd185dcb514",
+      "exit_code": 0,
+      "duration_s": 0.6,
+      "output_tail": "3fb12ec12f41e471780db15c232d5dd185dcb514 refs/tags/v0.2.6 \u2014 the SHA trivy-action@v0.36.0 pins internally exists and matches a current setup-trivy tag"
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 1,
+      "duration_s": 2.7,
+      "output_tail": "CORRECTED ENTRY — this receipt originally recorded exit_code 0 here via `... | tail -10` piping, which reports tail's exit code, not bandit's: the exact class of error Greptile's receipt-evidence finding (4147142705) called out elsewhere in this same receipt, which I failed to apply to this command at the time. The real exit code is 1: B324 (SHA1 used in infra/unified-lsp-broker/broker.py's WebSocket handshake, HIGH severity) — confirmed on PR #50's actual CI run (job 110002295320) and reproduced locally by re-running without a pipe. See ci/tests/test_security_workflows.py's new test for the fix (scope to this PR's changed .py files instead of the whole repo).",
+      "expects_failure": true
+    },
+    {
+      "cmd": "semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error .",
+      "exit_code": 1,
+      "duration_s": 15.5,
+      "output_tail": "Ran 69 rules on 240 files: 1 finding \u2014 python.lang.security.use-defused-xml.use-defused-xml in scripts/generate-templates.py:23, pre-existing on main, owned by bot-00-programming-lead, untouched by this PR. Real exit code captured directly (not through a pipe), proving an unscoped whole-repo Semgrep run would fail THIS PR for code it never touched \u2014 the reason --baseline-commit was added rather than shipping the naive widen-to-'.' fix.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git fetch --no-tags --depth=1 origin main && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --sarif --output semgrep.sarif --severity ERROR --error --baseline-commit origin/main .",
+      "exit_code": 0,
+      "duration_s": 15.0,
+      "output_tail": "Ran 37 rules on 9 files: 0 findings \u2014 'Scan was limited to files changed since baseline commit.' Same whole-repo scan, same pre-existing finding still present on disk, but --baseline-commit correctly excludes it and only judges this PR's own 9 changed files."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_security_workflows.py -v",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "11 passed \u2014 new regression-guard suite (Greptile P2 4147142698) parsing security-pr.yml and asserting its blocking flags, SHA pins, and per-job permissions scoping"
+    },
+    {
+      "cmd": "sed -i 's/exit-code: \"1\"$/exit-code: \"1\"\\n          ignore-unfixed: true/' .github/workflows/security-pr.yml && python3 -m pytest ci/tests/test_security_workflows.py::TestTrivyBlocks::test_ignore_unfixed_not_set -v",
+      "exit_code": 1,
+      "duration_s": 0.04,
+      "output_tail": "AssertionError: assert True is not True \u2014 proves the new test actually catches the exact regression it's named for (re-adding ignore-unfixed: true), not just a tautology. File was restored from backup immediately after.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.4,
+      "output_tail": "168 passed in 10.36s (157 pre-existing + 11 new)"
+    },
+    {
+      "cmd": "mcp__github__actions_get(method=download_workflow_run_artifact, resource_id=11113902354) to get a signed download URL, then curl that URL, unzip, and python3 -c \"import json; d=json.load(open('bandit.sarif')); [print(r['ruleId'], r['locations'][0]['physicalLocation']['artifactLocation']['uri']) for r in d['runs'][0]['results']]\" — the URL itself is a time-limited Azure blob SAS token, not reproducible verbatim; the download+inspect steps are",
+      "exit_code": 0,
+      "duration_s": 1.0,
+      "output_tail": "B324 infra/unified-lsp-broker/broker.py — the actual SARIF from PR #50's failed Bandit check run (job 110002295320), downloaded and inspected directly rather than guessed at from the truncated CI log (bandit's SARIF formatter writes findings only to the output file, not stdout)"
+    },
+    {
+      "cmd": "bandit infra/unified-lsp-broker/broker.py -lll",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "Reproduced locally: High: 1 — same B324 finding as CI, confirming this is a real, reproducible finding and not a CI-environment artifact",
+      "expects_failure": true
+    },
+    {
+      "cmd": "git diff --name-only origin/main...HEAD -- '*.py'",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "ci/tests/test_security_workflows.py — the only Python file this PR's diff touches; confirms infra/unified-lsp-broker/broker.py is pre-existing code outside this PR's own changes"
+    },
+    {
+      "cmd": "bandit ci/tests/test_security_workflows.py --ini ci/security/bandit.ini -lll -f sarif -o bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "SARIF output written, exit 0 — scoping Bandit to only this PR's changed .py files (the fix) excludes the pre-existing broker.py finding while still scanning everything this PR actually added"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.5,
+      "output_tail": "169 passed (168 pre-existing + 1 new: test_scoped_to_pr_changed_files_not_whole_repo)"
+    },
+    {
+      "cmd": "bandit --help | grep -B1 -A3 '\\-b '",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "-b BASELINE, --baseline BASELINE: path of a baseline report to compare against (only JSON-formatted files are accepted) — confirms -b exists and is JSON-only, informing the two-step (JSON-gating + separate SARIF-artifact) design"
+    },
+    {
+      "cmd": "git worktree add --detach /tmp/sectest/base-worktree2 origin/main; cd /tmp/sectest/base-worktree2; bandit -r . --ini <abs-path>/ci/security/bandit.ini -lll -f json -o /tmp/sectest/baseline2.json; cd -; git worktree remove /tmp/sectest/base-worktree2",
+      "exit_code": 1,
+      "duration_s": 3.0,
+      "output_tail": "Baseline generation against origin/main exits 1 (findings exist: the broker.py B324) — this is why the baseline-generation step's own exit code must be checked against >1, not >0, to correctly treat 'baseline has findings' as a successful snapshot rather than a tool failure"
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -b /tmp/sectest/baseline2.json -lll -f json -o /tmp/sectest/head-vs-baseline2.json",
+      "exit_code": 0,
+      "duration_s": 2.8,
+      "output_tail": "0 results — the pre-existing broker.py finding, present in both the base-ref baseline and the current tree, is correctly suppressed by -b. This is the actual gating mechanism the workflow now uses."
+    },
+    {
+      "cmd": "echo 'import hashlib\\ndef bad():\\n    return hashlib.md5(b\"x\").hexdigest()' > ci/tests/_scratch_bandit_check.py && bandit ci/tests/_scratch_bandit_check.py --ini ci/security/bandit.ini -b /tmp/sectest/baseline2.json -lll -f json -o /tmp/sectest/newfinding.json; rm ci/tests/_scratch_bandit_check.py",
+      "exit_code": 1,
+      "duration_s": 0.3,
+      "output_tail": "1 result (B324, HIGH) — a genuinely new finding in a file that isn't in the baseline at all is still caught even with -b active, proving this isn't a blanket suppression",
+      "expects_failure": true
+    },
+    {
+      "cmd": "bandit -r . --ini ci/security/bandit.ini -b bandit-baseline.json -f sarif -o bandit.sarif",
+      "exit_code": 2,
+      "duration_s": 0.2,
+      "output_tail": "WARNING: Baseline must be used with one of the following formats: ['custom', 'html', 'json', 'screen', 'txt'] — confirms -b and -f sarif cannot be combined in one invocation, which is why the gating decision (JSON+baseline) and the SARIF artifact (no baseline) are two separate steps in the workflow",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_security_workflows.py -v",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "14 passed — TestBanditBlocks now asserts the baseline-gated design (test_gating_scan_uses_baseline, test_baseline_snapshot_fails_closed_on_error, test_informational_sarif_step_does_not_gate) in place of the superseded changed-files test"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.7,
+      "output_tail": "171 passed (169 pre-existing + 2 net new: the old changed-files test replaced by three baseline-design tests)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json --bot bot-06-quality-security --strict",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-2 PASS — spe-5162-ci-harden-gate: 29 command(s), 29 substantiated claim(s), 8 unverified item(s) — passes for the first time on this receipt now that approved_by names bot-00-programming-lead (LEAD's commit 9777715, merged into this branch at 86bd54f)"
+    },
+    {
+      "cmd": "git worktree add --detach /tmp/collision-test origin/main; git worktree add --detach /tmp/collision-test origin/main",
+      "exit_code": 128,
+      "duration_s": 0.2,
+      "output_tail": "fatal: '/tmp/collision-test' already exists — reproduces exactly the failure a reviewer described: a leftover worktree from an interrupted run blocks git worktree add on the next run at a fixed path, before Bandit scans anything",
+      "expects_failure": true
+    },
+    {
+      "cmd": "python3 -c \"import json; d=json.load(open('bandit.json')); ...\" (bandit_json_to_sarif.py) run against both an empty results list and a populated one (the earlier scratch hashlib.md5 finding)",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "Both conversions produce valid SARIF 2.1.0: 0 results for the empty case, 1 result (B324) with the correct ruleId/level/message/location for the populated case — confirms the converter is a faithful JSON-to-SARIF mapping, not just a stub that always emits an empty report"
+    },
+    {
+      "cmd": "rm -f bandit-baseline.json bandit.json bandit.sarif; WORKTREE_DIR=/tmp/sectest/runnertemp/bandit-baseline-testrun-1; git worktree add --detach \"$WORKTREE_DIR\" origin/main; (cd \"$WORKTREE_DIR\" && bandit -r . --ini <abs>/ci/security/bandit.ini -lll -f json -o <abs>/bandit-baseline.json); git worktree remove \"$WORKTREE_DIR\"; bandit -r . --ini ci/security/bandit.ini -b bandit-baseline.json -lll -f json -o bandit.json; python3 ci/security/bandit_json_to_sarif.py bandit.json bandit.sarif",
+      "exit_code": 0,
+      "duration_s": 4.0,
+      "output_tail": "Full corrected job simulated end to end with the actual unique-path pattern and the actual converter script: baseline generation exits 1 (finds the pre-existing broker.py issue), gating scan against that baseline exits 0 (suppressed), SARIF conversion exits 0 with 0 results — matches what the real gate decided, not a stale unfiltered re-scan"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.1,
+      "output_tail": "172 passed — TestBanditBlocks now also asserts the worktree path includes RUNNER_TEMP/GITHUB_RUN_ID/GITHUB_RUN_ATTEMPT (not the old fixed /tmp/bandit-baseline) and that the SARIF step calls bandit_json_to_sarif.py rather than re-running bandit -r ."
+    },
+    {
+      "cmd": "python3 -c \"from urllib.parse import quote; print(quote('./ci/tests/weird file#name.py', safe='/'))\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "./ci/tests/weird%20file%23name.py — confirms quote(..., safe='/') percent-encodes '#' and space while preserving path separators, before wiring it into the converter"
+    },
+    {
+      "cmd": "python3 -c \"import json; fake={'results':[{'test_id':'B324','test_name':'hashlib','issue_severity':'HIGH','issue_text':'test','filename':'./weird file#name.py','line_number':5}]}; json.dump(fake, open('/tmp/sectest/weirdname.json','w'))\" && python3 ci/security/bandit_json_to_sarif.py /tmp/sectest/weirdname.json /tmp/sectest/weirdname.sarif && python3 -c \"import json; d=json.load(open('/tmp/sectest/weirdname.sarif')); uri=d['runs'][0]['results'][0]['locations'][0]['physicalLocation']['artifactLocation']['uri']; print('encoded uri:', uri); assert '#' not in uri and ' ' not in uri; print('OK: no raw # or space in the URI')\"",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "encoded uri: ./weird%20file%23name.py\nOK: no raw # or space in the URI — the fix as actually wired into the committed script, not just the standalone quote() call above"
+    },
+    {
+      "cmd": "cp ci/security/bandit_json_to_sarif.py /tmp/sectest/converter-backup3.py && sed -i 's/\"artifactLocation\": {\"uri\": quote(r\\[\"filename\"\\], safe=\"\\/\")},/\"artifactLocation\": {\"uri\": r[\"filename\"]},/' ci/security/bandit_json_to_sarif.py && python3 -m pytest ci/tests/test_security_workflows.py::TestBanditSarifConverter::test_filename_with_hash_and_space_is_percent_encoded -v",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "FAILED ... AssertionError: assert '#' not in './weird file#name.py' — proves the new regression test actually catches the exact bug it's named for (raw filename written unencoded) rather than being a tautology. An earlier revision of this receipt entry chained a trailing `; cp <backup> ...` restore onto the same line, which made the recorded exit_code wrong: with `;` instead of `&&`, the line's real exit status is the restore cp's (0), not pytest's (1) — Greptile caught the unrunnable placeholder path, and re-verifying it surfaced this second, separate bug in the same entry. Split into two commands (this one, reproduction only; the next one, restore only) so each command's own exit code is the one actually being cited.",
+      "expects_failure": true
+    },
+    {
+      "cmd": "cp /tmp/sectest/converter-backup3.py ci/security/bandit_json_to_sarif.py",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "File restored to its committed, fixed state — confirmed via git diff --stat showing no diff, and the full suite (175 tests) passing again immediately after"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 10.5,
+      "output_tail": "175 passed — 3 new tests in TestBanditSarifConverter (empty results, normal filename round-trips unchanged, filename with # and space gets percent-encoded)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml still validates with no duplicate pattern after adding the two QUALITY overrides (105 rules, up from 103; every rule names a declared bot)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Running G-1 exactly as the work order's own verify command specifies (--bot bot-06-quality-security --base origin/main) passes for this branch's full diff against main \u2014 which is what actually establishes that every new path this change adds (workflows, ci/security/**, SECURITY.md, ownership.yaml itself, the receipt) resolves to bot-06-quality-security: G-1 PASS is defined as no unowned and no foreign file in the diff, not merely that the manifest parses",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The repository's own secret scanner (G-3) finds nothing in this change's 8 changed files",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Both new workflow files and the semgrep config are syntactically valid YAML",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The gitleaks config is valid TOML",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Bandit runs clean (0 HIGH-severity findings, exit 0) against services/ and ci/ using the committed bandit.ini and the -lll flag the workflow uses, and produces a valid SARIF file via bandit-sarif-formatter",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Semgrep runs clean (0 findings, exit 0) against services/ and ci/ using the committed semgrep.yml combined with the registry's p/security-audit and p/secrets packs, with the exact flags (--severity ERROR --error) the workflow uses",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Gitleaks, scoped to only this PR's own commit range (origin/main..HEAD) as the workflow does, finds no leaks in the actual new commit \u2014 the config's ${VAR}-reference and comment text (which use words like 'secret', 'token', 'api_key') does not trigger a false positive on itself",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "A full-repository, all-history gitleaks scan (not what the workflow runs) does hit 12 pre-existing findings, all inside the G-3 gate's own intentional fake-secret test fixtures on main \u2014 this is exactly why the workflow scopes gitleaks to the PR's commit range instead of the whole tree, and confirms that choice is load-bearing rather than cosmetic",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "There are zero requirements*.txt files under services/ or ci/ today, so the PR workflow's pip-audit step takes its 'skip gracefully, exit 0' branch on the very next PR that runs it, not an untested branch",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "pip-audit cannot parse this repo's uv-managed services/desk-gateway/pyproject.toml as a requirements file, which is why the workflow relies on Trivy's filesystem scan (not pip-audit) as the SCA path for that manifest",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-7 desk integrity is unaffected by this change",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The full existing gate test suite (157 tests) still passes after this change \u2014 no regression in ci/gates/ behavior from the ownership.yaml edit",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The PR's own CI caught a real bug this sandbox's earlier verification missed: aquasecurity/trivy-action was pinned as @0.28.0, but the action's tags are v-prefixed (v0.28.0), so GitHub Actions could not resolve the action at all. Fixed by pinning @v0.28.0 instead.",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "Once the trivy-action tag was known to be the only wrong pin, the other three third-party pins used in these two workflows (zaproxy/action-baseline@v0.14.0, github/codeql-action/upload-sarif@v3, the nuclei v3.3.7 release asset) were independently confirmed to exist, closing the gap flagged earlier in unverified",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "aquasecurity/trivy-action@v0.28.0 fails to resolve in GitHub Actions for a second, distinct reason beyond anything guessable from this sandbox alone: that release hardcodes a nested action dependency, aquasecurity/setup-trivy@v0.2.1, whose tag upstream has since deleted (current tags are v0.2.6, v0.3.0, v0.3.1). PR #50's own CI surfaced this ('Unable to resolve action aquasecurity/setup-trivy@v0.2.1') after the first pin fix made v0.28.0 itself resolve.",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "trivy-action v0.29.0/v0.30.0 pin the same nested dependency by another mutable tag (v0.2.2) and would fail the identical way once that tag is deleted; v0.31.0 onward pin it by commit SHA instead, which is immune to upstream tag deletion \u2014 v0.36.0 (the newest at the time of checking) is the version chosen for that reason, consistent with SECURITY.md's own 'pin what executes by commit SHA' guidance",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "The commit SHA that trivy-action@v0.36.0 pins its setup-trivy dependency to actually exists upstream and corresponds to the current v0.2.6 tag, so this fix does not just move the same failure to a different tag name",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "Widening Bandit's scan target from services/ci to the whole repo (Greptile P1 4147142620 on PR #50) is NOT safe to ship as `bandit -r .`: it trips a real, pre-existing HIGH finding (B324, SHA1 in a WebSocket handshake) in infra/unified-lsp-broker/broker.py, a file this PR doesn't touch and doesn't own. PR #50's own CI caught this for real (job 110002295320, second push) after the whole-repo-widen commit landed — this receipt's own initial evidence for that command was wrong (exit_code recorded as 0 via a pipe that masked bandit's real exit 1), the same class of mistake Greptile's receipt-evidence finding flagged elsewhere in this file",
+      "evidence_command_index": 18,
+      "expects_failure": true
+    },
+    {
+      "claim": "Widening Semgrep's scan target to the whole repo without diff-scoping is NOT safe to ship as-is: it surfaces a real, pre-existing finding (use-defused-xml) in scripts/generate-templates.py, a file this PR does not touch and does not own. A naive fix for the 'misses SAST outside services/ci' finding would have made this PR's own gate red for someone else's code, and would make every future PR's gate red for the same reason until that file is fixed",
+      "evidence_command_index": 19,
+      "expects_failure": true
+    },
+    {
+      "claim": "Adding --baseline-commit origin/$BASE_REF resolves that conflict: the same whole-repo Semgrep scan, same pre-existing finding still present on disk, exits 0 because baselining correctly limits blocking results to the 9 files this PR actually changed \u2014 this is the mechanism that lets the scan scope widen (closing the P1 finding) without making the gate fail on unrelated legacy code",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "The new ci/tests/test_security_workflows.py regression-guard suite (Greptile P2 4147142698: 'a later change could silently disable enforcement while the self-test remains green') passes against the fixed workflow \u2014 11 tests asserting the blocking flags, SHA pins, and per-job permissions scoping this round of fixes introduced",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "The regression-guard suite is not a tautology: reintroducing the exact bug it was written for (ignore-unfixed: true on the Trivy step) makes test_ignore_unfixed_not_set fail, proving the test can actually catch the regression it names before the file was restored",
+      "evidence_command_index": 22,
+      "expects_failure": true
+    },
+    {
+      "claim": "The full gate suite (168 tests: 157 pre-existing + 11 new) passes with the workflow restored to its fixed state \u2014 no regression from any change in this round",
+      "evidence_command_index": 23
+    },
+    {
+      "claim": "PR #50's own CI (job 110002295320) failed Bandit for real after the previous round's whole-repo-widen fix landed, not because of a sandbox artifact: the actual SARIF it produced contains exactly one HIGH finding, B324, in infra/unified-lsp-broker/broker.py — precisely the class of failure this receipt's own 'unverified' section had already flagged as an accepted, un-closed gap in the previous revision, now manifested",
+      "evidence_command_index": 24
+    },
+    {
+      "claim": "The B324 finding is real and reproducible, not an environment fluke: scanning infra/unified-lsp-broker/broker.py directly, locally, with the same bandit version (1.9.4) reproduces it",
+      "evidence_command_index": 25,
+      "expects_failure": true
+    },
+    {
+      "claim": "This PR's own diff touches exactly one Python file, so scoping Bandit to the PR's changed .py files (rather than the whole repo) is not a workaround that happens to pass today by coincidence of an empty file list — there is a real file being scanned",
+      "evidence_command_index": 26
+    },
+    {
+      "claim": "Scoping Bandit to this PR's changed .py files instead of `bandit -r .` resolves the failure: same tool, same version, same severity floor, exit 0 because the file that trips B324 is correctly out of scope for a PR that never touched it",
+      "evidence_command_index": 27
+    },
+    {
+      "claim": "The full gate suite (169 tests) still passes after this fix, including the new test asserting Bandit stays diff-scoped rather than regressing to a whole-repo scan",
+      "evidence_command_index": 28
+    },
+    {
+      "claim": "NOTE ON CLAIMS 26-28: the changed-.py-files design they describe was itself superseded before this PR's CI ran again — a review caught it as fail-open (git-diff failure inside process substitution silently producing an empty, always-passing file list) and unable to distinguish a new finding from a pre-existing one in a touched file. Bandit's own -b/--baseline flag takes JSON, not SARIF, output (confirmed), which is why the final design splits gating (JSON + baseline) from the SARIF artifact (unfiltered) into two steps",
+      "evidence_command_index": 29
+    },
+    {
+      "claim": "Generating a baseline snapshot of origin/main's findings via a detached worktree, scanning it with the same bandit.ini and severity floor as the real gate, correctly produces the known broker.py finding — and exits 1 (findings present), not 0, which is why the workflow's own check for 'did the baseline scan itself fail' must test exit code >1, not >0",
+      "evidence_command_index": 30,
+      "expects_failure": true
+    },
+    {
+      "claim": "Comparing HEAD's full-tree scan against that baseline with -b suppresses the pre-existing broker.py finding — the actual mechanism the workflow's gating step now relies on",
+      "evidence_command_index": 31
+    },
+    {
+      "claim": "-b does not blanket-suppress everything: a finding in a file that was never part of the baseline at all (a scratch file with a fresh hashlib.md5 call) is still caught and still fails the scan",
+      "evidence_command_index": 32,
+      "expects_failure": true
+    },
+    {
+      "claim": "bandit's -b/--baseline flag cannot be combined with -f sarif in a single invocation (confirmed: it errors with exit 2, not silently ignoring one flag), which is why the workflow's gating decision (JSON+baseline) and its SARIF artifact (unfiltered, informational) are necessarily two separate bandit invocations rather than one",
+      "evidence_command_index": 33,
+      "expects_failure": true
+    },
+    {
+      "claim": "The regression-guard suite's Bandit tests now assert the baseline-gated design (that the gating step uses -b, that the baseline-generation step fails closed on a real tool error rather than treating it as empty, and that the SARIF step is marked continue-on-error so it structurally cannot gate) in place of the superseded changed-files assertions",
+      "evidence_command_index": 34
+    },
+    {
+      "claim": "The full gate suite (171 tests) passes with the baseline-gated Bandit design in place",
+      "evidence_command_index": 35
+    },
+    {
+      "claim": "G-2 now passes on this receipt for the first time: approved_by names bot-00-programming-lead per LEAD's own commit (9777715), merged into this branch rather than overwritten, and every other G-2 structural requirement (commands present, claims cite evidence, no bypass patterns, honest unverified section) still holds after this round of edits",
+      "evidence_command_index": 36
+    },
+    {
+      "claim": "A fixed worktree path across CI runs on a shared self-hosted runner is a real collision risk, not a theoretical one: reproducing the exact failure mode (a leftover worktree at the same path) locally produces the exact error a reviewer described (`fatal: already exists`, exit 128) before Bandit ever runs",
+      "evidence_command_index": 37,
+      "expects_failure": true
+    },
+    {
+      "claim": "ci/security/bandit_json_to_sarif.py is a faithful bandit-JSON-to-SARIF mapping, not a stub: it correctly round-trips both an empty result set and a populated one, preserving rule id, severity-to-level mapping, message, file and line",
+      "evidence_command_index": 38
+    },
+    {
+      "claim": "The corrected end-to-end Bandit job — unique-path worktree baseline, gating scan against that baseline, SARIF built from the gating scan's own JSON — produces the same correct result as every earlier isolated test of each piece: pre-existing broker.py finding suppressed, SARIF artifact matches the gating decision exactly rather than a stale unfiltered re-scan",
+      "evidence_command_index": 39
+    },
+    {
+      "claim": "The full gate suite (172 tests) passes with both the unique worktree path and the JSON-to-SARIF conversion in place, including new regression-guard assertions for each",
+      "evidence_command_index": 40
+    },
+    {
+      "claim": "urllib.parse.quote(..., safe='/') percent-encodes both '#' (a SARIF URI fragment separator) and a literal space (which makes a URI invalid outright) while leaving '/' alone, which is exactly the encoding a filename-as-SARIF-URI needs",
+      "evidence_command_index": 41
+    },
+    {
+      "claim": "The fix as actually wired into ci/security/bandit_json_to_sarif.py (not just the standalone quote() call) correctly percent-encodes a filename containing both '#' and a space",
+      "evidence_command_index": 42
+    },
+    {
+      "claim": "The new regression test is not a tautology: reverting the fix (writing the raw filename instead of the quoted one) makes test_filename_with_hash_and_space_is_percent_encoded fail with exactly the bug it's named for, proving the test can actually catch this regression",
+      "evidence_command_index": 43,
+      "expects_failure": true
+    },
+    {
+      "claim": "The reverted file was restored to its committed state as a separate, explicit command (not chained with ';' onto the reproduction command above) — confirmed by git diff showing no difference against the committed version",
+      "evidence_command_index": 44
+    },
+    {
+      "claim": "The full gate suite (175 tests: 172 pre-existing + 3 new in TestBanditSarifConverter) passes with the URI-encoding fix in place",
+      "evidence_command_index": 45
+    }
+  ],
+  "unverified": [
+    "Trivy's filesystem scan itself (the aquasecurity/trivy-action@ed142fd...v0.36.0 step's actual scan output) was never executed in this sandbox \u2014 only that the action and its nested setup-trivy dependency resolve, and that its SHA pin is correct. PR #50's own CI (self-hosted runner) is what will actually run it; whether it passes or finds HIGH+ vulnerabilities had not been observed as of this receipt revision.",
+    "The nightly DAST workflow (ZAP baseline via zaproxy/action-baseline, now SHA-pinned, and the Nuclei binary install/scan) was never executed: there is no STAGING_URL in this sandbox and no live target to scan against. The workflow's skip-when-unconfigured branch is the only path exercised, via reasoning about the job's `if:` condition, not an actual run of security-nightly.yml.",
+    "The SARIF-to-code-scanning upload step (github/codeql-action/upload-sarif, now SHA-pinned) was never executed; whether this repository has GitHub Advanced Security enabled (required for that upload to succeed rather than merely no-op via continue-on-error) is unknown from this sandbox. Per-job security-events: write (moved off the workflow root this round) was checked by parsing the YAML (command 21), not by observing the permission actually apply in a real run.",
+    "This PR's branch history: PR #49 was opened from claude/spe-5162-security-ci-uogcud (this session's default harness branch); GitHub's branch-rename endpoint, which would have retargeted #49's head in place, returned 403 (write access to that API path is blocked for this session, restricted to the sanctioned MCP tool set). #49 was closed and PR #50 opened instead from a new branch (bot-06-quality-security/spe-5162-ci-harden-gate) created at the same tip. #49 could not be reopened onto the required branch \u2014 that limitation was reported, not worked around further.",
+    "The self-hosted runner label [self-hosted, Linux, X64] is copied from ci/.github/workflows/gates.yml's convention on the assumption these new jobs can run on the same runner pool; whether that pool has the tool-install permissions and outbound network access these jobs need (pip installs, curl to github release CDNs) was not verified against the actual runner.",
+    "pip-audit's own CLI (checked its full --help output) has no severity flag at all, so its step now fails on ANY known vulnerability in a requirements*.txt file, not just HIGH+ — stricter than, not weaker than, the gate's stated policy, but still a real divergence from 'fail on HIGH+' worth flagging rather than silently accepting. Trivy is the actual HIGH+-filtered SCA path; this step only fires once a requirements*.txt file exists, which none do today.",
+    "Bandit's design went through three revisions on this PR, each caught by real CI or real review, not by this sandbox alone: (1) whole-repo `bandit -r .`, which trips a pre-existing HIGH finding in infra/unified-lsp-broker/broker.py (caught by PR #50's own CI); (2) scoping to this PR's changed .py files via `mapfile < <(git diff ...)`, which Greptile correctly identified as fail-open (bash's `set -e` doesn't see a process-substitution failure, so a broken git diff silently produces an empty file list and a false pass) and also unable to distinguish a genuinely new finding from a pre-existing one in a file the PR happens to touch; (3) the current design — bandit's own -b/--baseline flag comparing a full-tree scan of the base ref against a full-tree scan of HEAD, with the baseline-generation step failing closed (exit >1, not just >0) rather than silently treating a broken baseline as empty. Verified locally in both directions: the pre-existing broker.py finding is suppressed (exit 0) and a genuinely new finding in an unbaselined file is still caught (exit 1). What's still genuinely unverified: this baseline mechanism has never run inside actual GitHub Actions (git worktree behavior, disk space for the second checkout, and GITHUB_WORKSPACE path handling were exercised locally, not on the runner).",
+    "This receipt's own bandit -r . entry (now corrected) was recorded with the wrong exit code because of `command | tail -N` piping reporting tail's exit status instead of the piped command's — the exact class of evidence error Greptile's review caught elsewhere in an earlier revision of this file. Prompted by finding it, audited every other command in this receipt for the same `| tail` / `| head` pattern: one other command pipes through `| tail -5` (the trivy-action tag listing at index 13), but its exit code was never load-bearing for a pass/fail claim — it's an informational tag listing, not a '0 findings' assertion — so it isn't the same bug. No other instance found."
+  ],
+  "files_changed": [
+    "ownership.yaml",
+    ".github/workflows/security-pr.yml",
+    ".github/workflows/security-nightly.yml",
+    "ci/security/semgrep.yml",
+    "ci/security/gitleaks.toml",
+    "ci/security/bandit.ini",
+    "ci/security/bandit_json_to_sarif.py",
+    "ci/security/garak-stub.md",
+    "ci/tests/test_security_workflows.py",
+    "SECURITY.md",
+    ".receipts/bot-06-quality-security/spe-5162-ci-harden-gate.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this commit. Nothing is deployed: the two new workflows only take effect on the next matching GitHub event (a pull_request for security-pr.yml, the daily schedule or a manual dispatch for security-nightly.yml) and neither has run yet, so there is no running state or external resource to unwind \u2014 removing the files returns CI to its pre-SPE-5162 gate set. The ownership.yaml addition is two lines; removing them returns ci/security/** and .github/workflows/security-*.yml to falling under the broader INFRA .github/workflows/** rule with no other rule affected."
+}

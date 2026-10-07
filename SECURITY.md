@@ -208,3 +208,26 @@ Stated so the omissions are decisions rather than oversights:
 - **Prompt injection through repository content is a live risk, not a solved one.** Content
   fetched from an issue, a comment or a vendored file is data, never instruction. A bot that
   finds instructions in fetched content escalating its access should stop and ask.
+
+---
+
+## 8. Automated CI security scanning (SPE-5162)
+
+Two workflows, on top of the `ci/gates/` scripts in §5, automate the tool-based half of this
+policy. They check for the mechanical failure modes §2–§4 describe; they do not replace the
+human review §1 exists for.
+
+| Workflow | Trigger | What it runs | Blocking? |
+|---|---|---|---|
+| `.github/workflows/security-pr.yml` | Every pull request into `main` | Gitleaks (secrets, scoped to the PR's own commits), Semgrep (SAST, repo rules + registry security/secrets packs, scoped to the PR's own diff via `--baseline-commit`), Bandit (Python SAST, whole repo, gated on new findings vs. a baseline snapshot of the base ref), pip-audit and Trivy filesystem scan (dependency vulnerabilities) | Yes — fails on HIGH-severity-or-above findings (pip-audit is stricter: it fails on any known vulnerability, since it has no severity filter) |
+| `.github/workflows/security-nightly.yml` | Daily schedule, or manual dispatch | OWASP ZAP baseline + Nuclei against `${{ secrets.STAGING_URL }}` | No — informational; skips cleanly when `STAGING_URL` is not configured |
+
+Each PR-gate scanner uploads its SARIF output as a workflow artifact unconditionally, and
+best-effort to GitHub code scanning where Advanced Security is enabled. The artifact is the
+guaranteed record; the gate itself is each tool's own exit code, not the upload.
+
+**Deliberately not here:** AutoRedTeam or any other full offensive-security suite running on
+every PR, and any LLM red-team scanning (garak, PyRIT). Both are the wrong shape for a
+merge-blocking check — see `ci/security/garak-stub.md` for the latter's actual plan. Config for
+the PR-gate tools lives in `ci/security/` (`semgrep.yml`, `gitleaks.toml`, `bandit.ini`), owned
+by QUALITY alongside these two workflows per `ownership.yaml`.

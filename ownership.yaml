@@ -163,6 +163,15 @@ ownership:
     owner: bot-05-infrastructure
   - pattern: ".github/workflows/**"
     owner: bot-05-infrastructure
+  # QUALITY narrow override (SPE-5162): the security PR gate and its optional nightly DAST
+  # workflow are QUALITY's own gate surface, not general CI/CD. Placed immediately after the
+  # INFRA workflow rule on purpose — last match wins, so these two patterns carve security-*
+  # workflows and ci/security/** out from under the broader INFRA rule above without touching
+  # INFRA's ownership of the rest of .github/workflows/.
+  - pattern: "ci/security/**"
+    owner: bot-06-quality-security
+  - pattern: ".github/workflows/security-*.yml"
+    owner: bot-06-quality-security
   # The distributable gate template. GitHub only reads workflows from the repository
   # root, so ci/.github/workflows/gates.yml is the copy other repositories seed from
   # and .github/workflows/gates.yml is the copy that runs. The two must always change

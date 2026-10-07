@@ -1,0 +1,93 @@
+# Optional nightly DAST (SPE-5162) — ZAP baseline + Nuclei against a running staging deployment.
+#
+# This is deliberately NOT a PR gate: DAST needs a live target, runs for minutes, and produces
+# findings that need a human to triage — none of which belongs blocking every merge. It runs on
+# a schedule and skips gracefully, exit 0, whenever secrets.STAGING_URL is not configured, so
+# adding this workflow to a repository with no staging environment yet is a no-op, not a
+# permanently red or permanently skipped-looking check.
+#
+# Owned by QUALITY (bot-06-quality-security) — see ownership.yaml.
+
+name: Security Nightly (DAST)
+
+on:
+  schedule:
+    - cron: "17 2 * * *"   # 02:17 UTC daily; off the hour to avoid the top-of-hour GH Actions rush
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check-target:
+    runs-on: [self-hosted, Linux, X64]
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          if [ -z "$STAGING_URL" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::STAGING_URL is not set — nightly DAST has no target and will skip."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  dast:
+    needs: check-target
+    if: needs.check-target.outputs.configured == 'true'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ZAP baseline scan
+        # Pinned by commit SHA (v0.14.0's tag is annotated; this is its peeled commit) per
+        # SECURITY.md's "pin what executes by commit SHA, not a mutable tag".
+        uses: zaproxy/action-baseline@7c4deb10e6261301961c86d65d54a516394f9aed # v0.14.0
+        with:
+          target: ${{ secrets.STAGING_URL }}
+          # Baseline only — a passive/spidering pass, not an active attack profile. An active
+          # scan against a shared staging environment belongs in its own explicitly-approved
+          # job, not folded into a nightly default.
+          cmd_options: "-a"
+          fail_action: false   # informational: findings are triaged, not a merge-blocking gate
+
+      - name: Install Nuclei
+        run: |
+          set -euo pipefail
+          curl -sSL -o nuclei.zip \
+            https://github.com/projectdiscovery/nuclei/releases/download/v3.3.7/nuclei_3.3.7_linux_amd64.zip
+          unzip -o nuclei.zip nuclei
+          chmod +x nuclei
+
+      - name: Nuclei scan
+        env:
+          STAGING_URL: ${{ secrets.STAGING_URL }}
+        run: |
+          set -euo pipefail
+          ./nuclei -u "$STAGING_URL" \
+            -severity medium,high,critical \
+            -jsonl -o nuclei-results.jsonl \
+            -silent
+          # Informational, like the ZAP step above: nightly DAST surfaces findings for triage,
+          # it does not fail the build. A real finding is a follow-up ticket, not a red run at
+          # 2am with nobody watching to act on it.
+
+      - name: Upload DAST results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-dast-results
+          path: |
+            report_html.html
+            nuclei-results.jsonl
+          if-no-files-found: warn
+
+  skipped:
+    needs: check-target
+    if: needs.check-target.outputs.configured != 'true'
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - run: echo "STAGING_URL not configured — nightly DAST skipped for this run."

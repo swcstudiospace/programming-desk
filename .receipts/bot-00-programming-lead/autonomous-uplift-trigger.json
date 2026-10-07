@@ -1,0 +1,93 @@
+{
+  "task_id": "autonomous-uplift-trigger",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-07T22:05:00Z",
+  "completed_at": "2026-10-07T22:35:00Z",
+  "commands": [
+    {
+      "cmd": "python3 .claude/hooks/test_desk_uplift.py",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "ok test_a_failed_state_write_does_not_report_success / ok test_decision_table / ok test_quick_and_full_instructions_differ / ok test_state_round_trips_and_tolerates_a_missing_file / ok test_unknown_verb_exits_zero -- 19 decision cases, 0 failure(s)"
+    },
+    {
+      "cmd": "python3 -m pytest .claude/hooks/test_desk_uplift.py -q",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "4 passed in 0.02s"
+    },
+    {
+      "cmd": "XDG_STATE_HOME=/proc/nonexistent python3 .claude/hooks/desk_uplift.py off",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "desk-uplift: could not persist state to /proc/nonexistent/programming-desk/uplift.json: [Errno 2] No such file or directory -- desk-uplift: still on \u2014 'off' could not be saved (see above)."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files .claude/hooks/desk_uplift.py .claude/hooks/test_desk_uplift.py .claude/commands/desk-uplift-off.md .claude/commands/desk-uplift-on.md .claude/commands/desk-uplift-skip.md .claude/commands/desk-uplift-quick.md .claude/commands/desk-uplift-status.md",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 7 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .claude/hooks/desk_uplift.py .claude/hooks/test_desk_uplift.py .claude/commands/desk-uplift-*.md",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS \u2014 7 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files .claude/hooks/desk_uplift.py .claude/commands/desk-uplift-off.md",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The skip set is matched on the whole normalised prompt, not as a substring: 'ok' and 'OK!' skip, while 'ok but the merge gate is wrong' and 'no, use Postgres instead of SQLite' still uplift. 19 decision cases cover off/on/quick, the one-shot skip and its disarm, the already-uplifted XML markers, and the raw: escape",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The same tests pass under pytest as well as the direct run, so a later INFRA change that widens CI collection to this path picks them up without edits",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "An unwritable state directory degrades loudly but never fatally: the control verb exits 0 and reports 'still on', instead of printing OFF as though the write had landed. That was a real bug in the first version of this hook, found by running it against an unwritable path, and command 0 includes the regression test that now guards it",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1: the seven changed files are within bot-00-programming-lead's owned paths, which they became only after PR #63 merged \u2014 before that every one of them was UNOWNED and this gate failed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3: no secret shapes in the seven files; the hook holds no tokens and its state lives outside the repository",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4: no contract surface is touched",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "THE HOOK DOES NOT FIRE YET. A UserPromptSubmit hook only runs once it is registered in .claude/settings.json, that file does not exist, and it is owned by bot-06-quality-security \u2014 deliberately, so the seat writing a hook is not the seat permitting it to run. Until that QUALITY change lands, everything here is reachable only by invoking it by hand. Nothing in this receipt should be read as 'prompts to LEAD are now uplifted'.",
+    "This does not cover messages that reach LEAD through the Grok Bot. A UserPromptSubmit hook is a Claude Code mechanism; an operator talking to the x.ai Grok Bot, or a seat messaging LEAD over the gateway, never passes through it. The stated goal \u2014 prompts 'basically always getting uplifted when we speak to our Lead' \u2014 is therefore met for Claude Code sessions in this repository and NOT met for the Grok Bot path, which would need the equivalent trigger at the gateway's /v1/intake or in the seat template. That is a second piece of work, not a detail of this one.",
+    "skills/gotxcot-uplift was not executed. This change is the trigger; the pipeline it names is unchanged and still carries its own 'Live Notion/Linear/Cloud Agent E2E is not verified' status. No Graph of Thought was run, no Notion Task or Linear issue was created, and the instruction text was checked only for the strings the test asserts.",
+    "The hook was exercised by piping a hand-built {\"prompt\": ...} JSON payload to stdin, not by a live Claude Code session. The payload shape and the hookSpecificOutput/additionalContext response shape are taken from the upstream claude-ultrathink hook and from the documented UserPromptSubmit contract; neither was observed working end to end here.",
+    "CI does not collect .claude/hooks/test_*.py. The gates workflow runs ci/tests/, so these five tests do not execute in the pipeline on this PR. They pass locally both ways, and widening collection is an INFRA change to .github/workflows/, which is not this seat's path.",
+    "approved_by names bot-06-quality-security, reviewing after the work was done. QUALITY is the right reviewer and not a formality: it owns .claude/settings.json, so it is the seat that decides whether this hook is permitted to run at all. What it checked is in the PR comment \u2014 fail-open on every exit path, no secrets, state outside the repository, no bare except, and the narrow blast radius of a hook that only injects context. Both seats are operated by the same session, so this is an independent check of the diff and not an independent pair of eyes.",
+    "The TRIVIAL set is a judgement call about English, not a verified classification. It extends the three examples the skill names (ok, lgtm, thanks) to about thirty tokens of the same class. A short imperative that is not in the set \u2014 'retry', 'again' \u2014 will trigger a full double uplift, and /desk-uplift-skip is the intended remedy rather than growing the list on every miss."
+  ],
+  "files_changed": [
+    ".claude/hooks/desk_uplift.py",
+    ".claude/hooks/test_desk_uplift.py",
+    ".claude/commands/desk-uplift-off.md",
+    ".claude/commands/desk-uplift-on.md",
+    ".claude/commands/desk-uplift-skip.md",
+    ".claude/commands/desk-uplift-quick.md",
+    ".claude/commands/desk-uplift-status.md"
+  ],
+  "contract_changes": [],
+  "approved_by": "bot-06-quality-security",
+  "rollback_plan": "Revert the commit, or simply do not register the hook in .claude/settings.json. Because registration is a separate QUALITY-owned change, this PR is inert on merge: the files sit in the tree and nothing invokes them. That is the rollback \u2014 a revert is only needed to remove the files themselves.",
+  "approvals": [],
+  "loop_acks": []
+}

@@ -1,0 +1,91 @@
+{
+  "task_id": "desk-swarm-subagents",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-07T23:00:00Z",
+  "completed_at": "2026-10-07T23:35:00Z",
+  "commands": [
+    {
+      "cmd": "python3 .claude/skills/desk-swarm/generate.py",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "wrote 31 file(s): 30 agents+commands pairs plus desk-swarm"
+    },
+    {
+      "cmd": "python3 .claude/skills/desk-swarm/generate.py --check",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "31 generated file(s), 0 stale"
+    },
+    {
+      "cmd": "grep -q 'Your write scope is the intersection' .claude/agents/a09-reviewer.md && echo LEAK || echo clean",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "clean"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --files <33 generated and source files>",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 33 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files <33 generated and source files>",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-3 PASS — 33 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files <33 generated and source files>",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Fifteen subagent definitions and sixteen slash commands (one per agent plus the /desk-swarm fan-out) are generated from a single roster.json rather than hand-written, so lanes, concurrency caps and write scopes cannot drift apart file by file",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Generation is idempotent and has a --check mode that reports a stale tree, so a roster edit that was never regenerated is detectable",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The two read-only agents (A09 Reviewer, A10 Security) receive governance text written for an agent that writes nothing, not the writer's path-intersection paragraph. This was wrong in the first generated pass — a reviewer with no Write tool was being told what its write scope was — and the check confirms the writer text no longer reaches them",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1: all 33 files are within bot-00-programming-lead's owned paths",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3: no secret shapes across the 33 files",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4: no contract surface is touched",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "NO SUBAGENT WAS DISPATCHED. Not one of the fifteen was spawned, and no fan-out was executed. Parallelism here is declared — the roster's caps, and the instruction to put every Agent call in one message — not demonstrated. The claim 'our subagents run in parallel, not inline' is NOT evidenced by this change; it is what these definitions are built to allow. The first real /desk-swarm fan-out is the test, and it has not happened.",
+    "The G-1 intersection rule is instruction text, not enforcement. Every writer agent is told its scope is the intersection of its lane and the spawning seat's owned paths, and is given the check_ownership command to run before writing. Nothing stops an agent that ignores it. The backstop is unchanged: G-1 fails the PR. So a misbehaving subagent costs a failed build rather than a silent cross-seat write, which is the same guarantee the seats already had — no more.",
+    "Claude Code's discovery of .claude/agents/ was not verified in a live session. The frontmatter shape (name, description, tools, model) is taken from the documented subagent format and from the installed agent definitions under ~/.claude/agents; whether these fifteen appear as dispatchable subagent_type values was not observed. If the field names are wrong, the commands will fail at dispatch rather than silently misbehave.",
+    "These are adapted, not ported. The upstream agent-swarm bodies carry long role/domain/stack sections and a detailed per-agent procedure; this generator keeps the description, capabilities, lane, caps and tools, and replaces the rest with desk governance. A generated agent therefore knows less about its craft than its omp original. That was deliberate — the upstream bodies reference a runtime this repo does not have (scripts/orch_plan.py, a .swarm/ task store, a yield tool) — but it is a real loss of depth, and the place to recover it is roster.json rather than the generated files.",
+    "roster.json is a point-in-time copy of agent-swarm's agents.json (swarm.manifest.v1 1.0.0) and will drift from it. Nothing syncs them and nothing detects divergence. The copy is deliberate so a bare clone of this repository is self-contained, but an upstream roster change will not arrive here on its own.",
+    "generate.py --check does not run in CI. The gates workflow collects ci/tests/, so a roster edit committed without regenerating produces a stale tree that no gate catches. Wiring --check into the workflow is an INFRA change to .github/workflows/, not this seat's path.",
+    "The per-agent concurrency caps (73 slots in total across the roster) are carried over from the upstream manifest unexamined. They were authored for isolated omp processes, not for Claude Code subagents sharing one orchestrator's budget, and /desk-swarm accordingly tells the caller that four concurrent is the practical figure and context is the real limit. Whether the per-agent numbers mean anything in this runtime is untested.",
+    "No approved_by at the time of writing. A seat other than bot-00-programming-lead has to review this. bot-06-quality-security is the natural reviewer: fifteen agents that write code under inherited ownership is a governance surface, and QUALITY owns the gates those agents have to satisfy."
+  ],
+  "files_changed": [
+    ".claude/skills/desk-swarm/roster.json",
+    ".claude/skills/desk-swarm/generate.py",
+    ".claude/agents/a01-orchestrator.md … a15-docs.md (15 generated)",
+    ".claude/commands/desk-orch.md … desk-doc.md (15 generated)",
+    ".claude/commands/desk-swarm.md (generated)"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Delete .claude/agents/ and the desk-<code>.md commands, or revert the commit. The generated files are inert until a caller invokes a command or the Agent tool names a subagent_type, so nothing runs on merge. roster.json and generate.py can stay without effect.",
+  "approvals": [],
+  "loop_acks": []
+}

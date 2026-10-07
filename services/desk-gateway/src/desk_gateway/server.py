@@ -24,11 +24,23 @@ from mcp.types import Tool as MCPTool
 from pydantic import AnyHttpUrl
 from starlette.requests import Request
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from starlette.routing import WebSocketRoute
+from starlette.websockets import WebSocket
 
 from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEATS, TOOL_DEADLINE_SEC, Settings
+from desk_gateway.live import (
+    CLOSE_FORBIDDEN_ORIGIN,
+    CLOSE_UNAUTHORIZED,
+    SESSION_COOKIE,
+    SESSION_TTL_SEC,
+    DeskView,
+    ViewerAuth,
+    client_key,
+    origin_allowed,
+)
 from desk_gateway.oauth import ConsentError, SeatOAuthProvider, seat_of
-from desk_gateway.pages import consent_page, landing_page, message_page
+from desk_gateway.pages import consent_page, landing_page, message_page, view_login_page
 from desk_gateway.redact import contains_secret, redact_value
 from desk_gateway.rosters import RosterError, Rosters, ToolSpec
 from desk_gateway.schema import SchemaError, validate
@@ -120,6 +132,8 @@ class SeatServer(MCPServer):
         if contains_secret(json.dumps(args)):
             return _result({"error": "secret_refused", "reason": "tool arguments contain a credential shape; never paste secrets into tool calls (PD-4)"}, is_error=True)
         ctx = ToolContext(services=self.services, seat=self.services.rosters.seats[seat], spec=spec)
+        call_id = secrets.token_hex(4)
+        _live(self.services.live.tool_started, seat, name, call_id, spec.backend)
         error: str | None = None
         try:
             fn = resolve(spec.backend)
@@ -140,9 +154,35 @@ class SeatServer(MCPServer):
         if error and spec.read_only and "results" not in payload and "rows" not in payload:
             payload.setdefault("reason", error)
         ms = (time.monotonic() - started) * 1000
+        _live(
+            self.services.live.tool_finished,
+            seat,
+            name,
+            call_id,
+            spec.backend,
+            ok=error is None,
+            ms=ms,
+            args=args,
+            payload=payload,
+        )
         event = self.services.audit.tool_event(seat=seat, tool=name, arguments=args, ok=error is None, ms=ms, error=error, gates=spec.gates)
         self.services.audit.fire_and_forget(event)
         return _result(redact_value(payload), is_error=bool(error) and not spec.read_only)
+
+
+DESK_VIEW_HTML = Path(__file__).parent / "web" / "desk3d.html"
+
+
+def _live(fn: Any, *args: Any, **kwargs: Any) -> None:
+    """Run a live-desk update, swallowing any failure.
+
+    The 3D view is an observer. A broken live update must never fail the tool call or request
+    that triggered it, so every call into LiveDesk goes through here.
+    """
+    try:
+        fn(*args, **kwargs)
+    except Exception:
+        logger.exception("live desk update failed")
 
 
 def _result(payload: dict[str, Any], *, is_error: bool = False) -> CallToolResult:
@@ -231,7 +271,13 @@ class ConnectorKeyHeader:
         await self.app(scope, receive, send)
 
 
-def create_mcp(settings: Settings, services: Services, oauth: SeatOAuthProvider) -> SeatServer:
+def create_mcp(
+    settings: Settings,
+    services: Services,
+    oauth: SeatOAuthProvider,
+    viewer: ViewerAuth,
+    view: DeskView,
+) -> SeatServer:
     mcp = SeatServer(
         services,
         name="desk-gateway",
@@ -274,8 +320,50 @@ def create_mcp(settings: Settings, services: Services, oauth: SeatOAuthProvider)
         )
 
     @mcp.custom_route("/", methods=["GET"])
-    async def root(_request: Request) -> Response:
+    async def root(request: Request) -> Response:
+        # With the desk view off (or its bundle absent) `/` stays the connect landing page.
+        if not viewer.enabled or view.html is None:
+            return HTMLResponse(landing_page(settings), headers=PAGE_HEADERS)
+        if not viewer.valid(request.cookies.get(SESSION_COOKIE)):
+            return HTMLResponse(view_login_page(), headers=PAGE_HEADERS)
+        return HTMLResponse(view.html, headers=view.headers(settings.public_host))
+
+    @mcp.custom_route("/connect", methods=["GET"])
+    async def connect(_request: Request) -> Response:
+        # The seat-connection instructions, kept at a stable URL now that `/` serves the view.
         return HTMLResponse(landing_page(settings), headers=PAGE_HEADERS)
+
+    @mcp.custom_route("/view/login", methods=["POST"])
+    async def view_login(request: Request) -> Response:
+        if not viewer.enabled:
+            return HTMLResponse(
+                message_page("Desk view is off", "Set DESK_VIEW_PASSPHRASE on the gateway to turn it on."),
+                status_code=404,
+                headers=PAGE_HEADERS,
+            )
+        client = client_key(request.headers, request.client.host if request.client else None)
+        if viewer.throttled(client):
+            return HTMLResponse(view_login_page("throttled"), status_code=429, headers=PAGE_HEADERS)
+        form = await request.form()
+        if not viewer.check(str(form.get("passphrase") or "")):
+            viewer.failed(client)
+            return HTMLResponse(view_login_page("bad_passphrase"), status_code=401, headers=PAGE_HEADERS)
+        response = RedirectResponse("/", status_code=303, headers={"Cache-Control": "no-store"})
+        response.set_cookie(
+            SESSION_COOKIE,
+            viewer.issue(),
+            max_age=SESSION_TTL_SEC,
+            httponly=True,
+            secure=True,
+            samesite="strict",
+        )
+        return response
+
+    @mcp.custom_route("/view/logout", methods=["POST"])
+    async def view_logout(_request: Request) -> Response:
+        response = RedirectResponse("/", status_code=303, headers={"Cache-Control": "no-store"})
+        response.delete_cookie(SESSION_COOKIE, httponly=True, secure=True, samesite="strict")
+        return response
 
     @mcp.custom_route("/oauth/consent", methods=["GET"])
     async def consent_get(request: Request) -> Response:
@@ -329,6 +417,7 @@ def create_mcp(settings: Settings, services: Services, oauth: SeatOAuthProvider)
         if contains_secret(item["ask"]) or contains_secret(item["title"]):
             return JSONResponse({"error": "secret_refused", "reason": "the ask contains a credential shape; remove it and resend"}, status_code=422)
         record = store.intake_create(item)
+        _live(services.live.request_received, record["intake_id"], item["title"])
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
         store.audit_append({**event, "ts_gateway": time.time()})
         services.audit.fire_and_forget(event)
@@ -345,7 +434,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     store = Store(settings.data_dir)
     services = Services.build(settings, store, rosters)
     oauth = SeatOAuthProvider(settings, store_dir=settings.data_dir / "oauth")
-    mcp = create_mcp(settings, services, oauth)
+    # One ViewerAuth for the whole app: it holds the signing key, so a second instance would
+    # reject the sessions the first one issued whenever DESK_VIEW_SECRET is unset.
+    viewer = ViewerAuth(settings)
+    mcp = create_mcp(settings, services, oauth, viewer=viewer, view=DeskView(DESK_VIEW_HTML))
     origins = [
         "http://127.0.0.1",
         "http://127.0.0.1:*",
@@ -365,8 +457,20 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         allowed_origins=origins,
     )
     starlette_app = mcp.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, transport_security=transport_security, host=settings.public_host)
+
+    async def desk_events(websocket: WebSocket) -> None:
+        await websocket.accept()
+        if not origin_allowed(websocket.headers.get("origin"), settings.public_host):
+            await websocket.close(code=CLOSE_FORBIDDEN_ORIGIN)
+            return
+        if not viewer.valid(websocket.cookies.get(SESSION_COOKIE)):
+            await websocket.close(code=CLOSE_UNAUTHORIZED)
+            return
+        await services.live.serve(websocket)
+
+    starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
     app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters))
-    app.state = {"store": store, "services": services, "oauth": oauth, "rosters": rosters, "mcp": mcp}
+    app.state = {"store": store, "services": services, "oauth": oauth, "rosters": rosters, "mcp": mcp, "viewer": viewer}
     return app, settings
 
 

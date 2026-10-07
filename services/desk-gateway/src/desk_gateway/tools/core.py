@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from typing import Any
 
@@ -11,6 +12,8 @@ from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEAT_LABEL, SEATS
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.tools import ToolContext, failure
+
+logger = logging.getLogger(__name__)
 
 BRIEF_TTL_SEC = 300
 _brief_cache: dict[str, tuple[float, dict[str, Any]]] = {}
@@ -190,6 +193,12 @@ async def event_emit(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         "actor": "agent",
     }
     ctx.services.store.audit_append({**event, "ts_gateway": time.time()})
+    # The live view is a local observer: it reflects what the seat reported even when substrate
+    # rejects the event below, and a broken view must never fail the tool call.
+    try:
+        ctx.services.live.reported(ctx.short, args["kind"], args.get("task_id"), payload)
+    except Exception:
+        logger.exception("live desk update failed")
     result = await ctx.services.substrate.emit({k: v for k, v in event.items() if v is not None})
     if result.get("error"):
         return failure(result["error"], result.get("reason", "event not accepted"), local_mirror=True)

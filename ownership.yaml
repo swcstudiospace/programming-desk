@@ -192,6 +192,13 @@ ownership:
     owner: bot-06-quality-security
   - pattern: ".pre-commit-config.yaml"
     owner: bot-06-quality-security
+  # Repo-wide hygiene policy, same class as .pre-commit-config.yaml. It was the one tracked
+  # file in the repository that matched no pattern at all — 318 of 319 resolved, .gitignore
+  # did not — so no seat could edit it without G-1 failing on an UNOWNED path. It also decides
+  # what never reaches a commit (.receipts/**/*.json is ignored here and needs git add -f),
+  # which is a review surface, not a convenience.
+  - pattern: ".gitignore"
+    owner: bot-06-quality-security
   - pattern: "SECURITY.md"
     owner: bot-06-quality-security
   - pattern: "ownership.yaml"
@@ -291,6 +298,11 @@ ownership:
     owner: bot-00-programming-lead
   - pattern: "skills/trackplan-dispatch/**"
     owner: bot-00-programming-lead
+  # Vendored third-party source is supply chain, which is QUALITY's remit. Stated BEFORE the
+  # ultrathink-policy rule below so last-match-wins leaves that one directory with LEAD: the
+  # uplift policy is a desk override LEAD authors, not an upstream drop we only re-vendor.
+  - pattern: "vendor/**"
+    owner: bot-06-quality-security
   - pattern: "vendor/ultrathink-policy/**"
     owner: bot-00-programming-lead
   - pattern: "docs/intake-e2e-runbook.md"
@@ -356,6 +368,44 @@ ownership:
   - pattern: "ci/tests/**"
     owner: bot-06-quality-security
   - pattern: "ci/.github/**"
+    owner: bot-06-quality-security
+
+  # --- Agent runtime surface (.claude/, .planning/) ------------------------
+  # What a Claude Code or Grok Bot session actually loads when it opens this repo: the
+  # subagent roster, the desk slash commands, the prompt hooks, and the GSD planning
+  # artifacts.
+  #
+  # Stated AFTER the **/*.ts and **/*.py language globs on purpose. A prompt hook written in
+  # either language is agent wiring, not web or backend product code, and with only the
+  # language globs to go on it would land on WEB or SYSTEMS by file extension — an owner
+  # chosen by suffix rather than by decision.
+  #
+  # Deliberately enumerated rather than a blanket ".claude/**". A new kind of file under
+  # .claude/ should fail G-1 as UNOWNED and force someone to decide who owns it; that is the
+  # whole point of this manifest. A catch-all here would hide the collisions it exists to catch.
+  #
+  # LEAD owns the dispatch surface: the swarm specialists are who LEAD fans work out to, the
+  # commands are how an operator turns LEAD's uplift on and off, and the hooks are what make
+  # that uplift automatic. The roster is also a single coherent artefact — lanes, parallelism
+  # caps and non-overlapping file scopes only hold if one seat maintains them together — so it
+  # is not split per specialist, the same reasoning that keeps all of grokbot/** with LEAD
+  # even though its templates are per-seat.
+  - pattern: ".claude/agents/**"
+    owner: bot-00-programming-lead
+  - pattern: ".claude/commands/**"
+    owner: bot-00-programming-lead
+  - pattern: ".claude/hooks/**"
+    owner: bot-00-programming-lead
+  - pattern: ".claude/skills/**"
+    owner: bot-00-programming-lead
+  - pattern: ".planning/**"
+    owner: bot-00-programming-lead
+  # The settings file is an allowlist: which hooks may run, and which tools they may use. That
+  # is a permission surface, so it travels with ownership.yaml and .pre-commit-config.yaml
+  # rather than with the hooks it admits — the seat that writes a hook should not also be the
+  # seat that grants it permission to run. Last within this block so a future broader
+  # .claude/** rule cannot quietly take it back off QUALITY.
+  - pattern: ".claude/settings.json"
     owner: bot-06-quality-security
 
   # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY

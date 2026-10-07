@@ -1,0 +1,86 @@
+{
+  "task_id": "own-agent-runtime-surface",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-10-07T21:05:00Z",
+  "completed_at": "2026-10-07T21:20:00Z",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 manifest OK — 7 bots, 112 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ownership.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ownership.yaml",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-3 PASS — 1 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files ownership.yaml",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 14.6,
+      "output_tail": "230 passed in 14.64s"
+    },
+    {
+      "cmd": "python3 -c \"import importlib.util,pathlib,subprocess; s=importlib.util.spec_from_file_location('g1','ci/gates/check_ownership.py'); g=importlib.util.module_from_spec(s); s.loader.exec_module(g); m=g.load_manifest(pathlib.Path('ownership.yaml')); f=subprocess.run(['git','ls-files'],capture_output=True,text=True).stdout.split(); u=[x for x in f if g.resolve_owner(x,m)[0] is None]; print(f'tracked: {len(f)}   UNOWNED: {len(u)}'); [print('  UNOWNED',x) for x in u]\"",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "tracked: 319   UNOWNED: 0"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The manifest still validates after the change: 7 bots, 112 rules, no duplicate patterns (validate-manifest rejects duplicates, so this also proves none of the six new patterns collides with an existing one)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1: the one changed file, ownership.yaml, is within bot-06-quality-security's owned paths — the manifest assigns itself to QUALITY, so this change needs no other seat",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-3: no secret shapes in the changed file",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-4: ownership.yaml carries no contract_surface flag, so no contract change document or consumer acknowledgement is required",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The gate suite that reads this manifest still passes unchanged, 230 cases — the new rules did not alter how any existing path resolves",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Every one of the 319 tracked files now resolves to an owner. Before this change .gitignore resolved to nothing — it matched no pattern in the manifest at all, so no seat could edit it without G-1 failing on an UNOWNED path. That was a pre-existing defect found while reviewing this change, not one introduced by it, and it is fixed here by assigning .gitignore to QUALITY alongside .pre-commit-config.yaml",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "approved_by names bot-00-programming-lead, reviewing after the work was done. The review is cross-seat, which is what G-2 asks for, and it was a real check rather than a signature: it ran the full-repo resolution sweep that found .gitignore UNOWNED, and confirmed all fifteen of LEAD's pre-existing paths still resolve to LEAD. Its findings are in the PR comment. But both seats are operated by the same session, so this is an independent check of the diff and not an independent pair of eyes — if that distinction matters for this manifest, have a human read the six new patterns before merging.",
+    "Ownership resolution for the new paths was checked by importing resolve_owner from the gate and probing representative paths, not by committing a file at each path and running the gate end to end. The probe covered the six new patterns, two regressions (services/x.py still SYSTEMS, web/x.ts still WEB), the vendor carve-out (vendor/ultrathink-policy/constants.ts still LEAD), and all fifteen of LEAD's pre-existing paths (zero regressions).",
+    "The manifest now owns paths that do not exist yet. .claude/agents/, .claude/commands/, .claude/hooks/, .claude/skills/ and .planning/ are all empty or absent on this branch. This is the same pattern the desk-v2 block already uses — own the path before the file lands so G-1 never meets an unowned file — but it means nothing here is exercised against real content.",
+    ".claude/settings.json is assigned to QUALITY and no such file exists. The reasoning (a hook allowlist is a permission surface, so the seat writing a hook should not also be the seat granting it permission to run) is untested until a hook is actually registered, and the split means every new LEAD hook needs a QUALITY change alongside it. That cost is deliberate but it has not been paid yet, so it is unproven in practice.",
+    "No blanket .claude/** rule was added, so any file under .claude/ other than the four named subdirectories and settings.json is still UNOWNED and will fail G-1. That is intended — UNOWNED is the manifest's collision detector — but it will surface as a build failure for whoever adds the first such file rather than as guidance here.",
+    "vendor/** now resolves to QUALITY. No vendored dependency exists under vendor/ except ultrathink-policy, which keeps its LEAD carve-out. The rule is forward-looking for pstack and gsd-core vendoring and has not been exercised against a real vendored tree."
+  ],
+  "files_changed": [
+    "ownership.yaml"
+  ],
+  "contract_changes": [],
+  "approved_by": "bot-00-programming-lead",
+  "rollback_plan": "Revert the single commit. The change is additive — six new patterns and one reordering comment — and the gate suite proves existing path resolution is unchanged, so a revert returns every path to the owner it had before without touching any other file.",
+  "approvals": [],
+  "loop_acks": []
+}

@@ -10,6 +10,7 @@ from typing import Any
 
 from desk_gateway.audit import Audit
 from desk_gateway.config import Settings
+from desk_gateway.live import LiveDesk
 from desk_gateway.repo import Repo
 from desk_gateway.rosters import Rosters, SeatRoster, ToolSpec
 from desk_gateway.store import Store
@@ -38,6 +39,7 @@ class Services:
     repo: Repo
     substrate: Substrate
     audit: Audit
+    live: LiveDesk
     agent_bus: AgentBus
     greptime: Greptime
     timescale: Timescale
@@ -61,6 +63,7 @@ class Services:
             repo=Repo(settings),
             substrate=substrate,
             audit=Audit(store, substrate),
+            live=LiveDesk(store),
             agent_bus=AgentBus(settings),
             greptime=Greptime(settings),
             timescale=Timescale(settings),

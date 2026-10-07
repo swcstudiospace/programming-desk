@@ -1,0 +1,111 @@
+<title>Programming Desk 3D</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&display=swap">
+<style>/*STYLE*/</style>
+<div class="app" data-feed="demo" data-panel="">
+  <div class="stage" id="stage" role="img" aria-label="3D view of the Programming Desk: Lead above, six seats around the desk, the Desk Gateway and Railway services below"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__mark" aria-hidden="true"></span>
+      <div class="brand__text">
+        <h1>Programming Desk</h1>
+        <p>Spectrum Web Co · 3D desk view</p>
+      </div>
+    </div>
+    <div class="views" role="group" aria-label="Camera">
+      <button type="button" data-view="overview" aria-pressed="true">Desk <kbd>0</kbd></button>
+      <button type="button" data-view="lead" aria-pressed="false">Lead <kbd>L</kbd></button>
+      <button type="button" data-view="gateway" aria-pressed="false">Gateway <kbd>G</kbd></button>
+    </div>
+    <div class="feed">
+      <span class="feed__pill" id="feed-pill" data-state="demo" role="status">Demo feed</span>
+      <button type="button" class="feed__toggle" id="feed-toggle" aria-expanded="false" aria-controls="feed-panel">Feed</button>
+    </div>
+  </header>
+
+  <div class="feed-panel" id="feed-panel" hidden>
+    <form id="feed-form" novalidate>
+      <label for="gateway-url">Desk Gateway WebSocket</label>
+      <input id="gateway-url" name="gateway-url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="wss://your-vps/desk/events">
+      <p class="hint">The gateway sends Desk Event v1 JSON. Events the view can't read are counted under the log.</p>
+      <div class="feed-panel__actions">
+        <button type="submit" class="btn btn--primary">Connect</button>
+        <button type="button" class="btn" id="feed-disconnect">Disconnect</button>
+        <button type="button" class="btn js-demo">Run demo</button>
+      </div>
+      <p class="feed-panel__status" id="feed-status" role="status"></p>
+    </form>
+    <div class="hosted-note" id="gateway-note" hidden>
+      <p><strong>This page reads the Desk Gateway live.</strong> Every tool call, gateway request and status report from the seats shows up here as it happens.</p>
+      <p>Seats that have not connected to the gateway in the last hour show as offline.</p>
+      <div class="feed-panel__actions">
+        <button type="button" class="btn btn--primary js-live">Go live</button>
+        <button type="button" class="btn js-demo">Run demo</button>
+        <form method="post" action="/view/logout" class="inline-form"><button type="submit" class="btn">Sign out</button></form>
+      </div>
+      <p class="feed-panel__status" id="gateway-status" role="status"></p>
+    </div>
+    <div class="hosted-note" id="hosted-note" hidden>
+      <p><strong>This copy runs the demo feed.</strong> Pages hosted on claude.ai can't open connections to your VPS, so everything moving here is simulated.</p>
+      <p>To go live, serve <code>dist/desk3d.html</code> from the Desk Gateway and open it there, or pass <code>?gateway=wss://…</code> in the URL.</p>
+      <button type="button" class="btn js-demo">Restart demo</button>
+    </div>
+  </div>
+
+  <aside class="rail rail--left" aria-label="Desk roster">
+    <div class="meters">
+      <div><span class="meters__value" id="m-active">0</span><span class="meters__label">Active tasks</span></div>
+      <div><span class="meters__value" id="m-tools">0</span><span class="meters__label">Tool calls / min</span></div>
+      <div><span class="meters__value" id="m-gateway">0</span><span class="meters__label">Gateway / min</span></div>
+    </div>
+    <ul class="roster" id="roster"></ul>
+    <p class="rail__foot">Click a seat or press 1–6 to fly to it.</p>
+  </aside>
+
+  <aside class="rail rail--right" aria-label="Event log">
+    <div class="rail__head">
+      <h2>Event log</h2>
+      <div class="filters" role="group" aria-label="Filter the log">
+        <button type="button" data-filter="all" aria-pressed="true">All</button>
+        <button type="button" data-filter="tasks" aria-pressed="false">Tasks</button>
+        <button type="button" data-filter="tools" aria-pressed="false">Tools</button>
+      </div>
+    </div>
+    <ol class="log" id="log" data-filter="all" aria-live="off"></ol>
+    <p class="rejects" id="rejects" hidden></p>
+  </aside>
+
+  <section class="focus" id="focus" hidden aria-live="polite">
+    <header class="focus__head">
+      <i class="focus__swatch" aria-hidden="true"></i>
+      <div class="focus__title">
+        <h2 id="focus-name"></h2>
+        <p id="focus-role"></p>
+      </div>
+      <span class="chip" id="focus-status"></span>
+      <button type="button" class="focus__close" id="focus-close" aria-label="Back to the desk view">×</button>
+    </header>
+    <div class="focus__task">
+      <span class="label" id="focus-task-label">Current task</span>
+      <p id="focus-task"></p>
+      <div class="bar"><i id="focus-bar"></i></div>
+    </div>
+    <dl class="focus__stats">
+      <div><dt>Done</dt><dd id="focus-done">0</dd></div>
+      <div><dt>Failed</dt><dd id="focus-failed">0</dd></div>
+      <div><dt>Tool calls</dt><dd id="focus-calls">0</dd></div>
+    </dl>
+    <div class="focus__tools">
+      <span class="label">Recent tools</span>
+      <ol id="focus-tools"></ol>
+    </div>
+  </section>
+
+  <nav class="mobile-tabs" aria-label="Panels">
+    <button type="button" data-panel="roster" aria-pressed="false">Roster</button>
+    <button type="button" data-panel="log" aria-pressed="false">Log</button>
+  </nav>
+</div>
+<script type="module">/*SCRIPT*/</script>

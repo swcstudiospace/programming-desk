@@ -1,0 +1,18 @@
+{
+  "name": "@swcstudiospace/desk3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "3D command view for the Programming Desk, rendered with three.js and animated with anime.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/build.mjs --serve",
+    "build": "node scripts/build.mjs --gateway-out ../../services/desk-gateway/src/desk_gateway/web/desk3d.html"
+  },
+  "dependencies": {
+    "animejs": "4.5.0",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
+  }
+}

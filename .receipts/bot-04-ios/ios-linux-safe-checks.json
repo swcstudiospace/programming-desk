@@ -1,0 +1,59 @@
+{
+  "task_id": "ios-linux-safe-checks",
+  "bot": "bot-04-ios",
+  "branch": "bot-04-ios/linux-safe-checks",
+  "started_at": "2026-10-01T01:52:00+10:00",
+  "completed_at": "2026-10-01T01:55:40+10:00",
+  "commands": [
+    {
+      "cmd": "python3 -m unittest discover -s ios/tools/tests -q",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "Ran 20 tests in 0.020s\n\nOK"
+    },
+    {
+      "cmd": "command -v swift",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "swift not on PATH"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ios/tools unit tests passed: plist lint, snapshot hash diff, MetaVR evidence rejection of simulator kinds, and xcodebuild log parse",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "swift is not installed on this Linux host, so SPM tests were not executed",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "swift toolchain is absent, so swift test was not run against a real Package.swift.",
+    "xcodebuild was not invoked. The parser was checked against fixture text only, not a CI log from this change.",
+    "Xcode Simulator was not booted. This host cannot boot one.",
+    "No remote device and no MetaVR host was contacted. The run helper was exercised with python -c only.",
+    "No UI, dark mode, Dynamic Type, or VoiceOver check. These tools do not ship a screen.",
+    "No archive, TestFlight upload, or App Store submission."
+  ],
+  "files_changed": [
+    "ios/tools/IOS_TOOLS.md",
+    "ios/tools/spm_linux.py",
+    "ios/tools/plist_lint.py",
+    "ios/tools/snapshot_diff.py",
+    "ios/tools/metavr_evidence.py",
+    "ios/tools/xcodebuild_receipt.py",
+    "ios/tools/tests/test_spm_linux.py",
+    "ios/tools/tests/test_plist_lint.py",
+    "ios/tools/tests/test_snapshot_diff.py",
+    "ios/tools/tests/test_metavr_evidence.py",
+    "ios/tools/tests/test_xcodebuild_receipt.py",
+    ".receipts/bot-04-ios/ios-linux-safe-checks.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "approved_by": "LEAD",
+  "review_risks": "No entitlement change, no usage-string change in an app target, no deployment-target bump, no StoreKit, no account deletion. Tools only lint plists they are pointed at."
+}

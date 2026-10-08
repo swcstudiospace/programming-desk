@@ -1,12 +1,12 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.4
+milestone: v2.4 (Archived)
 milestone_name: Multi-Region Edge Federation & Autonomous Chaos Recovery
-status: Milestone v2.4 Complete (Phase 14 & Phase 15 100% complete)
-stopped_at: Completed Phase 15 Plan 02 execution (REQ-CHAOS-003, REQ-CHAOS-004, REQ-CHAOS-005).
-last_updated: "2026-10-09T16:00:00.000Z"
+status: Milestone v2.4 Complete & Archived (Phase 14 & Phase 15 100% complete)
+stopped_at: Archived Milestone v2.4 audit and roadmap artifacts. Ready for next milestone directives.
+last_updated: "2026-10-09T16:15:00.000Z"
 last_activity: 2026-10-09
-last_activity_desc: Executed Phase 15 Plan 02 (Workload rebalancing, DLQ replay orchestrator, continuous resilience verification suite)
+last_activity_desc: Archived Milestone v2.4 roadmap, requirements, and audit reports.
 progress:
   total_phases: 15
   completed_phases: 15

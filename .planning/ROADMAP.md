@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🔄 **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (in progress)
+- ✅ **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (shipped 2026-10-10) — [Archive](milestones/v2.6-ROADMAP.md)
 - ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
 - ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
 - ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
@@ -12,13 +12,16 @@
 
 ## Phases
 
-### Active Milestone: v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization
+### Completed Milestones
 
-- [x] **Phase 18: FinOps Dynamic Token Budgeting & Cost Governance** (2 plans)
-  - [x] 18-01: Token consumption ledger, multi-model cost translation engine & spend circuit-breaker (REQ-FINOPS-001, REQ-FINOPS-002, REQ-FINOPS-004)
-  - [x] 18-02: Seat-level quota allocation matrix & tamper-evident expenditure receipts (REQ-FINOPS-003, REQ-FINOPS-005)
-- [x] **Phase 19: LLM Tier Routing & Cost-Aware Model Optimization** (1 plan)
-  - [x] 19-01: Complexity-aware task classifier, dynamic fallback cascade, prompt cache optimizer & FinOps verification (REQ-TIER-001 through REQ-TIER-005)
+<details>
+<summary>✅ v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization (Phases 18-19) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 18: FinOps Dynamic Token Budgeting & Cost Governance (2/2 plans)
+- [x] Phase 19: LLM Tier Routing & Cost-Aware Model Optimization (1/1 plan)
+
+See [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md) for full phase details and execution history.
+</details>
 
 ### Completed Milestones
 

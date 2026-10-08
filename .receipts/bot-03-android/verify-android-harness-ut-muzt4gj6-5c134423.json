@@ -1,0 +1,75 @@
+{
+  "task_id": "verify-android-harness-ut-muzt4gj6-5c134423",
+  "bot": "bot-03-android",
+  "branch": "bot-03-android/verify-android-harness-ut-muzt4gj6",
+  "started_at": "2026-10-08T17:34:00Z",
+  "completed_at": "2026-10-08T17:45:22Z",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest android/tools/tests/test_verify_tools.py::MaestroFlowTests::test_returns_1_when_junit_reports_a_failure -v",
+      "exit_code": 1,
+      "duration_s": 2.106,
+      "output_tail": "E       AssertionError: 0 != 1\n\nandroid/tools/tests/test_verify_tools.py:218: AssertionError\nFAILED android/tools/tests/test_verify_tools.py::MaestroFlowTests::test_returns_1_when_junit_reports_a_failure\n1 failed in 0.86s"
+    },
+    {
+      "cmd": "python3 -m pytest android/tools/tests -v",
+      "exit_code": 0,
+      "duration_s": 27.96,
+      "output_tail": "33 passed in 27.96s"
+    },
+    {
+      "cmd": "python3 -m android.tools accel_check --json",
+      "exit_code": 0,
+      "duration_s": 0.045,
+      "output_tail": "{\n  \"kvm_node\": true,\n  \"kvm_usable\": false,\n  \"emulator_accel\": null,\n  \"recommendation\": \"no-emulator\"\n}"
+    },
+    {
+      "cmd": "python3 -m android.tools accel_check --json --require",
+      "exit_code": 3,
+      "duration_s": 0.045,
+      "output_tail": "{\n  \"kvm_node\": true,\n  \"kvm_usable\": false,\n  \"emulator_accel\": null,\n  \"recommendation\": \"no-emulator\"\n}"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Before the JUnit report was parsed, maestro_flow returned 0 on a report that contained a failure",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "android/tools tests pass, including a missing KVM node reporting kvm_node false with recommendation no-emulator, --require exiting 3 in that case, and maestro_flow returning 1 when a JUnit report contains a failure",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "On this host accel_check --json exits 0 with kvm_node true, kvm_usable false, emulator_accel null, and recommendation no-emulator",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "accel_check --require exits 3 on this host because the recommendation is no-emulator",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "This VM has a /dev/kvm node the ubuntu user cannot open (EACCES). The acceptance host without a KVM node was not this machine; kvm_node false is the AccelCheckTests case that points the probe at a missing path.",
+    "No emulator binary is on PATH, so emulator -accel-check did not run on this host.",
+    "Maestro 2.11.0 was not installed. maestro_flow tests use a fake maestro binary. A real Maestro CLI that ignores --debug-output can still write logs under the user home directory.",
+    "No adb device or emulator was connected, so screenrecord and maestro_flow were not exercised on a device.",
+    "Not run on a device at minSdk. skills/platforms/android asks for that, and this host has no device.",
+    "The python executable is absent on this image; the commands above used python3.",
+    "Greptile was not run by this seat. QUALITY records that verdict. This change is not merge-ready.",
+    "approved_by is absent until LEAD (bot-00-programming-lead) or a human stamps the receipt."
+  ],
+  "files_changed": [
+    "android/tools/accel_check.py",
+    "android/tools/maestro_flow.py",
+    "android/tools/screenrecord.py",
+    "android/tools/cli.py",
+    "android/tools/USAGE.md",
+    "android/tools/tests/test_verify_tools.py",
+    ".receipts/bot-03-android/verify-android-harness-ut-muzt4gj6-5c134423.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

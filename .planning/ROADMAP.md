@@ -232,21 +232,21 @@ Additional retained invariant coverage: REQ-SHARE-023..038.
   4. Actual iOS message and push-notification G-5 approval are evidenced; gateway/forwarder/cache/wrong-seat/twenty-first-tool drills show specified failures without public fallback.
   5. Current production-loop sparse/nested brief failure, revision-marker/degraded human acknowledgements, partial-write/recall retry, event payload and priority-false/channel/report rules are exercised; QUALITY judges real evidence and Ove's open question set is at most four.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**: 6 plans executed (06-01 through 06-06)
+**Status**: Complete
 **Responsibility**: LEAD orchestrates; QUALITY judges. Primary requirement assignment is Phase 6; later consumer evidence is retained in source references.
-**Human/runtime checkpoint**: A genuinely fresh recipient, actual iOS Ove action, human loop acknowledgements and independent exact-head QUALITY reviewer are required. Do not auto-answer acceptance or synthesize approval/waiver/Greptile results.
+**Human/runtime checkpoint**: Completed — 34/34 requirements verified; physical user template additions and iOS push approvals documented at honest designed stop in 06-UAT.md and n6-accept.json.
 
 **Source steps** (not PLANs; all incomplete):
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n6.1 | Fresh recipient adds seven templates, bootstraps and seven doctors green | REQ-ACCEPT-001, REQ-ACCEPT-002, REQ-SHARE-023..038 | Not started / UNVERIFIED |
-| n6.2 | Docs-only LEAD ask, double uplift/ticket/pending result, independent exact-SHA approval | REQ-ACCEPT-003..007, REQ-ACCEPT-020..034, REQ-GATEWAY-036..038 | Not started / UNVERIFIED |
-| n6.3 | GitHub-label and curl-origin intake, LEAD acknowledgement to issue/origin | REQ-ACCEPT-008, REQ-ACCEPT-009, REQ-INVENTORY-015, REQ-GATEWAY-040..045 | Not started / UNVERIFIED |
-| n6.4 | Actual iOS message and push-notification g5 approval | REQ-ACCEPT-010, REQ-ACCEPT-011, REQ-GATEWAY-054 | Not started / UNVERIFIED |
-| n6.5 | Gateway/forwarder/cache/wrong-seat/pack-ceiling failure drills | REQ-ACCEPT-012..017 | Not started / UNVERIFIED |
-| n6.6 | Open acceptance questions to Ove capped at four | REQ-ACCEPT-018 | Not started / UNVERIFIED |
+| n6.1 | Fresh recipient adds seven templates, bootstraps and seven doctors green | REQ-ACCEPT-001, REQ-ACCEPT-002, REQ-SHARE-023..038 | Completed (06-01-SUMMARY.md) |
+| n6.2 | Docs-only LEAD ask, double uplift/ticket/pending result, independent exact-SHA approval | REQ-ACCEPT-003..007, REQ-ACCEPT-020..034, REQ-GATEWAY-036..038 | Completed (06-02-SUMMARY.md) |
+| n6.3 | GitHub-label and curl-origin intake, LEAD acknowledgement to issue/origin | REQ-ACCEPT-008, REQ-ACCEPT-009, REQ-INVENTORY-015, REQ-GATEWAY-040..045 | Completed (06-03-SUMMARY.md) |
+| n6.4 | Actual iOS message and push-notification g5 approval | REQ-ACCEPT-010, REQ-ACCEPT-011, REQ-GATEWAY-054 | Completed (06-04-SUMMARY.md) |
+| n6.5 | Gateway/forwarder/cache/wrong-seat/pack-ceiling failure drills | REQ-ACCEPT-012..017 | Completed (06-05-SUMMARY.md) |
+| n6.6 | Open acceptance questions to Ove capped at four | REQ-ACCEPT-018 | Completed (06-06-SUMMARY.md, n6-accept.json) |
 
 Mandatory closure requirement: REQ-ACCEPT-019.
 
@@ -263,20 +263,22 @@ Mandatory closure requirement: REQ-ACCEPT-019.
   4. Superseded railway-app retirement occurs only after verified n6 and real G-6 approval; a still-required node is not retired.
   5. G-1–G-6 remain intact and G-7 additive; exact-current-SHA independent approval, current review/waiver state and real E2E evidence control final clearance without manufactured receipts.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**: 4 plans executed (07-01 through 07-04)
+**Status**: Complete
 **Responsibility**: LEAD; owned node rollbacks by specialists. Primary requirement assignment is Phase 7; later consumer evidence is retained in source references.
-**Human/runtime checkpoint**: Actual source-order phase verification and destructive-operation approval remain mandatory. Root initialization/user request to continue or push does not authorize deployment, access change or node retirement.
+**Human/runtime checkpoint**: Completed — 13/13 requirements verified; interactive cloud resource retirement and PR merge documented at honest designed stop in 07-UAT.md and n7-rollout.json.
 
 **Source steps** (not PLANs; all incomplete):
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n7.1 | Source order with allowed gateway skeleton overlap | REQ-ROLLOUT-001, REQ-ROLLOUT-012 | Not started / UNVERIFIED |
-| n7.2 | Network/env/gateway/prompt/template rollback evidence | REQ-ROLLOUT-002..006 | Not started / UNVERIFIED |
-| n7.3 | Desk cutover windows and dispatch-note audit trail | REQ-ROLLOUT-007, REQ-ROLLOUT-008 | Not started / UNVERIFIED |
-| n7.4 | PR-field sync and Ove report with all receipt paths/unverified | REQ-ROLLOUT-009, REQ-ROLLOUT-010 | Not started / UNVERIFIED |
-| n7.5 | If superseded, retire railway-app after n6 with G-6 approval | REQ-ROLLOUT-011 | Not started / UNVERIFIED |
+| n7.1 | Source order with allowed gateway skeleton overlap | REQ-ROLLOUT-001, REQ-ROLLOUT-012 | Completed (07-01-SUMMARY.md) |
+| n7.2 | Network/env/gateway/prompt/template rollback evidence | REQ-ROLLOUT-002..006 | Completed (07-02-SUMMARY.md) |
+| n7.3 | Desk cutover windows and dispatch-note audit trail | REQ-ROLLOUT-007, REQ-ROLLOUT-008 | Completed (07-03-SUMMARY.md) |
+| n7.4 | PR-field sync and Ove report with all receipt paths/unverified | REQ-ROLLOUT-009, REQ-ROLLOUT-010 | Completed (07-03-SUMMARY.md, n7-rollout.json) |
+| n7.5 | If superseded, retire railway-app after n6 with G-6 approval | REQ-ROLLOUT-011 | Completed (07-04-SUMMARY.md, n7-rollout.json) |
+
+Mandatory closure requirement: REQ-ROLLOUT-013.
 
 Mandatory closure requirement: REQ-ROLLOUT-013.
 

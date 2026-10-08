@@ -367,102 +367,102 @@ Source: [approved plan](../docs/upgrade-plan-desk-v2.md) §§5–13 and Appendic
 
 ### ACCEPT — Phase 6: Fresh-desk acceptance and external intake
 
-- [ ] **REQ-ACCEPT-001**: Given someone who has never had the desk, when share acceptance starts, then that person adds seven templates and runs bootstrap; existing Bots are not substituted.
+- [x] **REQ-ACCEPT-001**: Given someone who has never had the desk, when share acceptance starts, then that person adds seven templates and runs bootstrap; existing Bots are not substituted.
   - Source: P §9.4; §12 n6.1; source step / responsibility: n6.1; LEAD / fresh recipient / QUALITY; acceptance ID: AC-ACCEPT-001.
-- [ ] **REQ-ACCEPT-002**: Given fresh bootstrap, when judged, then all seven doctors are green with receipts covering every §9.3 check.
+- [x] **REQ-ACCEPT-002**: Given fresh bootstrap, when judged, then all seven doctors are green with receipts covering every §9.3 check.
   - Source: P §9.4 item 1; §12 n6.1; source step / responsibility: n6.1; recipient / QUALITY; acceptance ID: AC-ACCEPT-002.
-- [ ] **REQ-ACCEPT-003**: Given the fresh desk, when the docs-only ask is sent, then it enters via Ove-to-LEAD 1:1.
+- [x] **REQ-ACCEPT-003**: Given the fresh desk, when the docs-only ask is sent, then it enters via Ove-to-LEAD 1:1.
   - Source: P §9.4 item 2; §12 n6.2; source step / responsibility: n6.2; Ove / LEAD; acceptance ID: AC-ACCEPT-003.
-- [ ] **REQ-ACCEPT-004**: Given that docs-only ask, when dispatched, then the double uplift produces one concrete Lane C ticket for its owning seat.
+- [x] **REQ-ACCEPT-004**: Given that docs-only ask, when dispatched, then the double uplift produces one concrete Lane C ticket for its owning seat.
   - Source: P §9.4 item 3; §12 n6.2; G Flow; source step / responsibility: n6.2; LEAD; acceptance ID: AC-ACCEPT-004.
-- [ ] **REQ-ACCEPT-005**: Given the ticket result, when posted in the group, then it is labelled awaiting-review / pending QUALITY and is not presented as independent clearance.
+- [x] **REQ-ACCEPT-005**: Given the ticket result, when posted in the group, then it is labelled awaiting-review / pending QUALITY and is not presented as independent clearance.
   - Source: P §9.4 item 4; §12 n6.2; G Verification; source step / responsibility: n6.2; build seat; acceptance ID: AC-ACCEPT-005.
-- [ ] **REQ-ACCEPT-006**: Given the completed receipt, when QUALITY approves, then exact-current-SHA approval is externally resolvable without a new commit; the original on-branch approved_by stamp is documentary evidence, not an accepted workaround.
+- [x] **REQ-ACCEPT-006**: Given the completed receipt, when QUALITY approves, then exact-current-SHA approval is externally resolvable without a new commit; the original on-branch approved_by stamp is documentary evidence, not an accepted workaround.
   - Source: P §9.4 item 5; §12 n6.2; G Merge-claim head rule; assignment exact-SHA instruction; source step / responsibility: n6.2; independent QUALITY / SYSTEMS approval surface; acceptance ID: AC-ACCEPT-006.
-- [ ] **REQ-ACCEPT-007**: Given the fresh-desk sequence, when desk_roster_status is queried, then its events are visible with evidence of the actual sequence.
+- [x] **REQ-ACCEPT-007**: Given the fresh-desk sequence, when desk_roster_status is queried, then its events are visible with evidence of the actual sequence.
   - Source: P §9.4 item 6; source step / responsibility: n6.2; LEAD / QUALITY; acceptance ID: AC-ACCEPT-007.
-- [ ] **REQ-ACCEPT-008**: Given curl with an origin token, when POST /v1/intake is exercised, then LEAD obtains it through desk_intake_next and acknowledges it back to its origin.
+- [x] **REQ-ACCEPT-008**: Given curl with an origin token, when POST /v1/intake is exercised, then LEAD obtains it through desk_intake_next and acknowledges it back to its origin.
   - Source: P §9.4 item 7; §12 n6.3; source step / responsibility: n6.3; LEAD / external origin; acceptance ID: AC-ACCEPT-008.
-- [ ] **REQ-ACCEPT-009**: Given a GitHub desk:intake-labelled issue, when intake runs, then LEAD's acknowledgement reaches the issue with Graph ID and tracker links; API fixtures alone do not prove the label workflow.
+- [x] **REQ-ACCEPT-009**: Given a GitHub desk:intake-labelled issue, when intake runs, then LEAD's acknowledgement reaches the issue with Graph ID and tracker links; API fixtures alone do not prove the label workflow.
   - Source: P §10 GitHub; §12 n6.3; source step / responsibility: n6.3; INFRA / LEAD / QUALITY; acceptance ID: AC-ACCEPT-009.
-- [ ] **REQ-ACCEPT-010**: Given iOS mobile, when Ove messages LEAD, then that real mobile interaction is evidenced separately from desktop simulation.
+- [x] **REQ-ACCEPT-010**: Given iOS mobile, when Ove messages LEAD, then that real mobile interaction is evidenced separately from desktop simulation.
   - Source: P §12 n6.4; source step / responsibility: n6.4; Ove / LEAD; acceptance ID: AC-ACCEPT-010.
-- [ ] **REQ-ACCEPT-011**: Given a g5 tool approval push notification, when Ove approves from iOS, then the actual approval and gated-call evidence are recorded without fabricated authorization.
+- [x] **REQ-ACCEPT-011**: Given a g5 tool approval push notification, when Ove approves from iOS, then the actual approval and gated-call evidence are recorded without fabricated authorization.
   - Source: P §12 n6.4; §7.1 audit; source step / responsibility: n6.4; Ove / gated tool owner; acceptance ID: AC-ACCEPT-011.
-- [ ] **REQ-ACCEPT-012**: Given gateway-down conditions, when a read is attempted through the supported tool path, then fail-open read behavior and its reason are evidenced rather than treated as successful data retrieval.
+- [x] **REQ-ACCEPT-012**: Given gateway-down conditions, when a read is attempted through the supported tool path, then fail-open read behavior and its reason are evidenced rather than treated as successful data retrieval.
   - Source: P §12 n6.5; §7.1 failure; source step / responsibility: n6.5; LEAD / QUALITY / SYSTEMS; acceptance ID: AC-ACCEPT-012.
-- [ ] **REQ-ACCEPT-013**: Given gateway-down conditions, when a write is attempted, then the write fails closed and no successful write is claimed.
+- [x] **REQ-ACCEPT-013**: Given gateway-down conditions, when a write is attempted, then the write fails closed and no successful write is claimed.
   - Source: P §12 n6.5; §7.1 failure; source step / responsibility: n6.5; LEAD / QUALITY / SYSTEMS; acceptance ID: AC-ACCEPT-013.
-- [ ] **REQ-ACCEPT-014**: Given a forwarder outage, when desk_db_health runs, then it is red and there is no public proxy/domain fallback.
+- [x] **REQ-ACCEPT-014**: Given a forwarder outage, when desk_db_health runs, then it is red and there is no public proxy/domain fallback.
   - Source: P §12 n6.5; source step / responsibility: n6.5; INFRA / QUALITY; acceptance ID: AC-ACCEPT-014.
-- [ ] **REQ-ACCEPT-015**: Given Dragonfly down, when cached reads are exercised, then the same answers return uncached from their sources.
+- [x] **REQ-ACCEPT-015**: Given Dragonfly down, when cached reads are exercised, then the same answers return uncached from their sources.
   - Source: P §12 n6.5; §6 cache; source step / responsibility: n6.5; SYSTEMS / QUALITY; acceptance ID: AC-ACCEPT-015.
-- [ ] **REQ-ACCEPT-016**: Given a wrong-seat token, when the other seat endpoint is called, then runtime evidence shows 403.
+- [x] **REQ-ACCEPT-016**: Given a wrong-seat token, when the other seat endpoint is called, then runtime evidence shows 403.
   - Source: P §12 n6.5; source step / responsibility: n6.5; SYSTEMS / QUALITY; acceptance ID: AC-ACCEPT-016.
-- [ ] **REQ-ACCEPT-017**: Given twenty live tools, when a twenty-first would be activated, then the excess tool is refused.
+- [x] **REQ-ACCEPT-017**: Given twenty live tools, when a twenty-first would be activated, then the excess tool is refused.
   - Source: P §12 n6.5; §7.4; source step / responsibility: n6.5; SYSTEMS / QUALITY; acceptance ID: AC-ACCEPT-017.
-- [ ] **REQ-ACCEPT-018**: Given unresolved acceptance questions, when the source-defined question set is sent to Ove, then it contains at most four questions.
+- [x] **REQ-ACCEPT-018**: Given unresolved acceptance questions, when the source-defined question set is sent to Ove, then it contains at most four questions.
   - Source: P §12 n6.6; source step / responsibility: n6.6; LEAD → Ove; acceptance ID: AC-ACCEPT-018.
-- [ ] **REQ-ACCEPT-019**: Given delivery claims, when fresh-desk acceptance is judged, then QUALITY's independent verdict and consolidated receipts determine clearance, not file presence, local health or passing unit fixtures.
+- [x] **REQ-ACCEPT-019**: Given delivery claims, when fresh-desk acceptance is judged, then QUALITY's independent verdict and consolidated receipts determine clearance, not file presence, local health or passing unit fixtures.
   - Source: P §9.4 release gate; §12 n6; G Verification; source step / responsibility: n6; QUALITY / LEAD; acceptance ID: AC-ACCEPT-019.
-- [ ] **REQ-ACCEPT-020**: Given a brief response with top-level error/reason and no substrate/recall fields, when classified, then it is treated as a brief that never ran and blocks repo work absent the required degraded-turn acknowledgement.
+- [x] **REQ-ACCEPT-020**: Given a brief response with top-level error/reason and no substrate/recall fields, when classified, then it is treated as a brief that never ran and blocks repo work absent the required degraded-turn acknowledgement.
   - Source: G production loop point 1 L54–69; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-020.
-- [ ] **REQ-ACCEPT-021**: Given a populated brief, when its nested status is checked, then any substrate.error, recall.error or per-bank recall.results[].error makes the brief failed, including a single failed shared bank.
+- [x] **REQ-ACCEPT-021**: Given a populated brief, when its nested status is checked, then any substrate.error, recall.error or per-bank recall.results[].error makes the brief failed, including a single failed shared bank.
   - Source: G production loop point 1 L61–69; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-021.
-- [ ] **REQ-ACCEPT-022**: Given a failed brief or a successful brief without a revision marker, when repo work is considered, then it waits for the condition-specific recorded human acknowledgement; generated_at/cached do not substitute for a revision marker.
+- [x] **REQ-ACCEPT-022**: Given a failed brief or a successful brief without a revision marker, when repo work is considered, then it waits for the condition-specific recorded human acknowledgement; generated_at/cached do not substitute for a revision marker.
   - Source: G production loop point 3 L81–100; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-022.
-- [ ] **REQ-ACCEPT-023**: Given a brief receipt record, when provenance is written, then a supplied etag is brief_etag; desk_brief without one records generated_at as brief_read_at, cached with absent meaning false, and inability to detect changes in unverified rather than inventing an etag.
+- [x] **REQ-ACCEPT-023**: Given a brief receipt record, when provenance is written, then a supplied etag is brief_etag; desk_brief without one records generated_at as brief_read_at, cached with absent meaning false, and inability to detect changes in unverified rather than inventing an etag.
   - Source: G production loop point 2 L70–80; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-023.
-- [ ] **REQ-ACCEPT-024**: Given brief_degraded or brief_no_revision_marker, when an acknowledgement is requested, then it routes priority-false through LEAD to Ove 1:1 and names the corresponding degraded-loop operation for one turn on one ticket.
+- [x] **REQ-ACCEPT-024**: Given brief_degraded or brief_no_revision_marker, when an acknowledgement is requested, then it routes priority-false through LEAD to Ove 1:1 and names the corresponding degraded-loop operation for one turn on one ticket.
   - Source: G production loop point 3 L81–100; source step / responsibility: n6.2 / every future ticket; build seat → LEAD → Ove; acceptance ID: AC-ACCEPT-024.
-- [ ] **REQ-ACCEPT-025**: Given a human loop acknowledgement, when the receipt records it, then its ID is in loop_acks, not approvals[], and it cannot satisfy g5/g6 destructive-operation approval or be typed by the seat requiring it.
+- [x] **REQ-ACCEPT-025**: Given a human loop acknowledgement, when the receipt records it, then its ID is in loop_acks, not approvals[], and it cannot satisfy g5/g6 destructive-operation approval or be typed by the seat requiring it.
   - Source: G production loop point 3 L89–98; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-025.
-- [ ] **REQ-ACCEPT-026**: Given acknowledged degraded work that completed, when emitted, then implementation.completed carries receipt path, degraded=true, blocker, upstream_reason, reason_path and ack ID; ticket.blocked is reserved for work that stopped.
+- [x] **REQ-ACCEPT-026**: Given acknowledged degraded work that completed, when emitted, then implementation.completed carries receipt path, degraded=true, blocker, upstream_reason, reason_path and ack ID; ticket.blocked is reserved for work that stopped.
   - Source: G production loop point 4 L101–108; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-026.
-- [ ] **REQ-ACCEPT-027**: Given current gateway event emission, when its receipt is written, then payload.event is acknowledged as the current routing field under top-level kind=note, reserved payload seat/event/task_id are not overwritten, and no consumer routing is claimed without evidence.
+- [x] **REQ-ACCEPT-027**: Given current gateway event emission, when its receipt is written, then payload.event is acknowledged as the current routing field under top-level kind=note, reserved payload seat/event/task_id are not overwritten, and no consumer routing is claimed without evidence.
   - Source: G production loop point 5 L109–116; source step / responsibility: n6.2 / every future ticket; every seat / QUALITY contract; acceptance ID: AC-ACCEPT-027.
-- [ ] **REQ-ACCEPT-028**: Given desk_memory_retain returns ok=true, when evaluated, then results are checked per plane and a partial acceptance is recorded in unverified rather than claimed as full retention.
+- [x] **REQ-ACCEPT-028**: Given desk_memory_retain returns ok=true, when evaluated, then results are checked per plane and a partial acceptance is recorded in unverified rather than claimed as full retention.
   - Source: G production loop point 6 L117–120; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-028.
-- [ ] **REQ-ACCEPT-029**: Given an uncertain retain outcome, when considering retry, then recall precedes at most one retry and any possible duplicate is stated; only local evidence_required/secret_refused refusals prove no upstream call occurred.
+- [x] **REQ-ACCEPT-029**: Given an uncertain retain outcome, when considering retry, then recall precedes at most one retry and any possible duplicate is stated; only local evidence_required/secret_refused refusals prove no upstream call occurred.
   - Source: G production loop point 6 L121–124; source step / responsibility: n6.2 / every future ticket; every seat; acceptance ID: AC-ACCEPT-029.
-- [ ] **REQ-ACCEPT-030**: Given a handoff before the signed-packet schema has landed, when emitted, then absent packet fields are omitted and unsigned status is recorded in unverified instead of fabricated signatures.
+- [x] **REQ-ACCEPT-030**: Given a handoff before the signed-packet schema has landed, when emitted, then absent packet fields are omitted and unsigned status is recorded in unverified instead of fabricated signatures.
   - Source: G production loop paragraph L133–136; source step / responsibility: n6.2 / Lane B handoff when assigned; runtime owner; acceptance ID: AC-ACCEPT-030.
-- [ ] **REQ-ACCEPT-031**: Given a true widget request, when handled, then LEAD shows it in Ove's 1:1, echoes the choice in the Desk and returns it to the asking seat priority-true; group choices remain plain numbered text.
+- [x] **REQ-ACCEPT-031**: Given a true widget request, when handled, then LEAD shows it in Ove's 1:1, echoes the choice in the Desk and returns it to the asking seat priority-true; group choices remain plain numbered text.
   - Source: G Channel discipline L269; Direct-from-Ove and widgets; source step / responsibility: n6 / future tickets; LEAD / asking seat; acceptance ID: AC-ACCEPT-031.
-- [ ] **REQ-ACCEPT-032**: Given a channel ping without a LEAD ticket or direct Ove request to a build seat, when received, then the seat sends LEAD a held plan and waits for LEAD's plan before editing rather than inventing work.
+- [x] **REQ-ACCEPT-032**: Given a channel ping without a LEAD ticket or direct Ove request to a build seat, when received, then the seat sends LEAD a held plan and waits for LEAD's plan before editing rather than inventing work.
   - Source: G Channel rules L193–194; Channel discipline L275; Direct-from-Ove; source step / responsibility: n6 / future tickets; build seats; acceptance ID: AC-ACCEPT-032.
-- [ ] **REQ-ACCEPT-033**: Given assigned work and held status, when coordination occurs, then LEAD emits each dispatch note and polls priority-false handoffs at turn start and after Desk activity, relaying off-channel QUALITY status.
+- [x] **REQ-ACCEPT-033**: Given assigned work and held status, when coordination occurs, then LEAD emits each dispatch note and polls priority-false handoffs at turn start and after Desk activity, relaying off-channel QUALITY status.
   - Source: G Flow 8–10; Channel discipline L271–273; source step / responsibility: n6 / future tickets; LEAD / build seats / QUALITY; acceptance ID: AC-ACCEPT-033.
-- [ ] **REQ-ACCEPT-034**: Given an authorized ticket turn, when it finishes, then the receipt evidences brief-before-act, memory_write and events_emit in the same turn and only a ticket-requested handoff, with partial outcomes/unverified limits preserved.
+- [x] **REQ-ACCEPT-034**: Given an authorized ticket turn, when it finishes, then the receipt evidences brief-before-act, memory_write and events_emit in the same turn and only a ticket-requested handoff, with partial outcomes/unverified limits preserved.
   - Source: G production loop L41–52; ticket success criteria L173; source step / responsibility: n6.2 / future tickets; every seat; acceptance ID: AC-ACCEPT-034.
 
 ### ROLLOUT — Phase 7: Ordered rollout and rollback
 
-- [ ] **REQ-ROLLOUT-001**: Given rollout, when cutover dependencies are followed, then n2 → n3 → n4 → n5 → n6 governs completion, with only the n4 skeleton allowed to start after n1 and overlap n3.
+- [x] **REQ-ROLLOUT-001**: Given rollout, when cutover dependencies are followed, then n2 → n3 → n4 → n5 → n6 governs completion, with only the n4 skeleton allowed to start after n1 and overlap n3.
   - Source: P §12 n7.1; n4 dependency; source step / responsibility: n7.1; LEAD; acceptance ID: AC-ROLLOUT-001.
-- [ ] **REQ-ROLLOUT-002**: Given network rollback, when authorized and exercised, then forwarders can be deleted and the TCP proxy/public domain recreated without claiming data migration is involved.
+- [x] **REQ-ROLLOUT-002**: Given network rollback, when authorized and exercised, then forwarders can be deleted and the TCP proxy/public domain recreated without claiming data migration is involved.
   - Source: P §12 n7.2; §5 rollback; source step / responsibility: n7.2; INFRA / required approver; acceptance ID: AC-ROLLOUT-002.
-- [ ] **REQ-ROLLOUT-003**: Given substrate rollback, when performed, then the prior environment file is restored with the actual rollback evidence.
+- [x] **REQ-ROLLOUT-003**: Given substrate rollback, when performed, then the prior environment file is restored with the actual rollback evidence.
   - Source: P §12 n7.2; source step / responsibility: n7.2; INFRA / substrate owner; acceptance ID: AC-ROLLOUT-003.
-- [ ] **REQ-ROLLOUT-004**: Given gateway rollback, when the additive gateway is removed or disabled, then prior Bots continue their prior operation minus the new gateway tools.
+- [x] **REQ-ROLLOUT-004**: Given gateway rollback, when the additive gateway is removed or disabled, then prior Bots continue their prior operation minus the new gateway tools.
   - Source: P §12 n7.2; source step / responsibility: n7.2; SYSTEMS / INFRA; acceptance ID: AC-ROLLOUT-004.
-- [ ] **REQ-ROLLOUT-005**: Given prompt rollback, when v1.1 is reverted, then v1.0 is re-assembled with the committed roster rather than restoring recipient-breaking hardcoded IDs without evidence.
+- [x] **REQ-ROLLOUT-005**: Given prompt rollback, when v1.1 is reverted, then v1.0 is re-assembled with the committed roster rather than restoring recipient-breaking hardcoded IDs without evidence.
   - Source: P §12 n7.2; source step / responsibility: n7.2; QUALITY / each prompt owner; acceptance ID: AC-ROLLOUT-005.
-- [ ] **REQ-ROLLOUT-006**: Given template rollback, when publication is reverted, then templates are re-published and the actual Share state is evidenced.
+- [x] **REQ-ROLLOUT-006**: Given template rollback, when publication is reverted, then templates are re-published and the actual Share state is evidenced.
   - Source: P §12 n7.2; source step / responsibility: n7.2; LEAD; acceptance ID: AC-ROLLOUT-006.
-- [ ] **REQ-ROLLOUT-007**: Given a cutover window, when planned for execution, then it is announced in the Desk before the cutover.
+- [x] **REQ-ROLLOUT-007**: Given a cutover window, when planned for execution, then it is announced in the Desk before the cutover.
   - Source: P §12 n7.3; source step / responsibility: n7.3; LEAD; acceptance ID: AC-ROLLOUT-007.
-- [ ] **REQ-ROLLOUT-008**: Given a cutover assignment, when dispatched, then its Desk dispatch note remains the audit trail.
+- [x] **REQ-ROLLOUT-008**: Given a cutover assignment, when dispatched, then its Desk dispatch note remains the audit trail.
   - Source: P §12 n7.3; G Channel discipline; source step / responsibility: n7.3; LEAD; acceptance ID: AC-ROLLOUT-008.
-- [ ] **REQ-ROLLOUT-009**: Given PR status fields, when sync completes, then Notion and Linear reflect the actual GitHub PR fields rather than an invented merge or deployment status.
+- [x] **REQ-ROLLOUT-009**: Given PR status fields, when sync completes, then Notion and Linear reflect the actual GitHub PR fields rather than an invented merge or deployment status.
   - Source: P §12 n7.4; source step / responsibility: n7.4; LEAD; acceptance ID: AC-ROLLOUT-009.
-- [ ] **REQ-ROLLOUT-010**: Given consolidated rollout evidence, when reporting to Ove 1:1, then receipt paths and every unverified item are included and no unsupported completion is claimed.
+- [x] **REQ-ROLLOUT-010**: Given consolidated rollout evidence, when reporting to Ove 1:1, then receipt paths and every unverified item are included and no unsupported completion is claimed.
   - Source: P §12 n7.4; G Verification; source step / responsibility: n7.4; LEAD; acceptance ID: AC-ROLLOUT-010.
-- [ ] **REQ-ROLLOUT-011**: Given railway-app is proved superseded, when retired, then retirement occurs after n6 with recorded G-6 approval; an unidentified or required node is not retired.
+- [x] **REQ-ROLLOUT-011**: Given railway-app is proved superseded, when retired, then retirement occurs after n6 with recorded G-6 approval; an unidentified or required node is not retired.
   - Source: P §12 n7.5; §5 railway-app; source step / responsibility: n7.5 after n6; INFRA / G-6 approver; acceptance ID: AC-ROLLOUT-011.
-- [ ] **REQ-ROLLOUT-012**: Given the source dispatch lanes, when assigning execution, then n2/n5 are Lane C and n3/n4 default to Lane A Cursor Cloud Agents with second-uplift XML; Lane B is used only if Ove asks.
+- [x] **REQ-ROLLOUT-012**: Given the source dispatch lanes, when assigning execution, then n2/n5 are Lane C and n3/n4 default to Lane A Cursor Cloud Agents with second-uplift XML; Lane B is used only if Ove asks.
   - Source: P §12 runtime lanes L330; source step / responsibility: n2 / n3 / n4 / n5 / n7 coordination; LEAD; acceptance ID: AC-ROLLOUT-012.
-- [ ] **REQ-ROLLOUT-013**: Given a release/merge claim, when clearance is sought, then G-1…G-6 remain intact, G-7 is additive, and exact-current-SHA independent approval and the actual E2E evidence are required; this staged plan is not a merge claim.
+- [x] **REQ-ROLLOUT-013**: Given a release/merge claim, when clearance is sought, then G-1…G-6 remain intact, G-7 is additive, and exact-current-SHA independent approval and the actual E2E evidence are required; this staged plan is not a merge claim.
   - Source: P opening policy; §12 runtime lanes; §13 final paragraph; G Merge-claim head rule; source step / responsibility: n7 / all phases; LEAD / QUALITY; acceptance ID: AC-ROLLOUT-013.
 
 ## Resolved Source Variants

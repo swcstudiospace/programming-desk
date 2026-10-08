@@ -141,10 +141,12 @@ A successful trigger means the review was **queued**, not that analysis finished
 | Condition | Merge claim |
 |---|---|
 | Greptile comments with `addressed=false` (unaddressed) | **Block** completion / merge claim |
-| Addressed in code + follow-up commit, or waived | Allowed only with a **waiver receipt** |
-| Greptile `FAILED` / unavailable | Do not silently skip — record in receipt `unverified` / blocker; LEAD escalates |
+| Addressed in code + follow-up commit, or explicitly waived | Allowed only with a **waiver receipt** naming an explicit instruction from Ove |
+| Greptile `FAILED`, `SKIPPED`, or unavailable | Do not silently skip — record in receipt `unverified` / blocker; LEAD escalates |
 
-**Waiver receipt** (under `.receipts/` or PR comment linked from receipt): who waived, which comment ids, why, and that QUALITY acknowledged. Waiver is reviewable; ignoring Greptile is not.
+**Waiving requires an explicit instruction from Ove.** QUALITY records and acknowledges a waiver; it does not author one on its own judgement, and neither does LEAD or the implementing seat. "Cosmetic", "pre-existing" or "out of scope" is an argument to put to Ove, not grounds to waive.
+
+**Waiver receipt** (under `.receipts/` or PR comment linked from receipt): that Ove instructed it and where, which comment ids, why, that QUALITY acknowledged, what the waiver does not cover, and the head commit the review ran on. Waiver is reviewable; ignoring Greptile is not.
 
 QUALITY checklist includes Greptile status via `skills/greptile-merge-gate/SKILL.md` (wired into `prompts/bot-06-quality-security.xml` / `QUALITY.xml`). **E2E not verified** — no live trigger on a production PR in authoring; MCP `get_me` returned needsAuth at skill-author time.
 

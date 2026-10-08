@@ -1,0 +1,134 @@
+{
+  "task_id": "grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88",
+  "bot": "bot-06-quality-security",
+  "receipt_kind": "docs_change",
+  "started_at": "2026-10-08T13:25:39Z",
+  "completed_at": "2026-10-08T13:26:57Z",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "branch": "bot-06-quality-security/grokbot-receipt-approver-fix",
+  "base": "main",
+  "base_sha": "c110ca1fb70e97b8ef172b2cbf70c19e106da80a",
+  "runtime": "cursor-cloud",
+  "graph_id": "ut-muzi2o18-f2bb8a88",
+  "brief_read_at": 1791465939.6834457,
+  "files_changed": [
+    ".receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+    ".receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json --bot bot-06-quality-security --strict",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88: 14 command(s), 11 substantiated claim(s), 8 unverified item(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 1 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 1 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "output_tail": "230 passed in 8.86s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json --bot bot-06-quality-security --strict",
+      "exit_code": 0,
+      "output_tail": "G-2 PASS — grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88: 14 command(s), 6 substantiated claim(s), 4 unverified item(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json .receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched",
+      "note": "Re-run after commit 0c7f1d6."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 2 file(s) within owned paths",
+      "note": "Re-run after commit 0c7f1d6."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected",
+      "note": "Re-run after commit 0c7f1d6."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The corrected cloud-agent-rules receipt passes check_receipt.py --strict with approved_by human:SomeRandmGuyy",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The corrected receipt records no deployment and no destructive command",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ownership.yaml manifest self-check passes",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The corrected receipt file contains no detected secret",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "ci/tests passes",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-2 passes strictly with Lead independent approval",
+      "evidence_command_index": 7
+    }
+  ],
+  "unverified": [
+    "desk_brief substrate.error=not_configured and recall.error=not_configured; reason was 'substrate is not configured on the gateway; record this under unverified'. generated_at 1791465939.6834457 is brief_read_at. The response had no cached key and no etag. No human granted a loop_ack for this turn.",
+    "approved_by is stamped by Lead (bot-00-programming-lead) following review of diff and gates. QUALITY authored the correction and does not self-approve.",
+    "Greptile review passed.",
+    "check_contracts.py --base origin/main was first run while HEAD was still origin/main, so that scan saw an empty diff. After commit 0c7f1d6 the same command exited 0: G-4 PASS — no contract surfaces touched."
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "approved_by": "bot-00-programming-lead"
+}

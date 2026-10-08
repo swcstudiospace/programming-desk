@@ -61,48 +61,99 @@
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/grokbot-desk-run-raw-304e-ut-muzi2o18-f2bb8a88.json --bot bot-00-programming-lead --strict",
       "exit_code": 0,
+      "duration_s": 0.03,
+      "output_tail": "G-2 PASS — grokbot-desk-run-raw-304e-ut-muzi2o18-f2bb8a88: 15 command(s), 7 substantiated claim(s), 4 unverified item(s)",
+      "note": "Re-run on bot-00-programming-lead/grokbot-receipt-approver-72-ut-muzi2o18 after approved_by was corrected to human:SomeRandmGuyy. a96433b had recorded exit 0 with approved_by bot-06-quality-security."
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 0."
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "duration_s": 0.14,
+      "output_tail": "generate-templates --check: 7 templates up to date",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 1."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
       "duration_s": 0.05,
-      "output_tail": "G-2 PASS — grokbot-desk-run-raw-304e-ut-muzi2o18-f2bb8a88: 8 command(s), 7 substantiated claim(s), 3 unverified item(s)"
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 2."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base 34c741fd3f7f82b0599aca1bd6e6ec7de94ff579",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 2 file(s) within owned paths",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 3."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base 34c741fd3f7f82b0599aca1bd6e6ec7de94ff579",
+      "exit_code": 0,
+      "duration_s": 0.03,
+      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 4."
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base 34c741fd3f7f82b0599aca1bd6e6ec7de94ff579",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS — no contract surfaces touched",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 5."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 9.38,
+      "output_tail": "230 passed in 9.21s",
+      "note": "Re-run on 13ff124 (tree identical to #72 head a96433b) against base 34c741f by cloud agent bc-3b5a4f9b on 2026-10-08; reproduces command 6."
     }
   ],
   "claims": [
     {
       "claim": "G-7 desk integrity check passes",
-      "evidence_command_index": 0
+      "evidence_command_index": 8
     },
     {
       "claim": "All desk prompt templates match scripts/generate-templates.py",
-      "evidence_command_index": 1
+      "evidence_command_index": 9
     },
     {
       "claim": "Manifest self-check passes",
-      "evidence_command_index": 2
+      "evidence_command_index": 10
     },
     {
       "claim": "G-1 path ownership passes for bot-00-programming-lead",
-      "evidence_command_index": 3
+      "evidence_command_index": 11
     },
     {
       "claim": "G-3 secrets scan detects no secrets in the diff",
-      "evidence_command_index": 4
+      "evidence_command_index": 12
     },
     {
       "claim": "G-4 contract check detects no contract changes",
-      "evidence_command_index": 5
+      "evidence_command_index": 13
     },
     {
       "claim": "Repository quality test suite passes",
-      "evidence_command_index": 6
+      "evidence_command_index": 14
     }
   ],
   "unverified": [
-    "Substrate gateway connection not active in local test environment.",
-    "Linear issue creation and cloud agent dispatch was not triggered for this unit test.",
-    "Independent approval stamped by bot-06-quality-security following diff and gates verification."
+    "No desk_brief read is evidenced for this unit: brief_read_at 1791465939.6834457 is the same value recorded in .receipts/bot-06-quality-security/grokbot-receipt-approver-fix-ut-muzi2o18-f2bb8a88.json, and substrate status was not recorded. Commands 0 to 7 were recorded in a96433b, committed from Ming's GitHub account; where they ran is not recorded. Commands 8 to 14 re-ran commands 0 to 6 in a Cursor cloud VM: all matched.",
+    "This was not a test run. The skill change eb2d48b was made by Cursor cloud agent bc-3b5a4f9b-ed1f-578b-8732-cf48b14d304e for graph ut-muzi2o18-f2bb8a88 unit U5, and https://github.com/swcstudiospace/programming-desk/pull/72 cites Linear SPE-8208, SPE-8253, SPE-8217 and SPE-8211.",
+    "Ming's approval pushed from his account, confirmed 2026-10-09; Desk Quality did not review.",
+    "Greptile on https://github.com/swcstudiospace/programming-desk/pull/72: Confidence 5/5 on a96433b (review 5457728876, APPROVED, submitted 2026-10-08T13:57:51Z), no inline comments. The PR merged as 13ff124 at 2026-10-08T14:05:15Z."
   ],
   "contract_changes": [],
   "rollback_plan": null,
   "approvals": [],
   "loop_acks": [],
-  "approved_by": "bot-06-quality-security"
+  "approved_by": "human:SomeRandmGuyy"
 }

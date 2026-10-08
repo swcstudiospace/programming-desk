@@ -2,11 +2,11 @@
 gsd_state_version: "1.0"
 milestone: v2.2
 milestone_name: Multi-Desk Federation & Staging Deployments
-status: Milestone v2.2 complete (100% of plans and requirements verified)
-stopped_at: Completed Milestone v2.2 (Phases 10-11, 4/4 plans).
-last_updated: "2026-10-09T10:00:00.000Z"
+status: Milestone v2.2 complete and archived; ready for new milestone definition
+stopped_at: Completed and archived Milestone v2.2.
+last_updated: "2026-10-09T10:15:00.000Z"
 last_activity: 2026-10-09
-last_activity_desc: Milestone v2.2 completed and all requirements verified
+last_activity_desc: Milestone v2.2 requirements and roadmap archived; repository clean and ready for next milestone
 progress:
   total_phases: 11
   completed_phases: 11

@@ -88,6 +88,7 @@ class Settings:
     intake_rate_limit_per_minute: int = 60
     webhook_secrets: dict[str, str] = field(default_factory=dict)
     idempotency_window_sec: float = 300.0
+    intake_max_retries: int = 3
 
     @property
     def issuer_url(self) -> str:
@@ -192,4 +193,5 @@ class Settings:
             intake_rate_limit_per_minute=int(_env("INTAKE_RATE_LIMIT_PER_MINUTE", "60")),
             webhook_secrets=webhook_sec,
             idempotency_window_sec=float(_env("IDEMPOTENCY_WINDOW_SEC", "300.0")),
+            intake_max_retries=int(_env("INTAKE_MAX_RETRIES", "3")),
         )

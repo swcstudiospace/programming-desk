@@ -12,7 +12,7 @@
 
 ### 🟡 v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery (Phases 14-15)
 
-- [ ] Phase 14: Multi-Region Edge Federation & WAN Routing (1/2 plans)
+- [x] Phase 14: Multi-Region Edge Federation & WAN Routing (2/2 plans)
 - [ ] Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience (0/2 plans)
 
 #### Phase 14: Multi-Region Edge Federation & WAN Routing
@@ -21,7 +21,7 @@
 **Requirements**: REQ-EDGE-001 through REQ-EDGE-005
 **Plans**:
 - [x] 14-01-PLAN.md — Multi-region edge ingress gateway, geo-steering & distributed rate limiting (REQ-EDGE-001, REQ-EDGE-002)
-- [ ] 14-02-PLAN.md — Cross-region WAN inter-seat routing, cryptographic attestation & high-latency vector clock convergence (REQ-EDGE-003, REQ-EDGE-004, REQ-EDGE-005)
+- [x] 14-02-PLAN.md — Cross-region WAN inter-seat routing, cryptographic attestation & high-latency vector clock convergence (REQ-EDGE-003, REQ-EDGE-004, REQ-EDGE-005)
 
 #### Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience
 

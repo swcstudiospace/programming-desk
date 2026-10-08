@@ -132,6 +132,13 @@ from desk_gateway.multimodal import (
     StreamingFrameType,
     StreamingToolBus,
 )
+from desk_gateway.multimodal_memory import (
+    MultiModalStreamingVerifier,
+    SensoryMemoryIndexer,
+    SensoryMemoryRecord,
+    SensorySearchResult,
+    cosine_similarity,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -3269,6 +3276,97 @@ def create_mcp(
         status = streaming_bus.get_status(stream_id)
         is_cancelled = stream_supervisor.is_cancelled(stream_id)
         return JSONResponse({"ok": True, "stream_id": stream_id, "status": status, "is_cancelled": is_cancelled})
+
+    # Multi-Modal Sensory Memory Indexing & Streaming Verification (Phase 20-02)
+    sensory_indexer = SensoryMemoryIndexer()
+    mm_verifier = MultiModalStreamingVerifier(
+        pipeline=mm_pipeline,
+        streaming_bus=streaming_bus,
+        memory_indexer=sensory_indexer,
+    )
+
+    setattr(mcp, "_sensory_indexer", sensory_indexer)
+    setattr(mcp, "_mm_verifier", mm_verifier)
+
+    @mcp.custom_route("/v1/multimodal/memory/index", methods=["POST"])
+    async def multimodal_memory_index_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        artifact_id = body.get("artifact_id", "")
+        modality = body.get("modality", "image")
+        embedding = body.get("embedding", [])
+        caption = body.get("caption", "")
+        ledger_ref = body.get("ledger_ref")
+        tenant_id = body.get("tenant_id", "default")
+        seat_id = body.get("seat_id")
+        metadata = body.get("metadata", {})
+
+        try:
+            record = sensory_indexer.index(
+                artifact_id=artifact_id,
+                modality=modality,
+                embedding=embedding,
+                caption=caption,
+                ledger_ref=ledger_ref,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                metadata=metadata,
+            )
+            return JSONResponse({
+                "ok": True,
+                "memory": {
+                    "memory_id": record.memory_id,
+                    "artifact_id": record.artifact_id,
+                    "modality": record.modality,
+                    "dimensions": record.dimensions,
+                    "caption": record.caption,
+                    "ledger_ref": record.ledger_ref,
+                    "tenant_id": record.tenant_id,
+                    "seat_id": record.seat_id,
+                    "created_at": record.created_at,
+                }
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/multimodal/memory/search", methods=["POST"])
+    async def multimodal_memory_search_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        query_embedding = body.get("query_embedding", [])
+        tenant_id = body.get("tenant_id", "default")
+        modality = body.get("modality")
+        min_score = float(body.get("min_score", 0.0))
+        top_k = int(body.get("top_k", 10))
+
+        results = sensory_indexer.search(
+            query_embedding=query_embedding,
+            tenant_id=tenant_id,
+            modality=modality,
+            min_score=min_score,
+            top_k=top_k,
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "count": len(results),
+            "results": [
+                {
+                    "memory_id": r.record.memory_id,
+                    "artifact_id": r.record.artifact_id,
+                    "modality": r.record.modality,
+                    "caption": r.record.caption,
+                    "ledger_ref": r.record.ledger_ref,
+                    "score": r.score,
+                }
+                for r in results
+            ]
+        })
+
+    @mcp.custom_route("/v1/multimodal/streaming/verify", methods=["POST"])
+    async def multimodal_streaming_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id", f"verify-mm-{int(time.time()*1000)}")
+        res = await mm_verifier.verify_all(tenant_id=tenant_id)
+        return JSONResponse(res)
 
     return mcp
 

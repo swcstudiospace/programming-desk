@@ -7,8 +7,8 @@ This document defines the requirements for Milestone v2.7 of Programming Desk.
 - [x] **REQ-MM-001**: Multi-modal artifact ingestion pipeline handling image, audio, and binary attachments with content inspection and MIME verification.
 - [x] **REQ-MM-002**: Streaming tool execution bus enabling chunked SSE/streaming responses from MCP tools with intermediate telemetry frames.
 - [x] **REQ-MM-003**: Tool execution cancellation & backpressure supervisor supporting mid-stream client disconnects and resource reclamation.
-- [ ] **REQ-MM-004**: Multi-modal sensory memory indexer storing and retrieving multi-modal vector embeddings linked to desk ledger transactions.
-- [ ] **REQ-MM-005**: Multi-modal streaming verification harness validating chunk delivery latencies (<20ms per frame), RPO=0 audit compliance, and resource cleanup under sudden connection aborts.
+- [x] **REQ-MM-004**: Multi-modal sensory memory indexer storing and retrieving multi-modal vector embeddings linked to desk ledger transactions.
+- [x] **REQ-MM-005**: Multi-modal streaming verification harness validating chunk delivery latencies (<20ms per frame), RPO=0 audit compliance, and resource cleanup under sudden connection aborts.
 
 ## 2. Dynamic Streaming Tool Mesh & Real-Time Telemetry (Phase 21)
 

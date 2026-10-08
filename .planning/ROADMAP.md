@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🟡 **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (active)
+- ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
 - ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
 - ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
 - ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09) — [Archive](milestones/v2.2-ROADMAP.md)
@@ -20,6 +20,15 @@
   - [x] 17-01: Inter-desk discovery, asynchronous RPC, receipt co-signing & task delegation state machine (REQ-MESH-001 through REQ-MESH-005)
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh (Phases 16-17) — SHIPPED 2026-10-09</summary>
+
+- [x] Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement (2/2 plans)
+- [x] Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution (1/1 plan)
+
+See [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery (Phases 14-15) — SHIPPED 2026-10-09</summary>

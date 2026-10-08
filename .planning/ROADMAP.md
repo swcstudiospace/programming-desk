@@ -11,7 +11,7 @@
 ### 🟡 v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11)
 
 - [x] Phase 10: Multi-Desk Federation & Inter-Seat Routing (2/2 plans)
-- [ ] Phase 11: Automated Staging & VPS Environment Promotion (0/2 plans)
+- [ ] Phase 11: Automated Staging & VPS Environment Promotion (1/2 plans)
 
 #### Phase 10: Multi-Desk Federation & Inter-Seat Routing
 
@@ -26,7 +26,7 @@
 **Goal**: Implement automated declarative staging deployments, zero-downtime hot reloading, test lease reconciliation, and companion cross-repo contract verification.
 **Requirements**: REQ-STAGE-001 through REQ-STAGE-005
 **Plans**:
-- [ ] 11-01-PLAN.md — Declarative VPS deployment pipeline with rollback & zero-downtime reload (REQ-STAGE-001, REQ-STAGE-002)
+- [x] 11-01-PLAN.md — Declarative VPS deployment pipeline with rollback & zero-downtime reload (REQ-STAGE-001, REQ-STAGE-002)
 - [ ] 11-02-PLAN.md — Ephemeral lease pruning, staging promotion harness & companion contract alignment (REQ-STAGE-003, REQ-STAGE-004, REQ-STAGE-005)
 
 ### Completed Milestones

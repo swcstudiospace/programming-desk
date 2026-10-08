@@ -31,6 +31,7 @@ from starlette.websockets import WebSocket
 
 from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEATS, TOOL_DEADLINE_SEC, Settings
+from desk_gateway.alerts import AlertDispatcher, AlertNotification, SLOEvaluator
 from desk_gateway.cutover import (
     CanaryRouter,
     CutoverError,
@@ -68,6 +69,7 @@ from desk_gateway.telemetry import (
     get_current_trace_context,
     parse_traceparent,
     span_id_var,
+    telemetry_registry,
     trace_id_var,
     tracestate_var,
 )
@@ -197,6 +199,7 @@ class SeatServer(MCPServer):
         if error and spec.read_only and "results" not in payload and "rows" not in payload:
             payload.setdefault("reason", error)
         ms = (time.monotonic() - started) * 1000
+        telemetry_registry.record_seat_latency(seat, ms)
         _live(
             self.services.live.tool_finished,
             seat,
@@ -421,6 +424,7 @@ def create_mcp(
     federation: tuple[FederationRegistry, FederatedTokenValidator, PeerDeskClient] | None = None,
     cutover: tuple[CutoverOrchestrator, EmergencyIsolationManager] | None = None,
     failover: tuple[FailoverRouter, UpstreamHealthPoller] | None = None,
+    alerting: tuple[AlertDispatcher, SLOEvaluator] | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -451,6 +455,10 @@ def create_mcp(
             isolation_manager=iso_mgr,
         ),
         UpstreamHealthPoller(services),
+    )
+    alert_dispatcher, slo_evaluator = alerting if alerting else (
+        AlertDispatcher(settings),
+        SLOEvaluator(settings),
     )
 
     @mcp.custom_route("/health", methods=["GET"])
@@ -598,6 +606,46 @@ def create_mcp(
         ])
         for svc_name, rec in sorted(health_status["services"].items()):
             lines.append(f'desk_gateway_upstream_healthy{{service="{svc_name}"}} {1 if rec["healthy"] else 0}')
+
+        # Telemetry Latency percentiles, DLQ saturation, SLO and Federation metrics (REQ-ALERT-001, REQ-ALERT-002)
+        # 1. Per-seat invocation latency percentiles
+        lines.extend([
+            "# HELP desk_gateway_seat_latency_seconds Latency percentiles for seat tool invocations",
+            "# TYPE desk_gateway_seat_latency_seconds summary",
+        ])
+        all_seat_stats = telemetry_registry.get_all_seat_percentiles()
+        for s in sorted(SEATS):
+            stats = all_seat_stats.get(s, {"p50": 0.0, "p90": 0.0, "p99": 0.0, "count": 0, "sum_ms": 0.0})
+            lines.append(f'desk_gateway_seat_latency_seconds{{seat="{s}",quantile="0.5"}} {stats["p50"] / 1000.0:.4f}')
+            lines.append(f'desk_gateway_seat_latency_seconds{{seat="{s}",quantile="0.9"}} {stats["p90"] / 1000.0:.4f}')
+            lines.append(f'desk_gateway_seat_latency_seconds{{seat="{s}",quantile="0.99"}} {stats["p99"] / 1000.0:.4f}')
+            lines.append(f'desk_gateway_seat_latency_seconds_count{{seat="{s}"}} {stats["count"]}')
+            lines.append(f'desk_gateway_seat_latency_seconds_sum{{seat="{s}"}} {stats["sum_ms"] / 1000.0:.4f}')
+
+        # 2. Dead-letter queue (DLQ) saturation
+        dlq_count = len(store.intake_dlq_list())
+        lines.extend([
+            "# HELP desk_gateway_dlq_saturation Dead-letter queue item saturation count",
+            "# TYPE desk_gateway_dlq_saturation gauge",
+            f"desk_gateway_dlq_saturation {dlq_count}",
+            "# HELP desk_gateway_federation_signature_failures_total Cumulative count of federated signature verification failures",
+            "# TYPE desk_gateway_federation_signature_failures_total counter",
+            f"desk_gateway_federation_signature_failures_total {telemetry_registry.get_federation_signature_failures()}",
+        ])
+
+        # 3. SLO evaluations
+        slo_eval = slo_evaluator.evaluate()
+        lines.extend([
+            "# HELP desk_gateway_slo_latency_met Gateway p99 response latency SLO met status (< 500ms)",
+            "# TYPE desk_gateway_slo_latency_met gauge",
+            f"desk_gateway_slo_latency_met {1 if slo_eval.latency_slo_met else 0}",
+            "# HELP desk_gateway_slo_intake_met Gateway intake delivery success rate SLO met status (> 99.9%)",
+            "# TYPE desk_gateway_slo_intake_met gauge",
+            f"desk_gateway_slo_intake_met {1 if slo_eval.intake_slo_met else 0}",
+            "# HELP desk_gateway_slo_all_met All Service Level Objectives met status",
+            "# TYPE desk_gateway_slo_all_met gauge",
+            f"desk_gateway_slo_all_met {1 if slo_eval.all_slos_met else 0}",
+        ])
 
         lines.append("")
         return Response(content="\n".join(lines), media_type="text/plain; version=0.0.4")
@@ -815,6 +863,7 @@ def create_mcp(
 
         item.setdefault("max_retries", settings.intake_max_retries)
         record = store.intake_create(item)
+        telemetry_registry.record_intake_result(success=True)
         _live(services.live.request_received, record["intake_id"], item["title"])
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
         trace_ctx = get_current_trace_context()
@@ -900,7 +949,10 @@ def create_mcp(
                 terminal_event["trace"] = trace_ctx
             store.audit_append(terminal_event)
             services.audit.fire_and_forget(terminal_event)
+            telemetry_registry.record_intake_result(success=False)
             logger.error("Intake %s dead-lettered after %s retries: %s", intake_id, record.get("retry_count"), reason)
+            dlq_count = len(store.intake_dlq_list())
+            alert_dispatcher.check_and_alert_dlq(dlq_count)
 
         return JSONResponse(
             {
@@ -1125,6 +1177,7 @@ def create_mcp(
                 required_seat=target_seat,
             )
         except FederationError as exc:
+            telemetry_registry.record_federation_signature_failure()
             return problem_response(
                 status=exc.status_code,
                 title="Federation Token Verification Failed",
@@ -1216,6 +1269,7 @@ def create_mcp(
                 required_seat="lead",
             )
         except FederationError as exc:
+            telemetry_registry.record_federation_signature_failure()
             return problem_response(
                 status=exc.status_code,
                 title="Federation Token Verification Failed",
@@ -1635,6 +1689,89 @@ def create_mcp(
 
         return JSONResponse({"ok": True, "seat": seat, "status": "cleared"}, status_code=200)
 
+    @mcp.custom_route("/v1/alerts/status", methods=["GET"])
+    async def alerts_status_get(request: Request) -> Response:
+        """Inspect live SLO evaluation results, recent alerts, and alerting thresholds (REQ-ALERT-002, REQ-ALERT-003)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect alert status.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        slo_res = slo_evaluator.evaluate()
+        recent_alerts = alert_dispatcher.get_recent_alerts()
+        intake_stats = telemetry_registry.get_intake_stats()
+        gateway_lat = telemetry_registry.get_gateway_percentiles()
+        dlq_count = len(store.intake_dlq_list())
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "slo": slo_res.to_dict(),
+                "telemetry": {
+                    "gateway_latency": gateway_lat,
+                    "intake_stats": intake_stats,
+                    "dlq_count": dlq_count,
+                    "federation_signature_failures": telemetry_registry.get_federation_signature_failures(),
+                },
+                "thresholds": {
+                    "slo_latency_p99_max_ms": settings.slo_latency_p99_max_ms,
+                    "slo_intake_success_min_pct": settings.slo_intake_success_min_pct,
+                    "dlq_alert_threshold": settings.dlq_alert_threshold,
+                    "webhook_configured": bool(settings.alert_webhook_url),
+                },
+                "recent_alerts": recent_alerts,
+                "recent_alerts_count": len(recent_alerts),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/alerts/test", methods=["POST"])
+    async def alerts_test_post(request: Request) -> Response:
+        """Trigger a test alert dispatch to verify on-call webhook connectivity (REQ-ALERT-003)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth != "lead":
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead seat authorization required to trigger test alert dispatch.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        message = body.get("message", "Test alert triggered by operator")
+        test_alert = AlertNotification(
+            alert_type="test_alert",
+            severity="info",
+            summary=message,
+            details={"operator": seat_auth, "timestamp": time.time()},
+        )
+        delivered = await alert_dispatcher.dispatch(test_alert, force=True)
+        return JSONResponse(
+            {
+                "ok": True,
+                "dispatched": delivered,
+                "alert": test_alert.to_dict(),
+                "webhook_configured": bool(settings.alert_webhook_url),
+            },
+            status_code=200 if delivered or not settings.alert_webhook_url else 502,
+        )
+
     return mcp
 
 
@@ -1666,6 +1803,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     )
     failover_components = (failover_router, health_poller)
 
+    alert_dispatcher = AlertDispatcher(settings)
+    slo_evaluator = SLOEvaluator(settings)
+    alerting_components = (alert_dispatcher, slo_evaluator)
+
     mcp = create_mcp(
         settings,
         services,
@@ -1675,6 +1816,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         federation=federation_components,
         cutover=cutover_components,
         failover=failover_components,
+        alerting=alerting_components,
     )
     origins = [
         "http://127.0.0.1",
@@ -1722,6 +1864,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "isolation_manager": iso_manager,
         "failover_router": failover_router,
         "health_poller": health_poller,
+        "alert_dispatcher": alert_dispatcher,
+        "slo_evaluator": slo_evaluator,
     }
     return app, settings
 

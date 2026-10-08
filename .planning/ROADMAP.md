@@ -12,7 +12,7 @@
 ### 🟡 v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13)
 
 - [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
-- [ ] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (0/2 plans)
+- [ ] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (1/2 plans)
 
 #### Phase 12: Production Cutover & Dynamic Failover
 
@@ -27,7 +27,7 @@
 **Goal**: Implement Prometheus per-seat SLO metrics export, automated alert threshold dispatch, Solana devnet anchor verification, and telemetry audit suites.
 **Requirements**: REQ-ALERT-001 through REQ-ALERT-005
 **Plans**:
-- [ ] 13-01-PLAN.md — Prometheus SLO metrics export, alert threshold dispatcher & on-call webhook notification (REQ-ALERT-001, REQ-ALERT-002, REQ-ALERT-003)
+- [x] 13-01-PLAN.md — Prometheus SLO metrics export, alert threshold dispatcher & on-call webhook notification (REQ-ALERT-001, REQ-ALERT-002, REQ-ALERT-003)
 - [ ] 13-02-PLAN.md — Solana devnet anchor verification & synthetic telemetry stress test suite (REQ-ALERT-004, REQ-ALERT-005)
 
 ### Completed Milestones

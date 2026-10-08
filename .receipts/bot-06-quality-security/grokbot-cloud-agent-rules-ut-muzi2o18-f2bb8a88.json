@@ -5,7 +5,7 @@
   "started_at": "2026-10-08T12:45:39Z",
   "completed_at": "2026-10-08T12:51:00Z",
   "repo": "https://github.com/swcstudiospace/programming-desk",
-  "branch": "grokbot/cloud-agent-rules",
+  "branch": "bot-06-quality-security/grokbot-cloud-agent-rules",
   "base": "main",
   "base_sha": "61c79005b4c71504845e7f3a92a4830bd7237c03",
   "runtime": "cursor-cloud",

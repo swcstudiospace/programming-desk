@@ -11,8 +11,8 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 - [x] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
 - [x] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
 - [x] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
-- [ ] **Phase 6: Fresh-desk acceptance and external intake** - Prove the fresh-recipient desk, governed end-to-end ticket and independent approval, external intake, mobile use and failure behavior.
-- [ ] **Phase 7: Ordered rollout and rollback** - Roll out only verified dependencies in source order with authorized rollback, human-visible coordination, truthful tracker sync and final clearance.
+- [x] **Phase 6: Fresh-desk acceptance and external intake** - Prove the fresh-recipient desk, governed end-to-end ticket and independent approval, external intake, mobile use and failure behavior.
+- [x] **Phase 7: Ordered rollout and rollback** - Roll out only verified dependencies in source order with authorized rollback, human-visible coordination, truthful tracker sync and final clearance.
 
 ## Phase Details
 
@@ -304,6 +304,6 @@ Durable inputs: [implementation map](intel/implementation-map.md), [Phase 1 inve
 | 2. Network plane | v2.0 | 6/6 | Complete (at designed stop) | 2026-10-08 |
 | 3. Substrate data planes | v2.0 | 6/6 | Complete | 2026-10-08 |
 | 4. Desk Gateway and contracts | v2.0 | 6/6 | Complete | 2026-10-08 |
-| 5. Prompts, skills, templates, plugin | v2.0 | 0/TBD | Not started | - |
-| 6. Fresh-desk acceptance and external intake | v2.0 | 0/TBD | Not started | - |
-| 7. Ordered rollout and rollback | v2.0 | 0/TBD | Not started | - |
+| 5. Prompts, skills, templates, plugin | v2.0 | 6/6 | Complete | 2026-10-08 |
+| 6. Fresh-desk acceptance and external intake | v2.0 | 6/6 | Complete | 2026-10-08 |
+| 7. Ordered rollout and rollback | v2.0 | 4/4 | Complete | 2026-10-08 |

@@ -1,0 +1,790 @@
+{
+  "graph_id": "ut-muz1hdpm-2a933bcc",
+  "graph_identity": "created",
+  "permission_outcome": "write-ok",
+  "materialization": "complete",
+  "node_ids": [
+    "n1",
+    "n2",
+    "n3",
+    "n4",
+    "n5",
+    "n6",
+    "n7"
+  ],
+  "step_ids": [
+    "n1.1",
+    "n1.2",
+    "n1.3",
+    "n1.4",
+    "n1.5",
+    "n1.6",
+    "n2.1",
+    "n2.2",
+    "n2.3",
+    "n2.4",
+    "n2.5",
+    "n2.6",
+    "n3.1",
+    "n3.2",
+    "n3.3",
+    "n3.4",
+    "n3.5",
+    "n3.6",
+    "n4.1",
+    "n4.2",
+    "n4.3",
+    "n4.4",
+    "n4.5",
+    "n4.6",
+    "n5.1",
+    "n5.2",
+    "n5.3",
+    "n5.4",
+    "n5.5",
+    "n5.6",
+    "n6.1",
+    "n6.2",
+    "n6.3",
+    "n6.4",
+    "n6.5",
+    "n6.6",
+    "n7.1",
+    "n7.2",
+    "n7.3",
+    "n7.4",
+    "n7.5"
+  ],
+  "step_parents": {
+    "n1.1": "n1",
+    "n1.2": "n1",
+    "n1.3": "n1",
+    "n1.4": "n1",
+    "n1.5": "n1",
+    "n1.6": "n1",
+    "n2.1": "n2",
+    "n2.2": "n2",
+    "n2.3": "n2",
+    "n2.4": "n2",
+    "n2.5": "n2",
+    "n2.6": "n2",
+    "n3.1": "n3",
+    "n3.2": "n3",
+    "n3.3": "n3",
+    "n3.4": "n3",
+    "n3.5": "n3",
+    "n3.6": "n3",
+    "n4.1": "n4",
+    "n4.2": "n4",
+    "n4.3": "n4",
+    "n4.4": "n4",
+    "n4.5": "n4",
+    "n4.6": "n4",
+    "n5.1": "n5",
+    "n5.2": "n5",
+    "n5.3": "n5",
+    "n5.4": "n5",
+    "n5.5": "n5",
+    "n5.6": "n5",
+    "n6.1": "n6",
+    "n6.2": "n6",
+    "n6.3": "n6",
+    "n6.4": "n6",
+    "n6.5": "n6",
+    "n6.6": "n6",
+    "n7.1": "n7",
+    "n7.2": "n7",
+    "n7.3": "n7",
+    "n7.4": "n7",
+    "n7.5": "n7"
+  },
+  "notion_rows": [
+    {
+      "source_id": "task",
+      "level": "task",
+      "id": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "parent": null,
+      "url": "https://app.notion.com/3f3bc1a0c7ae8181a56be183b865afd5"
+    },
+    {
+      "source_id": "n1",
+      "level": "node",
+      "id": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81289f47de33c71d3149"
+    },
+    {
+      "source_id": "n2",
+      "level": "node",
+      "id": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae815cb1eac82da949884c"
+    },
+    {
+      "source_id": "n3",
+      "level": "node",
+      "id": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81f7beddefe03e89cea5"
+    },
+    {
+      "source_id": "n4",
+      "level": "node",
+      "id": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8100952bd26d76d7f891"
+    },
+    {
+      "source_id": "n5",
+      "level": "node",
+      "id": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81c8a9fafb92c6607e30"
+    },
+    {
+      "source_id": "n6",
+      "level": "node",
+      "id": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81e8a19aefa7b1b04c1c"
+    },
+    {
+      "source_id": "n7",
+      "level": "node",
+      "id": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "parent": "3f3bc1a0c7ae8181a56be183b865afd5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81dc82f4d025fb1f6ddd"
+    },
+    {
+      "source_id": "n1.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81d29bb4e7acc6bc124c",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81d29bb4e7acc6bc124c"
+    },
+    {
+      "source_id": "n1.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8196b034cf50eee7c998",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8196b034cf50eee7c998"
+    },
+    {
+      "source_id": "n1.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81858be9e511c451d60c",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81858be9e511c451d60c"
+    },
+    {
+      "source_id": "n1.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81cb803ce632a515762b",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81cb803ce632a515762b"
+    },
+    {
+      "source_id": "n1.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81d5b0b1cf265ab32111",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81d5b0b1cf265ab32111"
+    },
+    {
+      "source_id": "n1.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8173bd31ecbfa930d98e",
+      "parent": "3f3bc1a0c7ae81289f47de33c71d3149",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8173bd31ecbfa930d98e"
+    },
+    {
+      "source_id": "n2.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81029185e820cbb8ea61",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81029185e820cbb8ea61"
+    },
+    {
+      "source_id": "n2.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81bea51cd7c71d4b9d5b",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81bea51cd7c71d4b9d5b"
+    },
+    {
+      "source_id": "n2.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81759018d04a786d14e0",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81759018d04a786d14e0"
+    },
+    {
+      "source_id": "n2.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81da8869c51fc7a90c08",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81da8869c51fc7a90c08"
+    },
+    {
+      "source_id": "n2.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81c59ce8cec69a33c307",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81c59ce8cec69a33c307"
+    },
+    {
+      "source_id": "n2.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81d69d72f8b9493c5b5e",
+      "parent": "3f3bc1a0c7ae815cb1eac82da949884c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81d69d72f8b9493c5b5e"
+    },
+    {
+      "source_id": "n3.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae818cb227ebcaab03ba5c",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae818cb227ebcaab03ba5c"
+    },
+    {
+      "source_id": "n3.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81c2b371c3ea6e188a62",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81c2b371c3ea6e188a62"
+    },
+    {
+      "source_id": "n3.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae818d955ed1cce2e31897",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae818d955ed1cce2e31897"
+    },
+    {
+      "source_id": "n3.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81af92e0c2ef625ab660",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81af92e0c2ef625ab660"
+    },
+    {
+      "source_id": "n3.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81319b6bf8b3d9c04002",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81319b6bf8b3d9c04002"
+    },
+    {
+      "source_id": "n3.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae817f9c86fadbbd2ee7a4",
+      "parent": "3f3bc1a0c7ae81f7beddefe03e89cea5",
+      "url": "https://app.notion.com/3f3bc1a0c7ae817f9c86fadbbd2ee7a4"
+    },
+    {
+      "source_id": "n4.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae813ead9afda68990e17a",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae813ead9afda68990e17a"
+    },
+    {
+      "source_id": "n4.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae819db944f1806ccc8a4b",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae819db944f1806ccc8a4b"
+    },
+    {
+      "source_id": "n4.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81d285d0dc45aab6a771",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81d285d0dc45aab6a771"
+    },
+    {
+      "source_id": "n4.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81f989f1d3deedc67c12",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81f989f1d3deedc67c12"
+    },
+    {
+      "source_id": "n4.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae815ca351ff6c2a19b63d",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae815ca351ff6c2a19b63d"
+    },
+    {
+      "source_id": "n4.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8130ae62fe30cc4da9d3",
+      "parent": "3f3bc1a0c7ae8100952bd26d76d7f891",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8130ae62fe30cc4da9d3"
+    },
+    {
+      "source_id": "n5.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81e39f52eca7eab1b8e6",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81e39f52eca7eab1b8e6"
+    },
+    {
+      "source_id": "n5.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81388f83d7735dfbdbca",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81388f83d7735dfbdbca"
+    },
+    {
+      "source_id": "n5.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81e98c4fcddcdb7b8da0",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81e98c4fcddcdb7b8da0"
+    },
+    {
+      "source_id": "n5.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81b7879ac52bb99aed6b",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81b7879ac52bb99aed6b"
+    },
+    {
+      "source_id": "n5.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81218747cd1306e22b53",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81218747cd1306e22b53"
+    },
+    {
+      "source_id": "n5.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81a3af91d17dde8930ce",
+      "parent": "3f3bc1a0c7ae81c8a9fafb92c6607e30",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81a3af91d17dde8930ce"
+    },
+    {
+      "source_id": "n6.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8161b5a2d472ee40b2ae",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8161b5a2d472ee40b2ae"
+    },
+    {
+      "source_id": "n6.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8161b3d0f3ee24894741",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8161b3d0f3ee24894741"
+    },
+    {
+      "source_id": "n6.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae811c8bb7fcc960506cd7",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae811c8bb7fcc960506cd7"
+    },
+    {
+      "source_id": "n6.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81a4bc04e0248e2dbd6f",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81a4bc04e0248e2dbd6f"
+    },
+    {
+      "source_id": "n6.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81e4a669de5c2e311e68",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81e4a669de5c2e311e68"
+    },
+    {
+      "source_id": "n6.6",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8164920ff8928a4f58b7",
+      "parent": "3f3bc1a0c7ae81e8a19aefa7b1b04c1c",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8164920ff8928a4f58b7"
+    },
+    {
+      "source_id": "n7.1",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8185bfb3fdc5b2bf60d8",
+      "parent": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8185bfb3fdc5b2bf60d8"
+    },
+    {
+      "source_id": "n7.2",
+      "level": "step",
+      "id": "3f3bc1a0c7ae81948b23fae01ccd4586",
+      "parent": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "url": "https://app.notion.com/3f3bc1a0c7ae81948b23fae01ccd4586"
+    },
+    {
+      "source_id": "n7.3",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8127b759edf038c1d93a",
+      "parent": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8127b759edf038c1d93a"
+    },
+    {
+      "source_id": "n7.4",
+      "level": "step",
+      "id": "3f3bc1a0c7ae815989def8af62446749",
+      "parent": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "url": "https://app.notion.com/3f3bc1a0c7ae815989def8af62446749"
+    },
+    {
+      "source_id": "n7.5",
+      "level": "step",
+      "id": "3f3bc1a0c7ae8157a210f75d51482ad3",
+      "parent": "3f3bc1a0c7ae81dc82f4d025fb1f6ddd",
+      "url": "https://app.notion.com/3f3bc1a0c7ae8157a210f75d51482ad3"
+    }
+  ],
+  "linear_rows": [
+    {
+      "source_id": "n1",
+      "level": "node",
+      "id": "SPE-7688",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7688/n1-understand-inventory-and-prove-the-assumptions"
+    },
+    {
+      "source_id": "n2",
+      "level": "node",
+      "id": "SPE-7693",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7693/n2-decompose-network-plane"
+    },
+    {
+      "source_id": "n3",
+      "level": "node",
+      "id": "SPE-7694",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7694/n3-generate-substrate-data-planes"
+    },
+    {
+      "source_id": "n4",
+      "level": "node",
+      "id": "SPE-7695",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7695/n4-generate-desk-gateway-and-contracts"
+    },
+    {
+      "source_id": "n5",
+      "level": "node",
+      "id": "SPE-7697",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7697/n5-refine-prompts-skills-templates-plugin"
+    },
+    {
+      "source_id": "n6",
+      "level": "node",
+      "id": "SPE-7698",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7698/n6-critique-fresh-desk-acceptance-and-external-intake"
+    },
+    {
+      "source_id": "n7",
+      "level": "node",
+      "id": "SPE-7699",
+      "parent": null,
+      "url": "https://linear.app/swcstudio/issue/SPE-7699/n7-synthesize-ordered-rollout-and-rollback"
+    },
+    {
+      "source_id": "n1.1",
+      "level": "step",
+      "id": "SPE-7689",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7689/n11-list-railway-projects-service-names-and-ports"
+    },
+    {
+      "source_id": "n1.2",
+      "level": "step",
+      "id": "SPE-7736",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7736/n12-identify-railway-app-node"
+    },
+    {
+      "source_id": "n1.3",
+      "level": "step",
+      "id": "SPE-7732",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7732/n13-prove-bot-uuid-read-and-system-promptxml-write"
+    },
+    {
+      "source_id": "n1.4",
+      "level": "step",
+      "id": "SPE-7735",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7735/n14-observe-toolslist-changed-support-or-fallback"
+    },
+    {
+      "source_id": "n1.5",
+      "level": "step",
+      "id": "SPE-7737",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7737/n15-confirm-cursor-network-policy-and-plan-tier"
+    },
+    {
+      "source_id": "n1.6",
+      "level": "step",
+      "id": "SPE-7740",
+      "parent": "SPE-7688",
+      "url": "https://linear.app/swcstudio/issue/SPE-7740/n16-record-results-in-plan-13-through-quality-docs-ticket"
+    },
+    {
+      "source_id": "n2.1",
+      "level": "step",
+      "id": "SPE-7754",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7754/n21-deployadopt-ultrathink-forwarder"
+    },
+    {
+      "source_id": "n2.2",
+      "level": "step",
+      "id": "SPE-7755",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7755/n22-deployadopt-agent-substrate-forwarder"
+    },
+    {
+      "source_id": "n2.3",
+      "level": "step",
+      "id": "SPE-7756",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7756/n23-apply-exact-port-deny-default-acl"
+    },
+    {
+      "source_id": "n2.4",
+      "level": "step",
+      "id": "SPE-7758",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7758/n24-cut-substrate-environment-over-and-verify"
+    },
+    {
+      "source_id": "n2.5",
+      "level": "step",
+      "id": "SPE-7757",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7757/n25-approved-g-6-public-proxy-retirement"
+    },
+    {
+      "source_id": "n2.6",
+      "level": "step",
+      "id": "SPE-7759",
+      "parent": "SPE-7693",
+      "url": "https://linear.app/swcstudio/issue/SPE-7759/n26-network-receipt-with-status-and-probes"
+    },
+    {
+      "source_id": "n3.1",
+      "level": "step",
+      "id": "SPE-7760",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7760/n31-gated-companion-docs-and-env-integration"
+    },
+    {
+      "source_id": "n3.2",
+      "level": "step",
+      "id": "SPE-7761",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7761/n32-hindsight-memory-integration-and-local-retirement"
+    },
+    {
+      "source_id": "n3.3",
+      "level": "step",
+      "id": "SPE-7763",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7763/n33-dragonfly-caching-adapter-with-fail-through"
+    },
+    {
+      "source_id": "n3.4",
+      "level": "step",
+      "id": "SPE-7762",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7762/n34-timescale-coordination-migrations-and-hypertables"
+    },
+    {
+      "source_id": "n3.5",
+      "level": "step",
+      "id": "SPE-7765",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7765/n35-ragflow-dataset-ingest-and-docs-search"
+    },
+    {
+      "source_id": "n3.6",
+      "level": "step",
+      "id": "SPE-7764",
+      "parent": "SPE-7694",
+      "url": "https://linear.app/swcstudio/issue/SPE-7764/n36-package-receipts-with-bun-test-evidence"
+    },
+    {
+      "source_id": "n4.1",
+      "level": "step",
+      "id": "SPE-7766",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7766/n41-seven-roster-and-initial-pack-contracts"
+    },
+    {
+      "source_id": "n4.2",
+      "level": "step",
+      "id": "SPE-7767",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7767/n42-seat-oauth-routing-and-core-tools"
+    },
+    {
+      "source_id": "n4.3",
+      "level": "step",
+      "id": "SPE-7768",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7768/n43-seat-tools-g5g6-gates-and-roster-fixtures"
+    },
+    {
+      "source_id": "n4.4",
+      "level": "step",
+      "id": "SPE-7769",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7769/n44-origin-token-intake-api-and-lead-tools"
+    },
+    {
+      "source_id": "n4.5",
+      "level": "step",
+      "id": "SPE-7770",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7770/n45-gateway-dns-tls-and-systemd-deployment"
+    },
+    {
+      "source_id": "n4.6",
+      "level": "step",
+      "id": "SPE-7771",
+      "parent": "SPE-7695",
+      "url": "https://linear.app/swcstudio/issue/SPE-7771/n46-scratch-bot-smoke-and-wrong-seat-403"
+    },
+    {
+      "source_id": "n5.1",
+      "level": "step",
+      "id": "SPE-7772",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7772/n51-roster-assembly-core-directives-and-g-7-fixtures"
+    },
+    {
+      "source_id": "n5.2",
+      "level": "step",
+      "id": "SPE-7773",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7773/n52-seat-prompt-sections-assembly-and-parsing"
+    },
+    {
+      "source_id": "n5.3",
+      "level": "step",
+      "id": "SPE-7774",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7774/n53-desk-skills-authored-and-reviewed"
+    },
+    {
+      "source_id": "n5.4",
+      "level": "step",
+      "id": "SPE-7775",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7775/n54-marketplace-plugin-and-grok-bot-projector"
+    },
+    {
+      "source_id": "n5.5",
+      "level": "step",
+      "id": "SPE-7776",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7776/n55-seven-team-only-templates-and-screenshots"
+    },
+    {
+      "source_id": "n5.6",
+      "level": "step",
+      "id": "SPE-7777",
+      "parent": "SPE-7697",
+      "url": "https://linear.app/swcstudio/issue/SPE-7777/n56-desk-pack-skills-propose-pr"
+    },
+    {
+      "source_id": "n6.1",
+      "level": "step",
+      "id": "SPE-7778",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7778/n61-fresh-recipient-bootstrap-and-doctors-green"
+    },
+    {
+      "source_id": "n6.2",
+      "level": "step",
+      "id": "SPE-7779",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7779/n62-docs-only-ask-double-uplift-and-exact-sha-review"
+    },
+    {
+      "source_id": "n6.3",
+      "level": "step",
+      "id": "SPE-7780",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7780/n63-external-intake-and-lead-acknowledgement"
+    },
+    {
+      "source_id": "n6.4",
+      "level": "step",
+      "id": "SPE-7781",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7781/n64-mobile-push-notification-approval-evidence"
+    },
+    {
+      "source_id": "n6.5",
+      "level": "step",
+      "id": "SPE-7782",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7782/n65-gateway-and-component-failure-drills"
+    },
+    {
+      "source_id": "n6.6",
+      "level": "step",
+      "id": "SPE-7783",
+      "parent": "SPE-7698",
+      "url": "https://linear.app/swcstudio/issue/SPE-7783/n66-open-acceptance-questions-capped-at-four"
+    },
+    {
+      "source_id": "n7.1",
+      "level": "step",
+      "id": "SPE-7784",
+      "parent": "SPE-7699",
+      "url": "https://linear.app/swcstudio/issue/SPE-7784/n71-source-rollout-order-with-gateway-overlap"
+    },
+    {
+      "source_id": "n7.2",
+      "level": "step",
+      "id": "SPE-7785",
+      "parent": "SPE-7699",
+      "url": "https://linear.app/swcstudio/issue/SPE-7785/n72-multi-plane-rollback-evidence"
+    },
+    {
+      "source_id": "n7.3",
+      "level": "step",
+      "id": "SPE-7786",
+      "parent": "SPE-7699",
+      "url": "https://linear.app/swcstudio/issue/SPE-7786/n73-desk-cutover-windows-and-audit-trail"
+    },
+    {
+      "source_id": "n7.4",
+      "level": "step",
+      "id": "SPE-7787",
+      "parent": "SPE-7699",
+      "url": "https://linear.app/swcstudio/issue/SPE-7787/n74-pr-field-sync-and-ove-report"
+    },
+    {
+      "source_id": "n7.5",
+      "level": "step",
+      "id": "SPE-7788",
+      "parent": "SPE-7699",
+      "url": "https://linear.app/swcstudio/issue/SPE-7788/n75-g-6-railway-app-retirement-if-superseded"
+    }
+  ],
+  "first_uplift_xml": "<UPLIFTED_PROMPT><ORIGINAL>We're upgrading our Programming Desk application in https://github.com/swcstudiospace/programming-desk We want each bot to have it's own unique interface which connects our Railway resources properly via Tailscale. So we have 2 projects in Railway. Ultrathink which has our databases and then we have Agent Substrate which has 2 applications \"Hingsight\" and \"RAGflow\" so please upgrade our Agent Substrate documents to use the 3 databases and 2 applications intelligently then wire them into our Programming Desk whilst doing an overall uplift to our Programming Desk as a whole. We want a Grok Bot share which will integrate the entire desk from Add Bot and ensure our XML's Skills, Memories, Tools etc are still integrated properly. We want to drive the application from outside of the Desk speaking only to Lead. All of our Bots require 10-15 proper tools for themselves. Please introduce proper integrations of the applications and stuff from Grok Bot leveraging other skills and stuff made by other Teams. For our actual ios and Android bots can load up specialised tools for applications etc. Please plan an upgrade</ORIGINAL><SYSTEM_ROLE>You are bot-00-programming-lead, leading the Desk v2 upgrade and modernization for programming-desk.</SYSTEM_ROLE><APP_CONTEXT>Repository swcstudiospace/programming-desk, targeting PR #65 on branch bot-00-programming-lead/desk-swarm-subagents.</APP_CONTEXT><SCOPE>Complete Desk v2 delivery graph nodes n1 through n7 encompassing 41 execution steps.</SCOPE><CONSTRAINTS>Do not invent repository facts. Respect all safety and permission checks. Maintain tracker materialization and receipt evidence.</CONSTRAINTS><ACCEPTANCE_CRITERIA>All 7 nodes and 41 steps executed or reconciled with receipts, tests passing, trackers updated, zero regressions.</ACCEPTANCE_CRITERIA><OUT_OF_SCOPE>Modifications outside the Desk v2 upgrade plan and PR #65 boundary.</OUT_OF_SCOPE><NODE id=\"n1\"><STEP id=\"n1.1\">List both Railway projects' actual service names, ports and environments in authorized account</STEP><STEP id=\"n1.2\">Identify railway-app node</STEP><STEP id=\"n1.3\">Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path</STEP><STEP id=\"n1.4\">Observe tools/list_changed support or use fallback</STEP><STEP id=\"n1.5\">Confirm Cursor network policy and plan tier</STEP><STEP id=\"n1.6\">Record results in plan \u00a713 through QUALITY docs ticket</STEP></NODE><NODE id=\"n2\"><STEP id=\"n2.1\">Deploy/adopt Ultrathink forwarder with five mappings, tag and disabled expiry</STEP><STEP id=\"n2.2\">Deploy/adopt Agent Substrate forwarder for Hindsight/RAGFlow</STEP><STEP id=\"n2.3\">Apply exact-port deny-default ACL for VPS, Mac mini and XPS; evidence each permitted device path</STEP><STEP id=\"n2.4\">Cut substrate environment over, restart, verify brief/events</STEP><STEP id=\"n2.5\">Approved G-6 public Timescale/Greptime retirement and rollback</STEP><STEP id=\"n2.6\">Receipt with tailnet status, probes and unverified limits</STEP></NODE><NODE id=\"n3\"><STEP id=\"n3.1\">Gated companion docs/env/GSD replan integration</STEP><STEP id=\"n3.2\">Hindsight write/read/banks/redaction/version; back up and retire local memory paths</STEP><STEP id=\"n3.3\">Dragonfly brief/search/recall/rate caches with fail-through, cache only</STEP><STEP id=\"n3.4\">Desk Timescale coordination migrations, hypertables and aggregates</STEP><STEP id=\"n3.5\">RAGFlow dataset ingest and docs_search integration</STEP><STEP id=\"n3.6\">Package receipts with actual bun test evidence</STEP></NODE><NODE id=\"n4\"><STEP id=\"n4.1\">Seven roster and three initial pack contracts, consumers ack, contract first</STEP><STEP id=\"n4.2\">Seat OAuth/routing, eight core tools and Greptime audit</STEP><STEP id=\"n4.3\">All seat tools, g5/g6, deadlines/failures, pack behavior and roster fixtures</STEP><STEP id=\"n4.4\">Origin-token intake API and LEAD-only intake tools</STEP><STEP id=\"n4.5\">Public DNS/nginx/TLS/systemd/env and needed allowlist</STEP><STEP id=\"n4.6\">Scratch-Bot smoke: two distinct lists and wrong-seat 403</STEP></NODE><NODE id=\"n5\"><STEP id=\"n5.1\">Placeholders/roster assembly/core PD-8/G-7 and fixtures</STEP><STEP id=\"n5.2\">Every seat prompt sections, assembly and parsing</STEP><STEP id=\"n5.3\">All seven \u00a78.2 skills authored and reviewed with authorized lifecycle</STEP><STEP id=\"n5.4\">swc-programming-desk plugin and companion grok-bot projector</STEP><STEP id=\"n5.5\">Seven actual Team-only templates and Share-card screenshots</STEP><STEP id=\"n5.6\">Desk pack skills_propose PR into agent-skills</STEP></NODE><NODE id=\"n6\"><STEP id=\"n6.1\">Fresh recipient adds seven templates, bootstraps and seven doctors green</STEP><STEP id=\"n6.2\">Docs-only LEAD ask, double uplift/ticket/pending result, independent exact-SHA approval</STEP><STEP id=\"n6.3\">GitHub-label and curl-origin intake, LEAD acknowledgement to issue/origin</STEP><STEP id=\"n6.4\">Actual iOS message and push-notification g5 approval</STEP><STEP id=\"n6.5\">Gateway/forwarder/cache/wrong-seat/pack-ceiling failure drills</STEP><STEP id=\"n6.6\">Open acceptance questions to Ove capped at four</STEP></NODE><NODE id=\"n7\"><STEP id=\"n7.1\">Source order with allowed gateway skeleton overlap</STEP><STEP id=\"n7.2\">Network/env/gateway/prompt/template rollback evidence</STEP><STEP id=\"n7.3\">Desk cutover windows and dispatch-note audit trail</STEP><STEP id=\"n7.4\">PR-field sync and Ove report with all receipt paths/unverified</STEP><STEP id=\"n7.5\">If superseded, retire railway-app after n6 with G-6 approval</STEP></NODE></UPLIFTED_PROMPT>",
+  "second_uplift_xml": "<UPLIFTED_PROMPT><ORIGINAL>We're upgrading our Programming Desk application in https://github.com/swcstudiospace/programming-desk We want each bot to have it's own unique interface which connects our Railway resources properly via Tailscale. So we have 2 projects in Railway. Ultrathink which has our databases and then we have Agent Substrate which has 2 applications \"Hingsight\" and \"RAGflow\" so please upgrade our Agent Substrate documents to use the 3 databases and 2 applications intelligently then wire them into our Programming Desk whilst doing an overall uplift to our Programming Desk as a whole. We want a Grok Bot share which will integrate the entire desk from Add Bot and ensure our XML's Skills, Memories, Tools etc are still integrated properly. We want to drive the application from outside of the Desk speaking only to Lead. All of our Bots require 10-15 proper tools for themselves. Please introduce proper integrations of the applications and stuff from Grok Bot leveraging other skills and stuff made by other Teams. For our actual ios and Android bots can load up specialised tools for applications etc. Please plan an upgrade</ORIGINAL><SYSTEM_ROLE>You are bot-00-programming-lead, leading the Desk v2 upgrade and modernization for programming-desk.</SYSTEM_ROLE><APP_CONTEXT>Repository swcstudiospace/programming-desk, targeting PR #65 on branch bot-00-programming-lead/desk-swarm-subagents.</APP_CONTEXT><SCOPE>Complete Desk v2 delivery graph nodes n1 through n7 encompassing 41 execution steps.</SCOPE><CONSTRAINTS>Do not invent repository facts. Respect all safety and permission checks. Maintain tracker materialization and receipt evidence.</CONSTRAINTS><ACCEPTANCE_CRITERIA>All 7 nodes and 41 steps executed or reconciled with receipts, tests passing, trackers updated, zero regressions.</ACCEPTANCE_CRITERIA><OUT_OF_SCOPE>Modifications outside the Desk v2 upgrade plan and PR #65 boundary.</OUT_OF_SCOPE><NODE id=\"n1\"><STEP id=\"n1.1\">List both Railway projects' actual service names, ports and environments in authorized account</STEP><STEP id=\"n1.2\">Identify railway-app node</STEP><STEP id=\"n1.3\">Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path</STEP><STEP id=\"n1.4\">Observe tools/list_changed support or use fallback</STEP><STEP id=\"n1.5\">Confirm Cursor network policy and plan tier</STEP><STEP id=\"n1.6\">Record results in plan \u00a713 through QUALITY docs ticket</STEP></NODE><NODE id=\"n2\"><STEP id=\"n2.1\">Deploy/adopt Ultrathink forwarder with five mappings, tag and disabled expiry</STEP><STEP id=\"n2.2\">Deploy/adopt Agent Substrate forwarder for Hindsight/RAGFlow</STEP><STEP id=\"n2.3\">Apply exact-port deny-default ACL for VPS, Mac mini and XPS; evidence each permitted device path</STEP><STEP id=\"n2.4\">Cut substrate environment over, restart, verify brief/events</STEP><STEP id=\"n2.5\">Approved G-6 public Timescale/Greptime retirement and rollback</STEP><STEP id=\"n2.6\">Receipt with tailnet status, probes and unverified limits</STEP></NODE><NODE id=\"n3\"><STEP id=\"n3.1\">Gated companion docs/env/GSD replan integration</STEP><STEP id=\"n3.2\">Hindsight write/read/banks/redaction/version; back up and retire local memory paths</STEP><STEP id=\"n3.3\">Dragonfly brief/search/recall/rate caches with fail-through, cache only</STEP><STEP id=\"n3.4\">Desk Timescale coordination migrations, hypertables and aggregates</STEP><STEP id=\"n3.5\">RAGFlow dataset ingest and docs_search integration</STEP><STEP id=\"n3.6\">Package receipts with actual bun test evidence</STEP></NODE><NODE id=\"n4\"><STEP id=\"n4.1\">Seven roster and three initial pack contracts, consumers ack, contract first</STEP><STEP id=\"n4.2\">Seat OAuth/routing, eight core tools and Greptime audit</STEP><STEP id=\"n4.3\">All seat tools, g5/g6, deadlines/failures, pack behavior and roster fixtures</STEP><STEP id=\"n4.4\">Origin-token intake API and LEAD-only intake tools</STEP><STEP id=\"n4.5\">Public DNS/nginx/TLS/systemd/env and needed allowlist</STEP><STEP id=\"n4.6\">Scratch-Bot smoke: two distinct lists and wrong-seat 403</STEP></NODE><NODE id=\"n5\"><STEP id=\"n5.1\">Placeholders/roster assembly/core PD-8/G-7 and fixtures</STEP><STEP id=\"n5.2\">Every seat prompt sections, assembly and parsing</STEP><STEP id=\"n5.3\">All seven \u00a78.2 skills authored and reviewed with authorized lifecycle</STEP><STEP id=\"n5.4\">swc-programming-desk plugin and companion grok-bot projector</STEP><STEP id=\"n5.5\">Seven actual Team-only templates and Share-card screenshots</STEP><STEP id=\"n5.6\">Desk pack skills_propose PR into agent-skills</STEP></NODE><NODE id=\"n6\"><STEP id=\"n6.1\">Fresh recipient adds seven templates, bootstraps and seven doctors green</STEP><STEP id=\"n6.2\">Docs-only LEAD ask, double uplift/ticket/pending result, independent exact-SHA approval</STEP><STEP id=\"n6.3\">GitHub-label and curl-origin intake, LEAD acknowledgement to issue/origin</STEP><STEP id=\"n6.4\">Actual iOS message and push-notification g5 approval</STEP><STEP id=\"n6.5\">Gateway/forwarder/cache/wrong-seat/pack-ceiling failure drills</STEP><STEP id=\"n6.6\">Open acceptance questions to Ove capped at four</STEP></NODE><NODE id=\"n7\"><STEP id=\"n7.1\">Source order with allowed gateway skeleton overlap</STEP><STEP id=\"n7.2\">Network/env/gateway/prompt/template rollback evidence</STEP><STEP id=\"n7.3\">Desk cutover windows and dispatch-note audit trail</STEP><STEP id=\"n7.4\">PR-field sync and Ove report with all receipt paths/unverified</STEP><STEP id=\"n7.5\">If superseded, retire railway-app after n6 with G-6 approval</STEP></NODE><CLARIFICATIONS>Re-entrant graph ut-muz1hdpm-2a933bcc verified. Linear team Spectrum Web Co confirmed. Notion and Linear live URLs populated.</CLARIFICATIONS><ISSUES><TASK notion_url=\"https://app.notion.com/3f3bc1a0c7ae8181a56be183b865afd5\"/><ITEM source_id=\"n1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81289f47de33c71d3149\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7688/n1-understand-inventory-and-prove-the-assumptions\"/><ITEM source_id=\"n2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae815cb1eac82da949884c\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7693/n2-decompose-network-plane\"/><ITEM source_id=\"n3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81f7beddefe03e89cea5\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7694/n3-generate-substrate-data-planes\"/><ITEM source_id=\"n4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8100952bd26d76d7f891\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7695/n4-generate-desk-gateway-and-contracts\"/><ITEM source_id=\"n5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81c8a9fafb92c6607e30\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7697/n5-refine-prompts-skills-templates-plugin\"/><ITEM source_id=\"n6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81e8a19aefa7b1b04c1c\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7698/n6-critique-fresh-desk-acceptance-and-external-intake\"/><ITEM source_id=\"n7\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81dc82f4d025fb1f6ddd\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7699/n7-synthesize-ordered-rollout-and-rollback\"/><ITEM source_id=\"n1.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81d29bb4e7acc6bc124c\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7689/n11-list-railway-projects-service-names-and-ports\"/><ITEM source_id=\"n1.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8196b034cf50eee7c998\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7736/n12-identify-railway-app-node\"/><ITEM source_id=\"n1.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81858be9e511c451d60c\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7732/n13-prove-bot-uuid-read-and-system-promptxml-write\"/><ITEM source_id=\"n1.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81cb803ce632a515762b\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7735/n14-observe-toolslist-changed-support-or-fallback\"/><ITEM source_id=\"n1.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81d5b0b1cf265ab32111\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7737/n15-confirm-cursor-network-policy-and-plan-tier\"/><ITEM source_id=\"n1.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8173bd31ecbfa930d98e\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7740/n16-record-results-in-plan-13-through-quality-docs-ticket\"/><ITEM source_id=\"n2.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81029185e820cbb8ea61\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7754/n21-deployadopt-ultrathink-forwarder\"/><ITEM source_id=\"n2.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81bea51cd7c71d4b9d5b\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7755/n22-deployadopt-agent-substrate-forwarder\"/><ITEM source_id=\"n2.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81759018d04a786d14e0\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7756/n23-apply-exact-port-deny-default-acl\"/><ITEM source_id=\"n2.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81da8869c51fc7a90c08\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7758/n24-cut-substrate-environment-over-and-verify\"/><ITEM source_id=\"n2.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81c59ce8cec69a33c307\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7757/n25-approved-g-6-public-proxy-retirement\"/><ITEM source_id=\"n2.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81d69d72f8b9493c5b5e\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7759/n26-network-receipt-with-status-and-probes\"/><ITEM source_id=\"n3.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae818cb227ebcaab03ba5c\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7760/n31-gated-companion-docs-and-env-integration\"/><ITEM source_id=\"n3.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81c2b371c3ea6e188a62\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7761/n32-hindsight-memory-integration-and-local-retirement\"/><ITEM source_id=\"n3.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae818d955ed1cce2e31897\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7763/n33-dragonfly-caching-adapter-with-fail-through\"/><ITEM source_id=\"n3.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81af92e0c2ef625ab660\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7762/n34-timescale-coordination-migrations-and-hypertables\"/><ITEM source_id=\"n3.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81319b6bf8b3d9c04002\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7765/n35-ragflow-dataset-ingest-and-docs-search\"/><ITEM source_id=\"n3.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae817f9c86fadbbd2ee7a4\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7764/n36-package-receipts-with-bun-test-evidence\"/><ITEM source_id=\"n4.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae813ead9afda68990e17a\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7766/n41-seven-roster-and-initial-pack-contracts\"/><ITEM source_id=\"n4.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae819db944f1806ccc8a4b\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7767/n42-seat-oauth-routing-and-core-tools\"/><ITEM source_id=\"n4.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81d285d0dc45aab6a771\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7768/n43-seat-tools-g5g6-gates-and-roster-fixtures\"/><ITEM source_id=\"n4.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81f989f1d3deedc67c12\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7769/n44-origin-token-intake-api-and-lead-tools\"/><ITEM source_id=\"n4.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae815ca351ff6c2a19b63d\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7770/n45-gateway-dns-tls-and-systemd-deployment\"/><ITEM source_id=\"n4.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8130ae62fe30cc4da9d3\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7771/n46-scratch-bot-smoke-and-wrong-seat-403\"/><ITEM source_id=\"n5.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81e39f52eca7eab1b8e6\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7772/n51-roster-assembly-core-directives-and-g-7-fixtures\"/><ITEM source_id=\"n5.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81388f83d7735dfbdbca\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7773/n52-seat-prompt-sections-assembly-and-parsing\"/><ITEM source_id=\"n5.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81e98c4fcddcdb7b8da0\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7774/n53-desk-skills-authored-and-reviewed\"/><ITEM source_id=\"n5.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81b7879ac52bb99aed6b\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7775/n54-marketplace-plugin-and-grok-bot-projector\"/><ITEM source_id=\"n5.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81218747cd1306e22b53\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7776/n55-seven-team-only-templates-and-screenshots\"/><ITEM source_id=\"n5.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81a3af91d17dde8930ce\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7777/n56-desk-pack-skills-propose-pr\"/><ITEM source_id=\"n6.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8161b5a2d472ee40b2ae\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7778/n61-fresh-recipient-bootstrap-and-doctors-green\"/><ITEM source_id=\"n6.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8161b3d0f3ee24894741\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7779/n62-docs-only-ask-double-uplift-and-exact-sha-review\"/><ITEM source_id=\"n6.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae811c8bb7fcc960506cd7\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7780/n63-external-intake-and-lead-acknowledgement\"/><ITEM source_id=\"n6.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81a4bc04e0248e2dbd6f\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7781/n64-mobile-push-notification-approval-evidence\"/><ITEM source_id=\"n6.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81e4a669de5c2e311e68\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7782/n65-gateway-and-component-failure-drills\"/><ITEM source_id=\"n6.6\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8164920ff8928a4f58b7\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7783/n66-open-acceptance-questions-capped-at-four\"/><ITEM source_id=\"n7.1\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8185bfb3fdc5b2bf60d8\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7784/n71-source-rollout-order-with-gateway-overlap\"/><ITEM source_id=\"n7.2\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae81948b23fae01ccd4586\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7785/n72-multi-plane-rollback-evidence\"/><ITEM source_id=\"n7.3\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8127b759edf038c1d93a\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7786/n73-desk-cutover-windows-and-audit-trail\"/><ITEM source_id=\"n7.4\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae815989def8af62446749\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7787/n74-pr-field-sync-and-ove-report\"/><ITEM source_id=\"n7.5\" notion_url=\"https://app.notion.com/3f3bc1a0c7ae8157a210f75d51482ad3\" linear_url=\"https://linear.app/swcstudio/issue/SPE-7788/n75-g-6-railway-app-retirement-if-superseded\"/></ISSUES></UPLIFTED_PROMPT>",
+  "dispatch": {
+    "status": "blocked-missing-channel",
+    "reason": "No external cloud launcher/bus is mounted; Lane A/B gated to sequential inline GSD execution."
+  }
+}

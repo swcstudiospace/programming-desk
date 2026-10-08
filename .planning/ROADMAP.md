@@ -50,12 +50,12 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n1.1 | List both Railway projects' actual service names, ports and environments in authorized account | REQ-INVENTORY-004 | Not started / UNVERIFIED |
-| n1.2 | Identify railway-app node | REQ-INVENTORY-005, REQ-NETWORK-015 | Not started / UNVERIFIED |
-| n1.3 | Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path | REQ-INVENTORY-006, REQ-INVENTORY-007 | Not started / UNVERIFIED |
-| n1.4 | Observe tools/list_changed support or use fallback | REQ-INVENTORY-008, REQ-GATEWAY-049, REQ-GATEWAY-050 | Not started / UNVERIFIED |
-| n1.5 | Confirm Cursor network policy and plan tier | REQ-INVENTORY-009, REQ-INVENTORY-010 | Not started / UNVERIFIED |
-| n1.6 | Record results in plan §13 through QUALITY docs ticket | REQ-INVENTORY-011 | Not started / UNVERIFIED |
+| n1.1 | List both Railway projects' actual service names, ports and environments in authorized account | REQ-INVENTORY-004 | Automated evidence recorded in n1-platform.json; owner authorization pending |
+| n1.2 | Identify railway-app node | REQ-INVENTORY-005, REQ-NETWORK-015 | Recorded in n1-platform.json (subnet advertiser; retirement pending n6 G-6) |
+| n1.3 | Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path | REQ-INVENTORY-006, REQ-INVENTORY-007 | Boundary recorded in n1-bot-client.json; bot UI access pending |
+| n1.4 | Observe tools/list_changed support or use fallback | REQ-INVENTORY-008, REQ-GATEWAY-049, REQ-GATEWAY-050 | Boundary recorded in n1-bot-client.json; SaaS client access pending |
+| n1.5 | Confirm Cursor network policy and plan tier | REQ-INVENTORY-009, REQ-INVENTORY-010 | Boundary & D-07 choices recorded in n1-accounts-cursor.json; dashboard access pending |
+| n1.6 | Record results in plan §13 through QUALITY docs ticket | REQ-INVENTORY-011 | Routed to QUALITY on SPE-7740; packet recorded in n1-s13-routing.json |
 
 ### Phase 2: Network plane
 

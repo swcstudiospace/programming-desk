@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-07",
+  "recorded_on": "2026-10-08",
+  "hindsight_tool_attempt": {
+    "interfaces_queried": [
+      "mcp__railway_describe_service",
+      "mcp__railway_get_service_config"
+    ],
+    "service_id": "0436123d-6fff-4bd8-a9a5-bd38db9ffff1",
+    "project_id": "a3453be1-819a-4ac3-a787-c6cfa5550f18",
+    "environment_id": "c50e0706-deb0-43ad-aaa0-53a92da3b396",
+    "outcome": "boundary-hit",
+    "fields": {
+      "service_name": {
+        "status": "returned",
+        "value": "hindsight-api"
+      },
+      "service_state": {
+        "status": "returned",
+        "value": "live"
+      },
+      "staged_changes": {
+        "status": "returned",
+        "value": "none"
+      },
+      "latest_deployment_id": {
+        "status": "returned",
+        "value": "57b801a2-c683-4c65-bc9f-7e9ac5dd40af"
+      },
+      "latest_deployment_status": {
+        "status": "returned",
+        "value": "SUCCESS"
+      },
+      "configured_image": {
+        "status": "returned",
+        "value": "ghcr.io/vectorize-io/hindsight-api:0.9.1",
+        "note": "Image tag 0.9.1 is configuration/source, not running-API version"
+      },
+      "running_api_version": {
+        "status": "boundary-hit",
+        "reason": "Railway config/deployment metadata does not expose running-API version; no /version endpoint exists"
+      },
+      "embedding_provider": {
+        "status": "boundary-hit",
+        "reason": "Not exposed as non-secret Railway service config; HINDSIGHT_API_LLM_PROVIDER present in variableNames but values withheld and embedding provider not named"
+      },
+      "embedding_model": {
+        "status": "boundary-hit",
+        "reason": "Not exposed in Railway metadata or variable names"
+      },
+      "embedding_dimensions": {
+        "status": "boundary-hit",
+        "reason": "Not exposed in Railway metadata or variable names"
+      }
+    },
+    "separate_non_version_facts": {
+      "public_health_url": "https://hindsight-api-production-014d.up.railway.app/health",
+      "public_health_body": {
+        "status": "healthy",
+        "database": "connected",
+        "db_acquire_ms": 9.3,
+        "db_pool_waiting": 0,
+        "db_pool_in_use": 0,
+        "db_pool_max": 100,
+        "db_pool_idle": 1
+      },
+      "note": "Public health response proves container up and DB connected, but does not provide version, model, or dimensions"
+    }
+  },
+  "runtime_owner_remainder": {
+    "status": "blocked-missing-owner-attestation",
+    "blocker": "Hindsight runtime owner evidence pending for running API version, effective embedding provider, model, and dimensions beyond Railway describe tool boundary.",
+    "scope": "Running-API version, effective embedding provider/model/dimensions, and whether existing data fixes an embedding space"
+  }
+}

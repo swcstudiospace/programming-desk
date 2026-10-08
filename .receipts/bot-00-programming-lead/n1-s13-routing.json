@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-05",
+  "recorded_on": "2026-10-08",
+  "ownership_resolution": "pass",
+  "s13_packet_ref": {
+    "scope": "docs/upgrade-plan-desk-v2.md \u00a713 only",
+    "location": ".planning/phases/01-inventory-and-prove-assumptions/01-INVENTORY.md",
+    "tracker_ticket": "SPE-7740",
+    "tracker_url": "https://linear.app/swcstudio/issue/SPE-7740/n16-record-results-in-plan-13-through-quality-docs-ticket",
+    "notion_item_url": "https://app.notion.com/3f3bc1a0c7ae8173bd31ecbfa930d98e",
+    "six_dispositions": {
+      "railway_visibility_and_identity": "Ming Chen account confirmed connected; 5 services observed via SSH kernel listeners (Greptime 4000/4001/4003, Timescale 5432, Dragonfly 6379, Hindsight 8888, Ragflow 9380/80); unapproved listeners 4002/9382 noted; owner authorization unverified.",
+      "railway_app_role": "Observed subnet-route advertiser (100.77.7.42, routes 10.128.0.0/9, fd12:4f8:a4d6:1::/64, fd12::10/128); not a forwarder; retirement unapproved pending n6 G-6.",
+      "root_workflow_presence": "Quality Gates workflow 370453712 active; applicable PR 65 run 37697523618 completed with conclusion failure at G-2; status registered-active-not-green.",
+      "live_bot_client_rows": "Blocked: participating Bot computer and SaaS MCP client unmounted; documented targets retained.",
+      "mobile_and_hindsight_metadata": "Tool boundary hit on Hindsight runtime version/embeddings; mobile custody pending owner attestation.",
+      "retained_provenance_and_floors": "Ten-minute poll floor retained; D-4 original authoring session provenance preserved."
+    }
+  },
+  "quality_delivery": {
+    "status": "blocked-cross-owner-boundary",
+    "blocker": "QUALITY seat must author docs/upgrade-plan-desk-v2.md \u00a713 update and receipt on bot-06-quality-security with independent exact-current-SHA review without new tip.",
+    "target_ticket": "SPE-7740"
+  }
+}

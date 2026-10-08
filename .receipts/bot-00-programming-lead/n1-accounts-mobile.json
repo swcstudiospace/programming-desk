@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-06",
+  "recorded_on": "2026-10-08",
+  "mobile_custody": {
+    "status": "blocked-missing-owner-attestation",
+    "blocker": "Owner attestation pending for Play Developer and App Store Connect availability, custody, and authorized scope.",
+    "play_developer": {
+      "availability": "unknown",
+      "custodian": "unknown",
+      "note": "play_track_status is not a safe presence probe; values withheld"
+    },
+    "app_store_connect": {
+      "availability": "unknown",
+      "custodian": "unknown",
+      "note": "values withheld"
+    }
+  }
+}

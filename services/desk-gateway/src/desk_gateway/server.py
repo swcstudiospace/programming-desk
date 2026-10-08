@@ -39,6 +39,13 @@ from desk_gateway.cutover import (
     EmergencyIsolationManager,
     SeatIsolatedError,
 )
+from desk_gateway.edge import (
+    DistributedRateLimiter,
+    EdgeError,
+    EdgeIngressGateway,
+    GeoSteeringRouter,
+    RateLimitExceeded,
+)
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -246,12 +253,14 @@ class SeatRouter:
         rosters: Rosters,
         isolation_manager: EmergencyIsolationManager | None = None,
         failover_router: FailoverRouter | None = None,
+        edge_gateway: EdgeIngressGateway | None = None,
     ) -> None:
         self.app = app
         self.provider = provider
         self.rosters = rosters
         self.isolation_manager = isolation_manager
         self.failover_router = failover_router
+        self.edge_gateway = edge_gateway
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -313,6 +322,26 @@ class SeatRouter:
                 )
                 await _json(send, 503, prob)
                 return
+        # Distributed rate limiting check on seat dispatch (REQ-EDGE-002)
+        rate_headers: list[tuple[bytes, bytes]] = []
+        if self.edge_gateway:
+            try:
+                hdrs = await self.edge_gateway.enforce_rate_limit(seat, amount=1)
+                rate_headers = [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in hdrs.items()]
+            except RateLimitExceeded as exc:
+                prob = problem_details(
+                    status=429,
+                    title="Seat Rate Limit Exceeded",
+                    detail=f"Rate limit exceeded for seat '{seat}': burst capacity {exc.limit} tokens reached.",
+                    error_code="rate_limit_exceeded",
+                    instance=path,
+                    seat=seat,
+                    retry_after=exc.retry_after,
+                )
+                headers = [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in exc.headers.items()]
+                await _json(send, 429, prob, headers=headers)
+                return
+
         token = _bearer(scope)
         if token:
             access = await self.provider.load_access_token(token)
@@ -425,6 +454,7 @@ def create_mcp(
     cutover: tuple[CutoverOrchestrator, EmergencyIsolationManager] | None = None,
     failover: tuple[FailoverRouter, UpstreamHealthPoller] | None = None,
     alerting: tuple[AlertDispatcher, SLOEvaluator] | None = None,
+    edge: EdgeIngressGateway | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -460,6 +490,7 @@ def create_mcp(
         AlertDispatcher(settings),
         SLOEvaluator(settings),
     )
+    edge_gw = edge if edge else EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -480,6 +511,10 @@ def create_mcp(
                     "enabled": fail_router.enabled,
                     "active_diverts": fail_router.get_status()["active_diverts_count"],
                     "upstream_health": health_poller.get_status()["overall"],
+                },
+                "edge": {
+                    "regions_count": len(edge_gw.router.list_regions()),
+                    "default_region": edge_gw.router.default_region,
                 },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
@@ -1689,6 +1724,145 @@ def create_mcp(
 
         return JSONResponse({"ok": True, "seat": seat, "status": "cleared"}, status_code=200)
 
+    # -------------------------------------------------------------------------
+    # Edge Ingress & Geo-Steering Endpoints (REQ-EDGE-001, REQ-EDGE-002)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/edge/regions", methods=["GET"])
+    async def edge_regions_get(request: Request) -> Response:
+        """Inspect multi-region VPS gateway endpoints and health latencies (REQ-EDGE-001)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect edge regions.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        regions = edge_gw.router.list_regions()
+        return JSONResponse(
+            {
+                "ok": True,
+                "default_region": edge_gw.router.default_region,
+                "latency_threshold_ms": edge_gw.router.latency_threshold_ms,
+                "regions": regions,
+                "regions_count": len(regions),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/edge/regions/{region_id}/health", methods=["POST"])
+    async def edge_region_health_post(request: Request) -> Response:
+        """Update region health status or observed latency (REQ-EDGE-001)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead, Infra, or Systems seat authorization required to update edge region health.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+        region_id = request.path_params.get("region_id", "")
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        healthy = bool(body.get("healthy", True))
+        force = bool(body.get("force", not healthy))
+        lat_val = body.get("latency_ms")
+        latency_ms = float(lat_val) if lat_val is not None else None
+        try:
+            ep = edge_gw.router.update_health(region_id, healthy=healthy, latency_ms=latency_ms, force=force)
+        except EdgeError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Edge Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        return JSONResponse({"ok": True, "region": ep.to_dict()}, status_code=200)
+
+    @mcp.custom_route("/v1/edge/route", methods=["POST"])
+    async def edge_route_post(request: Request) -> Response:
+        """Resolve optimal multi-region destination based on geo-steering and health (REQ-EDGE-001)."""
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        client_lat = body.get("latitude")
+        client_lon = body.get("longitude")
+        preferred = body.get("preferred_region")
+        obs_lat = body.get("observed_latencies")
+
+        try:
+            route_res = edge_gw.route_request(
+                client_lat=float(client_lat) if client_lat is not None else None,
+                client_lon=float(client_lon) if client_lon is not None else None,
+                preferred_region=str(preferred) if preferred else None,
+                observed_latencies={str(k): float(v) for k, v in obs_lat.items()} if isinstance(obs_lat, dict) else None,
+            )
+        except EdgeError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Routing Failed",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        return JSONResponse({"ok": True, **route_res}, status_code=200)
+
+    @mcp.custom_route("/v1/edge/limits", methods=["GET"])
+    async def edge_limits_get(request: Request) -> Response:
+        """Inspect edge distributed rate limit configurations and status (REQ-EDGE-002)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect edge limits.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        configs = {}
+        for s in SEATS:
+            cfg = edge_gw.limiter.get_config(s)
+            configs[s] = {"rate_per_min": cfg.rate_per_min, "burst_capacity": cfg.burst_capacity}
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "default_rate_per_min": edge_gw.limiter.default_rate_per_min,
+                "default_burst": edge_gw.limiter.default_burst,
+                "seats": configs,
+                "dragonfly_connected": bool(edge_gw.limiter.dragonfly and getattr(edge_gw.limiter.dragonfly, "configured", False)),
+            },
+            status_code=200,
+        )
+
     @mcp.custom_route("/v1/alerts/status", methods=["GET"])
     async def alerts_status_get(request: Request) -> Response:
         """Inspect live SLO evaluation results, recent alerts, and alerting thresholds (REQ-ALERT-002, REQ-ALERT-003)."""
@@ -1807,6 +1981,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     slo_evaluator = SLOEvaluator(settings)
     alerting_components = (alert_dispatcher, slo_evaluator)
 
+    edge_gw = EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
+
     mcp = create_mcp(
         settings,
         services,
@@ -1817,6 +1993,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         cutover=cutover_components,
         failover=failover_components,
         alerting=alerting_components,
+        edge=edge_gw,
     )
     origins = [
         "http://127.0.0.1",
@@ -1849,7 +2026,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         await services.live.serve(websocket)
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
-    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router))
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router, edge_gateway=edge_gw))
     app.state = {
         "store": store,
         "services": services,
@@ -1866,6 +2043,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "health_poller": health_poller,
         "alert_dispatcher": alert_dispatcher,
         "slo_evaluator": slo_evaluator,
+        "edge_gateway": edge_gw,
     }
     return app, settings
 

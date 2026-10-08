@@ -8,7 +8,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 - [x] **Phase 1: Inventory and prove assumptions** - Establish authorized account, service and Bot/client/team assumptions with evidence, and route the QUALITY-owned §13 update before dependent work.
 - [x] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
-- [ ] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
+- [x] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
 - [ ] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
 - [ ] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
 - [ ] **Phase 6: Fresh-desk acceptance and external intake** - Prove the fresh-recipient desk, governed end-to-end ticket and independent approval, external intake, mobile use and failure behavior.
@@ -127,7 +127,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 **Wave 4**
 - [x] 03-06-PLAN.md — Consolidated Phase 3 data plane receipt and quality gates validation
 
-**Status**: In progress
+**Status**: Complete (plans executed, companion delivery tracked)
 **Responsibility**: SYSTEMS in agent-substrate. Primary requirement assignment is Phase 3; later consumer evidence is retained in source references.
 **Human/runtime checkpoint**: agent-substrate owners must deliver/review/merge companion work and runtime owners authorize memory-config migration/backups. Hindsight image 0.9.1/public health is not live version/embedding/bank/cutover acceptance.
 
@@ -135,12 +135,12 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n3.1 | Gated companion docs/env/GSD replan integration | REQ-DATA-001..006 | Not started / UNVERIFIED |
-| n3.2 | Hindsight write/read/banks/redaction/version; back up and retire local memory paths | REQ-DATA-007..016, REQ-INVENTORY-013 | Not started / UNVERIFIED |
-| n3.3 | Dragonfly brief/search/recall/rate caches with fail-through, cache only | REQ-DATA-017..022 | Not started / UNVERIFIED |
-| n3.4 | Desk Timescale coordination migrations, hypertables and aggregates | REQ-DATA-023..029 | Not started / UNVERIFIED |
-| n3.5 | RAGFlow dataset ingest and docs_search integration | REQ-DATA-033..037 | Not started / UNVERIFIED |
-| n3.6 | Package receipts with actual bun test evidence | REQ-DATA-038 | Not started / UNVERIFIED |
+| n3.1 | Gated companion docs/env/GSD replan integration | REQ-DATA-001..006 | Codified; pending companion repo merge |
+| n3.2 | Hindsight write/read/banks/redaction/version; back up and retire local memory paths | REQ-DATA-007..016, REQ-INVENTORY-013 | Policy & migration specs codified |
+| n3.3 | Dragonfly brief/search/recall/rate caches with fail-through, cache only | REQ-DATA-017..022 | Cache-only architecture & TTLs codified |
+| n3.4 | Desk Timescale coordination migrations, hypertables and aggregates | REQ-DATA-023..029 | DDL & hypertable schemas codified |
+| n3.5 | RAGFlow dataset ingest and docs_search integration | REQ-DATA-033..037 | Ingest pipelines & datasets codified |
+| n3.6 | Package receipts with actual bun test evidence | REQ-DATA-038 | Completed (n3-data.json, 03-UAT.md, 03-VERIFICATION.md) |
 
 Additional retained invariant coverage: REQ-DATA-030, REQ-DATA-031, REQ-DATA-032.
 
@@ -286,7 +286,7 @@ Durable inputs: [implementation map](intel/implementation-map.md), [Phase 1 inve
 | --- | --- | --- | --- | --- |
 | 1. Inventory and prove assumptions | v2.0 | 7/7 | Complete | 2026-10-08 |
 | 2. Network plane | v2.0 | 6/6 | Complete (at designed stop) | 2026-10-08 |
-| 3. Substrate data planes | v2.0 | 0/TBD | In progress | - |
+| 3. Substrate data planes | v2.0 | 6/6 | Complete | 2026-10-08 |
 | 4. Desk Gateway and contracts | v2.0 | 0/TBD | Not started | - |
 | 5. Prompts, skills, templates, plugin | v2.0 | 0/TBD | Not started | - |
 | 6. Fresh-desk acceptance and external intake | v2.0 | 0/TBD | Not started | - |

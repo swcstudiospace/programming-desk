@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v2.0
 milestone_name: Desk v2
-current_phase: 3
-current_phase_name: Substrate data planes
+current_phase: 4
+current_phase_name: Desk Gateway and contracts
 status: in_progress
-stopped_at: Phase 2 verified and closed at designed stop (forwarders codified, live cutover queued for operator Railway deployment). Advancing to Phase 3.
-last_updated: "2026-10-08T07:15:00.000Z"
+stopped_at: Completed Phase 3 data planes specification, plans, UAT, and verification receipt. Advancing to Phase 4 Desk Gateway and contracts.
+last_updated: "2026-10-08T07:40:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Completed Phase 2 verification and UAT at designed stop. Transitioned to Phase 3 Substrate data planes.
-state_head: 69d53c07ea82eb9a51d8b9b8b64b38d388e63b65
+last_activity_desc: Completed Phase 3 verification and UAT. Transitioned to Phase 4 Desk Gateway and contracts.
+state_head: 2dfa75510f2df22c954e3d36006f156d9818816c
 progress:
   total_phases: 7
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 19
-  completed_plans: 13
-  percent: 38
+  completed_plans: 19
+  percent: 45
 ---
 
 # Project State

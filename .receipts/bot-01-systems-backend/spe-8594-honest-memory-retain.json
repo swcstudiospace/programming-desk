@@ -63,6 +63,18 @@
       "exit_code": 0,
       "duration_s": 1,
       "output_tail": "status ok; correlation 07f71cb7-2e1a-4590-b74e-6f2bea0e5a62; 8 hotfix tasks PLANNED; no signed gate"
+    },
+    {
+      "cmd": "cd /tmp/pd-479d627/services/desk-gateway && PYTHONPATH=src /workspace/services/desk-gateway/.venv/bin/pytest -q tests/test_memory_retain.py::test_substrate_only_stored_is_partial tests/test_memory_retain.py::test_substrate_only_denied_is_unavailable --tb=line -p no:cacheprovider",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "2 failed in 0.07s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_memory_retain.py",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "15 passed in 0.67s"
     }
   ],
   "claims": [
@@ -106,11 +118,20 @@
     {
       "claim": "orch_plan accepted graph id ut-mv00tcgl-d8215d3e and wrote an advisory hotfix plan",
       "evidence_command_index": 9
+    },
+    {
+      "claim": "On 479d627, substrate-only stored and substrate-only denied tests fail before the verdict reply exists",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "After the fix, substrate-only stored is partial with substrate stored, substrate-only denied is memory_unavailable, and tests/test_memory_retain.py passes",
+      "evidence_command_index": 11
     }
   ],
   "unverified": [
     "Live substrate acceptance of the memory write is not proven. It waits for S1 (SUBSTRATE_ALLOW_ANONYMOUS and a recognised SUBSTRATE_TOKEN_GROK_BOT) plus Ming's separate operator step to set that token and restart substrate-mcp. This run used fake upstreams only.",
-    "Greptile review is not complete in this receipt. A FAILED, SKIPPED, or unavailable review blocks a merge claim.",
+    "Greptile review on e6164ed returned one P2 (substrate-only cases untested). That comment is addressed by the follow-up tests. The next review is not in yet, so this is not a 5/5 merge claim.",
     "approved_by is absent until bot-06-quality-security or a human stamps this receipt. The authoring seat does not self-approve.",
     "Swarm gates are advisory. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset, so correlation 07f71cb7-2e1a-4590-b74e-6f2bea0e5a62 is not APPROVED.",
     "docs/desk-operating-model.md still describes ok as any() over the two planes. That file is owned by bot-00-programming-lead and was not edited. The reply now also carries verdicts and partial.",

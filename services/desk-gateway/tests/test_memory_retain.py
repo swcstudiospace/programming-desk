@@ -223,6 +223,41 @@ async def test_hindsight_only_when_substrate_not_configured(caplog):
     assert FACT not in caplog.text
 
 
+async def test_substrate_only_stored_is_partial(caplog):
+    hindsight = FakeHindsight(configured=False)
+    substrate = FakeSubstrate({"ok": True, "content": [{"id": "mem-sub"}]})
+    with caplog.at_level(logging.WARNING, logger="desk_gateway.tools.core"):
+        reply = await memory_retain(_ctx(hindsight, substrate), {"content": FACT, "source": SOURCE})
+    assert reply["ok"] is True
+    assert reply["partial"] is True
+    planes = _by_plane(reply)
+    assert planes["hindsight"]["state"] == "not_configured"
+    assert planes["substrate"]["state"] == "stored"
+    assert hindsight.calls == []
+    assert substrate.calls[0]["arguments"]["kind"] == "fact"
+    assert FACT not in caplog.text
+
+
+async def test_substrate_only_denied_is_unavailable(caplog):
+    hindsight = FakeHindsight(configured=False)
+    substrate = FakeSubstrate(
+        {"ok": False, "error": "memory_denied", "reason": "rbac.no-grant", "writer": "unknown"}
+    )
+    with caplog.at_level(logging.WARNING, logger="desk_gateway.tools.core"):
+        reply = await memory_retain(_ctx(hindsight, substrate), {"content": FACT, "source": SOURCE})
+    assert reply["error"] == "memory_unavailable"
+    assert reply["ok"] is False
+    assert reply["partial"] is False
+    planes = _by_plane(reply)
+    assert planes["hindsight"]["state"] == "not_configured"
+    assert planes["substrate"]["state"] == "denied"
+    assert planes["substrate"]["reason"] == "rbac.no-grant"
+    assert planes["substrate"]["writer"] == "unknown"
+    assert hindsight.calls == []
+    assert FACT not in caplog.text
+    assert "rbac.no-grant" in caplog.text
+
+
 async def test_both_planes_stored(caplog):
     hindsight = FakeHindsight()
     substrate = FakeSubstrate({"ok": True, "content": [{"id": "mem-4"}]})

@@ -18,6 +18,7 @@ covered_files:
   - ".planning/phases/02-network-plane/02-VALIDATION.md"
   - ".receipts/bot-00-programming-lead/n2-network.json"
   - "infra/railway/forwarders.yaml"
+covered_digest: "v3:sha256:82ae7af745e975f1203289ed92c95c2c1d659b692ef5d2696da025fa85383997"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

@@ -18,6 +18,7 @@ covered_files:
   - ".planning/phases/07-ordered-rollout-and-rollback/07-VALIDATION.md"
   - ".planning/phases/07-ordered-rollout-and-rollback/07-UAT.md"
   - ".receipts/bot-00-programming-lead/n7-rollout.json"
+covered_digest: "v3:sha256:a48778a9b41fccc8856ebba8becb3aaa53860ceb38cc70717a58fa8f5da02cec"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

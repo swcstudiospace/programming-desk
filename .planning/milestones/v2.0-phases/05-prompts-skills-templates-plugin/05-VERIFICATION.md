@@ -23,6 +23,7 @@ covered_files:
   - ".planning/phases/05-prompts-skills-templates-plugin/05-UAT.md"
   - ".receipts/bot-00-programming-lead/n5-share.json"
   - "grokbot/marketplace/plugin.json"
+covered_digest: "v3:sha256:30e7ad144977a138de000a74a186a32547ed87b338fcd8363a9336cd01b51bc8"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

@@ -22,6 +22,7 @@ covered_files:
   - ".planning/phases/06-fresh-desk-acceptance-and-external-intake/06-VALIDATION.md"
   - ".planning/phases/06-fresh-desk-acceptance-and-external-intake/06-UAT.md"
   - ".receipts/bot-00-programming-lead/n6-accept.json"
+covered_digest: "v3:sha256:556883b4b02754ecaba27a0069b69270c951b189c22fb0a14d390407c85e5b52"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

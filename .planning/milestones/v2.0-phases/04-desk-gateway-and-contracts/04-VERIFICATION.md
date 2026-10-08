@@ -22,6 +22,7 @@ covered_files:
   - ".planning/phases/04-desk-gateway-and-contracts/04-VALIDATION.md"
   - ".planning/phases/04-desk-gateway-and-contracts/04-UAT.md"
   - ".receipts/bot-00-programming-lead/n4-gateway.json"
+covered_digest: "v3:sha256:2fa94995f9801834adba3bba92fa1af9768717769093991c62720bbacf72cf1c"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

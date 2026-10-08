@@ -21,6 +21,7 @@ covered_files:
   - ".planning/phases/03-substrate-data-planes/03-PATTERNS.md"
   - ".planning/phases/03-substrate-data-planes/03-VALIDATION.md"
   - ".receipts/bot-00-programming-lead/n3-data.json"
+covered_digest: "v3:sha256:552e4a87bf097c7737fd7b2ce46bd10656a5b85afc7d575b33eaf50c5d14026f"
 behavior_unverified: 0
 overrides_applied: 0
 human_verification:

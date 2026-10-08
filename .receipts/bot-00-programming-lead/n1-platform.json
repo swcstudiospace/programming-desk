@@ -1,0 +1,185 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-02",
+  "recorded_on": "2026-10-08",
+  "railway_services": [
+    {
+      "service_name": "GreptimeDB",
+      "project_name": "Ultrathink",
+      "project_id": "67a98752-ba0a-4ae2-a881-8d0e33a89328",
+      "environment_id": "6cfcb6de-3175-418b-8e20-7817a3d31633",
+      "service_id": "b53b4c7d-df3c-4cd8-a15d-e5fb1a79e254",
+      "listeners_observed": [
+        4000,
+        4001,
+        4002,
+        4003
+      ],
+      "authorized_forwarder_ports": [
+        4000,
+        4001,
+        4003
+      ],
+      "unauthorized_listeners_observed": [
+        4002
+      ],
+      "internal_host": "greptimedb.railway.internal",
+      "status_label": "observed",
+      "observer": "parent",
+      "evidence_notes": "SSH /proc/net/tcp state 0A returned 0FA0, 0FA1, 0FA2, 0FA3; describe-service configured ports agree. Forwarder design maps only 4000/4001/4003; 4002 observed-unauthorized."
+    },
+    {
+      "service_name": "TimescaleDB",
+      "project_name": "Ultrathink",
+      "project_id": "67a98752-ba0a-4ae2-a881-8d0e33a89328",
+      "environment_id": "6cfcb6de-3175-418b-8e20-7817a3d31633",
+      "service_id": "1bd7a6fd-b7b2-4fe4-8b4f-0d76ead81d79",
+      "listeners_observed": [
+        5432
+      ],
+      "authorized_forwarder_ports": [
+        5432
+      ],
+      "internal_host": "timescaledb.railway.internal",
+      "public_proxy": "monorail.proxy.rlwy.net:49679",
+      "status_label": "observed",
+      "observer": "parent",
+      "evidence_notes": "SSH /proc/net/tcp and tcp6 returned 1538 state 0A (5432). Intended host timescaledb.railway.internal."
+    },
+    {
+      "service_name": "Dragonfly",
+      "project_name": "Ultrathink",
+      "project_id": "67a98752-ba0a-4ae2-a881-8d0e33a89328",
+      "environment_id": "6cfcb6de-3175-418b-8e20-7817a3d31633",
+      "service_id": "32ee49a2-61bb-4572-acc8-1aa5956b6c7f",
+      "listeners_observed": [
+        6379
+      ],
+      "authorized_forwarder_ports": [
+        6379
+      ],
+      "internal_host": "dragonfly.railway.internal",
+      "status_label": "observed",
+      "observer": "parent",
+      "evidence_notes": "SSH /proc/net/tcp returned 00000000:18EB state 0A (6379). ss command failed, but kernel listener proof succeeded."
+    },
+    {
+      "service_name": "hindsight-api",
+      "project_name": "Agent Substrate",
+      "project_id": "a3453be1-819a-4ac3-a787-c6cfa5550f18",
+      "environment_id": "c50e0706-deb0-43ad-aaa0-53a92da3b396",
+      "service_id": "0436123d-6fff-4bd8-a9a5-bd38db9ffff1",
+      "listeners_observed": [
+        8888
+      ],
+      "authorized_forwarder_ports": [
+        8888
+      ],
+      "internal_host": "hindsight-api.railway.internal",
+      "configured_image": "ghcr.io/vectorize-io/hindsight-api:0.9.1",
+      "public_domain": "https://hindsight-api-production-014d.up.railway.app",
+      "status_label": "observed",
+      "observer": "parent",
+      "evidence_notes": "SSH /proc/net/tcp returned 22B8 state 0A (8888). Configured image 0.9.1 differs from proposal template v0.10.1-slim."
+    },
+    {
+      "service_name": "ragflow",
+      "project_name": "Agent Substrate",
+      "project_id": "a3453be1-819a-4ac3-a787-c6cfa5550f18",
+      "environment_id": "c50e0706-deb0-43ad-aaa0-53a92da3b396",
+      "service_id": "8ddda0d9-44d4-4e7a-8eec-6dbf91bb8d9e",
+      "listeners_observed": [
+        9380,
+        9382,
+        80
+      ],
+      "authorized_forwarder_ports": [
+        9380,
+        80
+      ],
+      "unauthorized_listeners_observed": [
+        9382
+      ],
+      "internal_host": "ragflow.railway.internal",
+      "status_label": "observed",
+      "observer": "parent",
+      "evidence_notes": "SSH /proc/net/tcp returned 24A4, 24A6, 0050 state 0A (9380/9382/80). Design maps API 9380 and web 80; 9382 observed-unauthorized."
+    }
+  ],
+  "railway_app": {
+    "service_name": "tailscale-vpn",
+    "project_id": "67a98752-ba0a-4ae2-a881-8d0e33a89328",
+    "service_id": "fcb79134-ca20-4816-8c10-ffaf18da5d7f",
+    "hostname": "railway-app",
+    "tailscale_ip": "100.77.7.42",
+    "advertised_routes": [
+      "10.128.0.0/9",
+      "fd12:4f8:a4d6:1::/64",
+      "fd12::10/128"
+    ],
+    "role": "observed-subnet-route-advertiser",
+    "suitability": "unproven-not-forwarder",
+    "retirement_consent": "unapproved-requires-genuine-G6-after-n6",
+    "observer": "parent"
+  },
+  "ci": {
+    "root_declared": true,
+    "workflow_id": 370453712,
+    "workflow_name": "Quality Gates",
+    "workflow_path": ".github/workflows/gates.yml",
+    "workflow_state": "active",
+    "actions_enabled": true,
+    "applicable_run_id": 37697523618,
+    "applicable_run_url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618",
+    "applicable_run_conclusion": "failure",
+    "applicable_run_event": "pull_request",
+    "applicable_run_head_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+    "pr_number": 65,
+    "failing_step": "G-2_verification_receipt",
+    "succeeded_steps": [
+      "G-1_manifest_and_path_ownership",
+      "gate-self-test"
+    ],
+    "skipped_steps": [
+      "G-3",
+      "G-4",
+      "G-5",
+      "G-6",
+      "G-7"
+    ],
+    "activation": "registered-active-not-green",
+    "runner": {
+      "id": 456,
+      "name": "srv1778002",
+      "status": "online",
+      "busy": false,
+      "os": "Linux",
+      "labels": [
+        "self-hosted",
+        "Linux",
+        "X64",
+        "ai-cluster"
+      ],
+      "group_name": "Default",
+      "allows_public_repositories": false
+    },
+    "future_scheduling_eligibility": "unproven",
+    "observer": "InspectDeskRemoteCI",
+    "observation_timestamp_utc": "2026-10-08T03:12:24Z"
+  },
+  "account_authorization": {
+    "connected_display_name": "Ming Chen",
+    "connected_email": "codingwithanabg@gmail.com",
+    "connected_id": "874b961a-8219-4dcd-ba7f-533e035a87d8",
+    "workspace": "Ming Chen's Projects",
+    "status": "blocked-missing-owner-attestation",
+    "blocker": "Owner confirmation pending: connected Railway account is not verified as Ove; mutation scope remains blocked.",
+    "scope_notes": "Display name Ming Chen matches proposal, but account identity is not established as Ove. Ownership authorization remains prerequisite to mutation."
+  },
+  "disclosed_omissions": [
+    "probe_timestamps",
+    "log_time_windows",
+    "deployment_sha_for_all_services"
+  ]
+}

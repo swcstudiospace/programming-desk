@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-03",
+  "recorded_on": "2026-10-08",
+  "bot_self_identity": {
+    "status": "blocked-missing-bot-access",
+    "blocker": "Genuine live-subject boundary: participating Bot Agent Computer UI is not mounted or accessible in execution environment.",
+    "target_path_hint": "/home/box/agent-data/agents/<uuid>/SYSTEM_PROMPT.xml",
+    "note": "Roster values and documented paths are inadmissible as live evidence; directory existence alone does not identify namespace."
+  },
+  "mcp_client_notification": {
+    "status": "blocked-missing-client-access",
+    "blocker": "Genuine live-subject boundary: authenticated SaaS Grok Bot client is not mounted or accessible for tools/list_changed trial.",
+    "note": "Offline grok-bot-box (100.94.38.2) and local server metadata do not establish SaaS client capability or fallback behavior."
+  }
+}

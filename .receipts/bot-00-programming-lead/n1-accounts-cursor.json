@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "phase": "01-inventory-and-prove-assumptions",
+  "plan": "01-04",
+  "recorded_on": "2026-10-08",
+  "cursor_admin_evidence": {
+    "status": "blocked-missing-cursor-admin-access",
+    "blocker": "Genuine account-surface boundary: authenticated Cursor dashboard is not accessible via relay (timeout observed); team tier and effective policy pending admin confirmation.",
+    "documented_modes": [
+      "allow-all",
+      "defaults-plus-allowlist",
+      "allowlist-only",
+      "enterprise-restricted"
+    ],
+    "poll_floor": "10-minute floor retained explicitly",
+    "resolved_choices_d07": {
+      "schedule": "weekly reflect",
+      "device_scope": "VPS plus Mac mini/XPS exact-port deny-default scope",
+      "activation": "authorized human UI install/enable",
+      "seat_mode": "seats proposal-only while skills.approve is absent"
+    }
+  }
+}

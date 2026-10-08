@@ -1,0 +1,108 @@
+{
+  "schema_version": 1,
+  "phase": "03-substrate-data-planes",
+  "plan": "03-06",
+  "recorded_on": "2026-10-08",
+  "bot": "bot-00-programming-lead",
+  "task_id": "n3-data",
+  "approved_by": "SomeRandmGuyy",
+  "data_planes": {
+    "greptimedb": {
+      "table": "agent_events",
+      "mode": "append_only",
+      "hashing": "sha256_chain",
+      "ledger_anchoring": "solana_devnet_hourly",
+      "retention_days": 180
+    },
+    "timescaledb": {
+      "coordination_tables": [
+        "desk_intake",
+        "desk_claims",
+        "desk_idempotency",
+        "desk_receipts",
+        "seat_roster",
+        "tool_pack_state"
+      ],
+      "queue_draining": "FOR UPDATE SKIP LOCKED",
+      "idempotency_retention_days": 30,
+      "hypertables": ["seat_heartbeat", "tool_calls_1m"],
+      "rollup_retention_years": 1
+    },
+    "dragonflydb": {
+      "role": "discardable_cache_only",
+      "ttls_seconds": {
+        "desk_brief": 300,
+        "docs_search": 600,
+        "memory_recall": 600,
+        "rate_counters": 3600,
+        "idempotency_mirror": 86400
+      },
+      "fallthrough_on_outage": true
+    },
+    "hindsight": {
+      "banks": {
+        "pd-desk": { "read": "all", "write": ["bot-00-programming-lead", "bot-06-quality-security"] },
+        "pd-<seat>": { "read": "owning_seat", "write": "owning_seat" },
+        "pd-lead-reports": { "read": "bot-00-programming-lead", "write": "bot-00-programming-lead" }
+      },
+      "provenance_required": true,
+      "retention": "forever",
+      "reflection": "weekly"
+    },
+    "ragflow": {
+      "datasets": [
+        "programming-desk",
+        "agent-substrate",
+        "kanbanos",
+        "desklanes",
+        "clippyos",
+        "auctioning"
+      ],
+      "embedding": "bge-small",
+      "retained_versions": 5,
+      "exclude_receipts": true
+    }
+  },
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-1 manifest OK — 7 bots, 113 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "G-3 PASS — files scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS — desk integrity"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Five-store data policy is fully codified and bounded",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Quality gates pass cleanly with no secret exposures or unowned paths",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [
+    "External agent-substrate companion PR delivery and merge (data-planes.md, railway-tailscale.md, .env.example)",
+    "Live bun test suite executions within agent-substrate repository packages",
+    "Live Hindsight embedding dimension alignment and live container version verification",
+    "Local Claude Code stdio and Hermes memory configuration backups prior to retirement"
+  ]
+}

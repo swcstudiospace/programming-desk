@@ -1,0 +1,393 @@
+{
+  "schema": "desk.swarm.roster.v1",
+  "source": "agent-swarm agents.json (swarm.manifest.v1 1.0.0), adapted for the Programming Desk",
+  "note": "Regenerate .claude/agents and .claude/commands with: python3 .claude/skills/desk-swarm/generate.py",
+  "defaults": {
+    "model": "sonnet"
+  },
+  "agents": [
+    {
+      "id": "A01",
+      "code": "ORCH",
+      "slug": "a01-orchestrator",
+      "name": "Swarm Orchestrator",
+      "model": "opus",
+      "lane": "control",
+      "class": "control",
+      "max_parallel": 8,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Agent",
+        "Write"
+      ],
+      "description": "Swarm control plane. Use to decompose a brief into a task DAG, schedule/assign tasks to the other 14 agents, enforce gates and budgets, arbitrate conflicts and escalate to humans. Owns the plan, never writes code/docs/IaC.",
+      "capabilities": [
+        "plan.decompose",
+        "plan.schedule",
+        "plan.arbitrate",
+        "plan.escalate"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A02",
+      "code": "REQ",
+      "slug": "a02-requirements",
+      "name": "Requirements Engineer",
+      "model": "sonnet",
+      "lane": "delivery",
+      "class": "delivery",
+      "max_parallel": 4,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Turns briefs into a requirements spec, user stories and machine-checkable acceptance criteria (Given/When/Then). Use at the start of any feature or when criteria are ambiguous/untestable.",
+      "capabilities": [
+        "req.elicit",
+        "req.spec",
+        "req.acceptance"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A03",
+      "code": "ARCH",
+      "slug": "a03-architect",
+      "name": "Solution Architect",
+      "model": "opus",
+      "lane": "delivery",
+      "class": "delivery",
+      "max_parallel": 3,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Produces the C4 blueprint, API contracts (OpenAPI/AsyncAPI), ADRs and tech-stack decisions from requirements. Use for design tasks, contract changes and architecture fitness checks.",
+      "capabilities": [
+        "design.blueprint",
+        "design.contract",
+        "design.adr",
+        "design.fitness"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A04",
+      "code": "UXD",
+      "slug": "a04-ux-designer",
+      "name": "UX Designer",
+      "model": "sonnet",
+      "lane": "delivery",
+      "class": "delivery",
+      "max_parallel": 3,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns design tokens, wireframes, UX specs and accessibility (WCAG) requirements. Use for any UI-facing feature before frontend implementation.",
+      "capabilities": [
+        "ux.tokens",
+        "ux.spec",
+        "ux.a11y"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A05",
+      "code": "BE",
+      "slug": "a05-backend",
+      "name": "Backend Engineer",
+      "model": "sonnet",
+      "lane": "code",
+      "class": "build",
+      "max_parallel": 6,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Implements backend services against A03 contracts and A07 data contracts, with unit tests. Use for server-side code, APIs, business logic and hotfix patches.",
+      "capabilities": [
+        "code.backend",
+        "code.api",
+        "code.patch"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A06",
+      "code": "FE",
+      "slug": "a06-frontend",
+      "name": "Frontend Engineer",
+      "model": "sonnet",
+      "lane": "code",
+      "class": "build",
+      "max_parallel": 6,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Implements UI against A04 tokens/UX specs and A03 API contracts, with component tests and a11y checks. Use for client-side code.",
+      "capabilities": [
+        "code.frontend",
+        "code.ui",
+        "code.patch"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A07",
+      "code": "DATA",
+      "slug": "a07-data",
+      "name": "Data Engineer",
+      "model": "sonnet",
+      "lane": "code",
+      "class": "build",
+      "max_parallel": 3,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns data models, schema migrations (expand/contract, reversible) and data contracts. Use for any persistence, migration or pipeline change.",
+      "capabilities": [
+        "data.model",
+        "data.migration",
+        "data.contract",
+        "data.pipeline"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A08",
+      "code": "QA",
+      "slug": "a08-qa",
+      "name": "Test Engineer",
+      "model": "sonnet",
+      "lane": "verify",
+      "class": "verify",
+      "max_parallel": 8,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Quality gate. Translates acceptance criteria into test suites, runs them, files defects and issues the signed quality gate verdict. Never modifies product code.",
+      "capabilities": [
+        "test.plan",
+        "test.unit",
+        "test.integration",
+        "test.e2e",
+        "test.perf",
+        "gate.quality"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A09",
+      "code": "REV",
+      "slug": "a09-reviewer",
+      "name": "Code Reviewer",
+      "model": "opus",
+      "lane": "verify",
+      "class": "verify",
+      "max_parallel": 8,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
+      "description": "Review gate. Reviews diffs for correctness, standards and contract adherence and issues the signed review verdict with structured findings. Read-only on product code.",
+      "capabilities": [
+        "review.code",
+        "review.standards",
+        "gate.review"
+      ],
+      "read_only": true
+    },
+    {
+      "id": "A10",
+      "code": "SEC",
+      "slug": "a10-security",
+      "name": "Security Auditor",
+      "model": "opus",
+      "lane": "verify",
+      "class": "verify",
+      "max_parallel": 6,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
+      "description": "Security gate. Runs SAST/secrets/dependency/IaC checks, threat-models changes, and issues the signed security gate verdict. Fail-closed; can never accept risk itself.",
+      "capabilities": [
+        "sec.sast",
+        "sec.secrets",
+        "sec.deps",
+        "sec.threatmodel",
+        "gate.security"
+      ],
+      "read_only": true
+    },
+    {
+      "id": "A11",
+      "code": "DEVOPS",
+      "slug": "a11-devops",
+      "name": "DevOps / Platform Engineer",
+      "model": "sonnet",
+      "lane": "ops",
+      "class": "operate",
+      "max_parallel": 4,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns IaC, CI pipelines, build artifacts and environments. Use to provision environments, build/sign artifacts and validate pipeline configuration.",
+      "capabilities": [
+        "deploy.env",
+        "ci.pipeline",
+        "build.artifact",
+        "iac.change"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A12",
+      "code": "REL",
+      "slug": "a12-release",
+      "name": "Release Manager",
+      "model": "sonnet",
+      "lane": "ops",
+      "class": "operate",
+      "max_parallel": 2,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write"
+      ],
+      "description": "Owns release plans, progressive delivery (canary) and rollback. Use once all gates are green to plan/promote a release, or to freeze/rollback on incident.",
+      "capabilities": [
+        "release.plan",
+        "release.promote",
+        "release.rollback",
+        "gate.release"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A13",
+      "code": "OBS",
+      "slug": "a13-observability",
+      "name": "Observability / SRE",
+      "model": "sonnet",
+      "lane": "ops",
+      "class": "operate",
+      "max_parallel": 4,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns SLOs, dashboards, alerting and incident declaration. Use to define SLOs for a service, compute error-budget burn, or declare/triage incidents.",
+      "capabilities": [
+        "obs.slo",
+        "obs.alerts",
+        "obs.incident",
+        "obs.telemetry"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A14",
+      "code": "MAINT",
+      "slug": "a14-maintenance",
+      "name": "Maintenance Engineer",
+      "model": "sonnet",
+      "lane": "sustain",
+      "class": "sustain",
+      "max_parallel": 4,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns patch tasks, dependency bumps, tech-debt register and EOL tracking. Use for hotfix root-cause analysis, CVE-driven patching and debt triage.",
+      "capabilities": [
+        "maint.patch",
+        "maint.deps",
+        "maint.debt",
+        "maint.rca"
+      ],
+      "read_only": false
+    },
+    {
+      "id": "A15",
+      "code": "DOC",
+      "slug": "a15-docs",
+      "name": "Documentation Engineer",
+      "model": "haiku",
+      "lane": "sustain",
+      "class": "sustain",
+      "max_parallel": 4,
+      "tools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "description": "Owns docs bundles, API references, runbooks and changelogs. Use after design/implementation/release to document artifacts and validate doc links/coverage.",
+      "capabilities": [
+        "docs.bundle",
+        "docs.api",
+        "docs.runbook",
+        "docs.changelog"
+      ],
+      "read_only": false
+    }
+  ]
+}

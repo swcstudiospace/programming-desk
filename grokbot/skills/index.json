@@ -96,6 +96,7 @@
       "ref": "bot-00-programming-lead/grokbot-skills-index",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/70",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "Calls the seat gateway for brief, recall, retain, docs, events, ownership, receipts and doctor. Memory is reached only through that gateway."
     },
@@ -106,6 +107,7 @@
       "ref": "bot-00-programming-lead/grokbot-skills-index",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/70",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "One /desk-run command that chains planning, gateway memory and Cursor cloud dispatch through to a draft pull request and the Greptile gate."
     }

@@ -48,9 +48,16 @@ jobs:
       - name: Fetch base ref
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
+        # Checkout above is already fetch-depth: 0. Do not pass --depth here.
+        # `git fetch --depth=1` writes a shallow boundary at the new base tip and
+        # hides every ancestor, even when those objects were already local. Once
+        # main has moved past this PR's fork point, origin/$BASE_REF and HEAD have
+        # no merge base, so --log-opts="origin/$BASE_REF..HEAD" walks the whole
+        # branch and reports fixture tokens this PR never touched. The refspec
+        # updates the remote-tracking ref with its history and does not shallow.
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
 
       - name: Gitleaks — scan only this PR's commits
         env:
@@ -126,7 +133,10 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          # Same full-history fetch as the gitleaks job. --depth=1 leaves
+          # --baseline-commit with no merge base and semgrep exits 2 before it
+          # reports any finding.
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           semgrep \
             --config ci/security/semgrep.yml \
             --config p/security-audit \
@@ -195,7 +205,9 @@ jobs:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          # Same full-history fetch as the gitleaks job. --depth=1 would shallow
+          # the base tip this worktree is checked out from.
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           # A fixed path (e.g. /tmp/bandit-baseline) collides across runs on this self-hosted
           # runner, which reuses its filesystem between jobs: a cancelled or crashed run can
           # leave the worktree registered, and `git worktree add` on the next PR then fails

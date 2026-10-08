@@ -71,6 +71,38 @@ class TestNoBypass:
                 assert snippet not in block, f"bypass {snippet!r} found in a workflow run: block"
 
 
+class TestBaseRefFetchKeepsHistory:
+    """A --depth=1 fetch of the base ref shallows that tip.
+
+    Checkout is already fetch-depth: 0. Fetching the base with --depth=1 writes a
+    shallow boundary at the new tip and hides its ancestors. When main has moved
+    past the PR's fork point, origin/$BASE_REF and HEAD then have no merge base:
+    gitleaks' origin/$BASE_REF..HEAD walks the whole branch (fixture tokens
+    included) and semgrep --baseline-commit exits 2. Confirmed on git 2.43 with a
+    branch cut from an older main: the depth-1 fetch yielded 142 commits in the
+    range, 21 gitleaks fixture hits, and semgrep exit 2; the full refspec fetch
+    yielded 1 commit, 0 gitleaks findings, and semgrep exit 0.
+    """
+
+    FULL_FETCH = (
+        'git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"'
+    )
+
+    def test_base_ref_is_not_fetched_shallow(self, workflow):
+        for block in _all_run_blocks(workflow):
+            commands = "\n".join(
+                line for line in block.splitlines() if not line.strip().startswith("#")
+            )
+            assert "--depth=" not in commands, "a depth-limited base fetch cuts history the scanners need"
+
+    def test_each_history_scanner_fetches_the_base_in_full(self, workflow):
+        for job_name in ("secrets", "semgrep", "bandit"):
+            blocks = [step["run"] for step in _job(workflow, job_name)["steps"] if "run" in step]
+            assert any(self.FULL_FETCH in block for block in blocks), (
+                f"{job_name} does not fetch the base ref with its history"
+            )
+
+
 class TestGitleaksBlocks:
     def test_exit_code_1_on_leak(self, workflow):
         step = _step(_job(workflow, "secrets"), "Gitleaks")

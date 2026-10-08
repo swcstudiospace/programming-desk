@@ -12,8 +12,8 @@ This document defines the requirements for Milestone v2.4 of Programming Desk.
 
 ## 2. Autonomous Chaos Recovery & Self-Healing Resilience (Phase 15)
 
-- **REQ-CHAOS-001**: Synthetic chaos injection harness simulating intermittent upstream network partitions, packet loss, and latency spikes across Railway dependencies.
-- **REQ-CHAOS-002**: Automated self-healing supervisor detecting corrupted or partitioned seat instances and triggering zero-downtime hot reconstitution.
-- **REQ-CHAOS-003**: Autonomous task graph rebalancing algorithm dynamically redistributing unacknowledged seat workloads upon seat crash or unresponsiveness.
-- **REQ-CHAOS-004**: Automated dead-letter queue (DLQ) replay orchestrator with exponential backoff, jitter, and poisonous payload quarantine.
-- **REQ-CHAOS-005**: Continuous resilience verification suite validating system-wide RPO (Recovery Point Objective = 0) and RTO (Recovery Time Objective < 3s) during chaos drills.
+- [x] **REQ-CHAOS-001**: Synthetic chaos injection harness simulating intermittent upstream network partitions, packet loss, and latency spikes across Railway dependencies.
+- [x] **REQ-CHAOS-002**: Automated self-healing supervisor detecting corrupted or partitioned seat instances and triggering zero-downtime hot reconstitution.
+- [x] **REQ-CHAOS-003**: Autonomous task graph rebalancing algorithm dynamically redistributing unacknowledged seat workloads upon seat crash or unresponsiveness.
+- [x] **REQ-CHAOS-004**: Automated dead-letter queue (DLQ) replay orchestrator with exponential backoff, jitter, and poisonous payload quarantine.
+- [x] **REQ-CHAOS-005**: Continuous resilience verification suite validating system-wide RPO (Recovery Point Objective = 0) and RTO (Recovery Time Objective < 3s) during chaos drills.

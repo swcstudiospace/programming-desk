@@ -65,11 +65,14 @@ from desk_gateway.vector_clock import (
     union_vector_clocks,
 )
 from desk_gateway.chaos import ChaosException, ChaosHarness, ChaosRule, FaultType
+from desk_gateway.dlq_replay import DLQReplayOrchestrator
+from desk_gateway.resilience import ResilienceVerifier
 from desk_gateway.supervisor import (
     SeatHealthStatus,
     SeatRuntimeProfile,
     SelfHealingSupervisor,
 )
+from desk_gateway.workload import WorkloadRebalancer
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -2361,6 +2364,83 @@ def create_mcp(
         result = healing_supervisor.reconstitute_seat(seat)
         return JSONResponse(result, status_code=200 if result.get("ok") else 500)
 
+    # --- Workload Rebalancing REST Endpoints (REQ-CHAOS-003) ---
+    workload_rebalancer = WorkloadRebalancer(supervisor=healing_supervisor, store=store, local_region_id=wan_router.local_region_id)
+    mcp._workload_rebalancer = workload_rebalancer  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/workload/rebalance", methods=["POST"])
+    async def workload_rebalance_post(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        failed_seat = body.get("failed_seat")
+        target_seat = body.get("target_seat")
+        if not failed_seat or failed_seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid or missing failed_seat. Allowed: {sorted(SEATS)}",
+                error_code="invalid_failed_seat",
+                instance=request.url.path,
+            )
+
+        reassigned = workload_rebalancer.rebalance_all_stored_graphs(failed_seat, target_seat)
+        return JSONResponse({
+            "ok": True,
+            "failed_seat": failed_seat,
+            "target_seat": target_seat,
+            "reassigned_count": len(reassigned),
+            "reassigned_tasks": reassigned,
+        })
+
+    # --- Dead-Letter Queue (DLQ) Replay Orchestrator Endpoints (REQ-CHAOS-004) ---
+    dlq_orchestrator = DLQReplayOrchestrator(store=store)
+    mcp._dlq_orchestrator = dlq_orchestrator  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/dlq/replay", methods=["POST"])
+    async def dlq_replay_post(_request: Request) -> Response:
+        async def dummy_intake_handler(item: dict[str, Any]) -> None:
+            # If payload marked corrupted/poison in metadata, trigger failure
+            if item.get("poison") or item.get("corrupted"):
+                raise ValueError("Intake parser rejected poisonous payload")
+
+        results = await dlq_orchestrator.replay_all_dlq(dummy_intake_handler)
+        return JSONResponse({
+            "ok": True,
+            "replayed_count": len(results),
+            "results": [r.to_dict() for r in results],
+            "quarantined_count": len(dlq_orchestrator.get_quarantined_items()),
+        })
+
+    # --- Resilience Verification Drill Endpoints (REQ-CHAOS-005) ---
+    resilience_verifier = ResilienceVerifier(
+        chaos_harness=chaos_harness,
+        supervisor=healing_supervisor,
+        rebalancer=workload_rebalancer,
+        dlq_replay=dlq_orchestrator,
+        store=store,
+    )
+    mcp._resilience_verifier = resilience_verifier  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/resilience/verify", methods=["GET", "POST"])
+    async def resilience_verify_drill(_request: Request) -> Response:
+        drill_seat = await resilience_verifier.run_seat_failure_recovery_drill()
+        drill_rebalance = await resilience_verifier.run_workload_rebalance_drill()
+        summary = resilience_verifier.get_summary()
+        return JSONResponse({
+            "ok": summary["all_slas_met"],
+            "summary": summary,
+            "drills": [drill_seat.to_dict(), drill_rebalance.to_dict()],
+        })
+
     return mcp
 
 
@@ -2470,6 +2550,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "impairment_manager": impairment_mgr,
         "chaos_harness": getattr(mcp, "_chaos_harness", None),
         "supervisor": getattr(mcp, "_healing_supervisor", None),
+        "workload_rebalancer": getattr(mcp, "_workload_rebalancer", None),
+        "dlq_orchestrator": getattr(mcp, "_dlq_orchestrator", None),
+        "resilience_verifier": getattr(mcp, "_resilience_verifier", None),
     }
     return app, settings
 

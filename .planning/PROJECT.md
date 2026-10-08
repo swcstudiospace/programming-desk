@@ -23,13 +23,14 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 - ✓ Phase 5: Prompts, skills, templates, plugin — REQ-SHARE-001 through REQ-SHARE-040 (v2.0)
 - ✓ Phase 6: Fresh-desk acceptance and external intake — REQ-ACCEPT-001 through REQ-ACCEPT-034 (v2.0)
 - ✓ Phase 7: Ordered rollout and rollback — REQ-ROLLOUT-001 through REQ-ROLLOUT-013 (v2.0)
+- ✓ Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010 (v2.1)
+- ✓ Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010 (v2.1)
 
-All 217 requirements shipped and verified in Milestone v2.0.
+All 237 requirements shipped and verified across Milestones v2.0 and v2.1.
 
 ### Active
 
-- [ ] Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010.
-- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010.
+None. All active milestone phases complete. Current milestone v2.1 is shipped.
 
 ### Out of Scope
 
@@ -79,4 +80,4 @@ Evidence-worker-owned durable artifacts: [implementation map](intel/implementati
 After each verified transition, update active/validated requirements and decisions only from actual evidence, preserving unverified limits. At milestone closure review scope, source crosswalk, external receipts and human checkpoints; do not infer completion from initialized files.
 
 ---
-*Last updated: 2026-10-08 after v2.0 milestone completion.*
+*Last updated: 2026-10-08 after v2.1 milestone completion.*

@@ -112,8 +112,22 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
   4. Timescale is transactional authority for intake/claims/30-day idempotency/roster/receipts/packs and specified hypertables/aggregates/retention; Greptime has redacted append-only chain, hourly devnet anchoring and 180-day hot export.
   5. RAGFlow covers desk/substrate and KanbanOS/Desk Lanes/ClippyOS/Auctioning docs, redacted main-merge ingest, heading/chunk citations, last-five versions and TEI bge-small; per-package actual test receipts retain limits.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**:
+**Wave 1**
+- [x] 03-01-PLAN.md — Companion integration contract, environment configurations, and external dependency boundaries
+
+**Wave 2**
+- [x] 03-02-PLAN.md — Hindsight semantic memory adapter specifications, bank isolation, and migration procedures
+- [x] 03-03-PLAN.md — Dragonfly cache-only architecture, TTL matrices, and fall-through validation plan
+
+**Wave 3**
+- [x] 03-04-PLAN.md — TimescaleDB relational coordination schema, hypertables, and continuous aggregate plans
+- [x] 03-05-PLAN.md — GreptimeDB ledger anchoring and RAGFlow document plane specifications
+
+**Wave 4**
+- [x] 03-06-PLAN.md — Consolidated Phase 3 data plane receipt and quality gates validation
+
+**Status**: In progress
 **Responsibility**: SYSTEMS in agent-substrate. Primary requirement assignment is Phase 3; later consumer evidence is retained in source references.
 **Human/runtime checkpoint**: agent-substrate owners must deliver/review/merge companion work and runtime owners authorize memory-config migration/backups. Hindsight image 0.9.1/public health is not live version/embedding/bank/cutover acceptance.
 

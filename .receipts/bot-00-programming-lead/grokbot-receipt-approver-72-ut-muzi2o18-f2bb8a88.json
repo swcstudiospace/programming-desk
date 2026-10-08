@@ -168,5 +168,6 @@
   "contract_changes": [],
   "rollback_plan": null,
   "approvals": [],
+  "approved_by": "bot-06-quality-security",
   "loop_acks": []
 }

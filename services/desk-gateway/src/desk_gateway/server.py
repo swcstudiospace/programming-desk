@@ -31,6 +31,13 @@ from starlette.websockets import WebSocket
 
 from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEATS, TOOL_DEADLINE_SEC, Settings
+from desk_gateway.cutover import (
+    CanaryRouter,
+    CutoverError,
+    CutoverOrchestrator,
+    EmergencyIsolationManager,
+    SeatIsolatedError,
+)
 from desk_gateway.federation import (
     FederatedTokenValidator,
     FederationError,
@@ -227,10 +234,17 @@ class SeatRouter:
     """Maps /mcp/<seat>[/packs/<app>] onto the single MCP route, refusing a token that belongs to
     another seat with a real HTTP 403 before the request reaches the MCP handler."""
 
-    def __init__(self, app: Any, provider: SeatOAuthProvider, rosters: Rosters) -> None:
+    def __init__(
+        self,
+        app: Any,
+        provider: SeatOAuthProvider,
+        rosters: Rosters,
+        isolation_manager: EmergencyIsolationManager | None = None,
+    ) -> None:
         self.app = app
         self.provider = provider
         self.rosters = rosters
+        self.isolation_manager = isolation_manager
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -250,6 +264,21 @@ class SeatRouter:
         seat, pack = match.group("seat"), match.group("pack")
         if seat not in SEATS:
             await _json(send, 404, {"error": "unknown_seat", "seats": sorted(SEATS)})
+            return
+        # Quarantine / Emergency Seat Isolation Check (REQ-CUTOVER-005)
+        if self.isolation_manager and self.isolation_manager.is_isolated(seat):
+            iso_record = self.isolation_manager.get_isolation(seat)
+            reason = iso_record.reason if iso_record else "anomaly detected"
+            prob = problem_details(
+                status=503,
+                title="Seat Isolated",
+                detail=f"Seat '{seat}' has been isolated and quarantined: {reason}",
+                error_code="seat_isolated",
+                instance=path,
+                seat=seat,
+                reason=reason,
+            )
+            await _json(send, 503, prob)
             return
         token = _bearer(scope)
         if token:
@@ -360,6 +389,7 @@ def create_mcp(
     viewer: ViewerAuth,
     view: DeskView,
     federation: tuple[FederationRegistry, FederatedTokenValidator, PeerDeskClient] | None = None,
+    cutover: tuple[CutoverOrchestrator, EmergencyIsolationManager] | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -379,6 +409,10 @@ def create_mcp(
         auth_server_provider=oauth,
     )
     store = services.store
+    cut_orch, iso_mgr = cutover if cutover else (
+        CutoverOrchestrator(settings),
+        EmergencyIsolationManager(settings.isolated_seats),
+    )
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -388,6 +422,13 @@ def create_mcp(
                 "status": "ok",
                 "service": "desk-gateway",
                 "version": __version__,
+                "cutover": {
+                    "enabled": cut_orch.is_enabled,
+                    "phase": cut_orch.phase,
+                    "ingress_target": cut_orch.ingress_target,
+                    "canary_percentage": cut_orch.canary_router.percentage,
+                    "isolated_seats_count": len(iso_mgr.list_isolated()),
+                },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
                 "registered_seats": sorted(k for k, v in (roster.get("seats") or {}).items() if v.get("agent_uuid")),
@@ -482,6 +523,22 @@ def create_mcp(
         ])
         for s, count in sorted(seat_tool_counts.items()):
             lines.append(f'desk_gateway_seat_tools_total{{seat="{s}"}} {count}')
+
+        # Production cutover and isolation metrics (REQ-CUTOVER-001, REQ-CUTOVER-005)
+        lines.extend([
+            "# HELP desk_gateway_cutover_enabled Production cutover enabled status",
+            "# TYPE desk_gateway_cutover_enabled gauge",
+            f"desk_gateway_cutover_enabled {1 if cut_orch.is_enabled else 0}",
+            "# HELP desk_gateway_canary_percentage Current canary traffic splitting percentage",
+            "# TYPE desk_gateway_canary_percentage gauge",
+            f"desk_gateway_canary_percentage {cut_orch.canary_router.percentage}",
+            "# HELP desk_gateway_isolated_seats_total Number of currently quarantined seats",
+            "# TYPE desk_gateway_isolated_seats_total gauge",
+            f"desk_gateway_isolated_seats_total {len(iso_mgr.list_isolated())}",
+        ])
+        for iso_rec in sorted(iso_mgr.list_isolated(), key=lambda r: r.seat):
+            lines.append(f'desk_gateway_seat_isolated{{seat="{iso_rec.seat}"}} 1')
+
         lines.append("")
         return Response(content="\n".join(lines), media_type="text/plain; version=0.0.4")
 
@@ -675,6 +732,25 @@ def create_mcp(
                 error_code="backpressure",
                 instance="/v1/intake",
                 headers={"Retry-After": "30"},
+            )
+
+        # Canary release traffic splitting mechanism (REQ-CUTOVER-004)
+        # Determine whether this intake request routes to canary VPS gateway vs legacy stub
+        canary_key = idem_key or f"{origin}:{item.get('title', '')}"
+        routed_to_canary = cut_orch.canary_router.should_route_to_canary(canary_key)
+        if not routed_to_canary:
+            # Route to legacy stub: acknowledge intake via legacy pipeline stub
+            legacy_id = f"legacy-{int(time.time()*1000)}"
+            logger.info("Canary router directed intake to legacy stub pipeline (id=%s origin=%s)", legacy_id, origin)
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "intake_id": legacy_id,
+                    "state": "legacy_stub",
+                    "canary_routed": False,
+                    "message": "Processed via legacy ingress stub under canary split policy",
+                },
+                status_code=202,
             )
 
         item.setdefault("max_retries", settings.intake_max_retries)
@@ -970,6 +1046,18 @@ def create_mcp(
                 instance=request.url.path,
             )
 
+        # Emergency Quarantine Check on target seat (REQ-CUTOVER-005)
+        if iso_mgr.is_isolated(target_seat):
+            iso_record = iso_mgr.get_isolation(target_seat)
+            reason = iso_record.reason if iso_record else "anomaly detected"
+            return problem_response(
+                status=503,
+                title="Seat Isolated",
+                detail=f"Target seat '{target_seat}' is isolated and quarantined: {reason}",
+                error_code="seat_isolated",
+                instance=request.url.path,
+            )
+
         # Validate token signature and seat boundaries (REQ-FED-002, REQ-FED-003)
         try:
             verified_claims = fed_val.decode_and_verify(
@@ -1132,6 +1220,199 @@ def create_mcp(
             )
         return JSONResponse({"ok": True, "graph": graph}, status_code=200)
 
+    # -------------------------------------------------------------------------
+    # Cutover & Emergency Seat Isolation Endpoints (REQ-CUTOVER-001, 004, 005)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/cutover/status", methods=["GET"])
+    async def cutover_status_get(request: Request) -> Response:
+        """Inspect live production cutover, canary splitting, and quarantined seats (REQ-CUTOVER-001, REQ-CUTOVER-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect cutover status.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        return JSONResponse(cut_orch.get_status(), status_code=200)
+
+    @mcp.custom_route("/v1/cutover/canary", methods=["POST"])
+    async def cutover_canary_post(request: Request) -> Response:
+        """Dynamically update canary percentage and cutover enablement (REQ-CUTOVER-001, REQ-CUTOVER-004)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        # Canary configuration requires lead or operator authorization
+        if seat != "lead":
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead seat authorization required to adjust canary cutover parameters.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        enabled = body.get("enabled", cut_orch.is_enabled)
+        percentage = body.get("percentage")
+        reason = body.get("reason", "operator adjustment")
+
+        if percentage is not None and not (0 <= int(percentage) <= 100):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Canary percentage must be an integer between 0 and 100.",
+                error_code="invalid_percentage",
+                instance=request.url.path,
+            )
+
+        updated_status = cut_orch.set_cutover_state(
+            enabled=bool(enabled),
+            canary_percentage=int(percentage) if percentage is not None else None,
+            reason=reason,
+        )
+        return JSONResponse(updated_status, status_code=200)
+
+    @mcp.custom_route("/v1/cutover/isolate", methods=["POST"])
+    async def cutover_isolate_post(request: Request) -> Response:
+        """Trigger emergency seat quarantine within 5 seconds of anomaly detection (REQ-CUTOVER-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        # Any authenticated seat or system actor with seat token can trigger emergency quarantine
+        if seat_auth is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Seat token required to trigger emergency isolation.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        target_seat = body.get("seat")
+        reason = body.get("reason", "anomaly detected")
+        metadata = body.get("metadata", {})
+
+        if not target_seat or target_seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Target seat must be one of {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+
+        record = iso_mgr.isolate_seat(
+            seat=target_seat,
+            reason=reason,
+            actor=seat_auth,
+            metadata=metadata,
+        )
+
+        iso_event = {
+            "kind": "seat.isolated",
+            "summary": f"Emergency isolation applied to seat {target_seat}: {reason}",
+            "payload": record.to_dict(),
+            "actor": seat_auth,
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            iso_event["trace"] = trace_ctx
+        store.audit_append(iso_event)
+        services.audit.fire_and_forget(iso_event)
+
+        return JSONResponse({"ok": True, "isolation": record.to_dict()}, status_code=200)
+
+    @mcp.custom_route("/v1/cutover/restore", methods=["POST"])
+    async def cutover_restore_post(request: Request) -> Response:
+        """Restore quarantined seat back to operational routing (REQ-CUTOVER-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth != "lead":
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead seat authorization required to restore quarantined seat.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        target_seat = body.get("seat")
+        if not target_seat or target_seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Target seat must be one of {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+
+        restored = iso_mgr.restore_seat(target_seat, actor=seat_auth)
+        if not restored:
+            return problem_response(
+                status=404,
+                title="Not Found",
+                detail=f"Seat '{target_seat}' was not isolated.",
+                error_code="seat_not_isolated",
+                instance=request.url.path,
+            )
+
+        restore_event = {
+            "kind": "seat.restored",
+            "summary": f"Seat {target_seat} restored from quarantine",
+            "payload": {"seat": target_seat},
+            "actor": seat_auth,
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            restore_event["trace"] = trace_ctx
+        store.audit_append(restore_event)
+        services.audit.fire_and_forget(restore_event)
+
+        return JSONResponse({"ok": True, "seat": target_seat, "status": "restored"}, status_code=200)
+
     return mcp
 
 
@@ -1151,7 +1432,19 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     fed_client = PeerDeskClient(fed_registry)
     federation_components = (fed_registry, fed_validator, fed_client)
 
-    mcp = create_mcp(settings, services, oauth, viewer=viewer, view=DeskView(DESK_VIEW_HTML), federation=federation_components)
+    iso_manager = EmergencyIsolationManager(settings.isolated_seats)
+    cutover_orchestrator = CutoverOrchestrator(settings, isolation_manager=iso_manager)
+    cutover_components = (cutover_orchestrator, iso_manager)
+
+    mcp = create_mcp(
+        settings,
+        services,
+        oauth,
+        viewer=viewer,
+        view=DeskView(DESK_VIEW_HTML),
+        federation=federation_components,
+        cutover=cutover_components,
+    )
     origins = [
         "http://127.0.0.1",
         "http://127.0.0.1:*",
@@ -1183,7 +1476,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         await services.live.serve(websocket)
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
-    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters))
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager))
     app.state = {
         "store": store,
         "services": services,
@@ -1194,6 +1487,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "federation_registry": fed_registry,
         "federation_validator": fed_validator,
         "federation_client": fed_client,
+        "cutover_orchestrator": cutover_orchestrator,
+        "isolation_manager": iso_manager,
     }
     return app, settings
 

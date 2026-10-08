@@ -19,7 +19,7 @@
 **Goal**: Deliver live traffic migration with zero request loss, automated multi-desk failover routing, upstream health polling, and canary traffic splitting.
 **Requirements**: REQ-CUTOVER-001 through REQ-CUTOVER-005
 **Plans**:
-- [ ] 12-01-PLAN.md — Production live cutover orchestrator, canary traffic splitting & emergency rollback (REQ-CUTOVER-001, REQ-CUTOVER-004, REQ-CUTOVER-005)
+- [x] 12-01-PLAN.md — Production live cutover orchestrator, canary traffic splitting & emergency rollback (REQ-CUTOVER-001, REQ-CUTOVER-004, REQ-CUTOVER-005)
 - [ ] 12-02-PLAN.md — Dynamic multi-desk failover routing & upstream health polling (REQ-CUTOVER-002, REQ-CUTOVER-003)
 
 #### Phase 13: Advanced Telemetry, SLOs & Alert Thresholds

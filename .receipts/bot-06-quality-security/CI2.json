@@ -1,0 +1,158 @@
+{
+  "task_id": "CI2",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/security-gate-full-base-fetch",
+  "started_at": "2026-10-08T23:20:00Z",
+  "completed_at": "2026-10-08T23:30:53Z",
+  "commands": [
+    {
+      "cmd": "git -C /tmp/ci2/bad rev-parse --is-shallow-repository && git -C /tmp/ci2/bad rev-list --count origin/main..HEAD; git -C /tmp/ci2/bad merge-base origin/main HEAD",
+      "exit_code": 1,
+      "duration_s": 0.01,
+      "output_tail": "true\n142"
+    },
+    {
+      "cmd": "git -C /tmp/ci2/good rev-parse --is-shallow-repository && git -C /tmp/ci2/good merge-base --is-ancestor $(git -C /tmp/ci2/good merge-base origin/main HEAD) HEAD && git -C /tmp/ci2/good rev-list --count origin/main..HEAD",
+      "exit_code": 0,
+      "duration_s": 0.01,
+      "output_tail": "false\n1"
+    },
+    {
+      "cmd": "cd /tmp/ci2/bad && /tmp/ci2/gitleaks detect --source . --config ci/security/gitleaks.toml --log-opts=\"origin/main..HEAD\" --report-format json --report-path /tmp/ci2/gl-bad.json --exit-code 1 >/tmp/ci2/gl-bad.out 2>&1; ec=$?; python3 -c 'import json; from collections import Counter; from pathlib import Path; p=Path(\"/tmp/ci2/gl-bad.json\"); data=json.loads(p.read_text()); c=Counter(f.get(\"File\",\"?\") for f in data); print(\"findings\", len(data));\n[print(f\"{n} {f}\") for f,n in sorted(c.items())]'; exit $ec",
+      "exit_code": 1,
+      "duration_s": 0.88,
+      "output_tail": "findings 21\n18 ci/tests/test_gates.py\n1 services/desk-gateway/tests/test_server.py\n2 services/desk-gateway/tests/test_units.py"
+    },
+    {
+      "cmd": "cd /tmp/ci2/good && /tmp/ci2/gitleaks detect --source . --config ci/security/gitleaks.toml --log-opts=\"origin/main..HEAD\" --report-format json --report-path /tmp/ci2/gl-good.json --exit-code 1 >/tmp/ci2/gl-good.out 2>&1; ec=$?; python3 -c 'import json; from pathlib import Path; p=Path(\"/tmp/ci2/gl-good.json\"); data=json.loads(p.read_text()) if p.exists() and p.stat().st_size else []; print(\"findings\", len(data))'; exit $ec",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "findings 0"
+    },
+    {
+      "cmd": "cd /tmp/ci2/bad && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --severity ERROR --error --baseline-commit origin/main --metrics off . >/tmp/ci2/sg-bad.out 2>&1; ec=$?; python3 -c 'from pathlib import Path; t=Path(\"/tmp/ci2/sg-bad.out\").read_text(errors=\"replace\"); print(\"\\n\".join([ln for ln in t.splitlines() if ln.strip()][-8:]))'; exit $ec",
+      "exit_code": 2,
+      "duration_s": 1.44,
+      "output_tail": "Exception: Error initializing baseline. While running command ['git', 'diff', '--cached', '--name-status', '--no-ext-diff', '-z', '--diff-filter=ACDMRTUXB', '--ignore-submodules', '--relative', 'origin/main', '--merge-base', '--'] received non-zero exit status of 128.\n(strerr)->fatal: no merge base found"
+    },
+    {
+      "cmd": "cd /tmp/ci2/good && semgrep --config ci/security/semgrep.yml --config p/security-audit --config p/secrets --severity ERROR --error --baseline-commit origin/main --metrics off . >/tmp/ci2/sg-good.out 2>&1; ec=$?; python3 -c 'from pathlib import Path; t=Path(\"/tmp/ci2/sg-good.out\").read_text(errors=\"replace\"); print(\"\\n\".join([ln for ln in t.splitlines() if ln.strip()][-12:]))'; exit $ec",
+      "exit_code": 0,
+      "duration_s": 1.69,
+      "output_tail": "Findings: 0 (0 blocking)\nRules run: 89\nTargets scanned: 0\nScan was limited to files changed since baseline commit.\nRan 89 rules on 0 files: 0 findings."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.08,
+      "output_tail": "293 passed in 9.08s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files .github/workflows/security-pr.yml ci/tests/test_security_workflows.py .receipts/bot-06-quality-security/CI2.json",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Depth-1 fetch of main past the fork point leaves the repo shallow, with no merge base and 142 commits in origin/main..HEAD",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "Full refspec fetch leaves the repo unshallow and origin/main..HEAD contains the one PR commit",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Gitleaks on the shallow range reports 21 fixture hits in ci/tests/test_gates.py, services/desk-gateway/tests/test_units.py, and services/desk-gateway/tests/test_server.py",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "Gitleaks on the full-fetch range reports zero findings",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Semgrep --baseline-commit exits 2 with fatal: no merge base found when the base ref is shallow",
+      "evidence_command_index": 4,
+      "expects_failure": true
+    },
+    {
+      "claim": "Semgrep --baseline-commit exits 0 with zero blocking findings when the base ref was fetched with history",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "ci/tests suite passes, including the base-fetch regression tests",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Ownership manifest validates",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Ownership check of the committed workflow and test against origin/main passes",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Secret scan of the diff against origin/main exits 0",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "Diff touches no contract surface",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "Desk integrity check exits 0",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The workflow, the regression test, and this receipt resolve to bot-06-quality-security",
+      "evidence_command_index": 12
+    }
+  ],
+  "unverified": [
+    "Self-hosted Security PR Gate jobs on the pull request have not reported yet. Local reproduction used git 2.43.0, gitleaks 8.21.2, and semgrep 1.180.0 on throwaway clones, not the VPS runner.",
+    "The throwaway PR commit was empty, branched from cc79a74, with main at f01ab87 (12 commits ahead). Same failure mode as PR #122, not a replay of that pull request's 133 commits.",
+    "Bandit's finding diff, pip-audit, and Trivy were not re-executed. The bandit job lost the same --depth=1 fetch; its baseline scan was not run.",
+    "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict is expected to fail on that field alone."
+  ],
+  "files_changed": [
+    ".github/workflows/security-pr.yml",
+    "ci/tests/test_security_workflows.py",
+    ".receipts/bot-06-quality-security/CI2.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this commit with git revert. The next workflow run picks the previous fetch up immediately. No data, schema, or migration is involved.",
+  "approvals": []
+}

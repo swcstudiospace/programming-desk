@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 ## Current Position
 
 Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring
-Plan: 09-02 queued
-Status: Ready to execute Plan 09-02 (ETag caching, circuit breaker & graceful degradation)
-Last activity: 2026-10-08 — Plan 09-01 completed and merged via PR #91.
+Plan: 09-03 queued
+Status: Plan 09-02 completed and merged via PR #93; ready for Plan 09-03 (DLQ retry policies and terminal failure reporting)
+Last activity: 2026-10-08 — Plan 09-02 completed and merged via PR #93.
 
 ## Accumulated Context
 

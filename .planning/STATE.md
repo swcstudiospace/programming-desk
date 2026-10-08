@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v2.1
 milestone_name: Live Drills & Intake Hardening
-status: Planning Phase 8
-stopped_at: Initialized Milestone v2.1 requirements and roadmap for Phase 8 and Phase 9.
-last_updated: "2026-10-08T15:45:00.000Z"
+status: Ready to execute Phase 9 Plan 01
+stopped_at: Initialized Phase 9 plans (09-01 through 09-04) covering REQ-INTAKE-001 through REQ-INTAKE-010.
+last_updated: "2026-10-08T17:50:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Milestone v2.1 initialized (Phase 8 & 9)
-state_head: daa45a99ef87b00ec5e5dc8d542387114e912443
+last_activity_desc: Phase 9 planned and ready for execution
+state_head: 049ff8748fa7975d064cf27b409a4731be753e16
 progress:
   total_phases: 9
-  completed_phases: 7
-  total_plans: 41
-  completed_plans: 41
-  percent: 85
-current_phase: 8
-current_phase_name: Gateway Resiliency & Subagent Execution Drills
+  completed_phases: 8
+  total_plans: 49
+  completed_plans: 45
+  percent: 91
+current_phase: 9
+current_phase_name: External Intake Hardening & Telemetry Anchoring
 ---
 
 # Project State
@@ -25,15 +25,15 @@ current_phase_name: Gateway Resiliency & Subagent Execution Drills
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Phase 8 — Gateway Resiliency & Subagent Execution Drills
+**Current focus:** Phase 9 — External Intake Hardening & Telemetry Anchoring
 **Milestone:** v2.1 — Live Drills & Intake Hardening
 
 ## Current Position
 
-Phase: Phase 8 — Gateway Resiliency & Subagent Execution Drills
-Plan: 08-04 completed (Phase 8 Complete)
-Status: Completed Plan 08-04 (Intake Rate Limiting & Backpressure Drill)
-Last activity: 2026-10-08 — Phase 8 Plan 04 verified (PR #85 merged, 129/129 gateway tests clean)
+Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring
+Plan: 09-01 queued
+Status: Ready to execute Plan 09-01 (Webhook HMAC verification, schema validation & sliding idempotency)
+Last activity: 2026-10-08 — Phase 9 initialized with 4 execution plans covering REQ-INTAKE-001..010.
 
 ## Accumulated Context
 
@@ -64,3 +64,6 @@ Evidence: [implementation map](intel/implementation-map.md), [Phase 1 inventory]
 ## Operator Next Steps
 
 - Start the next milestone with /gsd-new-milestone
+
+
+[You have received this identical output 3 times. Re-reading '.planning/STATE.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]

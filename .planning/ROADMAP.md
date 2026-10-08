@@ -12,6 +12,16 @@
 - [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
 - [ ] Phase 9: External Intake Hardening & Telemetry Anchoring (0/4 plans)
 
+### Phase 9: External Intake Hardening & Telemetry Anchoring
+
+**Goal**: Deliver cryptographic webhook verification, schema validation, idempotency deduplication, resilient caching, circuit breaking, DLQ handling, secrets filtering, and OpenTelemetry trace anchoring.
+**Requirements**: REQ-INTAKE-001 through REQ-INTAKE-010
+**Plans**:
+- [ ] 09-01-PLAN.md — Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004)
+- [ ] 09-02-PLAN.md — ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007)
+- [ ] 09-03-PLAN.md — DLQ retry policies and terminal failure reporting (REQ-INTAKE-008)
+- [ ] 09-04-PLAN.md — OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010)
+
 ### Completed Milestones
 
 <details>
@@ -30,12 +40,13 @@ See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase deta
 
 ## Next Steps
 
-1. Execute Phase 8 Plan 01: Subagent integrity verification suite.
-2. Execute Phase 8 Plan 02: Desk Gateway loopback & concurrency drill.
-3. Execute Phase 8 Plan 03: Token error & problem details drill.
-4. Execute Phase 8 Plan 04: Diagnostic receipt verification & schema audit. (Completed)
-5. Initialize Phase 9: External Intake Hardening & Telemetry Anchoring.
+1. Execute Phase 9 Plan 01: Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004).
+2. Execute Phase 9 Plan 02: ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007).
+3. Execute Phase 9 Plan 03: DLQ retry policies and terminal failure reporting (REQ-INTAKE-008).
+4. Execute Phase 9 Plan 04: OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010).
 
 
 
 [You have received this identical output 3 times. Re-reading '/root/src/repos/programming-desk/.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
+
+[You have received this identical output 3 times. Re-reading '.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]

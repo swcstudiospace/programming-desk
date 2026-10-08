@@ -1,19 +1,19 @@
-# Requirements: Milestone v2.6 — FinOps Dynamic Token Budgeting & LLM Tier Optimization
+# Requirements: Milestone v2.7 — Multi-Modal Processing & Streaming Tool Execution
 
-This document defines the requirements for Milestone v2.6 of Programming Desk.
+This document defines the requirements for Milestone v2.7 of Programming Desk.
 
-## 1. FinOps Dynamic Token Budgeting & Cost Governance (Phase 18)
+## 1. Multi-Modal Processing & Streaming Tool Execution (Phase 20)
 
-- [x] **REQ-FINOPS-001**: Real-time token consumption ledger tracking per-tenant, per-seat, and per-model input/output token usage with rolling expenditure calculation.
-- [x] **REQ-FINOPS-002**: Dynamic token budget enforcer with graduated spend limits (warning threshold at 80%, soft throttle at 95%, hard circuit-breaker at 100%).
-- [x] **REQ-FINOPS-003**: Seat-level token allocation matrix distributing daily and monthly allowances across the seven seats with priority burst overdrafts.
-- [x] **REQ-FINOPS-004**: Multi-currency cost translation engine converting provider token tariffs (Anthropic, OpenAI, Grok/xAI, DeepSeek) into real-time micro-dollar balances.
-- [x] **REQ-FINOPS-005**: Cryptographic expenditure audit receipts chaining token usage vouchers with SHA-256 state anchors for cost reconciliation.
+- [x] **REQ-MM-001**: Multi-modal artifact ingestion pipeline handling image, audio, and binary attachments with content inspection and MIME verification.
+- [x] **REQ-MM-002**: Streaming tool execution bus enabling chunked SSE/streaming responses from MCP tools with intermediate telemetry frames.
+- [x] **REQ-MM-003**: Tool execution cancellation & backpressure supervisor supporting mid-stream client disconnects and resource reclamation.
+- [x] **REQ-MM-004**: Multi-modal sensory memory indexer storing and retrieving multi-modal vector embeddings linked to desk ledger transactions.
+- [x] **REQ-MM-005**: Multi-modal streaming verification harness validating chunk delivery latencies (<20ms per frame), RPO=0 audit compliance, and resource cleanup under sudden connection aborts.
 
-## 2. LLM Tier Routing & Cost-Aware Model Optimization (Phase 19)
+## 2. Dynamic Streaming Tool Mesh & Real-Time Telemetry (Phase 21)
 
-- [x] **REQ-TIER-001**: Complexity-aware task classifier routing work to optimal LLM cost tiers (Tier 1: Fast/Small, Tier 2: Mid/Standard, Tier 3: Reasoning/Frontier).
-- [x] **REQ-TIER-002**: Dynamic fallback cascade automatically degrading or upgrading model tiers on provider rate limits (429), timeouts, or budget exhaustion.
-- [x] **REQ-TIER-003**: Cache-aware prompt optimizer detecting repeated prompt prefixes and semantic memory context to maximize prompt caching hit rates (>60%).
-- [x] **REQ-TIER-004**: Model performance & cost-efficiency benchmarking monitor tracking latency, completion quality, and tokens-per-dollar across tiers.
-- [x] **REQ-TIER-005**: Continuous FinOps verification test suite ensuring RPO=0 on spend tracking, sub-millisecond routing overhead (<5ms), and strict budget cutoff enforcement.
+- [ ] **REQ-STREAM-001**: Bi-directional streaming RPC transport between federated desks with heartbeat-governed keepalive and flow control.
+- [ ] **REQ-STREAM-002**: Distributed multi-modal media cache synchronized across edge nodes with cryptographic content hashing and LRU eviction.
+- [ ] **REQ-STREAM-003**: Dynamic client multiplexing allowing multiple subscriber seats to observe streaming tool output simultaneously with per-seat permission masking.
+- [ ] **REQ-STREAM-004**: Adaptive compression and downsampling engine dynamically optimizing media payloads based on WAN network bandwidth and peer latency.
+- [ ] **REQ-STREAM-005**: End-to-end streaming tool audit logger validating complete receipt verification for streaming execution sessions.

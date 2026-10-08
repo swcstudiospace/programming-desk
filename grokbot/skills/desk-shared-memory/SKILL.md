@@ -25,7 +25,9 @@ Need desk context?
 └─ Integrity of this seat ──▶ desk_doctor. §8
 ```
 
-A read that returns `not_configured`, or an `error` with a `reason`, is unverified. Name the tool and the reason, and continue by opening the file. Do not retry the upstream yourself, and do not use a browser or a personal login. A write that errors did not happen. Retry a write once only when the reason is transient. A `403` means the wrong seat endpoint: stop.
+A read that returns `not_configured`, or an `error` with a `reason`, is unverified. Name the tool and the reason, and continue by opening the file. Do not retry the upstream yourself, and do not use a browser or a personal login. A `403` means the wrong seat endpoint: stop.
+
+A write that returns an error did not reach its upstream. `desk_event_emit` still saves a local copy first: the gateway appends the audit line, then sends the event on, and a rejected send comes back as an error with `local_mirror: true`. That local line is already stored. Do not retry it. A second call appends the milestone again. For any other write, retry once only when the reason is transient and the result has no `local_mirror`. A refusal such as `evidence_required`, `secret_refused`, `invalid_args`, `forbidden` or `payload_too_large` is not transient. Fix the arguments or stop.
 
 Never put a token, passphrase, tailnet name or `railway.internal` host in an argument. Redaction at the gateway is a backstop.
 
@@ -51,7 +53,7 @@ Retain a decision, a verified command, an environment fact or a gotcha. Do not r
 
 ## §5 desk_event_emit
 
-`kind` is required: a short dotted name such as `task.started`, `pr.opened` or `task.blocked`. Pass `graph_id` and `task_id` when the turn has them. `payload` is an object, capped at 4 KB, and redacted. This is a write. If it returns an error, the event was not accepted. Say so once and carry on. An event failure does not block the turn.
+`kind` is required: a short dotted name such as `task.started`, `pr.opened` or `task.blocked`. Pass `graph_id` and `task_id` when the turn has them. `payload` is an object, capped at 4 KB, and redacted. The gateway appends a local audit line before the upstream send. An error with `local_mirror: true` means that line is saved and the upstream did not accept the event. Do not send the same milestone again. Say once that upstream delivery failed, and carry on. An error without `local_mirror`, such as `payload_too_large`, means nothing was stored. Shrink the payload and send it as a new call, not a retry of the same one. An event failure does not block the turn.
 
 ## §6 desk_ownership_resolve
 

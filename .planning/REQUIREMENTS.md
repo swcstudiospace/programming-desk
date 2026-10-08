@@ -6,9 +6,9 @@ This document defines the requirements for Milestone v2.4 of Programming Desk.
 
 - [x] **REQ-EDGE-001**: Edge ingress gateway proxying and load balancing across multi-region VPS desk instances with latency-based geo-steering and health-aware failover.
 - [x] **REQ-EDGE-002**: Distributed edge rate limiting and token-bucket traffic policing synchronized via DragonflyDB cache cluster with per-seat burst ceilings.
-- [ ] **REQ-EDGE-003**: Cross-region WAN inter-seat routing protocol enforcing cryptographic seat identity attestation and mutual TLS over Tailnet mesh.
-- **REQ-EDGE-004**: Vector clock conflict convergence with multi-master partitioned task graphs under high-latency WAN transit (>250ms).
-- **REQ-EDGE-005**: Dynamic edge route revocation and instantaneous session evacuation upon region-wide impairment detection.
+- [x] **REQ-EDGE-003**: Cross-region WAN inter-seat routing protocol enforcing cryptographic seat identity attestation and mutual TLS over Tailnet mesh.
+- [x] **REQ-EDGE-004**: Vector clock conflict convergence with multi-master partitioned task graphs under high-latency WAN transit (>250ms).
+- [x] **REQ-EDGE-005**: Dynamic edge route revocation and instantaneous session evacuation upon region-wide impairment detection.
 
 ## 2. Autonomous Chaos Recovery & Self-Healing Resilience (Phase 15)
 

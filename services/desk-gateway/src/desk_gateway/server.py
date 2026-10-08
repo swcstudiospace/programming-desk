@@ -46,6 +46,24 @@ from desk_gateway.edge import (
     GeoSteeringRouter,
     RateLimitExceeded,
 )
+from desk_gateway.wan_mesh import (
+    AttestationFailed,
+    RegionImpairmentManager,
+    RouteRevokedError,
+    SeatIdentityAttestor,
+    WanError,
+    WanMeshRouter,
+    WanPeerNode,
+    WanSeatEnvelope,
+)
+from desk_gateway.vector_clock import (
+    CausalityRelation,
+    ConflictResolver,
+    TaskNode,
+    VectorClockGraph,
+    compare_vector_clocks,
+    union_vector_clocks,
+)
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -455,6 +473,7 @@ def create_mcp(
     failover: tuple[FailoverRouter, UpstreamHealthPoller] | None = None,
     alerting: tuple[AlertDispatcher, SLOEvaluator] | None = None,
     edge: EdgeIngressGateway | None = None,
+    wan: tuple[WanMeshRouter, RegionImpairmentManager] | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -491,6 +510,12 @@ def create_mcp(
         SLOEvaluator(settings),
     )
     edge_gw = edge if edge else EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
+    wan_router, impairment_mgr = wan if wan else (
+        WanMeshRouter(local_region_id=settings.edge_default_region, settings=settings),
+        None,
+    )
+    if impairment_mgr is None:
+        impairment_mgr = wan_router.impairment_manager
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -515,6 +540,11 @@ def create_mcp(
                 "edge": {
                     "regions_count": len(edge_gw.router.list_regions()),
                     "default_region": edge_gw.router.default_region,
+                },
+                "wan_mesh": {
+                    "local_region": wan_router.local_region_id,
+                    "peers_count": len(impairment_mgr.list_peers()),
+                    "revoked_regions_count": len(impairment_mgr._revoked_regions),
                 },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
@@ -1946,6 +1976,254 @@ def create_mcp(
             status_code=200 if delivered or not settings.alert_webhook_url else 502,
         )
 
+    # -------------------------------------------------------------------------
+    # WAN Mesh Routing, Attestation, and Session Evacuation (REQ-EDGE-003, REQ-EDGE-005)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/wan/peers", methods=["GET"])
+    async def wan_peers_get(request: Request) -> Response:
+        """Inspect Tailnet overlay WAN mesh peer nodes and impairment statuses (REQ-EDGE-003, REQ-EDGE-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect WAN mesh peers.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        peers = [p.to_dict() for p in impairment_mgr.list_peers()]
+        return JSONResponse(
+            {
+                "ok": True,
+                "local_region": wan_router.local_region_id,
+                "peers": peers,
+                "peers_count": len(peers),
+                "revoked_regions": sorted(impairment_mgr._revoked_regions),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/wan/route", methods=["POST"])
+    async def wan_route_post(request: Request) -> Response:
+        """Encapsulate, cryptographically attest, or verify a cross-region seat message (REQ-EDGE-003)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat authentication required for WAN message routing.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        # Check if this is an incoming verification or an outbound routing request
+        if "signature" in body and "payload_hash" in body:
+            # Verification path
+            try:
+                verified_envelope = wan_router.receive_seat_message(body)
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "status": "verified",
+                        "envelope": verified_envelope.to_dict(),
+                    },
+                    status_code=200,
+                )
+            except WanError as exc:
+                return problem_response(
+                    status=exc.status_code,
+                    title="WAN Verification Error",
+                    detail=exc.message,
+                    error_code=exc.code,
+                    instance=request.url.path,
+                )
+
+        # Outbound attestation path
+        target_region = body.get("target_region")
+        target_seat = body.get("target_seat")
+        action = body.get("action", "inter_seat_call")
+        payload = body.get("payload", {})
+
+        if not target_region or not target_seat:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="target_region and target_seat are required",
+                error_code="missing_fields",
+                instance=request.url.path,
+            )
+
+        try:
+            envelope = wan_router.route_seat_message(
+                target_region=target_region,
+                source_seat=seat,
+                target_seat=target_seat,
+                action=action,
+                payload=payload,
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "status": "attested",
+                    "envelope": envelope.to_dict(),
+                },
+                status_code=200,
+            )
+        except WanError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="WAN Routing Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+    @mcp.custom_route("/v1/wan/evacuate", methods=["POST"])
+    async def wan_evacuate_post(request: Request) -> Response:
+        """Trigger emergency session evacuation from an impaired region (REQ-EDGE-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead, Infra, or Systems seat authorization required to trigger regional session evacuation.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        impaired_region = body.get("impaired_region")
+        target_region = body.get("target_region")
+
+        if not impaired_region:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="impaired_region is required",
+                error_code="missing_impaired_region",
+                instance=request.url.path,
+            )
+
+        try:
+            evac_res = impairment_mgr.evacuate_region(
+                impaired_region=impaired_region,
+                target_region=target_region,
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    **evac_res,
+                },
+                status_code=200,
+            )
+        except WanError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Evacuation Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+    # -------------------------------------------------------------------------
+    # WAN Vector Clock Task Graph Synchronization (REQ-EDGE-004)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/wan/sync", methods=["POST"])
+    async def wan_sync_post(request: Request) -> Response:
+        """Synchronize multi-master task graph with vector clock conflict convergence (REQ-EDGE-004)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat authentication required for task graph synchronization.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        remote_graph = body.get("graph")
+        if not remote_graph or not isinstance(remote_graph, dict):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="'graph' object is required",
+                error_code="missing_graph",
+                instance=request.url.path,
+            )
+
+        graph_id = remote_graph.get("graph_id")
+        if not graph_id:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="graph_id is required within graph object",
+                error_code="missing_graph_id",
+                instance=request.url.path,
+            )
+
+        # Retrieve existing local graph from store or initialize new
+        stored = store.task_graphs().get(graph_id)
+        if stored:
+            local_vc_graph = VectorClockGraph.from_dict(stored, local_region_id=wan_router.local_region_id)
+        else:
+            local_vc_graph = VectorClockGraph(graph_id=graph_id, local_region_id=wan_router.local_region_id)
+
+        merged_dict, resolution = local_vc_graph.merge_remote(remote_graph)
+        # Persist back to store
+        all_graphs = store.task_graphs()
+        all_graphs[graph_id] = merged_dict
+        store._write("task_graphs", all_graphs)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "resolution": resolution,
+                "graph": merged_dict,
+            },
+            status_code=200,
+        )
+
     return mcp
 
 
@@ -1983,6 +2261,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
 
     edge_gw = EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
 
+    wan_router = WanMeshRouter(local_region_id=settings.edge_default_region, settings=settings)
+    impairment_mgr = wan_router.impairment_manager
+    wan_components = (wan_router, impairment_mgr)
+
     mcp = create_mcp(
         settings,
         services,
@@ -1994,6 +2276,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         failover=failover_components,
         alerting=alerting_components,
         edge=edge_gw,
+        wan=wan_components,
     )
     origins = [
         "http://127.0.0.1",
@@ -2044,6 +2327,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "alert_dispatcher": alert_dispatcher,
         "slo_evaluator": slo_evaluator,
         "edge_gateway": edge_gw,
+        "wan_router": wan_router,
+        "impairment_manager": impairment_mgr,
     }
     return app, settings
 

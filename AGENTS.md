@@ -84,11 +84,19 @@ python3 ci/gates/check_ownership.py --bot <bot-id> --base origin/main
 python3 ci/gates/check_desk_integrity.py --repo .
 python3 ci/gates/check_secrets.py --base origin/main
 python3 ci/gates/check_contracts.py --base origin/main
+python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
 python3 ci/gates/check_rollback.py --receipt .receipts/<bot-id>/<task-id>.json
-python3 ci/gates/check_receipt.py --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id>
+python3 ci/gates/check_receipt.py --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id> --strict
 python3 -m pytest ci/tests/ -v
 ```
 
-G-2 is expected to fail on a missing `approved_by` until an independent
-reviewer stamps the receipt. Any other G-2 failure is yours to fix before
-pushing.
+The bare `check_contracts.py --base origin/main` is only for a diff that
+touches no contract surface. The gate does not search for a change document.
+When the diff touches one, use the exact invocation above:
+`python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml`
+([docs/quality-gates.md](docs/quality-gates.md)).
+
+`check_receipt.py --strict` matches the G-2 step in
+[`.github/workflows/gates.yml`](.github/workflows/gates.yml). G-2 is expected
+to fail on a missing `approved_by` until an independent reviewer stamps the
+receipt. Any other G-2 failure is yours to fix before pushing.

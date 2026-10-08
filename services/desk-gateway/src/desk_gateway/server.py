@@ -113,6 +113,15 @@ from desk_gateway.finops import (
     SpendCircuitBreaker,
     TokenLedger,
 )
+from desk_gateway.tier_routing import (
+    ComplexityClassifier,
+    FallbackCascadeManager,
+    FallbackReason,
+    FinOpsVerifier,
+    LLMTier,
+    PromptCacheOptimizer,
+    TierBenchmarkMonitor,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -2896,10 +2905,21 @@ def create_mcp(
     spend_circuit_breaker = SpendCircuitBreaker(token_ledger)
     seat_allocation_matrix = SeatQuotaAllocationMatrix()
     expenditure_receipt_ledger = ExpenditureReceiptLedger()
+    complexity_classifier = ComplexityClassifier()
+    fallback_cascade_mgr = FallbackCascadeManager(classifier=complexity_classifier, circuit_breaker=spend_circuit_breaker)
+    prompt_cache_optimizer = PromptCacheOptimizer()
+    tier_benchmark_monitor = TierBenchmarkMonitor()
+    finops_verifier = FinOpsVerifier(token_ledger, spend_circuit_breaker, complexity_classifier)
+
     setattr(mcp, "_token_ledger", token_ledger)
     setattr(mcp, "_spend_circuit_breaker", spend_circuit_breaker)
     setattr(mcp, "_seat_allocation_matrix", seat_allocation_matrix)
     setattr(mcp, "_expenditure_receipt_ledger", expenditure_receipt_ledger)
+    setattr(mcp, "_complexity_classifier", complexity_classifier)
+    setattr(mcp, "_fallback_cascade_mgr", fallback_cascade_mgr)
+    setattr(mcp, "_prompt_cache_optimizer", prompt_cache_optimizer)
+    setattr(mcp, "_tier_benchmark_monitor", tier_benchmark_monitor)
+    setattr(mcp, "_finops_verifier", finops_verifier)
 
     @mcp.custom_route("/v1/finops/tokens/record", methods=["POST"])
     async def finops_tokens_record(request: Request) -> Response:
@@ -3001,6 +3021,110 @@ def create_mcp(
             "budget_micro_dollars": int(budget),
             "circuit_breaker": spend_circuit_breaker.evaluate(tenant_id),
         })
+
+    @mcp.custom_route("/v1/finops/tier/classify", methods=["POST"])
+    async def finops_tier_classify(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        prompt = body.get("prompt", "")
+        context_turns = int(body.get("context_turns", 0))
+        explicit_tier = body.get("explicit_tier")
+        res = complexity_classifier.classify(prompt=prompt, context_turns=context_turns, explicit_tier=explicit_tier)
+        return JSONResponse({
+            "ok": True,
+            "tier": res.tier.value,
+            "recommended_model": res.recommended_model,
+            "complexity_score": res.complexity_score,
+            "reasons": res.reasons,
+            "input_tokens_estimate": res.input_tokens_estimate,
+        })
+
+    @mcp.custom_route("/v1/finops/tier/fallback", methods=["POST"])
+    async def finops_tier_fallback(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        current_model = body.get("current_model", "gpt-4o")
+        current_tier_str = body.get("current_tier", "tier_2_standard")
+        reason_str = body.get("reason", "rate_limit_429")
+        tenant_id = body.get("tenant_id", "default")
+        try:
+            current_tier = LLMTier(current_tier_str)
+        except ValueError:
+            current_tier = LLMTier.TIER_2_STANDARD
+        try:
+            reason = FallbackReason(reason_str)
+        except ValueError:
+            reason = FallbackReason.RATE_LIMIT_429
+        decision = fallback_cascade_mgr.resolve_fallback(
+            current_model=current_model,
+            current_tier=current_tier,
+            reason=reason,
+            tenant_id=tenant_id,
+        )
+        return JSONResponse({
+            "ok": True,
+            "original_model": decision.original_model,
+            "original_tier": decision.original_tier.value,
+            "fallback_model": decision.fallback_model,
+            "fallback_tier": decision.fallback_tier.value,
+            "reason": decision.reason.value,
+            "strategy": decision.strategy,
+        })
+
+    @mcp.custom_route("/v1/finops/cache/optimize", methods=["POST"])
+    async def finops_cache_optimize(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        system_prompt = body.get("system_prompt", "")
+        context_data = body.get("context_data", "")
+        dynamic_prompt = body.get("dynamic_prompt", "")
+        res = prompt_cache_optimizer.optimize_prompt(
+            system_prompt=system_prompt,
+            context_data=context_data,
+            dynamic_user_prompt=dynamic_prompt,
+        )
+        return JSONResponse({
+            "ok": True,
+            "prefix_hash": res.prefix_hash,
+            "prefix_tokens": res.prefix_tokens,
+            "suffix_tokens": res.suffix_tokens,
+            "total_tokens": res.total_tokens,
+            "cache_eligible": res.cache_eligible,
+            "estimated_hit_rate": res.estimated_hit_rate,
+            "cache_guidance": res.cache_guidance,
+        })
+
+    @mcp.custom_route("/v1/finops/benchmark", methods=["GET", "POST"])
+    async def finops_benchmark_handle(request: Request) -> Response:
+        if request.method == "POST":
+            body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+            model_id = body.get("model_id", "claude-3-5-sonnet")
+            tier_str = body.get("tier", "tier_2_standard")
+            latency_ms = float(body.get("latency_ms", 100.0))
+            tokens = int(body.get("tokens", 1000))
+            spend = int(body.get("spend_micro_dollars", 3000))
+            quality = float(body.get("quality_score", 1.0))
+            try:
+                tier = LLMTier(tier_str)
+            except ValueError:
+                tier = LLMTier.TIER_2_STANDARD
+            tier_benchmark_monitor.record_sample(
+                model_id=model_id,
+                tier=tier,
+                latency_ms=latency_ms,
+                tokens=tokens,
+                spend_micro_dollars=spend,
+                quality_score=quality,
+            )
+            return JSONResponse({"ok": True, "recorded": True})
+        return JSONResponse({
+            "ok": True,
+            "metrics": tier_benchmark_monitor.get_tier_summary(),
+        })
+
+    @mcp.custom_route("/v1/finops/verify", methods=["POST"])
+    async def finops_verify_run(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        tenant_id = body.get("tenant_id", f"verify-{int(time.time()*1000)}")
+        res = finops_verifier.verify_all(tenant_id=tenant_id)
+        return JSONResponse(res)
 
     return mcp
 
@@ -3126,6 +3250,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "spend_circuit_breaker": getattr(mcp, "_spend_circuit_breaker", None),
         "seat_allocation_matrix": getattr(mcp, "_seat_allocation_matrix", None),
         "expenditure_receipt_ledger": getattr(mcp, "_expenditure_receipt_ledger", None),
+        "complexity_classifier": getattr(mcp, "_complexity_classifier", None),
+        "fallback_cascade_mgr": getattr(mcp, "_fallback_cascade_mgr", None),
+        "prompt_cache_optimizer": getattr(mcp, "_prompt_cache_optimizer", None),
+        "tier_benchmark_monitor": getattr(mcp, "_tier_benchmark_monitor", None),
+        "finops_verifier": getattr(mcp, "_finops_verifier", None),
     }
     return app, settings
 

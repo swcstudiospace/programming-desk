@@ -10,7 +10,7 @@
 
 ### 🟡 v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11)
 
-- [ ] Phase 10: Multi-Desk Federation & Inter-Seat Routing (1/2 plans)
+- [x] Phase 10: Multi-Desk Federation & Inter-Seat Routing (2/2 plans)
 - [ ] Phase 11: Automated Staging & VPS Environment Promotion (0/2 plans)
 
 #### Phase 10: Multi-Desk Federation & Inter-Seat Routing
@@ -19,7 +19,7 @@
 **Requirements**: REQ-FED-001 through REQ-FED-005
 **Plans**:
 - [x] 10-01-PLAN.md — Peer gateway discovery, federated JWT validation & inter-desk routing (REQ-FED-001, REQ-FED-002, REQ-FED-003)
-- [ ] 10-02-PLAN.md — Distributed task graph synchronization & partition tolerance (REQ-FED-004, REQ-FED-005)
+- [x] 10-02-PLAN.md — Distributed task graph synchronization & partition tolerance (REQ-FED-004, REQ-FED-005)
 
 #### Phase 11: Automated Staging & VPS Environment Promotion
 

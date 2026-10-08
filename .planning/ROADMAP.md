@@ -2,15 +2,15 @@
 
 ## Milestones
 
-- 🟡 **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (in progress)
+- ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08)
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
 
-### 🟡 v2.1 Live Drills & Intake Hardening (Phases 8-9)
+### ✅ v2.1 Live Drills & Intake Hardening (Phases 8-9)
 
 - [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
-- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring (3/4 plans)
+- [x] Phase 9: External Intake Hardening & Telemetry Anchoring (4/4 plans)
 
 ### Phase 9: External Intake Hardening & Telemetry Anchoring
 
@@ -20,7 +20,7 @@
 - [x] 09-01-PLAN.md — Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004)
 - [x] 09-02-PLAN.md — ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007)
 - [x] 09-03-PLAN.md — DLQ retry policies and terminal failure reporting (REQ-INTAKE-008)
-- [ ] 09-04-PLAN.md — OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010)
+- [x] 09-04-PLAN.md — OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010)
 
 ### Completed Milestones
 
@@ -40,10 +40,7 @@ See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase deta
 
 ## Next Steps
 
-1. Execute Phase 9 Plan 01: Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004).
-2. Execute Phase 9 Plan 02: ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007).
-3. Execute Phase 9 Plan 03: DLQ retry policies and terminal failure reporting (REQ-INTAKE-008).
-4. Execute Phase 9 Plan 04: OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010).
+Milestone v2.1 complete! All requirements across Phase 8 (REQ-DRILL-001 through REQ-DRILL-010) and Phase 9 (REQ-INTAKE-001 through REQ-INTAKE-010) have been executed, verified, and merged to main.
 
 
 

@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v2.1
 milestone_name: Live Drills & Intake Hardening
-status: Ready to execute Phase 9 Plan 04
-stopped_at: Completed Phase 9 Plan 03 (Dead-letter queue retry policies and terminal failure reporting).
-last_updated: "2026-10-08T18:50:00.000Z"
+status: Milestone v2.1 Complete
+stopped_at: Completed Phase 9 Plan 04 (OTel trace propagation, secrets redaction & telemetry anchoring).
+last_updated: "2026-10-08T19:00:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Plan 09-03 executed and merged (PR #95)
-state_head: 604df48c087961d15dbf1a26d11f7c352010eaee
+last_activity_desc: Plan 09-04 executed and merged (PR #97); Milestone v2.1 completed
+state_head: 6be819c6292b3c20ba523274640194c739d2ca1e
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 49
-  completed_plans: 47
-  percent: 95
+  completed_plans: 48
+  percent: 100
 current_phase: 9
 current_phase_name: External Intake Hardening & Telemetry Anchoring
 ---
@@ -25,15 +25,15 @@ current_phase_name: External Intake Hardening & Telemetry Anchoring
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Phase 9 — External Intake Hardening & Telemetry Anchoring
-**Milestone:** v2.1 — Live Drills & Intake Hardening
+**Current focus:** Milestone v2.1 Complete
+**Milestone:** v2.1 — Live Drills & Intake Hardening (Shipped)
 
 ## Current Position
 
-Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring
-Plan: 09-04 queued
-Status: Plan 09-03 completed and merged via PR #95; ready for Plan 09-04 (OTel trace propagation, secrets redaction & telemetry anchoring)
-Last activity: 2026-10-08 — Plan 09-03 completed and merged via PR #95.
+Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring (Complete)
+Plan: 09-04 completed
+Status: Milestone v2.1 complete. All plans across Phase 8 and Phase 9 verified and merged.
+Last activity: 2026-10-08 — Plan 09-04 completed and merged via PR #97.
 
 ## Accumulated Context
 

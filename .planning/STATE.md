@@ -5,17 +5,17 @@ milestone_name: Desk v2
 current_phase: 2
 current_phase_name: Network plane
 status: in_progress
-stopped_at: Executing Phase 2 Wave 1 (02-01-PLAN.md & 02-02-PLAN.md).
-last_updated: "2026-10-08T06:45:00.000Z"
+stopped_at: Completed Phase 2 Wave 1 (02-01-PLAN.md & 02-02-PLAN.md). Wave 1 human checkpoints require Tailscale auth key generation and Railway template deployment.
+last_updated: "2026-10-08T06:50:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Executing Phase 2 Wave 1 plans; tailscale exact-port ACL policy reconciled in infra/tailscale/policy.hujson and forwarder specifications validated.
-state_head: 944ce4f8406e70a337454c7d0cc5a1a300a5a2da
+last_activity_desc: Executed Phase 2 Wave 1 plans; verified forwarder mappings, listener isolation, persistence specs, railway-app boundary, exact-port ACL policy, and Bot perimeter isolation.
+state_head: a3169e38d7894a4c8c07e2bbcb3ebf8fca7315d9
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 13
-  completed_plans: 7
-  percent: 14
+  completed_plans: 9
+  percent: 25
 ---
 
 # Project State
@@ -30,12 +30,12 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 
 ## Current Position
 
-Phase: 2 (Network plane) — READY TO EXECUTE
-Plan: 0 of 6 plans executed
-Status: Phase 1 complete and verified; Phase 2 planned and ready to execute
-Last activity: 2026-10-08 — Phase 2 planned (02-CONTEXT.md, 02-RESEARCH.md, 02-PATTERNS.md, 02-VALIDATION.md, and plans 02-01 through 02-06 synthesized)
+Phase: 2 (Network plane) — WAVE 1 COMPLETE, AWAITING FORWARDER DEPLOYMENT
+Plan: 2 of 6 plans executed (02-01, 02-02)
+Status: Wave 1 executed and summarized. Designed stop on forwarder enrollment in Railway and Tailscale ACL policy save.
+Last activity: 2026-10-08 — Wave 1 execution verified (02-01-SUMMARY.md, 02-02-SUMMARY.md, n2-network.json updated)
 
-Progress: [█░░░░░░░░░] 14%
+Progress: [███░░░░░░░] 25%
 
 Phase 1 is Complete (16/16 requirements complete, all 7 plans summarized and verified, 8/8 UAT checkpoints passed). Phase 2 is planned (6 plans across 4 waves covering REQ-NETWORK-001 through REQ-NETWORK-022). Next workflow: Phase 2 execution.
 

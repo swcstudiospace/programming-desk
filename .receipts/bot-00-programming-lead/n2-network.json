@@ -1,0 +1,258 @@
+{
+  "schema_version": 1,
+  "phase": "02-network-plane",
+  "plan": "02-01",
+  "recorded_on": "2026-10-08",
+  "bot": "bot-00-programming-lead",
+  "task_id": "n2-network",
+  "branch": "bot-00-programming-lead/desk-swarm-subagents",
+  "approved_by": null,
+  "forwarders": [
+    {
+      "project": "Ultrathink",
+      "environment": "production",
+      "machine": "ultrathink-production-tailscale-forwarder",
+      "tag": "tag:railway-forwarder",
+      "key_expiry": "disabled",
+      "auth_key_type": "reusable_non_ephemeral_tagged",
+      "state_volume": "/var/lib/tailscale",
+      "mappings": [
+        {
+          "port": 4000,
+          "target": "greptimedb.railway.internal:4000",
+          "service": "greptimedb",
+          "plane": "events",
+          "protocol": "HTTP/SQL"
+        },
+        {
+          "port": 4001,
+          "target": "greptimedb.railway.internal:4001",
+          "service": "greptimedb",
+          "plane": "events",
+          "protocol": "gRPC"
+        },
+        {
+          "port": 4003,
+          "target": "greptimedb.railway.internal:4003",
+          "service": "greptimedb",
+          "plane": "events",
+          "protocol": "Postgres wire"
+        },
+        {
+          "port": 5432,
+          "target": "timescaledb.railway.internal:5432",
+          "service": "timescaledb",
+          "plane": "index",
+          "protocol": "Postgres"
+        },
+        {
+          "port": 6379,
+          "target": "dragonfly.railway.internal:6379",
+          "service": "dragonfly",
+          "plane": "cache",
+          "protocol": "Redis"
+        }
+      ],
+      "isolated_listeners": [
+        4002
+      ],
+      "status": "planned"
+    },
+    {
+      "project": "Agent Substrate",
+      "environment": "production",
+      "machine": "agent-substrate-production-tailscale-forwarder",
+      "tag": "tag:railway-forwarder",
+      "key_expiry": "disabled",
+      "auth_key_type": "reusable_non_ephemeral_tagged",
+      "state_volume": "/var/lib/tailscale",
+      "mappings": [
+        {
+          "port": 8888,
+          "target": "hindsight-api.railway.internal:8888",
+          "service": "hindsight-api",
+          "plane": "memory",
+          "protocol": "REST + MCP"
+        },
+        {
+          "port": 9380,
+          "target": "ragflow.railway.internal:9380",
+          "service": "ragflow",
+          "plane": "documents",
+          "protocol": "HTTP API"
+        },
+        {
+          "port": 80,
+          "target": "ragflow.railway.internal:80",
+          "service": "ragflow",
+          "plane": "documents",
+          "protocol": "HTTP Web UI (optional)"
+        }
+      ],
+      "isolated_listeners": [
+        9382
+      ],
+      "status": "planned"
+    }
+  ],
+  "railway_app": {
+    "hostname": "railway-app",
+    "tailscale_ip": "100.77.7.42",
+    "role": "observed-subnet-route-advertiser",
+    "suitability": "unproven-not-forwarder",
+    "adoption": "rejected-non-forwarder-architecture",
+    "retirement_schedule": "deferred-to-phase-7-after-n6"
+  },
+  "acl_policy": {
+    "exact_ports_granted": [
+      "tcp:4000",
+      "tcp:4001",
+      "tcp:4003",
+      "tcp:5432",
+      "tcp:6379",
+      "tcp:8888",
+      "tcp:9380",
+      "tcp:80"
+    ],
+    "broad_ranges_rejected": [
+      "tcp:4000-4003"
+    ],
+    "permitted_devices": [
+      {
+        "device": "vps",
+        "tailscale_ip": "100.90.229.45",
+        "tag": "tag:vps",
+        "observed_status": "online"
+      },
+      {
+        "device": "mac-mini",
+        "tailscale_ip": "100.80.62.2",
+        "tag": "tag:admin",
+        "observed_status": "online"
+      },
+      {
+        "device": "ove-xps-15",
+        "tailscale_ip": "100.104.90.39",
+        "tag": "tag:admin",
+        "observed_status": "offline (last seen 5d ago)"
+      }
+    ],
+    "forwarder_outbound_grants": [],
+    "deny_default": true
+  },
+  "perimeter_isolation": {
+    "grok_bots_in_tailnet": false,
+    "grok_bots_hold_db_credentials": false,
+    "grok_bots_egress_protocol": "HTTPS to desk.swcstudio.space",
+    "team_allowlist_entry": "desk.swcstudio.space",
+    "mac_mini_routed_egress": "INFRA-only emergency path; depends on Mac mini awake"
+  },
+  "security_controls": {
+    "wireguard_mesh_encrypted": true,
+    "bearer_auth_retained": true
+  },
+  "probes": {
+    "vps": {
+      "4000": {
+        "protocol": "HTTP",
+        "target": "ultrathink-production-tailscale-forwarder:4000",
+        "status": "pending_deployment"
+      },
+      "4001": {
+        "protocol": "gRPC",
+        "target": "ultrathink-production-tailscale-forwarder:4001",
+        "status": "pending_deployment"
+      },
+      "4003": {
+        "protocol": "Postgres wire",
+        "target": "ultrathink-production-tailscale-forwarder:4003",
+        "status": "pending_deployment"
+      },
+      "5432": {
+        "protocol": "Postgres",
+        "target": "ultrathink-production-tailscale-forwarder:5432",
+        "status": "pending_deployment"
+      },
+      "6379": {
+        "protocol": "Redis",
+        "target": "ultrathink-production-tailscale-forwarder:6379",
+        "status": "pending_deployment"
+      },
+      "8888": {
+        "protocol": "REST/MCP",
+        "target": "agent-substrate-production-tailscale-forwarder:8888",
+        "status": "pending_deployment"
+      },
+      "9380": {
+        "protocol": "HTTP API",
+        "target": "agent-substrate-production-tailscale-forwarder:9380",
+        "status": "pending_deployment"
+      }
+    },
+    "mac_mini": {
+      "status": "pending_separate_evidence"
+    },
+    "xps": {
+      "status": "unverified_offline"
+    }
+  },
+  "cutover": {
+    "backup_path": "/etc/substrate/substrate.env.bak",
+    "target_hosts": {
+      "GREPTIME_URL": "http://ultrathink-production-tailscale-forwarder:4000",
+      "SUBSTRATE_PG_URL": "postgresql://postgres:***@ultrathink-production-tailscale-forwarder:5432/railway",
+      "DRAGONFLY_URL": "redis://:***@ultrathink-production-tailscale-forwarder:6379/0",
+      "HINDSIGHT_URL": "http://agent-substrate-production-tailscale-forwarder:8888",
+      "RAGFLOW_URL": "http://agent-substrate-production-tailscale-forwarder:9380"
+    },
+    "service_restart": "pending_deployment",
+    "brief_verified": "pending_restart",
+    "events_emit_verified": "pending_restart"
+  },
+  "hindsight_ui_governance": {
+    "selection": "administer_via_mac_mini_tailnet",
+    "public_railway_domain": "retained_only_on_operator_request"
+  },
+  "removals": {
+    "timescaledb_tcp_proxy": {
+      "endpoint": "monorail.proxy.rlwy.net:49679",
+      "status": "pending_cutover_verification"
+    },
+    "greptimedb_public_domain": {
+      "endpoint": "greptimedb-production.up.railway.app",
+      "status": "pending_cutover_verification"
+    }
+  },
+  "rollback_plan": null,
+  "approvals": [],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "ownership manifest OK: 113 rules"
+    },
+    {
+      "cmd": "python3 -c \"import yaml; fw=yaml.safe_load(open('infra/railway/forwarders.yaml'))['forwarders']; assert len(fw)==2\"",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "forwarder specs valid"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership manifest validates cleanly across path ownership rules",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "forwarders.yaml specifies exactly two per-project forwarders",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [
+    "Ove's XPS (100.104.90.39) probe execution (peer offline, last seen 5d ago)",
+    "Hindsight UI public browser exposure (pending operator confirmation)",
+    "RAGFlow optional port 80 mapping deployment (web UI optional)",
+    "railway-app permanent retirement (deferred to Phase 7 under G-6)"
+  ]
+}

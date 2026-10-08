@@ -71,8 +71,8 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 **Plans**:
 **Wave 1**
-- [/] 02-01-PLAN.md — Reconcile forwarder port mappings, listener isolation, persistence, and railway-app non-adoption boundary
-- [/] 02-02-PLAN.md — Enforce exact-port ACL policy, reject broad ranges, and verify Grok Bot perimeter isolation
+- [x] 02-01-PLAN.md — Reconcile forwarder port mappings, listener isolation, persistence, and railway-app non-adoption boundary
+- [x] 02-02-PLAN.md — Enforce exact-port ACL policy, reject broad ranges, and verify Grok Bot perimeter isolation
 
 **Wave 2** *(blocked on Wave 1)*
 - [ ] 02-03-PLAN.md — Execute VPS protocol probes, collect separate Mac mini administrative evidence, and verify WireGuard + bearer auth

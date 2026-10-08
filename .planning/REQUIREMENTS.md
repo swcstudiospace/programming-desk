@@ -173,113 +173,113 @@ Source: [approved plan](../docs/upgrade-plan-desk-v2.md) §§5–13 and Appendic
 
 ### GATEWAY — Phase 4: Desk Gateway and contracts
 
-- [ ] **REQ-GATEWAY-001**: Given the seven seat contracts, when published, then each roster declares tool names, JSON schemas, backend, gate tags and consumers with contract_surface=true.
+- [x] **REQ-GATEWAY-001**: Given the seven seat contracts, when published, then each roster declares tool names, JSON schemas, backend, gate tags and consumers with contract_surface=true.
   - Source: P §7.1 contract; §11; §12 n4.1; source step / responsibility: n4.1; QUALITY; acceptance ID: AC-GATEWAY-001.
-- [ ] **REQ-GATEWAY-002**: Given the first pack contracts, when published, then kanbanos, desklanes and clippyos declare their application-specific tools and record required consumer acknowledgements.
+- [x] **REQ-GATEWAY-002**: Given the first pack contracts, when published, then kanbanos, desklanes and clippyos declare their application-specific tools and record required consumer acknowledgements.
   - Source: P §7.4; §11; §12 n4.1; source step / responsibility: n4.1; QUALITY / WEB, ANDROID, IOS consumers; acceptance ID: AC-GATEWAY-002.
-- [ ] **REQ-GATEWAY-003**: Given gateway implementation or a breaking roster/pack change, when it is integrated, then the contract PR has merged first and G-4 acknowledgements cover affected seat consumers.
+- [x] **REQ-GATEWAY-003**: Given gateway implementation or a breaking roster/pack change, when it is integrated, then the contract PR has merged first and G-4 acknowledgements cover affected seat consumers.
   - Source: P §7.1 contract; §11 contracts; §12 n4.1; source step / responsibility: n4.1 before n4.2–3; QUALITY / consumers; acceptance ID: AC-GATEWAY-003.
-- [ ] **REQ-GATEWAY-004**: Given a seat connector, when OAuth completes, then its own desk-<seat> client grants only seat:<name> for that seat's /mcp/<seat> endpoint.
+- [x] **REQ-GATEWAY-004**: Given a seat connector, when OAuth completes, then its own desk-<seat> client grants only seat:<name> for that seat's /mcp/<seat> endpoint.
   - Source: P §7.1 auth; §12 n4.2; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-004.
-- [ ] **REQ-GATEWAY-005**: Given issued OAuth credentials, when token lifetimes are inspected, then access tokens last twenty-four hours and refresh credentials last thirty days.
+- [x] **REQ-GATEWAY-005**: Given issued OAuth credentials, when token lifetimes are inspected, then access tokens last twenty-four hours and refresh credentials last thirty days.
   - Source: P §7.1 auth; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-005.
-- [ ] **REQ-GATEWAY-006**: Given a token for seat A, when used on seat B's endpoint, then the gateway returns 403.
+- [x] **REQ-GATEWAY-006**: Given a token for seat A, when used on seat B's endpoint, then the gateway returns 403.
   - Source: P §7.1 per-seat surface; §12 n4.6; source step / responsibility: n4.2 / n4.6; SYSTEMS; acceptance ID: AC-GATEWAY-006.
-- [ ] **REQ-GATEWAY-007**: Given the x-connector-key path, when used, then it is restricted to the specified smoke-testing path rather than substituted for per-seat production OAuth.
+- [x] **REQ-GATEWAY-007**: Given the x-connector-key path, when used, then it is restricted to the specified smoke-testing path rather than substituted for per-seat production OAuth.
   - Source: P §7.1 auth; §12 n4.6; source step / responsibility: n4.6; SYSTEMS / INFRA; acceptance ID: AC-GATEWAY-007.
-- [ ] **REQ-GATEWAY-008**: Given tools/list on a seat endpoint without packs, when returned, then it equals that seat's contract and has 10–15 tools; host tools and Marketplace connectors are outside the count.
+- [x] **REQ-GATEWAY-008**: Given tools/list on a seat endpoint without packs, when returned, then it equals that seat's contract and has 10–15 tools; host tools and Marketplace connectors are outside the count.
   - Source: P §7.1; §7.3; §11 G-7; source step / responsibility: n4.2–3; SYSTEMS / QUALITY; acceptance ID: AC-GATEWAY-008.
-- [ ] **REQ-GATEWAY-009**: Given the deployed Desk Gateway, when its listen address is inspected, then it binds 127.0.0.1:8791 rather than exposing the application port publicly or colliding with occupied connector ports.
+- [x] **REQ-GATEWAY-009**: Given the deployed Desk Gateway, when its listen address is inspected, then it binds 127.0.0.1:8791 rather than exposing the application port publicly or colliding with occupied connector ports.
   - Source: P §7.1 deploy; §12 n4.5; source step / responsibility: n4.5; INFRA; acceptance ID: AC-GATEWAY-009.
-- [ ] **REQ-GATEWAY-010**: Given desk.swcstudio.space, when public DNS is checked for cutover, then it resolves to the specified VPS target and an actual external client can reach it; local /health alone does not prove this.
+- [x] **REQ-GATEWAY-010**: Given desk.swcstudio.space, when public DNS is checked for cutover, then it resolves to the specified VPS target and an actual external client can reach it; local /health alone does not prove this.
   - Source: P §7.1 deploy; §12 n4.5; source step / responsibility: n4.5; INFRA; acceptance ID: AC-GATEWAY-010.
-- [ ] **REQ-GATEWAY-011**: Given the public gateway transport, when provisioned, then nginx serves TLS to the loopback application using the systemd unit and a credential-free environment template.
+- [x] **REQ-GATEWAY-011**: Given the public gateway transport, when provisioned, then nginx serves TLS to the loopback application using the systemd unit and a credential-free environment template.
   - Source: P §7.1 deploy; §11 infra; §12 n4.5; source step / responsibility: n4.5; INFRA; acceptance ID: AC-GATEWAY-011.
-- [ ] **REQ-GATEWAY-012**: Given gateway upstream access, when credentials are used, then data-plane credentials stay in substrate.env and the gateway's own API/upstream tokens stay in gateway.env; neither is returned to a Bot or share template.
+- [x] **REQ-GATEWAY-012**: Given gateway upstream access, when credentials are used, then data-plane credentials stay in substrate.env and the gateway's own API/upstream tokens stay in gateway.env; neither is returned to a Bot or share template.
   - Source: P §4 rule 3; §7.1 upstreams; source step / responsibility: n4.2 / n4.5; SYSTEMS / INFRA; acceptance ID: AC-GATEWAY-012.
-- [ ] **REQ-GATEWAY-013**: Given turn-start desk_brief, when served, then it includes the seat/shared memory brief and open seat tickets with a five-minute brief cache.
+- [x] **REQ-GATEWAY-013**: Given turn-start desk_brief, when served, then it includes the seat/shared memory brief and open seat tickets with a five-minute brief cache.
   - Source: P §7.2 desk_brief; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-013.
-- [ ] **REQ-GATEWAY-014**: Given desk_docs_search for a ticket, when executed, then it searches programming-desk, agent-substrate and the ticket's named repository through substrate docs_search/RAGFlow read-only.
+- [x] **REQ-GATEWAY-014**: Given desk_docs_search for a ticket, when executed, then it searches programming-desk, agent-substrate and the ticket's named repository through substrate docs_search/RAGFlow read-only.
   - Source: P §7.2 desk_docs_search; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-014.
-- [ ] **REQ-GATEWAY-015**: Given desk_memory_retain, when accepted, then it targets pd-<seat> with graph_id, task_id and receipt_path tags; absent receipt_path and source is refused.
+- [x] **REQ-GATEWAY-015**: Given desk_memory_retain, when accepted, then it targets pd-<seat> with graph_id, task_id and receipt_path tags; absent receipt_path and source is refused.
   - Source: P §7.2 desk_memory_retain; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-015.
-- [ ] **REQ-GATEWAY-016**: Given desk_memory_recall, when executed, then it reads pd-<seat> and pd-desk and includes pd-lead-reports only for LEAD.
+- [x] **REQ-GATEWAY-016**: Given desk_memory_recall, when executed, then it reads pd-<seat> and pd-desk and includes pd-lead-reports only for LEAD.
   - Source: P §7.2 desk_memory_recall; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-016.
-- [ ] **REQ-GATEWAY-017**: Given an ownership pre-check, when desk_ownership_resolve is called, then it resolves ownership.yaml at origin/main under G-1 policy.
+- [x] **REQ-GATEWAY-017**: Given an ownership pre-check, when desk_ownership_resolve is called, then it resolves ownership.yaml at origin/main under G-1 policy.
   - Source: P §7.2 desk_ownership_resolve; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-017.
-- [ ] **REQ-GATEWAY-018**: Given a receipt JSON, when desk_receipt_check runs, then it executes check_receipt.py, check_secrets.py and check_rollback.py as computation without writing git.
+- [x] **REQ-GATEWAY-018**: Given a receipt JSON, when desk_receipt_check runs, then it executes check_receipt.py, check_secrets.py and check_rollback.py as computation without writing git.
   - Source: P §7.2 desk_receipt_check; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-018.
-- [ ] **REQ-GATEWAY-019**: Given desk_event_emit, when sent through substrate events_emit, then the event is attributed to the authenticated seat.
+- [x] **REQ-GATEWAY-019**: Given desk_event_emit, when sent through substrate events_emit, then the event is attributed to the authenticated seat.
   - Source: P §7.2 desk_event_emit; source step / responsibility: n4.2; SYSTEMS; acceptance ID: AC-GATEWAY-019.
-- [ ] **REQ-GATEWAY-020**: Given desk_doctor, when its action is selected, then check, register, install_prompt and repair are exposed with the §9.3 integrity/repair boundaries.
+- [x] **REQ-GATEWAY-020**: Given desk_doctor, when its action is selected, then check, register, install_prompt and repair are exposed with the §9.3 integrity/repair boundaries.
   - Source: P §7.2 desk_doctor; §9.3; source step / responsibility: n4.2; SYSTEMS / QUALITY contract; acceptance ID: AC-GATEWAY-020.
-- [ ] **REQ-GATEWAY-021**: Given LEAD tools/list, when returned, then its fifteen-tool roster is core eight plus intake_next, intake_ack, graph_register, graph_state, bus_start_job, bus_wait_job and roster_status, with the catalogued backend semantics. The desk_intake_next input preserves Appendix C's object schema with optional string origin and additionalProperties: false.
+- [x] **REQ-GATEWAY-021**: Given LEAD tools/list, when returned, then its fifteen-tool roster is core eight plus intake_next, intake_ack, graph_register, graph_state, bus_start_job, bus_wait_job and roster_status, with the catalogued backend semantics. The desk_intake_next input preserves Appendix C's object schema with optional string origin and additionalProperties: false.
   - Source: P §7.3 LEAD L164; Appendix C; source step / responsibility: n4.3; SYSTEMS; LEAD consumer; acceptance ID: AC-GATEWAY-021.
-- [ ] **REQ-GATEWAY-022**: Given SYSTEMS tools/list, when returned, then its fourteen-tool roster is core eight plus index_query, events_query, cache, lsp_diagnostics, contract_propose and design_artifact_get, with the catalogued backend semantics.
+- [x] **REQ-GATEWAY-022**: Given SYSTEMS tools/list, when returned, then its fourteen-tool roster is core eight plus index_query, events_query, cache, lsp_diagnostics, contract_propose and design_artifact_get, with the catalogued backend semantics.
   - Source: P §7.3 SYSTEMS L166; source step / responsibility: n4.3; SYSTEMS; SYSTEMS consumer; acceptance ID: AC-GATEWAY-022.
-- [ ] **REQ-GATEWAY-023**: Given WEB tools/list, when returned, then its fifteen-tool roster is core eight plus lsp_diagnostics, vercel_deployments, vercel_promote, vercel_rollback, preview_check, bundle_secret_scan and contract_ack, with the catalogued backend semantics.
+- [x] **REQ-GATEWAY-023**: Given WEB tools/list, when returned, then its fifteen-tool roster is core eight plus lsp_diagnostics, vercel_deployments, vercel_promote, vercel_rollback, preview_check, bundle_secret_scan and contract_ack, with the catalogued backend semantics.
   - Source: P §7.3 WEB L168; source step / responsibility: n4.3; SYSTEMS; WEB consumer; acceptance ID: AC-GATEWAY-023.
-- [ ] **REQ-GATEWAY-024**: Given ANDROID tools/list, when returned, then its fifteen-tool roster is core eight plus play_track_status, play_staged_rollout, play_halt_rollout, artifact_size_delta, lint_baseline_diff, contract_ack and app_tools_load, with the catalogued backend semantics.
+- [x] **REQ-GATEWAY-024**: Given ANDROID tools/list, when returned, then its fifteen-tool roster is core eight plus play_track_status, play_staged_rollout, play_halt_rollout, artifact_size_delta, lint_baseline_diff, contract_ack and app_tools_load, with the catalogued backend semantics.
   - Source: P §7.3 ANDROID L170; source step / responsibility: n4.3; SYSTEMS; ANDROID consumer; acceptance ID: AC-GATEWAY-024.
-- [ ] **REQ-GATEWAY-025**: Given IOS tools/list, when returned, then its fifteen-tool roster is core eight plus testflight_status, appstore_phased_release, appstore_pause_release, entitlements_diff, review_risk_check, contract_ack and app_tools_load, with the catalogued backend semantics.
+- [x] **REQ-GATEWAY-025**: Given IOS tools/list, when returned, then its fifteen-tool roster is core eight plus testflight_status, appstore_phased_release, appstore_pause_release, entitlements_diff, review_risk_check, contract_ack and app_tools_load, with the catalogued backend semantics.
   - Source: P §7.3 IOS L172; source step / responsibility: n4.3; SYSTEMS; IOS consumer; acceptance ID: AC-GATEWAY-025.
-- [ ] **REQ-GATEWAY-026**: Given INFRA tools/list, when returned, then its fifteen-tool roster is core eight plus railway_status, railway_logs, railway_variable_names, railway_redeploy, tailscale_status, vps_units and db_health, with the catalogued backend semantics.
+- [x] **REQ-GATEWAY-026**: Given INFRA tools/list, when returned, then its fifteen-tool roster is core eight plus railway_status, railway_logs, railway_variable_names, railway_redeploy, tailscale_status, vps_units and db_health, with the catalogued backend semantics.
   - Source: P §7.3 INFRA L174; source step / responsibility: n4.3; SYSTEMS; INFRA consumer; acceptance ID: AC-GATEWAY-026.
-- [ ] **REQ-GATEWAY-027**: Given QUALITY tools/list, when returned, then its fifteen-tool roster is core eight plus gates_run, greptile_review, receipt_approve, waiver_record, contract_ack_status, supply_chain_check and secret_scan, with approval delivery governed by the exact-SHA rule rather than the original branch-stamp mechanism.
+- [x] **REQ-GATEWAY-027**: Given QUALITY tools/list, when returned, then its fifteen-tool roster is core eight plus gates_run, greptile_review, receipt_approve, waiver_record, contract_ack_status, supply_chain_check and secret_scan, with approval delivery governed by the exact-SHA rule rather than the original branch-stamp mechanism.
   - Source: P §7.3 QUALITY L176; source step / responsibility: n4.3; SYSTEMS; QUALITY consumer; acceptance ID: AC-GATEWAY-027.
-- [ ] **REQ-GATEWAY-028**: Given any g5/g6 tool, when invoked without approval_id or rollback_plan, then it is refused; a permitted call echoes both fields into its event.
+- [x] **REQ-GATEWAY-028**: Given any g5/g6 tool, when invoked without approval_id or rollback_plan, then it is refused; a permitted call echoes both fields into its event.
   - Source: P §7.1 audit; §7.3 gate tags; §11 G-7; source step / responsibility: n4.3; SYSTEMS / QUALITY; acceptance ID: AC-GATEWAY-028.
-- [ ] **REQ-GATEWAY-029**: Given every tool invocation, when audited to Greptime, then its event records surface=grok-bot, seat, tool, graph_id, task_id, ok, ms and a redacted-arguments hash.
+- [x] **REQ-GATEWAY-029**: Given every tool invocation, when audited to Greptime, then its event records surface=grok-bot, seat, tool, graph_id, task_id, ok, ms and a redacted-arguments hash.
   - Source: P §7.1 audit; source step / responsibility: n4.2–3; SYSTEMS; acceptance ID: AC-GATEWAY-029.
-- [ ] **REQ-GATEWAY-030**: Given a read upstream failure, when the tool returns, then the response is an empty result with reason under the stated fail-open read contract; it is not proof a production-loop brief succeeded.
+- [x] **REQ-GATEWAY-030**: Given a read upstream failure, when the tool returns, then the response is an empty result with reason under the stated fail-open read contract; it is not proof a production-loop brief succeeded.
   - Source: P §7.1 failure; §12 n4.3; source step / responsibility: n4.3; SYSTEMS; acceptance ID: AC-GATEWAY-030.
-- [ ] **REQ-GATEWAY-031**: Given an unavailable upstream or missing authorization, when a write or gated tool is called, then it fails closed rather than executing a fallback write.
+- [x] **REQ-GATEWAY-031**: Given an unavailable upstream or missing authorization, when a write or gated tool is called, then it fails closed rather than executing a fallback write.
   - Source: P §7.1 failure; §12 n4.3; source step / responsibility: n4.3; SYSTEMS; acceptance ID: AC-GATEWAY-031.
-- [ ] **REQ-GATEWAY-032**: Given a gateway tool call, when its upstream exceeds twenty seconds, then the per-call deadline terminates it without treating an uncertain write as proven unwritten.
+- [x] **REQ-GATEWAY-032**: Given a gateway tool call, when its upstream exceeds twenty seconds, then the per-call deadline terminates it without treating an uncertain write as proven unwritten.
   - Source: P §7.1 failure; §12 n4.3; source step / responsibility: n4.3; SYSTEMS; acceptance ID: AC-GATEWAY-032.
-- [ ] **REQ-GATEWAY-033**: Given an upstream exception, when the Bot receives the response, then no upstream stack trace is exposed.
+- [x] **REQ-GATEWAY-033**: Given an upstream exception, when the Bot receives the response, then no upstream stack trace is exposed.
   - Source: P §7.1 failure; source step / responsibility: n4.3; SYSTEMS; acceptance ID: AC-GATEWAY-033.
-- [ ] **REQ-GATEWAY-034**: Given every contracted seat roster, when fixture coverage is produced, then its tool schemas and backend behaviors have roster-specific fixtures; passing fixtures alone does not prove runtime acceptance.
+- [x] **REQ-GATEWAY-034**: Given every contracted seat roster, when fixture coverage is produced, then its tool schemas and backend behaviors have roster-specific fixtures; passing fixtures alone does not prove runtime acceptance.
   - Source: P §11 gateway tests; §12 n4.3; source step / responsibility: n4.3; SYSTEMS; future parent verification; acceptance ID: AC-GATEWAY-034.
-- [ ] **REQ-GATEWAY-035**: Given a scratch Bot smoke, when two seat endpoints are exercised with the smoke header path, then tools/list differs between seats and cross-seat access returns 403 with recorded runtime evidence.
+- [x] **REQ-GATEWAY-035**: Given a scratch Bot smoke, when two seat endpoints are exercised with the smoke header path, then tools/list differs between seats and cross-seat access returns 403 with recorded runtime evidence.
   - Source: P §12 n4.6; source step / responsibility: n4.6; SYSTEMS / INFRA / scratch Bot; acceptance ID: AC-GATEWAY-035.
-- [ ] **REQ-GATEWAY-036**: Given an unstamped receipt for a reviewed current head, when independent approval is delivered, then approval_ref identifies kind/name/reviewed_sha and resolves to approval for that exact head without creating a new tip; QUALITY cannot self-approve its own receipt.
+- [x] **REQ-GATEWAY-036**: Given an unstamped receipt for a reviewed current head, when independent approval is delivered, then approval_ref identifies kind/name/reviewed_sha and resolves to approval for that exact head without creating a new tip; QUALITY cannot self-approve its own receipt.
   - Source: P §7.3 QUALITY; §9.4; §12 n6.2; G Merge-claim head rule L202–240; assignment exact-SHA instruction; source step / responsibility: n4.3 / n6.2; SYSTEMS + QUALITY + independent reviewer; acceptance ID: AC-GATEWAY-036.
-- [ ] **REQ-GATEWAY-037**: Given a missing approval, Greptile not COMPLETED on the current head, or a moved head, when merge clearance is evaluated, then it stays BLOCKED with merge_claim.allowed=false; no placeholder or fabricated approved_by makes it pass.
+- [x] **REQ-GATEWAY-037**: Given a missing approval, Greptile not COMPLETED on the current head, or a moved head, when merge clearance is evaluated, then it stays BLOCKED with merge_claim.allowed=false; no placeholder or fabricated approved_by makes it pass.
   - Source: G Merge-claim head rule L204–250; assignment exact-SHA instruction; source step / responsibility: n4.3 / n6.2 / n7; QUALITY; acceptance ID: AC-GATEWAY-037.
-- [ ] **REQ-GATEWAY-038**: Given a waiver/claim, when it is used for clearance, then claims cite evidence_command_index and a WITHDRAWN or DOES_NOT_COVER_CURRENT_HEAD waiver is not active; SKIPPED is not pass.
+- [x] **REQ-GATEWAY-038**: Given a waiver/claim, when it is used for clearance, then claims cite evidence_command_index and a WITHDRAWN or DOES_NOT_COVER_CURRENT_HEAD waiver is not active; SKIPPED is not pass.
   - Source: P §7.3 QUALITY waiver_record; G Merge-claim head rule L242–250; source step / responsibility: n4.3 / n7; QUALITY; acceptance ID: AC-GATEWAY-038.
-- [ ] **REQ-GATEWAY-039**: Given desk_brief calls, when roster status is queried, then seat_heartbeat, tool_calls_1m rollups, gate outcomes, registrations, tool counts and last doctor results are reported; Langfuse retains LLM traces without gateway duplication.
+- [x] **REQ-GATEWAY-039**: Given desk_brief calls, when roster status is queried, then seat_heartbeat, tool_calls_1m rollups, gate outcomes, registrations, tool counts and last doctor results are reported; Langfuse retains LLM traces without gateway duplication.
   - Source: P §7.3 roster_status; §7.5; source step / responsibility: n4.3; SYSTEMS / LEAD consumer; acceptance ID: AC-GATEWAY-039.
-- [ ] **REQ-GATEWAY-040**: Given POST /v1/intake, when an authorized request is inserted, then its origin, title, verbatim ask, links[], priority, requested_by and idempotency_key are represented in the Timescale intake queue and the intake is evented to Greptime.
+- [x] **REQ-GATEWAY-040**: Given POST /v1/intake, when an authorized request is inserted, then its origin, title, verbatim ask, links[], priority, requested_by and idempotency_key are represented in the Timescale intake queue and the intake is evented to Greptime.
   - Source: P §10 machines; §12 n4.4; source step / responsibility: n4.4; SYSTEMS; acceptance ID: AC-GATEWAY-040.
-- [ ] **REQ-GATEWAY-041**: Given a seat token on /v1/intake, when authorization is evaluated, then it is rejected; only an origin token for the documented origins authorizes the route.
+- [x] **REQ-GATEWAY-041**: Given a seat token on /v1/intake, when authorization is evaluated, then it is rejected; only an origin token for the documented origins authorizes the route.
   - Source: P §10 machines / enforcement; source step / responsibility: n4.4; SYSTEMS; acceptance ID: AC-GATEWAY-041.
-- [ ] **REQ-GATEWAY-042**: Given a non-LEAD seat endpoint, when intake_next or intake_ack is requested, then the gateway refuses it; only LEAD can drain/ack outside work.
+- [x] **REQ-GATEWAY-042**: Given a non-LEAD seat endpoint, when intake_next or intake_ack is requested, then the gateway refuses it; only LEAD can drain/ack outside work.
   - Source: P §10 enforcement; §7.3 LEAD; source step / responsibility: n4.4; SYSTEMS; acceptance ID: AC-GATEWAY-042.
-- [ ] **REQ-GATEWAY-043**: Given LEAD accepts, rejects or reports progress on an intake, when desk_intake_ack executes, then it posts the Graph ID and relevant links back to the origin.
+- [x] **REQ-GATEWAY-043**: Given LEAD accepts, rejects or reports progress on an intake, when desk_intake_ack executes, then it posts the Graph ID and relevant links back to the origin.
   - Source: P §7.3 LEAD; §10 GitHub; source step / responsibility: n4.4; SYSTEMS / LEAD; acceptance ID: AC-GATEWAY-043.
-- [ ] **REQ-GATEWAY-044**: Given a swcstudiospace issue labelled desk:intake, when desk-intake.yml runs, then it posts the issue URL to /v1/intake and the acknowledgement comments the Graph ID, Linear and Notion links on that issue.
+- [x] **REQ-GATEWAY-044**: Given a swcstudiospace issue labelled desk:intake, when desk-intake.yml runs, then it posts the issue URL to /v1/intake and the acknowledgement comments the Graph ID, Linear and Notion links on that issue.
   - Source: P §10 GitHub; §11 workflows; source step / responsibility: n4.4–5 / n6.3; INFRA; acceptance ID: AC-GATEWAY-044.
-- [ ] **REQ-GATEWAY-045**: Given a message in #programming-desk-intake, when supported Cursor Slack integration is available, then it triggers LEAD intake polling; otherwise the ten-minute polling floor covers intake.
+- [x] **REQ-GATEWAY-045**: Given a message in #programming-desk-intake, when supported Cursor Slack integration is available, then it triggers LEAD intake polling; otherwise the ten-minute polling floor covers intake.
   - Source: P §10 Slack; §8.1 routines; source step / responsibility: n4.4 / n6.3; LEAD; acceptance ID: AC-GATEWAY-045.
-- [ ] **REQ-GATEWAY-046**: Given an outside Bot request, when received by LEAD, then it is intake; when received by a build seat, then the seat records and holds it for LEAD rather than acting.
+- [x] **REQ-GATEWAY-046**: Given an outside Bot request, when received by LEAD, then it is intake; when received by a build seat, then the seat records and holds it for LEAD rather than acting.
   - Source: P §10 other Bots; §8.1 PD-8; source step / responsibility: n4.4 / n5.1; LEAD / build seats; acceptance ID: AC-GATEWAY-046.
-- [ ] **REQ-GATEWAY-047**: Given app and task_id, when desk_app_tools_load loads or unloads a pack, then its named tools are active only for that ticket's lifetime and unload removes them.
+- [x] **REQ-GATEWAY-047**: Given app and task_id, when desk_app_tools_load loads or unloads a pack, then its named tools are active only for that ticket's lifetime and unload removes them.
   - Source: P §7.4; source step / responsibility: n4.1–3; SYSTEMS / QUALITY; acceptance ID: AC-GATEWAY-047.
-- [ ] **REQ-GATEWAY-048**: Given pack activation, when the pack exceeds five tools or the live seat total would exceed twenty, then activation cannot expose the excess tool; the twenty-first live tool is refused.
+- [x] **REQ-GATEWAY-048**: Given pack activation, when the pack exceeds five tools or the live seat total would exceed twenty, then activation cannot expose the excess tool; the twenty-first live tool is refused.
   - Source: P §7.4; §12 n6.5; source step / responsibility: n4.3 / n6.5; SYSTEMS; acceptance ID: AC-GATEWAY-048.
-- [ ] **REQ-GATEWAY-049**: Given a successful pack load, when the tool surface changes, then the gateway emits MCP notifications/tools/list_changed without claiming unproved client support.
+- [x] **REQ-GATEWAY-049**: Given a successful pack load, when the tool surface changes, then the gateway emits MCP notifications/tools/list_changed without claiming unproved client support.
   - Source: P §7.4 delivery; source step / responsibility: n4.3; SYSTEMS; acceptance ID: AC-GATEWAY-049.
-- [ ] **REQ-GATEWAY-050**: Given no client notification support, when a pack is used, then /mcp/<seat>/packs/<app> is available as a second connector with per-ticket Marketplace plugin enable/disable subject to skill/connector authorization.
+- [x] **REQ-GATEWAY-050**: Given no client notification support, when a pack is used, then /mcp/<seat>/packs/<app> is available as a second connector with per-ticket Marketplace plugin enable/disable subject to skill/connector authorization.
   - Source: P §7.4 fallback; source step / responsibility: n4.3 / n5.4; SYSTEMS / recipient; acceptance ID: AC-GATEWAY-050.
-- [ ] **REQ-GATEWAY-051**: Given the initial kanbanos pack, when its contracted list is returned, then it contains kanbanos_api_smoke, kanbanos_supabase_query, kanbanos_push_test, kanbanos_feature_flags and kanbanos_crash_reports with the stated application backends and read-only project-scoped Supabase access.
+- [x] **REQ-GATEWAY-051**: Given the initial kanbanos pack, when its contracted list is returned, then it contains kanbanos_api_smoke, kanbanos_supabase_query, kanbanos_push_test, kanbanos_feature_flags and kanbanos_crash_reports with the stated application backends and read-only project-scoped Supabase access.
   - Source: P §7.4 kanbanos table; source step / responsibility: n4.1–3; SYSTEMS / mobile consumers; acceptance ID: AC-GATEWAY-051.
-- [ ] **REQ-GATEWAY-052**: Given the initial desklanes pack, when its contracted list is returned, then it contains desklanes_api_smoke, desklanes_scoreboard_get, desklanes_push_test, desklanes_store_listing_get and desklanes_crash_reports with Desk Lanes API/store backends.
+- [x] **REQ-GATEWAY-052**: Given the initial desklanes pack, when its contracted list is returned, then it contains desklanes_api_smoke, desklanes_scoreboard_get, desklanes_push_test, desklanes_store_listing_get and desklanes_crash_reports with Desk Lanes API/store backends.
   - Source: P §7.4 desklanes table; source step / responsibility: n4.1–3; SYSTEMS / mobile consumers; acceptance ID: AC-GATEWAY-052.
-- [ ] **REQ-GATEWAY-053**: Given the initial clippyos pack, when its contracted list is returned, then it contains clippyos_api_smoke, clippyos_render_job_status, clippyos_push_test and clippyos_crash_reports with the ClippyOS API backend.
+- [x] **REQ-GATEWAY-053**: Given the initial clippyos pack, when its contracted list is returned, then it contains clippyos_api_smoke, clippyos_render_job_status, clippyos_push_test and clippyos_crash_reports with the ClippyOS API backend.
   - Source: P §7.4 clippyos table; source step / responsibility: n4.1–3; SYSTEMS / mobile consumers; acceptance ID: AC-GATEWAY-053.
-- [ ] **REQ-GATEWAY-054**: Given a mobile operator, when using the desk, then messaging, mentioning, approval and computer watching remain available while advanced configuration/connector-card setup stays on desktop.
+- [x] **REQ-GATEWAY-054**: Given a mobile operator, when using the desk, then messaging, mentioning, approval and computer watching remain available while advanced configuration/connector-card setup stays on desktop.
   - Source: P §10 human; §9.2 step 1; §2 platform; source step / responsibility: n4 / n6.4; LEAD / operator; acceptance ID: AC-GATEWAY-054.
 
 ### SHARE — Phase 5: Prompts, skills, templates, plugin

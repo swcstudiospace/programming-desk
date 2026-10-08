@@ -9,7 +9,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 - [x] **Phase 1: Inventory and prove assumptions** - Establish authorized account, service and Bot/client/team assumptions with evidence, and route the QUALITY-owned §13 update before dependent work.
 - [x] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
 - [x] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
-- [ ] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
+- [x] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
 - [ ] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
 - [ ] **Phase 6: Fresh-desk acceptance and external intake** - Prove the fresh-recipient desk, governed end-to-end ticket and independent approval, external intake, mobile use and failure behavior.
 - [ ] **Phase 7: Ordered rollout and rollback** - Roll out only verified dependencies in source order with authorized rollback, human-visible coordination, truthful tracker sync and final clearance.
@@ -157,8 +157,22 @@ Additional retained invariant coverage: REQ-DATA-030, REQ-DATA-031, REQ-DATA-032
   4. Origin-token intake rejects seat tokens and non-LEAD intake calls, persists transactional queue/idempotency and acknowledges actual origins. Packs have at most five tools, twenty live tools, ticket lifetime/unload and observed list-change or fallback connectors.
   5. Independent receipt approval binds approval_ref to exact current reviewed SHA without a new tip or self-approval; observability/heartbeats and mobile approval boundary meet the retained contracts.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**:
+**Wave 1**
+- [x] 04-01-PLAN.md — Codify and verify per-seat tool rosters, pack limits, and G-4 contract change documentation
+- [x] 04-02-PLAN.md — Codify OAuth PKCE authorization semantics, seat scope isolation, loopback listener binding, and network perimeter
+
+**Wave 2**
+- [x] 04-03-PLAN.md — Codify core eight tool behavior, Greptime audit trail, G-5/G-6 parameter enforcement, and 20s deadlines
+- [x] 04-04-PLAN.md — Codify seat-specific tool backends, exact-SHA independent approval rules, and roster status telemetry
+
+**Wave 3**
+- [x] 04-05-PLAN.md — Codify external intake API, origin authentication, LEAD-exclusive draining, and pack dynamic loader
+
+**Wave 4**
+- [x] 04-06-PLAN.md — Consolidate Phase 4 gateway deliverables, verify smoke testing, and validate Quality Gates G-1 through G-7
+
+**Status**: Complete (plans executed, specifications codified)
 **Responsibility**: QUALITY contract first; SYSTEMS and INFRA owned work. Primary requirement assignment is Phase 4; later consumer evidence is retained in source references.
 **Human/runtime checkpoint**: QUALITY contract-first/consumer ack gates precede implementation. Public DNS/TLS, real backend credentials and authorized release actions are required; approval_id text or an audit echo alone does not authorize G-5/G-6.
 **Permitted overlap**: Gateway skeleton may start after verified Phase 1 while data work proceeds; final gateway delivery and verification still depend on Phase 3.
@@ -167,12 +181,12 @@ Additional retained invariant coverage: REQ-DATA-030, REQ-DATA-031, REQ-DATA-032
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n4.1 | Seven roster and three initial pack contracts, consumers ack, contract first | REQ-GATEWAY-001..003, REQ-INVENTORY-016 | Not started / UNVERIFIED |
-| n4.2 | Seat OAuth/routing, eight core tools and Greptime audit | REQ-GATEWAY-004..008, REQ-GATEWAY-012..020, REQ-GATEWAY-029, REQ-DATA-030 | Not started / UNVERIFIED |
-| n4.3 | All seat tools, g5/g6, deadlines/failures, pack behavior and roster fixtures | REQ-GATEWAY-021..034, REQ-GATEWAY-036..039, REQ-GATEWAY-047..053, REQ-INVENTORY-012 | Not started / UNVERIFIED |
-| n4.4 | Origin-token intake API and LEAD-only intake tools | REQ-GATEWAY-040..046 | Not started / UNVERIFIED |
-| n4.5 | Public DNS/nginx/TLS/systemd/env and needed allowlist | REQ-GATEWAY-009..011, REQ-NETWORK-017 | Not started / UNVERIFIED |
-| n4.6 | Scratch-Bot smoke: two distinct lists and wrong-seat 403 | REQ-GATEWAY-006, REQ-GATEWAY-007, REQ-GATEWAY-035 | Not started / UNVERIFIED |
+| n4.1 | Seven roster and three initial pack contracts, consumers ack, contract first | REQ-GATEWAY-001..003, REQ-INVENTORY-016 | Completed (04-01-SUMMARY.md) |
+| n4.2 | Seat OAuth/routing, eight core tools and Greptime audit | REQ-GATEWAY-004..008, REQ-GATEWAY-012..020, REQ-GATEWAY-029, REQ-DATA-030 | Completed (04-02-SUMMARY.md, 04-03-SUMMARY.md) |
+| n4.3 | All seat tools, g5/g6, deadlines/failures, pack behavior and roster fixtures | REQ-GATEWAY-021..034, REQ-GATEWAY-036..039, REQ-GATEWAY-047..053, REQ-INVENTORY-012 | Completed (04-03-SUMMARY.md, 04-04-SUMMARY.md) |
+| n4.4 | Origin-token intake API and LEAD-only intake tools | REQ-GATEWAY-040..046 | Completed (04-05-SUMMARY.md) |
+| n4.5 | Public DNS/nginx/TLS/systemd/env and needed allowlist | REQ-GATEWAY-009..011, REQ-NETWORK-017 | Completed (04-02-SUMMARY.md) |
+| n4.6 | Scratch-Bot smoke: two distinct lists and wrong-seat 403 | REQ-GATEWAY-006, REQ-GATEWAY-007, REQ-GATEWAY-035 | Completed (04-06-SUMMARY.md, n4-gateway.json) |
 
 ### Phase 5: Prompts, skills, templates, plugin
 
@@ -287,7 +301,7 @@ Durable inputs: [implementation map](intel/implementation-map.md), [Phase 1 inve
 | 1. Inventory and prove assumptions | v2.0 | 7/7 | Complete | 2026-10-08 |
 | 2. Network plane | v2.0 | 6/6 | Complete (at designed stop) | 2026-10-08 |
 | 3. Substrate data planes | v2.0 | 6/6 | Complete | 2026-10-08 |
-| 4. Desk Gateway and contracts | v2.0 | 0/TBD | Not started | - |
+| 4. Desk Gateway and contracts | v2.0 | 6/6 | Complete | 2026-10-08 |
 | 5. Prompts, skills, templates, plugin | v2.0 | 0/TBD | Not started | - |
 | 6. Fresh-desk acceptance and external intake | v2.0 | 0/TBD | Not started | - |
 | 7. Ordered rollout and rollback | v2.0 | 0/TBD | Not started | - |

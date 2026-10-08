@@ -11,7 +11,7 @@
 
 ### 🟡 v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13)
 
-- [ ] Phase 12: Production Cutover & Dynamic Failover (0/2 plans)
+- [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
 - [ ] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (0/2 plans)
 
 #### Phase 12: Production Cutover & Dynamic Failover
@@ -20,7 +20,7 @@
 **Requirements**: REQ-CUTOVER-001 through REQ-CUTOVER-005
 **Plans**:
 - [x] 12-01-PLAN.md — Production live cutover orchestrator, canary traffic splitting & emergency rollback (REQ-CUTOVER-001, REQ-CUTOVER-004, REQ-CUTOVER-005)
-- [ ] 12-02-PLAN.md — Dynamic multi-desk failover routing & upstream health polling (REQ-CUTOVER-002, REQ-CUTOVER-003)
+- [x] 12-02-PLAN.md — Dynamic multi-desk failover routing & upstream health polling (REQ-CUTOVER-002, REQ-CUTOVER-003)
 
 #### Phase 13: Advanced Telemetry, SLOs & Alert Thresholds
 

@@ -13,7 +13,7 @@ One command for the whole Programming Desk pipeline. It chains three saved skill
 - desk-shared-memory: `/home/box/agent-data/workflows/desk-shared-memory/SKILL.md`
 - swarm-cloud-dispatch: `/home/box/agent-data/workflows/swarm-cloud-dispatch/SKILL.md`
 
-The text after `/desk-run` is the request. If it is empty, ask what to run and stop. If it starts with `raw:`, skip planning (step 2) but keep the other steps. If it cites an existing `graph ut-…`, continue that graph instead of planning a new one.
+The text after `/desk-run` is the request. If it is empty, ask what to run and stop. If it starts with `raw:`, skip the Ultrathink uplift and Graph of Thought analysis in step 2, but still mint a Graph ID, file one Linear issue, and write one XML prompt file per repo change with the text after `raw:` copied verbatim into ORIGINAL and the task. Steps 3 and 4 still need those files, so `raw:` never launches without them. If it cites an existing `graph ut-…`, continue that graph and reuse its prompt files instead of planning a new one.
 
 ## 1. Load desk context (desk-shared-memory)
 - Call `desk_brief`, then `desk_memory_recall` with specific words from the request (repo, tool, error, decision names), then `desk_docs_search` if the request touches a repo or design.

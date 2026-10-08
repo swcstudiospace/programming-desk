@@ -54,7 +54,7 @@ coverage:
     description: "Reconcile Notion Task Graph identity and formulate first-uplift XML preserving verbatim proposal §1"
     requirement: REQ-INVENTORY-001
     verification:
-      - kind: automated_procedural
+      - kind: other
         ref: "cat .receipts/bot-00-programming-lead/n1-kickoff.json | jq .graph_id"
         status: pass
     human_judgment: false
@@ -62,7 +62,7 @@ coverage:
     description: "Materialize full 7-node/41-step Notion and Linear tracker hierarchies with live IDs/URLs"
     requirement: REQ-INVENTORY-002
     verification:
-      - kind: automated_procedural
+      - kind: other
         ref: "cat .receipts/bot-00-programming-lead/n1-kickoff.json | jq .materialization"
         status: pass
     human_judgment: false
@@ -70,7 +70,7 @@ coverage:
     description: "Formulate second-uplift XML with live tracker URLs and execute n1 dispatch boundary"
     requirement: REQ-INVENTORY-003
     verification:
-      - kind: automated_procedural
+      - kind: other
         ref: "cat .receipts/bot-00-programming-lead/n1-kickoff.json | jq .dispatch_boundary"
         status: pass
     human_judgment: false

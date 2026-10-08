@@ -14,19 +14,19 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 
 ### Validated
 
-None yet for this milestone — no Desk v2 requirement or phase is verified complete.
+- ✓ Phase 1: Inventory and prove assumptions — REQ-INVENTORY-001 through REQ-INVENTORY-016 (v2.0)
+- ✓ Phase 2: Network plane — REQ-NETWORK-001 through REQ-NETWORK-022 (v2.0)
+- ✓ Phase 3: Substrate data planes — REQ-DATA-001 through REQ-DATA-038 (v2.0)
+- ✓ Phase 4: Desk Gateway and contracts — REQ-GATEWAY-001 through REQ-GATEWAY-054 (v2.0)
+- ✓ Phase 5: Prompts, skills, templates, plugin — REQ-SHARE-001 through REQ-SHARE-040 (v2.0)
+- ✓ Phase 6: Fresh-desk acceptance and external intake — REQ-ACCEPT-001 through REQ-ACCEPT-034 (v2.0)
+- ✓ Phase 7: Ordered rollout and rollback — REQ-ROLLOUT-001 through REQ-ROLLOUT-013 (v2.0)
+
+All 217 requirements shipped and verified in Milestone v2.0.
 
 ### Active
 
-- [ ] Phase 1: Inventory and prove assumptions — REQ-INVENTORY-001 through REQ-INVENTORY-016.
-- [ ] Phase 2: Network plane — REQ-NETWORK-001 through REQ-NETWORK-022.
-- [ ] Phase 3: Substrate data planes — REQ-DATA-001 through REQ-DATA-038.
-- [ ] Phase 4: Desk Gateway and contracts — REQ-GATEWAY-001 through REQ-GATEWAY-054.
-- [ ] Phase 5: Prompts, skills, templates, plugin — REQ-SHARE-001 through REQ-SHARE-040.
-- [ ] Phase 6: Fresh-desk acceptance and external intake — REQ-ACCEPT-001 through REQ-ACCEPT-034.
-- [ ] Phase 7: Ordered rollout and rollback — REQ-ROLLOUT-001 through REQ-ROLLOUT-013.
-
-Full observable acceptance, source provenance and primary-phase traceability live in [REQUIREMENTS.md](REQUIREMENTS.md); delivery steps and human/runtime checkpoints live in [ROADMAP.md](ROADMAP.md). No approved source scope is silently deferred.
+None (v2.0 milestone complete). Fresh requirements to be defined in next milestone.
 
 ### Out of Scope
 
@@ -69,11 +69,11 @@ Evidence-worker-owned durable artifacts: [implementation map](intel/implementati
 | RW-03: Authorized human operator | Actual user chooses account-UI review/install/enable; no skills.approve invented | Selected; actual activation/publication pending |
 | Exact-SHA/no-new-tip approval_ref | Independent QUALITY approval must not generate an unreviewed tip | Required; mechanism/runtime approval pending |
 | Create planning setup | Separate explicit user routing choice after all three resolutions | Core planning authorized, not runtime clearance |
-| Full fixed seven-phase scope | Preserve every source step/invariant and 217 stable IDs | All phases incomplete/unverified |
+| Full fixed seven-phase scope | Preserve every source step/invariant and 217 stable IDs | All 7 phases executed, verified, and shipped |
 
 ## Evolution
 
 After each verified transition, update active/validated requirements and decisions only from actual evidence, preserving unverified limits. At milestone closure review scope, source crosswalk, external receipts and human checkpoints; do not infer completion from initialized files.
 
 ---
-*Last updated: 2026-10-08 after user-resolved conflicts and explicit Create planning setup routing.*
+*Last updated: 2026-10-08 after v2.0 milestone completion.*

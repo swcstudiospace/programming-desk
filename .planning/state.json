@@ -6,43 +6,43 @@
     {
       "number": "1",
       "name": "Inventory and prove assumptions",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "2",
       "name": "Network plane",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "3",
       "name": "Substrate data planes",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "4",
       "name": "Desk Gateway and contracts",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "5",
       "name": "Prompts, skills, templates, plugin",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "6",
       "name": "Fresh-desk acceptance and external intake",
-      "status": "pending"
+      "status": "complete"
     },
     {
       "number": "7",
       "name": "Ordered rollout and rollback",
-      "status": "pending"
+      "status": "complete"
     }
   ],
   "next": {
-    "command": "/gsd:progress --next",
-    "label": "Advance to the next step (verify)",
-    "reason": "Phase 1 of 7 · 0% · ready to verify"
+    "command": "/gsd:progress",
+    "label": "Show progress",
+    "reason": "Unsure of state — showing progress"
   },
-  "updated_at": "2026-10-08T05:24:06.088Z"
+  "updated_at": "2026-10-08T15:24:41.110Z"
 }

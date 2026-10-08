@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "verification",
+  "task_id": "archive-v2.0",
+  "branch": "bot-00-programming-lead/archive-v2.0",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-08T15:20:00Z",
+  "completed_at": "2026-10-08T15:25:00Z",
+  "head_commit": "5a3081b9538c227cb224be4c18544d6dbfe05353",
+  "approved_by": "SomeRandmGuyy",
+  "commands": [
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs query milestone.complete v2.0 --name 'Desk v2' --confirm",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "Milestone archived to .planning/milestones/"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Milestone v2.0 planning artifacts archived to .planning/milestones/ and roadmap reset with milestone grouping",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-7 desk integrity gate remains completely clean after milestone archiving",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [],
+  "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+}

@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 ## Current Position
 
 Phase: Phase 8 — Gateway Resiliency & Subagent Execution Drills
-Plan: 08-03 completed (08-04 next)
-Status: Completed Plan 08-03 (Token Error & RFC-7807 Problem Details Drill)
-Last activity: 2026-10-08 — Phase 8 Plan 03 verified (PR #83 merged, 128/128 gateway tests clean)
+Plan: 08-04 completed (Phase 8 Complete)
+Status: Completed Plan 08-04 (Intake Rate Limiting & Backpressure Drill)
+Last activity: 2026-10-08 — Phase 8 Plan 04 verified (PR #85 merged, 129/129 gateway tests clean)
 
 ## Accumulated Context
 

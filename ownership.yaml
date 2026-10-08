@@ -172,15 +172,11 @@ ownership:
     owner: bot-06-quality-security
   - pattern: ".github/workflows/security-*.yml"
     owner: bot-06-quality-security
-  # The distributable gate template. GitHub only reads workflows from the repository
-  # root, so ci/.github/workflows/gates.yml is the copy other repositories seed from
-  # and .github/workflows/gates.yml is the copy that runs. The two must always change
-  # together — .github/workflows/gates-template-sync.yml fails the build if they drift —
-  # so the template belongs to the same bot as the live workflow. Without this rule the
-  # path matches nothing: .github/workflows/** is anchored at the root, so the nested
-  # path was UNOWNED and no bot could touch the template at all.
-  - pattern: "ci/.github/workflows/**"
-    owner: bot-05-infrastructure
+  # The distributable gate template (ci/.github/workflows/gates.yml) belongs to
+  # INFRA, same as the live .github/workflows/gates.yml: gates-template-sync.yml
+  # fails the build if the two drift. The pattern is stated later, immediately
+  # after the broader ci/.github/** QUALITY rule. Last match wins, so stating it
+  # here would lose and no single seat could edit both copies.
   - pattern: "scripts/dev/**"
     owner: bot-05-infrastructure
 
@@ -364,11 +360,17 @@ ownership:
     owner: bot-00-programming-lead
   - pattern: "scripts/generate-templates.py"
     owner: bot-00-programming-lead
-  # The gate test suite and the workflow template under ci/ travel with the gates.
+  # The gate test suite travels with the gates. The distributable workflow
+  # template does not: it has to stay with INFRA, same owner as the live copy.
   - pattern: "ci/tests/**"
     owner: bot-06-quality-security
+  # Anything under ci/.github/ other than the gates template. The template rule
+  # is next, on purpose: this broader pattern would otherwise win by last match
+  # and hand ci/.github/workflows/** to QUALITY.
   - pattern: "ci/.github/**"
     owner: bot-06-quality-security
+  - pattern: "ci/.github/workflows/**"
+    owner: bot-05-infrastructure
 
   # --- Agent runtime surface (.claude/, .planning/) ------------------------
   # What a Claude Code or Grok Bot session actually loads when it opens this repo: the

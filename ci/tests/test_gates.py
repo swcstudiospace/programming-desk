@@ -13,6 +13,7 @@ A gate that has silently stopped working looks identical to a gate with nothing 
 from __future__ import annotations
 
 import atexit
+import importlib.util
 import io
 import json
 import os
@@ -296,6 +297,41 @@ class TestG1Ownership:
     def test_each_platform_routes_to_its_owner(self, path, bot):
         r = run_gate("check_ownership.py", "--bot", bot, "--files", path)
         assert r.returncode == 0, f"{path} should belong to {bot}\n{r.stderr}"
+
+
+def _ownership_resolver():
+    """The G-1 resolver. Tests call it directly so the owner string is the assertion."""
+    spec = importlib.util.spec_from_file_location("check_ownership", GATES / "check_ownership.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestGateWorkflowCopiesShareOneOwner:
+    """Live gates.yml and the distributable template must resolve to INFRA.
+
+    .github/workflows/gates-template-sync.yml fails when the two copies drift, so
+    one seat has to be able to edit both. ci/.github/** is a later, broader
+    QUALITY rule; last match would hand ci/.github/workflows/gates.yml to QUALITY
+    and leave no seat that passes both G-1 and the sync check.
+    """
+
+    def _owner(self, path: str) -> str:
+        module = _ownership_resolver()
+        owner, _contract = module.resolve_owner(path, module.load_manifest(MANIFEST))
+        return owner
+
+    @pytest.mark.parametrize("path", [
+        ".github/workflows/gates.yml",
+        "ci/.github/workflows/gates.yml",
+    ])
+    def test_both_copies_belong_to_infrastructure(self, path):
+        owner = self._owner(path)
+        assert owner == "bot-05-infrastructure", f"{path} resolved to {owner}"
+
+    def test_other_paths_under_ci_github_stay_with_quality(self):
+        owner = self._owner("ci/.github/CODEOWNERS")
+        assert owner == "bot-06-quality-security", owner
 
 
 # ===========================================================================

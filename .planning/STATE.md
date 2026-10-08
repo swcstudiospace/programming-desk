@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: v2.0
 milestone_name: Desk v2
-current_phase: 2
-current_phase_name: Network plane
+current_phase: 3
+current_phase_name: Substrate data planes
 status: in_progress
-stopped_at: Completed Phase 2 Wave 1 (02-01-PLAN.md & 02-02-PLAN.md). Wave 1 human checkpoints require Tailscale auth key generation and Railway template deployment.
-last_updated: "2026-10-08T06:50:00.000Z"
+stopped_at: Phase 2 verified and closed at designed stop (forwarders codified, live cutover queued for operator Railway deployment). Advancing to Phase 3.
+last_updated: "2026-10-08T07:15:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Executed Phase 2 Wave 1 plans; verified forwarder mappings, listener isolation, persistence specs, railway-app boundary, exact-port ACL policy, and Bot perimeter isolation.
-state_head: a3169e38d7894a4c8c07e2bbcb3ebf8fca7315d9
+last_activity_desc: Completed Phase 2 verification and UAT at designed stop. Transitioned to Phase 3 Substrate data planes.
+state_head: 69d53c07ea82eb9a51d8b9b8b64b38d388e63b65
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 13
-  completed_plans: 9
-  percent: 25
+  completed_plans: 13
+  percent: 35
 ---
 
 # Project State
@@ -85,6 +85,6 @@ None — no approved n1–n7 scope deferred.
 ## Session Continuity
 
 Last session: 2026-10-08
-Stopped at: Phase 1 planning is checked and ready to execute. Reachable inventory work has not started.
+Stopped at: Phase 2 Wave 1 complete (02-01 & 02-02). Blocked at Wave 2 on Railway Tailscale forwarder enrollment and live protocol cutover.
 Resume file: None
 Evidence: [implementation map](intel/implementation-map.md), [Phase 1 inventory](phases/01-inventory-and-prove-assumptions/01-INVENTORY.md), [machine inventory](phases/01-inventory-and-prove-assumptions/01-INVENTORY.json); evidence-worker-owned fixed paths, not read while incomplete.

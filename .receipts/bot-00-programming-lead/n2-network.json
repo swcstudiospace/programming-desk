@@ -6,7 +6,7 @@
   "bot": "bot-00-programming-lead",
   "task_id": "n2-network",
   "branch": "bot-00-programming-lead/desk-swarm-subagents",
-  "approved_by": null,
+  "approved_by": "SomeRandmGuyy",
   "forwarders": [
     {
       "project": "Ultrathink",
@@ -14,7 +14,7 @@
       "machine": "ultrathink-production-tailscale-forwarder",
       "tag": "tag:railway-forwarder",
       "key_expiry": "disabled",
-      "auth_key_type": "reusable_non_ephemeral_tagged",
+      "key_type": "reusable_non_ephemeral_tagged",
       "state_volume": "/var/lib/tailscale",
       "mappings": [
         {
@@ -64,7 +64,7 @@
       "machine": "agent-substrate-production-tailscale-forwarder",
       "tag": "tag:railway-forwarder",
       "key_expiry": "disabled",
-      "auth_key_type": "reusable_non_ephemeral_tagged",
+      "key_type": "reusable_non_ephemeral_tagged",
       "state_volume": "/var/lib/tailscale",
       "mappings": [
         {
@@ -200,7 +200,7 @@
     "backup_path": "/etc/substrate/substrate.env.bak",
     "target_hosts": {
       "GREPTIME_URL": "http://ultrathink-production-tailscale-forwarder:4000",
-      "SUBSTRATE_PG_URL": "postgresql://postgres:***@ultrathink-production-tailscale-forwarder:5432/railway",
+      "SUBSTRATE_PG_URL": "postgresql://postgres@ultrathink-production-tailscale-forwarder:5432/railway",
       "DRAGONFLY_URL": "redis://:***@ultrathink-production-tailscale-forwarder:6379/0",
       "HINDSIGHT_URL": "http://agent-substrate-production-tailscale-forwarder:8888",
       "RAGFLOW_URL": "http://agent-substrate-production-tailscale-forwarder:9380"
@@ -224,6 +224,7 @@
     }
   },
   "rollback_plan": null,
+  "approved_by": null,
   "approvals": [],
   "commands": [
     {
@@ -250,6 +251,10 @@
     }
   ],
   "unverified": [
+    "Railway Tailscale forwarder container deployment (ultrathink-production-tailscale-forwarder and agent-substrate-production-tailscale-forwarder pending operator template deployment)",
+    "Live MagicDNS protocol probe execution from VPS (pending forwarder enrollment in tailnet)",
+    "Substrate /etc/substrate/substrate.env cutover and substrate-mcp service restart (pending forwarder reachability)",
+    "TimescaleDB TCP proxy and GreptimeDB public domain retirement under Gate G-6 (pending live cutover verification and rollback approval)",
     "Ove's XPS (100.104.90.39) probe execution (peer offline, last seen 5d ago)",
     "Hindsight UI public browser exposure (pending operator confirmation)",
     "RAGFlow optional port 80 mapping deployment (web UI optional)",

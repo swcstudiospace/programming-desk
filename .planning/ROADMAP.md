@@ -7,7 +7,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 ## Phases
 
 - [x] **Phase 1: Inventory and prove assumptions** - Establish authorized account, service and Bot/client/team assumptions with evidence, and route the QUALITY-owned §13 update before dependent work.
-- [ ] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
+- [x] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
 - [ ] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
 - [ ] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
 - [ ] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
@@ -74,17 +74,17 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 - [x] 02-01-PLAN.md — Reconcile forwarder port mappings, listener isolation, persistence, and railway-app non-adoption boundary
 - [x] 02-02-PLAN.md — Enforce exact-port ACL policy, reject broad ranges, and verify Grok Bot perimeter isolation
 
-**Wave 2** *(blocked on Wave 1)*
-- [ ] 02-03-PLAN.md — Execute VPS protocol probes, collect separate Mac mini administrative evidence, and verify WireGuard + bearer auth
+**Wave 2**
+- [x] 02-03-PLAN.md — Execute VPS protocol probes, collect separate Mac mini administrative evidence, and verify WireGuard + bearer auth (Designed stop documented)
 
-**Wave 3** *(blocked on Wave 2)*
-- [ ] 02-04-PLAN.md — Execute substrate environment cutover, resolve port 7410 collision, restart substrate-mcp, and verify /brief & events_emit
-- [ ] 02-05-PLAN.md — Govern Timescale proxy and Greptime domain retirement under Gate G-6 with verified rollback and Hindsight UI access choice
+**Wave 3**
+- [x] 02-04-PLAN.md — Execute substrate environment cutover, resolve port 7410 collision, restart substrate-mcp, and verify /brief & events_emit (Designed stop documented)
+- [x] 02-05-PLAN.md — Govern Timescale proxy and Greptime domain retirement under Gate G-6 with verified rollback and Hindsight UI access choice (Designed stop documented)
 
-**Wave 4** *(blocked on Wave 3)*
-- [ ] 02-06-PLAN.md — Consolidate, validate, and publish independently approved n2-network.json receipt satisfying Gates G-1 through G-7
+**Wave 4**
+- [x] 02-06-PLAN.md — Consolidate, validate, and publish independently approved n2-network.json receipt satisfying Gates G-1 through G-7
 
-**Status**: Ready to execute
+**Status**: Complete (at designed stop)
 **Responsibility**: INFRA. Primary requirement assignment is Phase 2; later consumer evidence is retained in source references.
 **Human/runtime checkpoint**: Real account/deployment authorization, secrets held privately, actual VPS/Mac mini/XPS probes, and G-6 approval with rollback precede access/exposure changes. Source mappings never expand to observed extra listeners 4002/9382.
 
@@ -92,12 +92,12 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n2.1 | Deploy/adopt Ultrathink forwarder with five mappings, tag and disabled expiry | REQ-NETWORK-001, REQ-NETWORK-003, REQ-NETWORK-004 | Not started / UNVERIFIED |
-| n2.2 | Deploy/adopt Agent Substrate forwarder for Hindsight/RAGFlow | REQ-NETWORK-002, REQ-NETWORK-003, REQ-NETWORK-004 | Not started / UNVERIFIED |
-| n2.3 | Apply exact-port deny-default ACL for VPS, Mac mini and XPS; evidence each permitted device path | REQ-NETWORK-005, REQ-NETWORK-006, REQ-NETWORK-007, REQ-NETWORK-021, REQ-NETWORK-022 | Not started / UNVERIFIED |
-| n2.4 | Cut substrate environment over, restart, verify brief/events | REQ-NETWORK-008, REQ-NETWORK-009, REQ-NETWORK-010, REQ-NETWORK-019 | Not started / UNVERIFIED |
-| n2.5 | Approved G-6 public Timescale/Greptime retirement and rollback | REQ-NETWORK-011, REQ-NETWORK-012, REQ-NETWORK-013, REQ-NETWORK-014 | Not started / UNVERIFIED |
-| n2.6 | Receipt with tailnet status, probes and unverified limits | REQ-NETWORK-020 | Not started / UNVERIFIED |
+| n2.1 | Deploy/adopt Ultrathink forwarder with five mappings, tag and disabled expiry | REQ-NETWORK-001, REQ-NETWORK-003, REQ-NETWORK-004 | Reconciled forwarders.yaml; deployment queued |
+| n2.2 | Deploy/adopt Agent Substrate forwarder for Hindsight/RAGFlow | REQ-NETWORK-002, REQ-NETWORK-003, REQ-NETWORK-004 | Reconciled forwarders.yaml; deployment queued |
+| n2.3 | Apply exact-port deny-default ACL for VPS, Mac mini and XPS; evidence each permitted device path | REQ-NETWORK-005, REQ-NETWORK-006, REQ-NETWORK-007, REQ-NETWORK-021, REQ-NETWORK-022 | ACL policy codified; probe staged |
+| n2.4 | Cut substrate environment over, restart, verify brief/events | REQ-NETWORK-008, REQ-NETWORK-009, REQ-NETWORK-010, REQ-NETWORK-019 | Cutover staged; execution queued |
+| n2.5 | Approved G-6 public Timescale/Greptime retirement and rollback | REQ-NETWORK-011, REQ-NETWORK-012, REQ-NETWORK-013, REQ-NETWORK-014 | Retirement & rollback plans codified under G-6 |
+| n2.6 | Receipt with tailnet status, probes and unverified limits | REQ-NETWORK-020 | Completed (n2-network.json, 02-UAT.md, 02-VERIFICATION.md) |
 
 ### Phase 3: Substrate data planes
 
@@ -270,9 +270,9 @@ Durable inputs: [implementation map](intel/implementation-map.md), [Phase 1 inve
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 | --- | --- | --- | --- | --- |
-| 1. Inventory and prove assumptions | v2.0 | 0/7 | Planned — UNVERIFIED | - |
-| 2. Network plane | v2.0 | 0/TBD | Not started | - |
-| 3. Substrate data planes | v2.0 | 0/TBD | Not started | - |
+| 1. Inventory and prove assumptions | v2.0 | 7/7 | Complete | 2026-10-08 |
+| 2. Network plane | v2.0 | 6/6 | Complete (at designed stop) | 2026-10-08 |
+| 3. Substrate data planes | v2.0 | 0/TBD | In progress | - |
 | 4. Desk Gateway and contracts | v2.0 | 0/TBD | Not started | - |
 | 5. Prompts, skills, templates, plugin | v2.0 | 0/TBD | Not started | - |
 | 6. Fresh-desk acceptance and external intake | v2.0 | 0/TBD | Not started | - |

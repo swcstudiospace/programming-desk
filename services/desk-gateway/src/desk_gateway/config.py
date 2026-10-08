@@ -95,6 +95,10 @@ class Settings:
     cutover_enabled: bool = False
     canary_percentage: int = 100
     isolated_seats: list[str] = field(default_factory=list)
+    alert_webhook_url: str = ""
+    slo_latency_p99_max_ms: float = 500.0
+    slo_intake_success_min_pct: float = 99.9
+    dlq_alert_threshold: int = 10
 
     @property
     def issuer_url(self) -> str:
@@ -216,4 +220,8 @@ class Settings:
             cutover_enabled=_env("CUTOVER_ENABLED", "false").lower() in ("true", "1", "yes"),
             canary_percentage=int(_env("CANARY_PERCENTAGE", "100")),
             isolated_seats=_csv(_env("ISOLATED_SEATS", "")),
+            alert_webhook_url=_env("ALERT_WEBHOOK_URL"),
+            slo_latency_p99_max_ms=float(_env("SLO_LATENCY_P99_MAX_MS", "500.0")),
+            slo_intake_success_min_pct=float(_env("SLO_INTAKE_SUCCESS_MIN_PCT", "99.9")),
+            dlq_alert_threshold=int(_env("DLQ_ALERT_THRESHOLD", "10")),
         )

@@ -41,6 +41,7 @@ from desk_gateway.live import (
 )
 from desk_gateway.oauth import ConsentError, SeatOAuthProvider, seat_of
 from desk_gateway.pages import consent_page, landing_page, message_page, view_login_page
+from desk_gateway.problems import problem_details, problem_response
 from desk_gateway.redact import contains_secret, redact_value
 from desk_gateway.rosters import RosterError, Rosters, ToolSpec
 from desk_gateway.schema import SchemaError, validate
@@ -222,9 +223,30 @@ class SeatRouter:
             access = await self.provider.load_access_token(token)
             token_seat = seat_of(access)
             if access is None:
-                pass
+                # Corrupted, unissued, or expired token
+                prob = problem_details(
+                    status=401,
+                    title="Invalid or Expired Token",
+                    detail="The provided bearer token is invalid, expired, or corrupted.",
+                    error_code="invalid_token",
+                    instance=path,
+                )
+                headers = [
+                    (b"www-authenticate", b'Bearer error="invalid_token", error_description="The token is invalid or expired"'),
+                ]
+                await _json(send, 401, prob, headers=headers)
+                return
             elif token_seat != seat:
-                await _json(send, 403, {"error": "wrong_seat", "reason": f"this token belongs to {token_seat or 'no seat'}; connect to /mcp/{token_seat} or re-authorise with the {seat} passphrase"})
+                prob = problem_details(
+                    status=403,
+                    title="Wrong Seat",
+                    detail=f"this token belongs to {token_seat or 'no seat'}; connect to /mcp/{token_seat} or re-authorise with the {seat} passphrase",
+                    error_code="wrong_seat",
+                    instance=path,
+                    token_seat=token_seat,
+                    expected_seat=seat,
+                )
+                await _json(send, 403, prob)
                 return
         if pack and not self.rosters.pack_surface(seat, pack):
             await _json(send, 404, {"error": "unknown_pack", "reason": f"no pack {pack} for seat {seat}"})
@@ -250,9 +272,17 @@ def _bearer(scope: dict[str, Any]) -> str | None:
     return key.decode(errors="ignore").strip() if key else None
 
 
-async def _json(send: Any, status: int, body: dict[str, Any]) -> None:
+async def _json(send: Any, status: int, body: dict[str, Any], headers: list[tuple[bytes, bytes]] | None = None) -> None:
     raw = json.dumps(body).encode()
-    await send({"type": "http.response.start", "status": status, "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(raw)).encode()), (b"cache-control", b"no-store")]})
+    content_type = b"application/problem+json" if "title" in body and "status" in body else b"application/json"
+    resp_headers = [
+        (b"content-type", content_type),
+        (b"content-length", str(len(raw)).encode()),
+        (b"cache-control", b"no-store"),
+    ]
+    if headers:
+        resp_headers.extend(headers)
+    await send({"type": "http.response.start", "status": status, "headers": resp_headers})
     await send({"type": "http.response.body", "body": raw})
 
 
@@ -482,8 +512,21 @@ def create_mcp(
         origin = settings.origin_for_intake_token(token)
         if origin is None:
             if token and settings.seat_for_passphrase(token):
-                return JSONResponse({"error": "forbidden", "reason": "seat tokens cannot submit intake; only origin tokens can"}, status_code=403)
-            return JSONResponse({"error": "unauthorized", "reason": "missing or unknown origin token"}, status_code=401)
+                return problem_response(
+                    status=403,
+                    title="Seat Token Forbidden For Intake",
+                    detail="seat tokens cannot submit intake; only origin tokens can",
+                    error_code="forbidden",
+                    instance="/v1/intake",
+                )
+            return problem_response(
+                status=401,
+                title="Unauthorized Origin Token",
+                detail="missing or unknown origin token",
+                error_code="unauthorized",
+                instance="/v1/intake",
+                headers={"WWW-Authenticate": 'Bearer error="invalid_token", error_description="missing or unknown origin token"'},
+            )
         try:
             body = await request.json()
         except ValueError:

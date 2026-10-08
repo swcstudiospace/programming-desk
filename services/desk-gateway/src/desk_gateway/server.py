@@ -139,6 +139,19 @@ from desk_gateway.multimodal_memory import (
     SensorySearchResult,
     cosine_similarity,
 )
+from desk_gateway.streaming_mesh import (
+    AdaptivePayloadDownsampler,
+    CompressionQuality,
+    DistributedMediaCache,
+    MediaCacheEntry,
+    NetworkConditions,
+    StreamAuditReceipt,
+    StreamRPCFrame,
+    StreamRPCFrameType,
+    StreamingClientMultiplexer,
+    StreamingMeshRPC,
+    StreamingToolAuditLogger,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -3021,7 +3034,8 @@ def create_mcp(
         }
         if seat_id:
             res["seat_id"] = seat_id
-            res["seat_spend_micro_dollars"] = token_ledger.get_seat_spend(tenant_id, seat_id)
+            spend_val = token_ledger.get_seat_spend(tenant_id, seat_id)
+            res["seat_spend_micro_dollars"] = spend_val
         return JSONResponse(res)
 
     @mcp.custom_route("/v1/finops/budget", methods=["POST"])
@@ -3368,6 +3382,110 @@ def create_mcp(
         res = await mm_verifier.verify_all(tenant_id=tenant_id)
         return JSONResponse(res)
 
+    # Dynamic Streaming Tool Mesh & Real-Time Telemetry (Phase 21)
+    streaming_rpc = StreamingMeshRPC(local_desk_id=settings.public_host)
+    media_cache = DistributedMediaCache()
+    client_multiplexer = StreamingClientMultiplexer()
+    downsampler = AdaptivePayloadDownsampler()
+    audit_logger = StreamingToolAuditLogger()
+
+    setattr(mcp, "_streaming_rpc", streaming_rpc)
+    setattr(mcp, "_media_cache", media_cache)
+    setattr(mcp, "_client_multiplexer", client_multiplexer)
+    setattr(mcp, "_downsampler", downsampler)
+    setattr(mcp, "_audit_logger", audit_logger)
+
+    @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
+    async def mesh_streaming_open_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        remote_desk = body.get("remote_desk_id", "peer-desk")
+        session_id = body.get("session_id")
+        frame = streaming_rpc.open_session(remote_desk_id=remote_desk, session_id=session_id)
+        return JSONResponse({"ok": True, "frame": frame.to_dict()})
+
+    @mcp.custom_route("/v1/mesh/streaming/frame/send", methods=["POST"])
+    async def mesh_streaming_send_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        payload = body.get("payload", {})
+        try:
+            audit_logger.start_session_audit(session_id=session_id, tool_name="remote_streaming_tool")
+            frame = streaming_rpc.send_data(session_id=session_id, data=payload)
+            audit_logger.record_frame(session_id, frame.to_dict())
+            return JSONResponse({"ok": True, "frame": frame.to_dict()})
+        except (KeyError, BufferError, TimeoutError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/streaming/cache/put", methods=["POST"])
+    async def mesh_streaming_cache_put_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload_b64 = body.get("payload_b64", "")
+        mime_type = body.get("mime_type", "application/octet-stream")
+        tenant_id = body.get("tenant_id", "default")
+        origin_node = body.get("origin_node")
+        try:
+            raw_bytes = base64.b64decode(payload_b64)
+            digest = media_cache.put(raw_bytes, mime_type=mime_type, tenant_id=tenant_id, origin_node=origin_node)
+            return JSONResponse({"ok": True, "content_hash": digest, "size_bytes": len(raw_bytes)})
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/streaming/cache/get/{content_hash}", methods=["GET"])
+    async def mesh_streaming_cache_get_route(request: Request) -> Response:
+        content_hash = request.path_params.get("content_hash", "")
+        entry = media_cache.get(content_hash)
+        if not entry:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return JSONResponse({
+            "ok": True,
+            "content_hash": entry.content_hash,
+            "mime_type": entry.mime_type,
+            "size_bytes": entry.size_bytes,
+            "tenant_id": entry.tenant_id,
+            "sync_origins": list(entry.sync_origins),
+        })
+
+    @mcp.custom_route("/v1/mesh/streaming/downsample", methods=["POST"])
+    async def mesh_streaming_downsample_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload_b64 = body.get("payload_b64", "")
+        mime_type = body.get("mime_type", "image/png")
+        bw = float(body.get("bandwidth_kbps", 2000.0))
+        rtt = float(body.get("latency_ms", 50.0))
+        raw_bytes = base64.b64decode(payload_b64)
+        conditions = NetworkConditions(bandwidth_kbps=bw, latency_ms=rtt)
+        downsampled, tier, meta = downsampler.downsample_payload(raw_bytes, mime_type, conditions)
+        return JSONResponse({
+            "ok": True,
+            "tier": tier.value,
+            "metadata": meta,
+            "downsampled_b64": base64.b64encode(downsampled).decode("ascii"),
+        })
+
+    @mcp.custom_route("/v1/mesh/streaming/audit/finalize", methods=["POST"])
+    async def mesh_streaming_audit_finalize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        status = body.get("status", "completed")
+        try:
+            receipt = audit_logger.finalize_session(session_id=session_id, status=status)
+            valid = audit_logger.verify_receipt(receipt)
+            return JSONResponse({
+                "ok": True,
+                "valid": valid,
+                "receipt": {
+                    "session_id": receipt.session_id,
+                    "tool_name": receipt.tool_name,
+                    "frames_count": receipt.frames_count,
+                    "bytes_transferred": receipt.bytes_transferred,
+                    "receipt_hash": receipt.receipt_hash,
+                    "signature": receipt.signature,
+                    "session_status": receipt.session_status,
+                }
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
     return mcp
 
 
@@ -3497,6 +3615,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "prompt_cache_optimizer": getattr(mcp, "_prompt_cache_optimizer", None),
         "tier_benchmark_monitor": getattr(mcp, "_tier_benchmark_monitor", None),
         "finops_verifier": getattr(mcp, "_finops_verifier", None),
+        "streaming_rpc": getattr(mcp, "_streaming_rpc", None),
+        "media_cache": getattr(mcp, "_media_cache", None),
+        "client_multiplexer": getattr(mcp, "_client_multiplexer", None),
+        "downsampler": getattr(mcp, "_downsampler", None),
+        "audit_logger": getattr(mcp, "_audit_logger", None),
     }
     return app, settings
 

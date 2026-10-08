@@ -73,6 +73,19 @@ from desk_gateway.supervisor import (
     SelfHealingSupervisor,
 )
 from desk_gateway.workload import WorkloadRebalancer
+from desk_gateway.tenant import (
+    TenantContext,
+    TenantIsolationEngine,
+    TenantIsolationError,
+    current_tenant,
+)
+from desk_gateway.rbac import (
+    AccessDecision,
+    PolicyEvaluationResult,
+    PolicyRule,
+    RBACPolicyEngine,
+    Role,
+)
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -165,9 +178,17 @@ approval_id (PD-5). A 403 means you are on another seat's endpoint: stop and tel
 
 
 class SeatServer(MCPServer):
-    def __init__(self, services: Services, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        services: Services,
+        rbac: RBACPolicyEngine | None = None,
+        tenant_engine: TenantIsolationEngine | None = None,
+        **kwargs: Any,
+    ) -> None:
         super().__init__(**kwargs)
         self.services = services
+        self.rbac = rbac or RBACPolicyEngine()
+        self.tenant_engine = tenant_engine or TenantIsolationEngine()
 
     def _surface(self) -> tuple[str, dict[str, ToolSpec]]:
         seat = current_seat.get() or seat_of(get_access_token())
@@ -210,6 +231,23 @@ class SeatServer(MCPServer):
             return _result({"error": "invalid_args", "reason": str(exc)}, is_error=True)
         if contains_secret(json.dumps(args)):
             return _result({"error": "secret_refused", "reason": "tool arguments contain a credential shape; never paste secrets into tool calls (PD-4)"}, is_error=True)
+
+        # RBAC / ABAC Policy Evaluation (REQ-TENANT-002)
+        tenant = current_tenant.get()
+        role = Role.LEAD if seat == "lead" else Role.DEVELOPER
+        policy_eval = self.rbac.evaluate(
+            tenant=tenant,
+            role=role,
+            seat=seat,
+            action=f"tool:{name}",
+            gates=spec.gates,
+            is_destructive="g6" in spec.gates,
+            has_approval=bool(args.get("approval_id")),
+            has_rollback_plan=bool(args.get("rollback_plan")),
+        )
+        if policy_eval.decision == AccessDecision.DENY:
+            return _result({"error": "policy_denied", "reason": policy_eval.reason}, is_error=True)
+
         ctx = ToolContext(services=self.services, seat=self.services.rosters.seats[seat], spec=spec)
         call_id = secrets.token_hex(4)
         _live(self.services.live.tool_started, seat, name, call_id, spec.backend)
@@ -463,12 +501,22 @@ class ConnectorKeyHeader:
             t_token = trace_id_var.set(parsed_tp[0] if parsed_tp else "")
             s_token = span_id_var.set(parsed_tp[1] if parsed_tp else "")
             st_token = tracestate_var.set(tracestate_str)
+
+            # Tenant Isolation Context Extraction (REQ-TENANT-001)
+            tenant_engine = TenantIsolationEngine()
+            str_headers = {
+                k.decode("latin1").lower(): v.decode("latin1") for k, v in headers
+            }
+            tenant_ctx = tenant_engine.extract_from_headers(str_headers)
+            tenant_token = current_tenant.set(tenant_ctx)
+
             try:
                 await self.app(scope, receive, send)
             finally:
                 trace_id_var.reset(t_token)
                 span_id_var.reset(s_token)
                 tracestate_var.reset(st_token)
+                current_tenant.reset(tenant_token)
             return
         await self.app(scope, receive, send)
 
@@ -487,9 +535,15 @@ def create_mcp(
     wan: tuple[WanMeshRouter, RegionImpairmentManager] | None = None,
     chaos: ChaosHarness | None = None,
     supervisor: SelfHealingSupervisor | None = None,
+    tenant_engine: TenantIsolationEngine | None = None,
+    rbac_engine: RBACPolicyEngine | None = None,
 ) -> SeatServer:
+    t_engine = tenant_engine or TenantIsolationEngine()
+    r_engine = rbac_engine or RBACPolicyEngine()
     mcp = SeatServer(
         services,
+        rbac=r_engine,
+        tenant_engine=t_engine,
         name="desk-gateway",
         title="Programming Desk gateway",
         description="One MCP endpoint per Programming Desk seat, with contract-defined tool rosters.",
@@ -2441,6 +2495,72 @@ def create_mcp(
             "drills": [drill_seat.to_dict(), drill_rebalance.to_dict()],
         })
 
+    # --- Multi-Tenant Governance & RBAC Endpoints (REQ-TENANT-001, REQ-TENANT-002) ---
+    tenant_engine = t_engine
+    rbac_engine = r_engine
+    mcp._tenant_engine = tenant_engine  # type: ignore[attr-defined]
+    mcp._rbac_engine = rbac_engine  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/tenant/current", methods=["GET"])
+    async def tenant_current_get(_request: Request) -> Response:
+        ctx = current_tenant.get()
+        return JSONResponse({
+            "ok": True,
+            "tenant": ctx.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/tenant/policies", methods=["GET"])
+    async def tenant_policies_get(_request: Request) -> Response:
+        rules = [
+            {
+                "rule_id": r.rule_id,
+                "roles": [role.value for role in r.roles],
+                "seats": list(r.seats),
+                "actions": list(r.actions),
+                "effect": r.effect.value,
+                "environments": list(r.environments),
+                "description": r.description,
+            }
+            for r in rbac_engine.rules
+        ]
+        return JSONResponse({
+            "ok": True,
+            "count": len(rules),
+            "rules": rules,
+        })
+
+    @mcp.custom_route("/v1/tenant/policies/evaluate", methods=["POST"])
+    async def tenant_policies_evaluate_post(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        role_str = body.get("role", "developer")
+        seat = body.get("seat", "lead")
+        action = body.get("action", "tool:desk_brief")
+        gates = body.get("gates", [])
+        is_destructive = body.get("is_destructive", False)
+        has_approval = body.get("has_approval", False)
+        has_rollback_plan = body.get("has_rollback_plan", False)
+
+        ctx = current_tenant.get()
+        result = rbac_engine.evaluate(
+            tenant=ctx,
+            role=role_str,
+            seat=seat,
+            action=action,
+            gates=gates,
+            is_destructive=is_destructive,
+            has_approval=has_approval,
+            has_rollback_plan=has_rollback_plan,
+        )
+        return JSONResponse({
+            "ok": result.decision == AccessDecision.ALLOW,
+            "decision": result.decision.value,
+            "reason": result.reason,
+            "rule_id": result.rule_id,
+            "role": result.role,
+            "seat": result.seat,
+            "action": result.action,
+        })
+
     return mcp
 
 
@@ -2553,6 +2673,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "workload_rebalancer": getattr(mcp, "_workload_rebalancer", None),
         "dlq_orchestrator": getattr(mcp, "_dlq_orchestrator", None),
         "resilience_verifier": getattr(mcp, "_resilience_verifier", None),
+        "tenant_engine": getattr(mcp, "_tenant_engine", None),
+        "rbac_engine": getattr(mcp, "_rbac_engine", None),
     }
     return app, settings
 

@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (active)
 - ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
 - ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
 - ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09) — [Archive](milestones/v2.2-ROADMAP.md)
@@ -9,6 +10,13 @@
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
+
+### Active Milestone: v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh
+
+- [ ] **Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement** (1/2 plans)
+  - [x] 16-01: Multi-tenant namespace isolation engine & ABAC/RBAC policy evaluation (REQ-TENANT-001, REQ-TENANT-002)
+  - [ ] 16-02: Tenant-partitioned memory & dataset encryption, quota policer & tamper-evident audit hashing (REQ-TENANT-003, REQ-TENANT-004, REQ-TENANT-005)
+- [ ] **Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution** (0/2 plans)
 
 ### Completed Milestones
 
@@ -61,3 +69,6 @@ See [milestones/v2.1-ROADMAP.md](milestones/v2.1-ROADMAP.md) for full phase deta
 
 See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase details and execution history.
 </details>
+
+
+[You have received this identical output 3 times. Re-reading '.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]

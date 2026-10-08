@@ -31,6 +31,12 @@ from starlette.websockets import WebSocket
 
 from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEATS, TOOL_DEADLINE_SEC, Settings
+from desk_gateway.federation import (
+    FederatedTokenValidator,
+    FederationError,
+    FederationRegistry,
+    PeerDeskClient,
+)
 from desk_gateway.live import (
     CLOSE_FORBIDDEN_ORIGIN,
     CLOSE_UNAUTHORIZED,
@@ -353,6 +359,7 @@ def create_mcp(
     oauth: SeatOAuthProvider,
     viewer: ViewerAuth,
     view: DeskView,
+    federation: tuple[FederationRegistry, FederatedTokenValidator, PeerDeskClient] | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -811,6 +818,204 @@ def create_mcp(
         services.audit.fire_and_forget(replay_event)
         return JSONResponse({"ok": True, "intake_id": intake_id, "state": replayed["state"]}, status_code=200)
 
+    # -------------------------------------------------------------------------
+    # Federation Endpoints (REQ-FED-001, REQ-FED-002, REQ-FED-003)
+    # -------------------------------------------------------------------------
+    fed_reg, fed_val, fed_cli = federation if federation else (
+        FederationRegistry(settings),
+        FederatedTokenValidator(FederationRegistry(settings), local_desk_id=settings.public_host),
+        PeerDeskClient(FederationRegistry(settings)),
+    )
+
+    @mcp.custom_route("/v1/federation/handshake", methods=["POST"])
+    async def federation_handshake_post(request: Request) -> Response:
+        """Handshake discovery endpoint allowing peer desk gateways to register (REQ-FED-001)."""
+        if not settings.federation_enabled:
+            return problem_response(
+                status=501,
+                title="Federation Not Enabled",
+                detail="Multi-desk federation is disabled on this gateway.",
+                error_code="federation_disabled",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload for federation handshake.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        desk_id = body.get("desk_id")
+        url = body.get("url")
+        if not desk_id or not url:
+            return problem_response(
+                status=400,
+                title="Invalid Handshake Payload",
+                detail="Handshake payload requires 'desk_id' and 'url'.",
+                error_code="invalid_payload",
+                instance=request.url.path,
+            )
+
+        # Normalize url scheme if bare hostname
+        peer_url = url if url.startswith(("http://", "https://")) else f"https://{url}"
+
+        try:
+            peer = fed_reg.register_peer(
+                desk_id=desk_id,
+                url=peer_url,
+                public_keys=body.get("public_keys"),
+                capabilities=body.get("capabilities"),
+                seats=body.get("seats"),
+            )
+        except FederationError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Handshake Registration Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        event = {
+            "kind": "federation.handshake",
+            "summary": f"Federation handshake completed with peer desk {desk_id}",
+            "payload": {"desk_id": desk_id, "url": peer_url, "capabilities": peer.capabilities},
+            "actor": "federation",
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
+        store.audit_append(event)
+        services.audit.fire_and_forget(event)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "desk_id": settings.public_host,
+                "url": settings.gateway_url,
+                "public_keys": fed_reg.settings.federation_peer_keys,
+                "capabilities": ["intake", "dispatch", "telemetry"],
+                "seats": list(SEATS.keys()),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/federation/peers", methods=["GET"])
+    async def federation_peers_get(request: Request) -> Response:
+        """List registered peer gateways and their status (REQ-FED-001)."""
+        if not settings.federation_enabled:
+            return problem_response(
+                status=501,
+                title="Federation Not Enabled",
+                detail="Multi-desk federation is disabled on this gateway.",
+                error_code="federation_disabled",
+                instance=request.url.path,
+            )
+
+        peers = [p.to_dict() for p in fed_reg.list_peers()]
+        return JSONResponse({"ok": True, "peers": peers, "count": len(peers)}, status_code=200)
+
+    @mcp.custom_route("/v1/federation/route", methods=["POST"])
+    async def federation_route_post(request: Request) -> Response:
+        """Receive and negotiate incoming cross-desk route requests (REQ-FED-002, REQ-FED-003)."""
+        if not settings.federation_enabled:
+            return problem_response(
+                status=501,
+                title="Federation Not Enabled",
+                detail="Multi-desk federation is disabled on this gateway.",
+                error_code="federation_disabled",
+                instance=request.url.path,
+            )
+
+        auth = request.headers.get("authorization", "")
+        if not auth.lower().startswith("bearer "):
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Bearer token required for federated route invocation.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        token = auth[7:].strip()
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload for federated route.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        target_seat = body.get("target_seat")
+        action = body.get("action", "dispatch")
+        payload = body.get("payload", {})
+
+        if not target_seat or target_seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Invalid Target Seat",
+                detail=f"target_seat must be one of {sorted(SEATS)}",
+                error_code="invalid_target_seat",
+                instance=request.url.path,
+            )
+
+        # Validate token signature and seat boundaries (REQ-FED-002, REQ-FED-003)
+        try:
+            verified_claims = fed_val.decode_and_verify(
+                token=token,
+                required_seat=target_seat,
+            )
+        except FederationError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Federation Token Verification Failed",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        route_event = {
+            "kind": "federation.route",
+            "summary": f"Federated route dispatch accepted for seat {target_seat} from issuer {verified_claims.get('iss')}",
+            "payload": {
+                "target_seat": target_seat,
+                "action": action,
+                "sub": verified_claims.get("sub"),
+                "iss": verified_claims.get("iss"),
+            },
+            "actor": verified_claims.get("sub", "federation"),
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            route_event["trace"] = trace_ctx
+        store.audit_append(route_event)
+        services.audit.fire_and_forget(route_event)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "status": "routed",
+                "target_seat": target_seat,
+                "action": action,
+                "issuer": verified_claims.get("iss"),
+                "subject": verified_claims.get("sub"),
+                "processed_at": time.time(),
+            },
+            status_code=200,
+        )
+
     return mcp
 
 
@@ -825,7 +1030,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     # One ViewerAuth for the whole app: it holds the signing key, so a second instance would
     # reject the sessions the first one issued whenever DESK_VIEW_SECRET is unset.
     viewer = ViewerAuth(settings)
-    mcp = create_mcp(settings, services, oauth, viewer=viewer, view=DeskView(DESK_VIEW_HTML))
+    fed_registry = FederationRegistry(settings)
+    fed_validator = FederatedTokenValidator(fed_registry, local_desk_id=settings.public_host)
+    fed_client = PeerDeskClient(fed_registry)
+    federation_components = (fed_registry, fed_validator, fed_client)
+
+    mcp = create_mcp(settings, services, oauth, viewer=viewer, view=DeskView(DESK_VIEW_HTML), federation=federation_components)
     origins = [
         "http://127.0.0.1",
         "http://127.0.0.1:*",
@@ -858,7 +1068,17 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
     app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters))
-    app.state = {"store": store, "services": services, "oauth": oauth, "rosters": rosters, "mcp": mcp, "viewer": viewer}
+    app.state = {
+        "store": store,
+        "services": services,
+        "oauth": oauth,
+        "rosters": rosters,
+        "mcp": mcp,
+        "viewer": viewer,
+        "federation_registry": fed_registry,
+        "federation_validator": fed_validator,
+        "federation_client": fed_client,
+    }
     return app, settings
 
 

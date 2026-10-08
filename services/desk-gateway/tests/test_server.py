@@ -1611,3 +1611,148 @@ async def test_railway_redeploy_compares_the_deployment_in_the_target_environmen
     out = await rpc.call("infra", "desk_railway_redeploy", REDEPLOY)
     assert out["ok"] is True, out
     assert out["environment_id"] == "env-prod" and redeploys == [("svc-1", "env-prod")]
+
+
+# ---------------------------------------------------------------------------
+# Upstream Resilience: Circuit Breakers, ETag Caching & Graceful Fallbacks
+# ---------------------------------------------------------------------------
+
+async def test_upstream_etag_caching_and_conditional_requests():
+    """REQ-INTAKE-002: ETag caching and conditional request (If-None-Match) handling."""
+    from desk_gateway.upstreams import HttpUpstream
+    import httpx
+
+    requests_received = []
+
+    def app_handler(request: httpx.Request) -> httpx.Response:
+        requests_received.append(request)
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == '"v1.0.0"':
+            return httpx.Response(304, headers={"ETag": '"v1.0.0"'})
+        return httpx.Response(200, headers={"ETag": '"v1.0.0"'}, json={"data": "registry_info", "count": 42})
+
+    transport = httpx.MockTransport(app_handler)
+    upstream = HttpUpstream("mock-registry", "http://substrate-mock")
+
+    # Monkeypatch AsyncClient in request to use mock transport
+    original_client_init = httpx.AsyncClient.__init__
+
+    def mock_client_init(self, *args, **kwargs):
+        kwargs["transport"] = transport
+        original_client_init(self, *args, **kwargs)
+
+    import unittest.mock
+    with unittest.mock.patch.object(httpx.AsyncClient, "__init__", mock_client_init):
+        # 1. Initial GET - cache miss, sets etag
+        res1 = await upstream.request("GET", "/registry")
+        assert res1["ok"] is True
+        assert res1["status"] == 200
+        assert res1["body"] == {"data": "registry_info", "count": 42}
+        assert len(requests_received) == 1
+        assert "if-none-match" not in requests_received[0].headers
+
+        # 2. Subsequent GET - sends If-None-Match, server returns 304, upstream returns cached body
+        res2 = await upstream.request("GET", "/registry")
+        assert res2["ok"] is True
+        assert res2["status"] == 304
+        assert res2["cached"] is True
+        assert res2["body"] == {"data": "registry_info", "count": 42}
+        assert len(requests_received) == 2
+        assert requests_received[1].headers.get("if-none-match") == '"v1.0.0"'
+
+
+async def test_upstream_circuit_breaker_and_recovery():
+    """REQ-INTAKE-007: Circuit breaker halts outbound calls on threshold failures and recovers."""
+    from desk_gateway.upstreams import HttpUpstream, CircuitBreaker
+    import httpx
+
+    attempts = 0
+
+    def app_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(500, json={"error": "server exploded"})
+
+    transport = httpx.MockTransport(app_handler)
+    upstream = HttpUpstream("failing-upstream", "http://failing-upstream", failure_threshold=3, recovery_timeout_sec=0.1)
+
+    original_client_init = httpx.AsyncClient.__init__
+
+    def mock_client_init(self, *args, **kwargs):
+        kwargs["transport"] = transport
+        original_client_init(self, *args, **kwargs)
+
+    import unittest.mock
+    with unittest.mock.patch.object(httpx.AsyncClient, "__init__", mock_client_init):
+        # Fail 3 times to trip circuit breaker
+        for _ in range(3):
+            res = await upstream.request("GET", "/status")
+            assert res.get("status") == 500
+
+        assert attempts == 3
+        assert upstream.circuit_breaker.state == "open"
+
+        # 4th call: circuit breaker is open, fails fast without hitting network
+        res_tripped = await upstream.request("GET", "/status")
+        assert res_tripped["error"] == "circuit_breaker_open"
+        assert res_tripped["status"] == 503
+        assert res_tripped["circuit_breaker"] == "open"
+        assert attempts == 3  # not incremented
+
+        # Wait for recovery timeout (0.1s)
+        await asyncio.sleep(0.12)
+        assert upstream.circuit_breaker.allow_request() is True
+        assert upstream.circuit_breaker.state == "half-open"
+
+        # In half-open state, a successful call resets breaker
+        def ok_handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"healthy": True})
+
+        ok_transport = httpx.MockTransport(ok_handler)
+        with unittest.mock.patch.object(
+            httpx.AsyncClient,
+            "__init__",
+            lambda s, *a, **kw: original_client_init(s, *a, **{**kw, "transport": ok_transport}),
+        ):
+            res_recovered = await upstream.request("GET", "/status")
+            assert res_recovered["ok"] is True
+            assert upstream.circuit_breaker.state == "closed"
+
+
+async def test_upstream_graceful_degradation_fallbacks():
+    """REQ-INTAKE-005: Graceful degradation fallback when Substrate/AgentBus companion services fail."""
+    from desk_gateway.config import Settings
+    from desk_gateway.upstreams import Substrate, AgentBus
+
+    settings = Settings(
+        substrate_url="http://127.0.0.1:7410",
+        substrate_token="sub-tok",
+        agent_bus_url="http://127.0.0.1:8790",
+        agent_bus_token="bus-tok",
+    )
+    sub = Substrate(settings)
+    bus = AgentBus(settings)
+
+    # Trigger call to unreachable endpoint
+    import httpx
+    def failing_handler(request: httpx.Request):
+        return httpx.Response(502, json={"error": "service unavailable"})
+
+    transport = httpx.MockTransport(failing_handler)
+    orig_client_init = httpx.AsyncClient.__init__
+    import unittest.mock
+    with unittest.mock.patch.object(
+        httpx.AsyncClient,
+        "__init__",
+        lambda s, *a, **kw: orig_client_init(s, *a, **{**kw, "transport": transport}),
+    ):
+        sub_res = await sub.brief(repo="swcstudiospace/programming-desk", graph_id="graph-1")
+        assert sub_res["degraded"] is True
+        assert "[degraded] Substrate is currently unreachable" in sub_res["brief"]
+        assert "graph-1" in sub_res["brief"]
+
+        bus_res = await bus.start_job(runtime="python", goal="test resilience", provider=None, idempotency_key=None)
+        assert bus_res["degraded"] is True
+        assert bus_res["fallback"]["status"] == "queued_local_fallback"
+        assert bus_res["fallback"]["runtime"] == "python"
+

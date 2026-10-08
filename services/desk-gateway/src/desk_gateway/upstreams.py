@@ -76,12 +76,63 @@ async def _json(resp: httpx.Response) -> Any:
         return {"text": redact_text(resp.text[:2000])}
 
 
+class CircuitBreaker:
+    """Outbound circuit breaker with closed, open, and half-open states."""
+
+    def __init__(self, failure_threshold: int = 5, recovery_timeout_sec: float = 30.0) -> None:
+        self.failure_threshold = failure_threshold
+        self.recovery_timeout_sec = recovery_timeout_sec
+        self.failure_count: int = 0
+        self.state: str = "closed"  # closed, open, half-open
+        self.last_failure_time: float = 0.0
+
+    def allow_request(self) -> bool:
+        if self.state == "closed":
+            return True
+        now = time.monotonic()
+        if self.state == "open":
+            if now - self.last_failure_time >= self.recovery_timeout_sec:
+                self.state = "half-open"
+                return True
+            return False
+        # half-open allows trial request
+        return True
+
+    def record_success(self) -> None:
+        self.failure_count = 0
+        self.state = "closed"
+
+    def record_failure(self) -> None:
+        self.failure_count += 1
+        self.last_failure_time = time.monotonic()
+        if self.failure_count >= self.failure_threshold or self.state == "half-open":
+            self.state = "open"
+
+    def reset(self) -> None:
+        self.failure_count = 0
+        self.state = "closed"
+        self.last_failure_time = 0.0
+
+
 class HttpUpstream:
-    def __init__(self, name: str, base_url: str, headers: dict[str, str] | None = None, timeout: float = 15.0) -> None:
+    def __init__(
+        self,
+        name: str,
+        base_url: str,
+        headers: dict[str, str] | None = None,
+        timeout: float = 15.0,
+        failure_threshold: int = 5,
+        recovery_timeout_sec: float = 30.0,
+    ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.headers = headers or {}
         self.timeout = timeout
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=failure_threshold,
+            recovery_timeout_sec=recovery_timeout_sec,
+        )
+        self._etag_cache: dict[str, tuple[str, Any]] = {}
 
     @property
     def configured(self) -> bool:
@@ -92,15 +143,56 @@ class HttpUpstream:
             return not_configured(self.name)
         url = path if path.startswith("http") else f"{self.base_url}{path}"
         headers = {**self.headers, **(kwargs.pop("headers", None) or {})}
+
+        if not self.circuit_breaker.allow_request():
+            detail = f"{self.name} circuit breaker is open (cooling down)"
+            prob = problem_details(
+                status=503,
+                title=f"{self.name} circuit breaker open",
+                detail=detail,
+                error_code="circuit_breaker_open",
+                instance=url,
+            )
+            return {
+                "error": "circuit_breaker_open",
+                "reason": detail,
+                "status": 503,
+                "problem": prob,
+                "body": None,
+                "circuit_breaker": "open",
+            }
+
+        # Conditional request handling with ETag for GET requests
+        method_upper = method.upper()
+        cache_key = f"{url}?{kwargs.get('params')}" if kwargs.get("params") else url
+        if method_upper == "GET" and cache_key in self._etag_cache:
+            cached_etag, _ = self._etag_cache[cache_key]
+            if "If-None-Match" not in headers:
+                headers["If-None-Match"] = cached_etag
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
-                resp = await client.request(method, url, **kwargs)
+                resp = await client.request(method_upper, url, **kwargs)
         except httpx.TimeoutException:
+            self.circuit_breaker.record_failure()
             return {"error": UPSTREAM_TIMEOUT, "reason": f"{self.name} did not answer within {self.timeout:.0f}s"}
         except httpx.HTTPError as exc:
+            self.circuit_breaker.record_failure()
             return {"error": UPSTREAM_ERROR, "reason": f"{self.name}: {redact_text(str(exc))[:300]}"}
+
+        # HTTP 304 Not Modified: return cached response body
+        if resp.status_code == 304 and cache_key in self._etag_cache:
+            self.circuit_breaker.record_success()
+            cached_etag, cached_body = self._etag_cache[cache_key]
+            return {"ok": True, "status": 304, "body": cached_body, "cached": True, "etag": cached_etag}
+
         body = await _json(resp)
         if resp.status_code >= 400:
+            if resp.status_code >= 500:
+                self.circuit_breaker.record_failure()
+            else:
+                self.circuit_breaker.record_success()
+
             status = resp.status_code
             error_code = UPSTREAM_ERROR
             title = f"{self.name} upstream error"
@@ -110,13 +202,12 @@ class HttpUpstream:
             }
             if status in (401, 403):
                 title = f"{self.name} authentication failed"
-                detail = f"{self.name} refused token credentials (HTTP {status})"
-                error_code = "upstream_401"
+                detail = f"{self.name} refused credentials (HTTP {status})"
             problem = problem_details(
                 status=status,
                 title=title,
                 detail=detail,
-                error_code=error_code,
+                error_code="upstream_401" if status in (401, 403) else error_code,
                 instance=url,
                 **extra_fields,
             )
@@ -127,6 +218,12 @@ class HttpUpstream:
                 "problem": problem,
                 "body": extra_fields["body"],
             }
+
+        self.circuit_breaker.record_success()
+        etag_header = resp.headers.get("etag") or resp.headers.get("ETag")
+        if method_upper == "GET" and etag_header:
+            self._etag_cache[cache_key] = (etag_header, redact_value(body))
+
         return {"ok": True, "status": resp.status_code, "body": redact_value(body)}
 
 
@@ -153,34 +250,21 @@ class Substrate:
         if not self.configured:
             return not_configured("substrate")
         payload = {k: v for k, v in {"repo": repo, "graph_id": graph_id, "surface": "grok-bot"}.items() if v}
-        try:
-            async with httpx.AsyncClient(timeout=6.0, headers=self.http.headers) as client:
-                resp = await client.post(f"{self.http.base_url}/brief", json=payload)
-        except httpx.HTTPError as exc:
-            status = 502
-            err_msg = redact_text(str(exc))[:300]
-            prob = problem_details(
-                status=status,
-                title="substrate upstream error",
-                detail=f"substrate: {err_msg}",
-                error_code=UPSTREAM_ERROR,
-                instance=f"{self.http.base_url}/brief",
+        result = await self.http.request("POST", "/brief", json=payload)
+        if not result.get("ok"):
+            # Graceful degradation fallback when substrate brief fails
+            fallback_brief = (
+                f"[degraded] Substrate is currently unreachable ({result.get('reason', 'upstream error')}). "
+                f"Falling back to basic repository context for repo={repo or 'unknown'} graph_id={graph_id or 'none'}."
             )
-            return {"error": UPSTREAM_ERROR, "reason": f"substrate: {err_msg}", "problem": prob}
-        if resp.status_code >= 400:
-            status = resp.status_code
-            title = "substrate authentication failed" if status in (401, 403) else "substrate upstream error"
-            err_code = "upstream_401" if status in (401, 403) else UPSTREAM_ERROR
-            detail = f"substrate refused credentials (HTTP {status})" if status in (401, 403) else f"substrate returned HTTP {status}"
-            prob = problem_details(
-                status=status,
-                title=title,
-                detail=detail,
-                error_code=err_code,
-                instance=f"{self.http.base_url}/brief",
-            )
-            return {"error": UPSTREAM_ERROR, "reason": f"substrate returned HTTP {resp.status_code}", "status": status, "problem": prob}
-        return {"ok": True, "brief": redact_text(resp.text[:20000])}
+            return {
+                **result,
+                "degraded": True,
+                "brief": fallback_brief,
+            }
+        body = result.get("body")
+        brief_text = body.get("brief", "") if isinstance(body, dict) else str(body or "")
+        return {"ok": True, "brief": redact_text(brief_text[:20000])}
 
     async def emit(self, event: dict[str, Any]) -> dict[str, Any]:
         if not self.configured:
@@ -249,7 +333,20 @@ class AgentBus:
             body["provider"] = provider
         if idempotency_key:
             body["idempotency_key"] = idempotency_key
-        return await self.http.request("POST", "/v1/jobs", json=body)
+        result = await self.http.request("POST", "/v1/jobs", json=body)
+        if not result.get("ok"):
+            # Graceful degradation fallback when agent bus is unreachable
+            return {
+                **result,
+                "degraded": True,
+                "fallback": {
+                    "runtime": runtime,
+                    "goal": goal,
+                    "status": "queued_local_fallback",
+                    "reason": result.get("reason", "agent bus unreachable"),
+                },
+            }
+        return result
 
     async def get_job(self, job_id: str) -> dict[str, Any]:
         return await self.http.request("GET", f"/v1/jobs/{job_id}")

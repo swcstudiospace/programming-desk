@@ -99,6 +99,10 @@ class Settings:
     slo_latency_p99_max_ms: float = 500.0
     slo_intake_success_min_pct: float = 99.9
     dlq_alert_threshold: int = 10
+    edge_default_region: str = "us-east"
+    edge_latency_threshold_ms: float = 400.0
+    edge_rate_limit_per_minute: int = 60
+    edge_burst_capacity: int = 120
 
     @property
     def issuer_url(self) -> str:
@@ -224,4 +228,8 @@ class Settings:
             slo_latency_p99_max_ms=float(_env("SLO_LATENCY_P99_MAX_MS", "500.0")),
             slo_intake_success_min_pct=float(_env("SLO_INTAKE_SUCCESS_MIN_PCT", "99.9")),
             dlq_alert_threshold=int(_env("DLQ_ALERT_THRESHOLD", "10")),
+            edge_default_region=_env("EDGE_DEFAULT_REGION", "us-east"),
+            edge_latency_threshold_ms=float(_env("EDGE_LATENCY_THRESHOLD_MS", "400.0")),
+            edge_rate_limit_per_minute=int(_env("EDGE_RATE_LIMIT_PER_MINUTE", "60")),
+            edge_burst_capacity=int(_env("EDGE_BURST_CAPACITY", "120")),
         )

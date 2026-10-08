@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from desk_gateway.config import Settings
+from desk_gateway.problems import problem_details
 from desk_gateway.redact import redact_text, redact_value
 
 logger = logging.getLogger("desk_gateway.upstreams")
@@ -100,11 +101,31 @@ class HttpUpstream:
             return {"error": UPSTREAM_ERROR, "reason": f"{self.name}: {redact_text(str(exc))[:300]}"}
         body = await _json(resp)
         if resp.status_code >= 400:
-            return {
-                "error": UPSTREAM_ERROR,
-                "reason": f"{self.name} returned HTTP {resp.status_code}",
-                "status": resp.status_code,
+            status = resp.status_code
+            error_code = UPSTREAM_ERROR
+            title = f"{self.name} upstream error"
+            detail = f"{self.name} returned HTTP {status}"
+            extra_fields: dict[str, Any] = {
                 "body": redact_value(body) if isinstance(body, (dict, list)) else body,
+            }
+            if status in (401, 403):
+                title = f"{self.name} authentication failed"
+                detail = f"{self.name} refused token credentials (HTTP {status})"
+                error_code = "upstream_401"
+            problem = problem_details(
+                status=status,
+                title=title,
+                detail=detail,
+                error_code=error_code,
+                instance=url,
+                **extra_fields,
+            )
+            return {
+                "error": error_code,
+                "reason": detail,
+                "status": status,
+                "problem": problem,
+                "body": extra_fields["body"],
             }
         return {"ok": True, "status": resp.status_code, "body": redact_value(body)}
 
@@ -136,9 +157,29 @@ class Substrate:
             async with httpx.AsyncClient(timeout=6.0, headers=self.http.headers) as client:
                 resp = await client.post(f"{self.http.base_url}/brief", json=payload)
         except httpx.HTTPError as exc:
-            return {"error": UPSTREAM_ERROR, "reason": f"substrate: {redact_text(str(exc))[:300]}"}
+            status = 502
+            err_msg = redact_text(str(exc))[:300]
+            prob = problem_details(
+                status=status,
+                title="substrate upstream error",
+                detail=f"substrate: {err_msg}",
+                error_code=UPSTREAM_ERROR,
+                instance=f"{self.http.base_url}/brief",
+            )
+            return {"error": UPSTREAM_ERROR, "reason": f"substrate: {err_msg}", "problem": prob}
         if resp.status_code >= 400:
-            return {"error": UPSTREAM_ERROR, "reason": f"substrate returned HTTP {resp.status_code}"}
+            status = resp.status_code
+            title = "substrate authentication failed" if status in (401, 403) else "substrate upstream error"
+            err_code = "upstream_401" if status in (401, 403) else UPSTREAM_ERROR
+            detail = f"substrate refused credentials (HTTP {status})" if status in (401, 403) else f"substrate returned HTTP {status}"
+            prob = problem_details(
+                status=status,
+                title=title,
+                detail=detail,
+                error_code=err_code,
+                instance=f"{self.http.base_url}/brief",
+            )
+            return {"error": UPSTREAM_ERROR, "reason": f"substrate returned HTTP {resp.status_code}", "status": status, "problem": prob}
         return {"ok": True, "brief": redact_text(resp.text[:20000])}
 
     async def emit(self, event: dict[str, Any]) -> dict[str, Any]:
@@ -162,7 +203,16 @@ class Substrate:
         except TimeoutError:
             return {"error": UPSTREAM_TIMEOUT, "reason": f"substrate {name} did not answer within {timeout:.0f}s"}
         except Exception as exc:  # the MCP client raises many shapes; none of them may reach a Bot raw
-            return {"error": UPSTREAM_ERROR, "reason": f"substrate {name}: {redact_text(str(exc))[:300]}"}
+            err_msg = redact_text(str(exc))[:300]
+            prob = problem_details(
+                status=502,
+                title="substrate mcp call failed",
+                detail=f"substrate {name}: {err_msg}",
+                error_code=UPSTREAM_ERROR,
+                instance=f"{self.http.base_url}/mcp",
+                tool=name,
+            )
+            return {"error": UPSTREAM_ERROR, "reason": f"substrate {name}: {err_msg}", "problem": prob}
         content: list[Any] = []
         for block in result.content or []:
             text = getattr(block, "text", None)

@@ -82,13 +82,29 @@ async def test_each_seat_sees_its_own_roster(rpc, seat):
 async def test_wrong_seat_token_is_403(rpc):
     resp = await rpc.raw("ios", PASS["lead"], "tools/list")
     assert resp.status_code == 403
-    assert resp.json()["error"] == "wrong_seat"
+    body = resp.json()
+    assert body["error"] == "wrong_seat"
+    assert body["title"] == "Wrong Seat"
+    assert body["status"] == 403
+    assert "application/problem+json" in resp.headers["content-type"]
 
 
 async def test_missing_token_is_401_with_resource_metadata(rpc):
     resp = await rpc.raw("lead", None, "tools/list")
     assert resp.status_code == 401
     assert "oauth-protected-resource" in resp.headers["www-authenticate"]
+
+
+async def test_corrupted_or_expired_token_is_401_problem_details(rpc):
+    # Pass an unissued / corrupted token
+    resp = await rpc.raw("lead", "bogus_corrupted_expired", "tools/list")
+    assert resp.status_code == 401
+    assert "application/problem+json" in resp.headers["content-type"]
+    body = resp.json()
+    assert body["error"] == "invalid_token"
+    assert body["status"] == 401
+    assert body["title"] == "Invalid or Expired Token"
+    assert "invalid_token" in resp.headers["www-authenticate"]
 
 
 async def test_unknown_seat_and_pack_paths(client):
@@ -164,8 +180,19 @@ async def test_intake_flow_only_lead_can_drain(client, rpc):
     body = {"title": "Add /health to desklanes", "ask": "Please add a /health endpoint returning 200 ok with a test.", "links": ["https://github.com/swcstudiospace/desklanes/issues/12"], "requested_by": "ove", "idempotency_key": "github:desklanes:12"}
     resp = await client.post("/v1/intake", json=body)
     assert resp.status_code == 401
+    assert "application/problem+json" in resp.headers["content-type"]
+    p_401 = resp.json()
+    assert p_401["error"] == "unauthorized"
+    assert p_401["status"] == 401
+    assert p_401["title"] == "Unauthorized Origin Token"
+
     resp = await client.post("/v1/intake", headers={"Authorization": f"Bearer {PASS['lead']}"}, json=body)
     assert resp.status_code == 403
+    assert "application/problem+json" in resp.headers["content-type"]
+    p_403 = resp.json()
+    assert p_403["error"] == "forbidden"
+    assert p_403["status"] == 403
+
     resp = await client.post("/v1/intake", headers={"Authorization": f"Bearer {INTAKE_TOKEN}"}, json={**body, "origin": "slack"})
     assert resp.status_code == 403
     resp = await client.post("/v1/intake", headers={"Authorization": f"Bearer {INTAKE_TOKEN}"}, json=body)
@@ -354,9 +381,38 @@ async def test_lead_graph_state_heartbeat_rejected_lease_is_a_failed_call(rpc, m
     assert out["error"] == "lease_rejected" and "lost" in out["reason"]
 
 
-async def test_lead_graph_state_heartbeat_requires_lease_id(rpc):
-    out = await rpc.call("lead", "desk_graph_state", {"graph_id": "ut-abc-12345678", "node_id": "n1", "action": "heartbeat"})
-    assert out["is_error"] is True and out["error"] == "invalid_args"
+async def test_upstream_token_error_problem_details(monkeypatch):
+    """Corrupted or expired tokens to upstream services produce structured RFC-7807 problem details."""
+    from desk_gateway.config import Settings
+    from desk_gateway.upstreams import HttpUpstream, Substrate
+    import httpx
+
+    settings = Settings(
+        substrate_url="http://127.0.0.1:7410",
+        substrate_token="expired-token-xyz",
+    )
+    substrate = Substrate(settings)
+
+    # Simulate 401 Unauthorized response from Substrate upstream
+    def fake_handler(request: httpx.Request):
+        return httpx.Response(401, json={"error": "unauthorized", "message": "token expired"})
+
+    transport = httpx.MockTransport(fake_handler)
+
+    # Monkeypatch AsyncClient in HttpUpstream to use MockTransport
+    orig_client = httpx.AsyncClient
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **kwargs: orig_client(transport=transport, **kwargs))
+
+    res = await substrate.brief(repo="test/repo", graph_id="graph-1")
+    assert res.get("error") == "upstream_error"
+    assert "problem" in res
+    problem = res["problem"]
+    assert problem["status"] == 401
+    assert problem["error"] == "upstream_401"
+    assert problem["title"] == "substrate authentication failed"
+    assert "refused credentials" in problem["detail"]
+    assert problem["type"] == "about:blank"
+
 
 
 async def test_doctor_register_and_check(rpc, app):

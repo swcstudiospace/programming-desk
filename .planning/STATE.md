@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.4 (Archived)
-milestone_name: Multi-Region Edge Federation & Autonomous Chaos Recovery
-status: Milestone v2.4 Complete & Archived (Phase 14 & Phase 15 100% complete)
-stopped_at: Archived Milestone v2.4 audit and roadmap artifacts. Ready for next milestone directives.
-last_updated: "2026-10-09T16:15:00.000Z"
+milestone: v2.5
+milestone_name: Multi-Tenant Governance & Inter-Desk Agent Mesh
+status: Phase 16 Plan 01 complete (REQ-TENANT-001, REQ-TENANT-002)
+stopped_at: Completed 16-01-PLAN.md. Ready for 16-02-PLAN.md.
+last_updated: "2026-10-09T17:00:00.000Z"
 last_activity: 2026-10-09
-last_activity_desc: Archived Milestone v2.4 roadmap, requirements, and audit reports.
+last_activity_desc: Completed Phase 16 Plan 01 (Multi-tenant isolation & RBAC policy engine).
 progress:
-  total_phases: 15
+  total_phases: 17
   completed_phases: 15
-  total_plans: 55
-  completed_plans: 55
-  percent: 100
-current_phase: 15
-current_phase_name: Autonomous Chaos Recovery & Self-Healing Resilience
+  total_plans: 59
+  completed_plans: 56
+  percent: 94
+current_phase: 16
+current_phase_name: Multi-Tenant Governance & RBAC Policy Enforcement
 ---
 
 # Project State
@@ -24,15 +24,16 @@ current_phase_name: Autonomous Chaos Recovery & Self-Healing Resilience
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery (COMPLETED)
-**Milestone:** v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery
+**Current focus:** Milestone v2.5 — Multi-Tenant Governance & Inter-Desk Agent Mesh
+**Milestone:** v2.5 — Multi-Tenant Governance & Inter-Desk Agent Mesh
 
 ## Current Position
 
-Phase: Phase 15 complete (Autonomous Chaos Recovery & Self-Healing Resilience).
-Milestone: Milestone v2.4 complete (Phase 14 completed, Phase 15 completed).
-Status: Milestone v2.4 shipped (10/10 requirements satisfied).
-Last activity: 2026-10-09 — Executed Phase 15 Plan 02.
+Phase: Phase 16 (Multi-Tenant Governance & RBAC Policy Enforcement).
+Milestone: Milestone v2.5 (Phases 16 & 17).
+Status: In progress.
+Last activity: 2026-10-09 — Initialized Milestone v2.5 requirements.
+
 
 ## Accumulated Context
 

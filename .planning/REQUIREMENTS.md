@@ -1,19 +1,20 @@
-# Requirements: Milestone v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery
+# Requirements: Milestone v2.5 — Multi-Tenant Governance & Inter-Desk Agent Mesh
 
-This document defines the requirements for Milestone v2.4 of Programming Desk.
+This document defines the requirements for Milestone v2.5 of Programming Desk.
 
-## 1. Multi-Region Edge Federation & WAN Inter-Seat Routing (Phase 14)
+## 1. Multi-Tenant Governance & RBAC Policy Enforcement (Phase 16)
 
-- [x] **REQ-EDGE-001**: Edge ingress gateway proxying and load balancing across multi-region VPS desk instances with latency-based geo-steering and health-aware failover.
-- [x] **REQ-EDGE-002**: Distributed edge rate limiting and token-bucket traffic policing synchronized via DragonflyDB cache cluster with per-seat burst ceilings.
-- [x] **REQ-EDGE-003**: Cross-region WAN inter-seat routing protocol enforcing cryptographic seat identity attestation and mutual TLS over Tailnet mesh.
-- [x] **REQ-EDGE-004**: Vector clock conflict convergence with multi-master partitioned task graphs under high-latency WAN transit (>250ms).
-- [x] **REQ-EDGE-005**: Dynamic edge route revocation and instantaneous session evacuation upon region-wide impairment detection.
+- [x] **REQ-TENANT-001**: Multi-tenant isolation engine enforcing organization and team namespaces across all gateway endpoints, preventing cross-tenant data leakage.
+- [x] **REQ-TENANT-002**: Attribute-based & role-based access control (ABAC/RBAC) policy engine governing per-seat tool invocation privileges and data-plane access.
+- [ ] **REQ-TENANT-003**: Tenant-scoped Hindsight memory partitions and RAGFlow document dataset isolation with cryptographically authenticated tenant boundaries.
+- [ ] **REQ-TENANT-004**: Multi-tenant quota and rate limiting policer with tenant-level burst ceilings and fair-share scheduling.
+- [ ] **REQ-TENANT-005**: Tenant audit trail verification with immutable per-tenant cryptographic event hashing and tamper detection.
 
-## 2. Autonomous Chaos Recovery & Self-Healing Resilience (Phase 15)
+## 2. Inter-Desk Agent Mesh & Distributed Work Distribution (Phase 17)
 
-- [x] **REQ-CHAOS-001**: Synthetic chaos injection harness simulating intermittent upstream network partitions, packet loss, and latency spikes across Railway dependencies.
-- [x] **REQ-CHAOS-002**: Automated self-healing supervisor detecting corrupted or partitioned seat instances and triggering zero-downtime hot reconstitution.
-- [x] **REQ-CHAOS-003**: Autonomous task graph rebalancing algorithm dynamically redistributing unacknowledged seat workloads upon seat crash or unresponsiveness.
-- [x] **REQ-CHAOS-004**: Automated dead-letter queue (DLQ) replay orchestrator with exponential backoff, jitter, and poisonous payload quarantine.
-- [x] **REQ-CHAOS-005**: Continuous resilience verification suite validating system-wide RPO (Recovery Point Objective = 0) and RTO (Recovery Time Objective < 3s) during chaos drills.
+- [ ] **REQ-MESH-001**: Inter-desk agent service discovery protocol registering autonomous desk instances (Programming, Recruitment, Trading) over Tailnet mesh.
+- [ ] **REQ-MESH-002**: Asynchronous inter-desk RPC protocol via VPS Agent Bus enabling cross-desk task handoffs and progress tracking.
+- [ ] **REQ-MESH-003**: Cross-organization receipt co-signing protocol verifying multi-agent task completion with dual-party cryptographic attestation.
+- [ ] **REQ-MESH-004**: Decentralized task delegation state machine handling timeout negotiation, delegation rejection, and automated recall to originating desk.
+- [ ] **REQ-MESH-005**: Continuous inter-desk mesh verification test suite validating end-to-end multi-desk ticket lifecycle and receipt reconciliation.
+

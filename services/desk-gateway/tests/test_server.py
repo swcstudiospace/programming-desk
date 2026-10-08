@@ -307,6 +307,125 @@ async def test_intake_rate_limiting_and_backpressure_drill(monkeypatch, tmp_path
             assert r3.headers["Retry-After"] == "60"
 
 
+async def test_intake_hmac_and_pr_schema_and_idempotency(monkeypatch, tmp_path):
+    """REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004: HMAC signature, PR schema validation, and sliding window idempotency."""
+    import hashlib
+    import hmac
+    import httpx
+    from asgi_lifespan import LifespanManager
+    from desk_gateway import server
+    from desk_gateway.config import Settings
+    from desk_gateway.server import build_app
+
+    server._origin_request_timestamps.clear()
+    server._idempotency_cache.clear()
+
+    webhook_secret = "test-webhook-hmac-secret-12345"  # pragma: allowlist secret (test fixture key)
+    custom_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "hmac_data",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        webhook_secrets={"github": webhook_secret},
+        idempotency_window_sec=1.0,  # short 1s window for test
+    )
+    application, _ = build_app(custom_settings)
+
+    async with LifespanManager(application):
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            valid_payload = {
+                "title": "PR from GitHub: Fix typo",
+                "ask": "Please inspect this pull request and run lint/tests.",
+                "idempotency_key": "gh-pr-101",
+                "pr_payload": {
+                    "repo": "swcstudiospace/programming-desk",
+                    "number": 101,
+                    "action": "opened",
+                    "head_sha": "049ff8748fa7975d064cf27b409a4731be753e16",
+                    "base_branch": "main",
+                    "sender": "octocat",
+                },
+            }
+            raw_bytes = json.dumps(valid_payload).encode("utf-8")
+            valid_sig = "sha256=" + hmac.new(webhook_secret.encode("utf-8"), raw_bytes, hashlib.sha256).hexdigest()
+
+            # 1. Missing signature when secret is configured -> 401 problem details (REQ-INTAKE-001)
+            res_no_sig = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}", "Content-Type": "application/json"},
+                content=raw_bytes,
+            )
+            assert res_no_sig.status_code == 401
+            assert res_no_sig.json()["error"] == "missing_signature"
+
+            # 2. Invalid HMAC signature -> 403 problem details (REQ-INTAKE-001)
+            res_bad_sig = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": "sha256=badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadb",
+                },
+                content=raw_bytes,
+            )
+            assert res_bad_sig.status_code == 403
+            assert res_bad_sig.json()["error"] == "invalid_signature"
+
+            # 3. Valid HMAC signature -> 202 Accepted (REQ-INTAKE-001)
+            res_ok = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": valid_sig,
+                },
+                content=raw_bytes,
+            )
+            assert res_ok.status_code == 202
+            intake_id = res_ok.json()["intake_id"]
+            assert intake_id.startswith("in-")
+
+            # 4. Sliding window idempotency: duplicate within window returns cached response (REQ-INTAKE-004)
+            res_dup = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": valid_sig,
+                },
+                content=raw_bytes,
+            )
+            assert res_dup.status_code == 202
+            assert res_dup.json()["intake_id"] == intake_id
+
+            # 5. Schema validation: malformed PR payload -> 400 invalid_args (REQ-INTAKE-003)
+            malformed_payload = {
+                "title": "PR from GitHub: Malformed",
+                "ask": "This payload has invalid PR field types.",
+                "idempotency_key": "gh-pr-102",
+                "pr_payload": {
+                    "repo": "invalid-repo-format",  # missing slash
+                    "number": 0,  # minimum 1
+                    "action": "unknown_action",
+                },
+            }
+            mal_bytes = json.dumps(malformed_payload).encode("utf-8")
+            mal_sig = "sha256=" + hmac.new(webhook_secret.encode("utf-8"), mal_bytes, hashlib.sha256).hexdigest()
+            res_mal = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": mal_sig,
+                },
+                content=mal_bytes,
+            )
+            assert res_mal.status_code == 400
+            assert res_mal.json()["error"] == "invalid_args"
+
+
 async def test_packs_load_unload_and_ceiling(rpc):
     out = await rpc.call("ios", "desk_app_tools_load", {"app": "kanbanos", "task_id": "feat-push"})
     assert out["ok"] and out["live_tools"] == 20

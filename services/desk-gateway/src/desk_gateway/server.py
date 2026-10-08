@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import hashlib
+import hmac
 import json
 import logging
 import os
@@ -59,6 +61,19 @@ PAGE_HEADERS = {
 SEAT_PATH = re.compile(r"^/mcp/(?P<seat>[a-z]+)(?:/packs/(?P<pack>[a-z][a-z0-9-]{1,40}))?/?$")
 RESOURCE_META_PATH = re.compile(r"^/\.well-known/oauth-protected-resource/mcp(?:/[a-z]+(?:/packs/[a-z0-9-]+)?)?/?$")
 INTAKE_PRIORITIES = ("low", "normal", "high", "urgent")
+PR_PAYLOAD_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["repo", "number", "action"],
+    "properties": {
+        "repo": {"type": "string", "pattern": r"^[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+$"},
+        "number": {"type": "integer", "minimum": 1},
+        "action": {"type": "string", "enum": ["opened", "synchronize", "reopened", "closed", "labeled", "unlabeled"]},
+        "head_sha": {"type": "string", "pattern": r"^[0-9a-fA-F]{7,40}$"},
+        "base_branch": {"type": "string", "minLength": 1, "maxLength": 100},
+        "sender": {"type": "string", "minLength": 1, "maxLength": 100},
+    },
+}
 INTAKE_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
@@ -71,12 +86,14 @@ INTAKE_SCHEMA: dict[str, Any] = {
         "priority": {"type": "string", "enum": list(INTAKE_PRIORITIES), "default": "normal"},
         "requested_by": {"type": "string", "maxLength": 120},
         "idempotency_key": {"type": "string", "maxLength": 200},
+        "pr_payload": PR_PAYLOAD_SCHEMA,
     },
 }
 
 current_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_seat", default=None)
 current_pack: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_pack", default=None)
 _origin_request_timestamps: dict[str, list[float]] = {}
+_idempotency_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 INSTRUCTIONS = """\
 Programming Desk gateway. You are connected as one seat; tools/list is your contract
@@ -529,11 +546,48 @@ def create_mcp(
                 headers={"WWW-Authenticate": 'Bearer error="invalid_token", error_description="missing or unknown origin token"'},
             )
         try:
-            body = await request.json()
-        except ValueError:
+            raw_body = await request.body()
+            body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+        except (ValueError, UnicodeDecodeError):
             return JSONResponse({"error": "invalid_json"}, status_code=400)
         if not isinstance(body, dict):
             return JSONResponse({"error": "invalid_body"}, status_code=400)
+
+        # HMAC validation if signature header present or origin configured (REQ-INTAKE-001)
+        webhook_secret = settings.webhook_secret_for_origin(origin)
+        sig_header = (
+            request.headers.get("x-hub-signature-256")
+            or request.headers.get("x-webhook-signature-256")
+            or request.headers.get("x-signature-sha256")
+        )
+        if webhook_secret:
+            if not sig_header:
+                return problem_response(
+                    status=401,
+                    title="Missing Webhook HMAC Signature",
+                    detail=f"HMAC-SHA256 signature required for origin {origin}",
+                    error_code="missing_signature",
+                    instance="/v1/intake",
+                )
+            expected_sig = "sha256=" + hmac.new(webhook_secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+            provided_sig = sig_header if sig_header.startswith("sha256=") else f"sha256={sig_header}"
+            if not secrets.compare_digest(expected_sig.lower(), provided_sig.lower()):
+                return problem_response(
+                    status=403,
+                    title="Invalid Webhook HMAC Signature",
+                    detail=f"HMAC-SHA256 signature verification failed for origin {origin}",
+                    error_code="invalid_signature",
+                    instance="/v1/intake",
+                )
+        elif sig_header:
+            return problem_response(
+                status=400,
+                title="Unexpected Webhook Signature",
+                detail=f"no webhook secret configured for origin {origin}",
+                error_code="signature_not_configured",
+                instance="/v1/intake",
+            )
+
         body.setdefault("origin", origin)
         try:
             item = validate(INTAKE_SCHEMA, body)
@@ -543,6 +597,22 @@ def create_mcp(
             return JSONResponse({"error": "forbidden", "reason": f"token belongs to origin {origin}"}, status_code=403)
         if contains_secret(item["ask"]) or contains_secret(item["title"]):
             return JSONResponse({"error": "secret_refused", "reason": "the ask contains a credential shape; remove it and resend"}, status_code=422)
+
+        # Sliding window idempotency check (REQ-INTAKE-004)
+        idem_key = item.get("idempotency_key")
+        now = time.time()
+        if idem_key:
+            scoped_idem_key = f"{origin}:{idem_key}"
+            # Clean expired idempotency keys
+            expired_keys = [k for k, (ts, _) in _idempotency_cache.items() if (now - ts) > settings.idempotency_window_sec]
+            for k in expired_keys:
+                _idempotency_cache.pop(k, None)
+            cached = _idempotency_cache.get(scoped_idem_key)
+            if cached is not None:
+                cached_id, cached_response = cached
+                existing_record = store.intake_get(cached_id)
+                if existing_record and existing_record.get("state") == "queued":
+                    return JSONResponse(cached_response, status_code=202)
 
         # Rate limiting check per origin (REQ-DRILL-004)
         now = time.time()
@@ -577,7 +647,10 @@ def create_mcp(
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
         store.audit_append({**event, "ts_gateway": time.time()})
         services.audit.fire_and_forget(event)
-        return JSONResponse({"ok": True, "intake_id": record["intake_id"], "state": record["state"], "queue": store.intake_counts()}, status_code=202)
+        resp_data = {"ok": True, "intake_id": record["intake_id"], "state": record["state"], "queue": store.intake_counts()}
+        if idem_key:
+            _idempotency_cache[f"{origin}:{idem_key}"] = (now, (record["intake_id"], resp_data))
+        return JSONResponse(resp_data, status_code=202)
 
     return mcp
 

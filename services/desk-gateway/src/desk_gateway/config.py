@@ -86,6 +86,8 @@ class Settings:
     view_secret: str = ""
     intake_queue_max_depth: int = 100
     intake_rate_limit_per_minute: int = 60
+    webhook_secrets: dict[str, str] = field(default_factory=dict)
+    idempotency_window_sec: float = 300.0
 
     @property
     def issuer_url(self) -> str:
@@ -119,6 +121,9 @@ class Settings:
                 return origin
         return None
 
+    def webhook_secret_for_origin(self, origin: str) -> str | None:
+        return self.webhook_secrets.get(origin)
+
     @classmethod
     def from_env(cls) -> Settings:
         passphrases = {seat: _env(f"SEAT_PASSPHRASE_{seat.upper()}") for seat in SEATS}
@@ -127,6 +132,11 @@ class Settings:
             origin, _, token = pair.partition(":")
             if origin and token:
                 intake[origin.strip()] = token.strip()
+        webhook_sec: dict[str, str] = {}
+        for pair in _csv(_env("WEBHOOK_SECRETS")):
+            origin, _, sec = pair.partition(":")
+            if origin and sec:
+                webhook_sec[origin.strip()] = sec.strip()
         projects = {
             "ultrathink": _env("RAILWAY_PROJECT_ULTRATHINK"),
             "agent-substrate": _env("RAILWAY_PROJECT_AGENT_SUBSTRATE"),
@@ -180,4 +190,6 @@ class Settings:
             view_secret=_env("DESK_VIEW_SECRET"),
             intake_queue_max_depth=int(_env("INTAKE_QUEUE_MAX_DEPTH", "100")),
             intake_rate_limit_per_minute=int(_env("INTAKE_RATE_LIMIT_PER_MINUTE", "60")),
+            webhook_secrets=webhook_sec,
+            idempotency_window_sec=float(_env("IDEMPOTENCY_WINDOW_SEC", "300.0")),
         )

@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 milestone: v2.5
 milestone_name: Multi-Tenant Governance & Inter-Desk Agent Mesh
-status: Phase 16 complete (5/5 requirements). Ready for Phase 17.
-stopped_at: Completed 16-02-PLAN.md. Ready for Phase 17 (Inter-Desk Agent Mesh).
-last_updated: "2026-10-09T18:00:00.000Z"
+status: Phase 17 complete (5/5 requirements). Milestone v2.5 fully implemented.
+stopped_at: Completed 17-01-PLAN.md. Ready for Milestone v2.5 audit and tagging.
+last_updated: "2026-10-09T19:00:00.000Z"
 last_activity: 2026-10-09
-last_activity_desc: Completed Phase 16 Plan 02 (Tenant memory/dataset isolation, quota policer, cryptographic audit chaining).
+last_activity_desc: Completed Phase 17 Plan 01 (Inter-desk discovery, async RPC, receipt co-signing, delegation state machine).
 progress:
   total_phases: 17
-  completed_phases: 16
-  total_plans: 59
-  completed_plans: 57
-  percent: 96
+  completed_phases: 17
+  total_plans: 58
+  completed_plans: 58
+  percent: 100
 current_phase: 17
 current_phase_name: Inter-Desk Agent Mesh & Distributed Work Distribution
 ---
@@ -29,10 +29,10 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 
 ## Current Position
 
-Phase: Phase 16 (Multi-Tenant Governance & RBAC Policy Enforcement).
+Phase: Phase 17 (Inter-Desk Agent Mesh & Distributed Work Distribution).
 Milestone: Milestone v2.5 (Phases 16 & 17).
-Status: In progress.
-Last activity: 2026-10-09 — Initialized Milestone v2.5 requirements.
+Status: Completed.
+Last activity: 2026-10-09 — Phase 17 implemented and verified (5/5 requirements).
 
 
 ## Accumulated Context
@@ -43,14 +43,11 @@ Last activity: 2026-10-09 — Initialized Milestone v2.5 requirements.
 - Milestone v2.1 (Live Drills & Intake Hardening, 2 phases, 20 requirements) 100% completed and archived.
 - Milestone v2.2 (Multi-Desk Federation & Staging Deployments, 2 phases, 10 requirements) 100% completed, tagged (`v2.2.0`), and archived.
 - Milestone v2.3 (Production Cutover, Dynamic Failover & Telemetry Alerting, 2 phases, 10 requirements) 100% completed, tagged (`v2.3.0`), and archived.
-- Milestone v2.4 completed:
-  - Phase 14 Plan 01 completed: Edge ingress gateway, geo-steering router, and distributed token-bucket rate limiter with DragonflyDB/in-memory fallback (`REQ-EDGE-001`, `REQ-EDGE-002`).
-  - Phase 14 Plan 02 completed: WAN inter-seat routing, cryptographic attestation, vector clock convergence, and session evacuation (`REQ-EDGE-003`, `REQ-EDGE-004`, `REQ-EDGE-005`).
-  - Phase 14 completed (5/5 requirements).
-  - Phase 15 Plan 01 completed: Synthetic chaos injection harness and automated self-healing supervisor (`REQ-CHAOS-001`, `REQ-CHAOS-002`).
-  - Phase 15 Plan 02 completed: Autonomous workload rebalancer, automated DLQ replay orchestrator with backoff & poison vault, and continuous resilience verification suite confirming RPO=0 and RTO < 3.0s (`REQ-CHAOS-003`, `REQ-CHAOS-004`, `REQ-CHAOS-005`).
-  - Phase 15 completed (5/5 requirements).
+- Milestone v2.4 (Multi-Region Edge Federation & Autonomous Chaos Recovery, 2 phases, 10 requirements) 100% completed, tagged (`v2.4.0`), and archived.
+- Milestone v2.5 (Multi-Tenant Governance & Inter-Desk Agent Mesh):
+  - Phase 16 completed (5/5 requirements: REQ-TENANT-001 through REQ-TENANT-005).
+  - Phase 17 completed (5/5 requirements: REQ-MESH-001 through REQ-MESH-005).
 
 ### Pending Todos
 
-- None. Milestone v2.4 (Phase 14 & Phase 15) is 100% complete and fully verified.
+- Perform Milestone v2.5 audit and generate audit artifacts.

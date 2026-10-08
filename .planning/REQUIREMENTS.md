@@ -12,9 +12,9 @@ This document defines the requirements for Milestone v2.5 of Programming Desk.
 
 ## 2. Inter-Desk Agent Mesh & Distributed Work Distribution (Phase 17)
 
-- [ ] **REQ-MESH-001**: Inter-desk agent service discovery protocol registering autonomous desk instances (Programming, Recruitment, Trading) over Tailnet mesh.
-- [ ] **REQ-MESH-002**: Asynchronous inter-desk RPC protocol via VPS Agent Bus enabling cross-desk task handoffs and progress tracking.
-- [ ] **REQ-MESH-003**: Cross-organization receipt co-signing protocol verifying multi-agent task completion with dual-party cryptographic attestation.
-- [ ] **REQ-MESH-004**: Decentralized task delegation state machine handling timeout negotiation, delegation rejection, and automated recall to originating desk.
-- [ ] **REQ-MESH-005**: Continuous inter-desk mesh verification test suite validating end-to-end multi-desk ticket lifecycle and receipt reconciliation.
+- [x] **REQ-MESH-001**: Inter-desk agent service discovery protocol registering autonomous desk instances (Programming, Recruitment, Trading) over Tailnet mesh.
+- [x] **REQ-MESH-002**: Asynchronous inter-desk RPC protocol via VPS Agent Bus enabling cross-desk task handoffs and progress tracking.
+- [x] **REQ-MESH-003**: Cross-organization receipt co-signing protocol verifying multi-agent task completion with dual-party cryptographic attestation.
+- [x] **REQ-MESH-004**: Decentralized task delegation state machine handling timeout negotiation, delegation rejection, and automated recall to originating desk.
+- [x] **REQ-MESH-005**: Continuous inter-desk mesh verification test suite validating end-to-end multi-desk ticket lifecycle and receipt reconciliation.
 

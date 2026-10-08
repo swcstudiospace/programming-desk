@@ -92,6 +92,9 @@ class Settings:
     federation_enabled: bool = False
     federation_peer_keys: dict[str, str] = field(default_factory=dict)
     federation_peers: dict[str, str] = field(default_factory=dict)
+    cutover_enabled: bool = False
+    canary_percentage: int = 100
+    isolated_seats: list[str] = field(default_factory=list)
 
     @property
     def issuer_url(self) -> str:
@@ -210,4 +213,7 @@ class Settings:
             federation_enabled=_env("FEDERATION_ENABLED", "false").lower() in ("true", "1", "yes"),
             federation_peer_keys=fed_keys,
             federation_peers=fed_peers,
+            cutover_enabled=_env("CUTOVER_ENABLED", "false").lower() in ("true", "1", "yes"),
+            canary_percentage=int(_env("CANARY_PERCENTAGE", "100")),
+            isolated_seats=_csv(_env("ISOLATED_SEATS", "")),
         )

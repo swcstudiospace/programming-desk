@@ -9,7 +9,7 @@
 
 ### 🟡 v2.1 Live Drills & Intake Hardening (Phases 8-9)
 
-- [ ] Phase 8: Gateway Resiliency & Subagent Execution Drills (0/4 plans)
+- [ ] Phase 8: Gateway Resiliency & Subagent Execution Drills (1/4 plans)
 - [ ] Phase 9: External Intake Hardening & Telemetry Anchoring (0/4 plans)
 
 ### Completed Milestones

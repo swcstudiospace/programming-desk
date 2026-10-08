@@ -25,15 +25,15 @@ current_phase_name: Gateway Resiliency & Subagent Execution Drills
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Phase 2 — Network plane
-**Milestone:** v2.0 — Desk v2
+**Current focus:** Phase 8 — Gateway Resiliency & Subagent Execution Drills
+**Milestone:** v2.1 — Live Drills & Intake Hardening
 
 ## Current Position
 
-Phase: Milestone v2.0 complete
-Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-10-08 — Milestone v2.0 completed and archived
+Phase: Phase 8 — Gateway Resiliency & Subagent Execution Drills
+Plan: 08-01 completed (08-02 next)
+Status: Completed Plan 08-01 (Subagent Integrity Verification)
+Last activity: 2026-10-08 — Phase 8 Plan 01 verified (61/61 agent tests, 291/291 total)
 
 ## Accumulated Context
 

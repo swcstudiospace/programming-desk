@@ -1016,6 +1016,122 @@ def create_mcp(
             status_code=200,
         )
 
+    @mcp.custom_route("/v1/federation/graphs/sync", methods=["POST"])
+    async def federation_graphs_sync_post(request: Request) -> Response:
+        """Receive and synchronize distributed task graph state from peer desk (REQ-FED-004)."""
+        if not settings.federation_enabled:
+            return problem_response(
+                status=501,
+                title="Federation Not Enabled",
+                detail="Multi-desk federation is disabled on this gateway.",
+                error_code="federation_disabled",
+                instance=request.url.path,
+            )
+
+        auth = request.headers.get("authorization", "")
+        if not auth.lower().startswith("bearer "):
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Bearer token required for task graph synchronization.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        token = auth[7:].strip()
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload for task graph synchronization.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        graph_payload = body.get("graph")
+        if not isinstance(graph_payload, dict) or not graph_payload.get("graph_id"):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Missing or invalid 'graph' object with 'graph_id'.",
+                error_code="invalid_graph_payload",
+                instance=request.url.path,
+            )
+
+        # Validate token with lead authority (sync is a coordination role)
+        try:
+            verified_claims = fed_val.decode_and_verify(
+                token=token,
+                required_seat="lead",
+            )
+        except FederationError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Federation Token Verification Failed",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        # Merge task graph into local store
+        merged_graph, status_res = store.merge_task_graph(graph_payload)
+
+        sync_event = {
+            "kind": "federation.graph_sync",
+            "summary": f"Task graph {merged_graph.get('graph_id')} synced from {verified_claims.get('iss')} ({status_res})",
+            "payload": {
+                "graph_id": merged_graph.get("graph_id"),
+                "status": status_res,
+                "version": merged_graph.get("version"),
+                "nodes_count": len(merged_graph.get("nodes", {})),
+                "iss": verified_claims.get("iss"),
+            },
+            "actor": verified_claims.get("sub", "federation"),
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            sync_event["trace"] = trace_ctx
+        store.audit_append(sync_event)
+        services.audit.fire_and_forget(sync_event)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "resolution": status_res,
+                "graph": merged_graph,
+                "synced_at": time.time(),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/federation/graphs/{graph_id}", methods=["GET"])
+    async def federation_graphs_get(request: Request) -> Response:
+        """Fetch local federated task graph by graph_id (REQ-FED-004)."""
+        if not settings.federation_enabled:
+            return problem_response(
+                status=501,
+                title="Federation Not Enabled",
+                detail="Multi-desk federation is disabled on this gateway.",
+                error_code="federation_disabled",
+                instance=request.url.path,
+            )
+
+        graph_id = request.path_params.get("graph_id")
+        graph = store.get_task_graph(graph_id)
+        if not graph:
+            return problem_response(
+                status=404,
+                title="Graph Not Found",
+                detail=f"Task graph '{graph_id}' does not exist on this desk.",
+                error_code="graph_not_found",
+                instance=request.url.path,
+            )
+        return JSONResponse({"ok": True, "graph": graph}, status_code=200)
+
     return mcp
 
 

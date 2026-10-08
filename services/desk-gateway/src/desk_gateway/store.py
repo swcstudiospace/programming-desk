@@ -304,3 +304,140 @@ class Store:
             path = self.dir / "audit.jsonl"
             with path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(event, sort_keys=True) + "\n")
+
+    def task_graphs(self) -> dict[str, Any]:
+        """Return all local federated task graphs (REQ-FED-004)."""
+        with self._lock:
+            return self._read("task_graphs", {})
+
+    def get_task_graph(self, graph_id: str) -> dict[str, Any] | None:
+        """Get a specific task graph by graph_id (REQ-FED-004)."""
+        with self._lock:
+            graphs = self.task_graphs()
+            return graphs.get(graph_id)
+
+    def upsert_task_graph(
+        self,
+        graph_id: str,
+        title: str,
+        nodes: dict[str, Any],
+        version: int = 1,
+        vector_clock: dict[str, int] | None = None,
+        origin_desk: str | None = None,
+        updated_at: float | None = None,
+    ) -> dict[str, Any]:
+        """Create or update a local task graph (REQ-FED-004)."""
+        with self._lock:
+            graphs = self.task_graphs()
+            now = _now() if updated_at is None else updated_at
+            vc = dict(vector_clock or {})
+            if origin_desk:
+                vc[origin_desk] = max(vc.get(origin_desk, 0), version)
+
+            record = {
+                "graph_id": graph_id,
+                "title": title,
+                "nodes": nodes,
+                "version": version,
+                "vector_clock": vc,
+                "origin_desk": origin_desk,
+                "updated_at": now,
+            }
+            graphs[graph_id] = record
+            self._write("task_graphs", graphs)
+            return record
+
+    def merge_task_graph(
+        self,
+        remote_graph: dict[str, Any],
+    ) -> tuple[dict[str, Any], str]:
+        """Merge a remote task graph with deterministic conflict resolution (REQ-FED-004).
+
+        Resolution rules:
+        1. Causality check via Vector Clocks:
+           - If remote strictly dominates local -> Remote wins.
+           - If local strictly dominates remote -> Local wins (noop).
+        2. Concurrent updates (divergent vector clocks):
+           - Highest version wins.
+           - Tie-break: Highest updated_at timestamp wins.
+           - Tie-break: Lexicographical comparison of origin_desk (deterministic).
+        - For nodes within graph: Merge node states deterministically:
+           - If remote node has higher updated_at / version or local node doesn't exist, adopt remote node.
+           - Union nodes to prevent state loss across partitioned desks.
+
+        Returns (merged_graph, resolution_status) where status is:
+        'adopted_remote', 'kept_local', or 'merged_concurrent'.
+        """
+        graph_id = remote_graph.get("graph_id")
+        if not graph_id:
+            raise ValueError("remote_graph missing 'graph_id'")
+
+        with self._lock:
+            graphs = self.task_graphs()
+            local_graph = graphs.get(graph_id)
+            if not local_graph:
+                graphs[graph_id] = remote_graph
+                self._write("task_graphs", graphs)
+                return remote_graph, "adopted_remote"
+
+            local_vc = dict(local_graph.get("vector_clock") or {})
+            remote_vc = dict(remote_graph.get("vector_clock") or {})
+
+            # Check vector clock dominance
+            all_desks = set(local_vc.keys()) | set(remote_vc.keys())
+            local_dominates = True
+            remote_dominates = True
+            for d in all_desks:
+                l_v = local_vc.get(d, 0)
+                r_v = remote_vc.get(d, 0)
+                if l_v < r_v:
+                    local_dominates = False
+                if r_v < l_v:
+                    remote_dominates = False
+
+            if remote_dominates and not local_dominates:
+                graphs[graph_id] = remote_graph
+                self._write("task_graphs", graphs)
+                return remote_graph, "adopted_remote"
+
+            if local_dominates and not remote_dominates:
+                return local_graph, "kept_local"
+
+            # Concurrent updates: merge nodes deterministically and union vector clocks
+            merged_vc = {d: max(local_vc.get(d, 0), remote_vc.get(d, 0)) for d in all_desks}
+            merged_nodes = dict(local_graph.get("nodes") or {})
+            for node_id, remote_node in (remote_graph.get("nodes") or {}).items():
+                if node_id not in merged_nodes:
+                    merged_nodes[node_id] = remote_node
+                else:
+                    local_node = merged_nodes[node_id]
+                    # Deterministic node conflict resolution: latest updated_at wins, then status precedence
+                    l_ts = local_node.get("updated_at", 0)
+                    r_ts = remote_node.get("updated_at", 0)
+                    if r_ts > l_ts:
+                        merged_nodes[node_id] = remote_node
+                    elif r_ts == l_ts:
+                        # Tie break on state progression: done > in_progress > open
+                        state_weights = {"done": 3, "in_progress": 2, "open": 1}
+                        l_w = state_weights.get(local_node.get("status", ""), 0)
+                        r_w = state_weights.get(remote_node.get("status", ""), 0)
+                        if r_w > l_w:
+                            merged_nodes[node_id] = remote_node
+
+            merged_version = max(local_graph.get("version", 1), remote_graph.get("version", 1)) + 1
+            merged_updated_at = max(local_graph.get("updated_at", 0), remote_graph.get("updated_at", 0), _now())
+            origin_desk = local_graph.get("origin_desk") or remote_graph.get("origin_desk")
+
+            merged_record = {
+                "graph_id": graph_id,
+                "title": remote_graph.get("title") or local_graph.get("title", ""),
+                "nodes": merged_nodes,
+                "version": merged_version,
+                "vector_clock": merged_vc,
+                "origin_desk": origin_desk,
+                "updated_at": merged_updated_at,
+            }
+            graphs[graph_id] = merged_record
+            self._write("task_graphs", graphs)
+            return merged_record, "merged_concurrent"
+

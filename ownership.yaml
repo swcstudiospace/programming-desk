@@ -174,9 +174,10 @@ ownership:
     owner: bot-06-quality-security
   # The distributable gate template (ci/.github/workflows/gates.yml) belongs to
   # INFRA, same as the live .github/workflows/gates.yml: gates-template-sync.yml
-  # fails the build if the two drift. The pattern is stated later, immediately
+  # fails the build if the two drift. That exact path is stated later, immediately
   # after the broader ci/.github/** QUALITY rule. Last match wins, so stating it
-  # here would lose and no single seat could edit both copies.
+  # here would lose and no single seat could edit both copies. A folder glob is
+  # the wrong shape: only this one file has to travel with the live workflow.
   - pattern: "scripts/dev/**"
     owner: bot-05-infrastructure
 
@@ -364,12 +365,13 @@ ownership:
   # template does not: it has to stay with INFRA, same owner as the live copy.
   - pattern: "ci/tests/**"
     owner: bot-06-quality-security
-  # Anything under ci/.github/ other than the gates template. The template rule
-  # is next, on purpose: this broader pattern would otherwise win by last match
-  # and hand ci/.github/workflows/** to QUALITY.
+  # Anything under ci/.github/ other than the gates template file. The next
+  # rule names that one path. Last match wins, so this broader pattern would
+  # otherwise hand ci/.github/workflows/gates.yml to QUALITY. A workflows/**
+  # exception would also give INFRA a future non-gates file in that folder.
   - pattern: "ci/.github/**"
     owner: bot-06-quality-security
-  - pattern: "ci/.github/workflows/**"
+  - pattern: "ci/.github/workflows/gates.yml"
     owner: bot-05-infrastructure
 
   # --- Agent runtime surface (.claude/, .planning/) ------------------------

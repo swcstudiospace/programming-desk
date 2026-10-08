@@ -329,9 +329,13 @@ class TestGateWorkflowCopiesShareOneOwner:
         owner = self._owner(path)
         assert owner == "bot-05-infrastructure", f"{path} resolved to {owner}"
 
-    def test_other_paths_under_ci_github_stay_with_quality(self):
-        owner = self._owner("ci/.github/CODEOWNERS")
-        assert owner == "bot-06-quality-security", owner
+    @pytest.mark.parametrize("path", [
+        "ci/.github/CODEOWNERS",
+        "ci/.github/workflows/other.yml",
+    ])
+    def test_other_paths_under_ci_github_stay_with_quality(self, path):
+        owner = self._owner(path)
+        assert owner == "bot-06-quality-security", f"{path} resolved to {owner}"
 
 
 # ===========================================================================

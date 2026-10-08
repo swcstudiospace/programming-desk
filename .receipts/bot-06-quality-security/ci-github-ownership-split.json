@@ -3,7 +3,7 @@
   "bot": "bot-06-quality-security",
   "branch": "bot-06-quality-security/ci-github-ownership-split",
   "started_at": "2026-10-08T23:35:00Z",
-  "completed_at": "2026-10-08T23:38:16Z",
+  "completed_at": "2026-10-08T23:46:48Z",
   "commands": [
     {
       "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=short",
@@ -46,6 +46,30 @@
       "exit_code": 0,
       "duration_s": 0.12,
       "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=line",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "AssertionError: ci/.github/workflows/other.yml resolved to bot-05-infrastructure\n1 failed, 3 passed"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.11,
+      "output_tail": "4 passed in 0.11s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.08,
+      "output_tail": "295 passed in 9.08s"
     }
   ],
   "claims": [
@@ -77,13 +101,30 @@
     {
       "claim": "Desk integrity check exits 0",
       "evidence_command_index": 6
+    },
+    {
+      "claim": "With a workflows folder glob, ci/.github/workflows/other.yml resolves to bot-05-infrastructure",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    },
+    {
+      "claim": "Naming only ci/.github/workflows/gates.yml keeps that file with Infrastructure and leaves ci/.github/workflows/other.yml with Quality",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Ownership manifest still validates after the pattern is narrowed to one file",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "ci/tests suite passes after the Greptile P2 narrowing",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [
     "PR #140 (bot-05-infrastructure/gates-full-base-fetch) was not updated or rebased onto this rule. It stays blocked on G-1 until this change is on main.",
     "gates.yml itself was not edited. Template sync was not run against a paired gates.yml diff.",
     "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict fails on that field.",
-    "Greptile review of this pull request has not completed."
+    "Greptile re-review of the narrowed gates.yml exception has not completed. The review of 515951d reported one P2 and the gates job failed G-2, which is the empty approved_by."
   ],
   "files_changed": [
     "ownership.yaml",

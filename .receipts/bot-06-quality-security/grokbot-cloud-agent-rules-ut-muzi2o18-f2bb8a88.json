@@ -143,13 +143,13 @@
       "evidence_command_index": 12
     },
     {
-      "claim": "All quality gates pass strictly with independent LEAD approval",
+      "claim": "Quality gates pass under --strict with Ming's approval (human:SomeRandmGuyy)",
       "evidence_command_index": 13
     }
   ],
   "unverified": [
     "desk_brief substrate.error=not_configured and recall.error=not_configured; both reasons were 'substrate is not configured on the gateway; record this under unverified'. generated_at 1791463539.0240884 is brief_read_at. The response had no cached key (desk-operating-model treats absence as false) and no etag. No human granted a loop_ack, so loop_acks is an empty list. docs/desk-operating-model.md calls a failed brief without that ack a blocker; the unit BUILD_PROMPT still required the edit.",
-    "Initial authoring turn had approved_by absent as QUALITY cannot self-approve; approved_by was stamped by LEAD (bot-00-programming-lead) following independent review of diff and gates.",
+    "Ming (human owner, GitHub SomeRandmGuyy) approved this change in commit a47b423 and confirmed that in chat on 2026-10-09 (AEDT). approved_by is human:SomeRandmGuyy. Lead (bot-00-programming-lead) did not review or stamp it.",
     "The first check_secrets.py --base origin/main (command index 4) and the first check_contracts.py --base origin/main (command index 5) ran while HEAD was still origin/main, so they scanned an empty diff. Command indices 10 and 11 are the same commands after commit 2b1920e.",
     "G-5 does not apply: this receipt records no deployment command, so check_rollback.py does not require a rollback plan (docs/quality-gates.md: no deployment without a plan). rollback_plan is null. Nothing was deployed or exercised in staging.",
     "GitHub Actions on this branch was not run here. .github/workflows/gates.yml rejects a head ref whose prefix is not bot-0N-name, and docs/github-sot-orchestration.md §3.1 requires that prefix. The unit TARGET branch is grokbot/cloud-agent-rules, which will fail the acting-bot step.",
@@ -160,5 +160,6 @@
   "contract_changes": [],
   "rollback_plan": null,
   "approvals": [],
-  "approved_by": "bot-00-programming-lead"
+  "loop_acks": [],
+  "approved_by": "human:SomeRandmGuyy"
 }

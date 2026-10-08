@@ -738,17 +738,61 @@ def test_guard_rejects_pathlike_host_binary(tmp_path, monkeypatch):
 
 
 def test_reload_pid_file_keeps_builtin_kill_without_external(tmp_path, decoy_gateway):
-    """No external kill leaves Bash's builtin in place, so the PID file can still be signalled."""
+    """No external kill leaves Bash's builtin, which signals a child this test owns.
+
+    The child catches SIGHUP and stays up. An unused PID is not a safe target:
+    another process can claim it before kill runs.
+    """
     stub_dir = tmp_path / "bin"
     stub_dir.mkdir()
-    target = _unused_pid()
-    pid_file = tmp_path / "gateway.pid"
-    pid_file.write_text(f"{target}\n", encoding="utf-8")
+    marker = tmp_path / "sighup-received"
+    child = subprocess.Popen(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import signal, pathlib, time, sys\n"
+                "marker = pathlib.Path(sys.argv[1])\n"
+                "def on_hup(_signum, _frame):\n"
+                "    marker.write_text('hup')\n"
+                "signal.signal(signal.SIGHUP, on_hup)\n"
+                "marker.write_text('ready')\n"
+                "time.sleep(30)\n"
+            ),
+            str(marker),
+        ],
+        start_new_session=True,
+    )
+    try:
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            if child.poll() is not None:
+                pytest.fail(f"signal target exited during setup with status {child.returncode}")
+            if marker.is_file() and marker.read_text(encoding="utf-8") == "ready":
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail("signal target did not become ready")
 
-    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
-    proc = _run(RELOAD_SCRIPT, env)
+        pid_file = tmp_path / "gateway.pid"
+        pid_file.write_text(f"{child.pid}\n", encoding="utf-8")
+        env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+        proc = _run(RELOAD_SCRIPT, env)
 
-    assert proc.returncode != 0
-    assert "command not found" not in proc.stderr
-    assert "No such process" in proc.stderr
-    assert decoy_gateway.poll() is None
+        assert proc.returncode == 0, proc.stderr
+        assert "command not found" not in proc.stderr
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline and marker.read_text(encoding="utf-8") != "hup":
+            time.sleep(0.02)
+        assert marker.read_text(encoding="utf-8") == "hup"
+        assert child.poll() is None
+        assert decoy_gateway.poll() is None
+        assert child.pid != decoy_gateway.pid
+    finally:
+        if child.poll() is None:
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait(timeout=5)

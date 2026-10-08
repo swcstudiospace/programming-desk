@@ -28,7 +28,7 @@
 **Goal**: Implement synthetic chaos injection, automated self-healing seat reconstitution, workload rebalancing, and DLQ replay orchestrator.
 **Requirements**: REQ-CHAOS-001 through REQ-CHAOS-005
 **Plans**:
-- [ ] 15-01-PLAN.md — Synthetic chaos injection harness & automated self-healing supervisor (REQ-CHAOS-001, REQ-CHAOS-002)
+- [x] 15-01-PLAN.md — Synthetic chaos injection harness & automated self-healing supervisor (REQ-CHAOS-001, REQ-CHAOS-002)
 - [ ] 15-02-PLAN.md — Autonomous workload rebalancing, DLQ replay orchestrator & resilience verification suite (REQ-CHAOS-003, REQ-CHAOS-004, REQ-CHAOS-005)
 
 ### Completed Milestones

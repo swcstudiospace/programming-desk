@@ -64,6 +64,12 @@ from desk_gateway.vector_clock import (
     compare_vector_clocks,
     union_vector_clocks,
 )
+from desk_gateway.chaos import ChaosException, ChaosHarness, ChaosRule, FaultType
+from desk_gateway.supervisor import (
+    SeatHealthStatus,
+    SeatRuntimeProfile,
+    SelfHealingSupervisor,
+)
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -272,6 +278,7 @@ class SeatRouter:
         isolation_manager: EmergencyIsolationManager | None = None,
         failover_router: FailoverRouter | None = None,
         edge_gateway: EdgeIngressGateway | None = None,
+        supervisor: SelfHealingSupervisor | None = None,
     ) -> None:
         self.app = app
         self.provider = provider
@@ -279,6 +286,7 @@ class SeatRouter:
         self.isolation_manager = isolation_manager
         self.failover_router = failover_router
         self.edge_gateway = edge_gateway
+        self.supervisor = supervisor
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -474,6 +482,8 @@ def create_mcp(
     alerting: tuple[AlertDispatcher, SLOEvaluator] | None = None,
     edge: EdgeIngressGateway | None = None,
     wan: tuple[WanMeshRouter, RegionImpairmentManager] | None = None,
+    chaos: ChaosHarness | None = None,
+    supervisor: SelfHealingSupervisor | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -516,6 +526,12 @@ def create_mcp(
     )
     if impairment_mgr is None:
         impairment_mgr = wan_router.impairment_manager
+    chaos_harness = chaos if chaos else ChaosHarness()
+    healing_supervisor = supervisor if supervisor else SelfHealingSupervisor(
+        rosters=services.rosters,
+        isolation_manager=iso_mgr,
+        edge_gateway=edge_gw,
+    )
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -545,6 +561,12 @@ def create_mcp(
                     "local_region": wan_router.local_region_id,
                     "peers_count": len(impairment_mgr.list_peers()),
                     "revoked_regions_count": len(impairment_mgr._revoked_regions),
+                },
+                "chaos": {
+                    "active_rules_count": len(chaos_harness.get_rules()),
+                },
+                "supervisor": {
+                    "seats_count": len(healing_supervisor.list_profiles()),
                 },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
@@ -2224,6 +2246,121 @@ def create_mcp(
             status_code=200,
         )
 
+    # Attach components for reference
+    mcp._chaos_harness = chaos_harness  # type: ignore[attr-defined]
+    mcp._healing_supervisor = healing_supervisor  # type: ignore[attr-defined]
+
+    # --- Chaos Injection REST Endpoints (REQ-CHAOS-001) ---
+    @mcp.custom_route("/v1/chaos/rules", methods=["GET"])
+    async def get_chaos_rules(_request: Request) -> Response:
+        rules = [r.to_dict() for r in chaos_harness.get_rules()]
+        return JSONResponse({"rules": rules, "count": len(rules)})
+
+    @mcp.custom_route("/v1/chaos/inject", methods=["POST"])
+    async def inject_chaos_rule(request: Request) -> Response:
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        auth_seat = settings.seat_for_passphrase(token)
+        # Operator seats lead, infra, systems, or loopback
+        if auth_seat not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail=f"Seat '{auth_seat}' is not permitted to inject synthetic chaos faults",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        target_service = body.get("target") or body.get("target_service")
+        fault_type_str = body.get("fault_type")
+        if not target_service or not fault_type_str:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="target and fault_type are required",
+                error_code="missing_fields",
+                instance=request.url.path,
+            )
+
+        try:
+            fault_type = FaultType(fault_type_str)
+        except ValueError:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid fault_type '{fault_type_str}'. Allowed: {[f.value for f in FaultType]}",
+                error_code="invalid_fault_type",
+                instance=request.url.path,
+            )
+
+        delay_ms = float(body.get("delay_ms") or body.get("latency_ms") or 0.0)
+        prob = float(body.get("probability", 1.0))
+        err_code = int(body.get("error_code") or body.get("status_code") or 503)
+        err_msg = body.get("error_message", "Chaos injected upstream failure")
+        duration = float(body["ttl_seconds"]) if body.get("ttl_seconds") is not None else None
+
+        rule = chaos_harness.add_rule(
+            target=target_service,
+            fault_type=fault_type,
+            probability=prob,
+            delay_ms=delay_ms,
+            error_code=err_code,
+            error_message=err_msg,
+            duration_sec=duration,
+        )
+        return JSONResponse({"ok": True, "rule": rule.to_dict()}, status_code=201)
+
+    @mcp.custom_route("/v1/chaos/reset", methods=["POST"])
+    async def reset_chaos_rules(_request: Request) -> Response:
+        count = chaos_harness.clear_rules()
+        return JSONResponse({"ok": True, "cleared_rules_count": count})
+
+    # --- Self-Healing Supervisor REST Endpoints (REQ-CHAOS-002) ---
+    @mcp.custom_route("/v1/supervisor/seats", methods=["GET"])
+    async def get_supervisor_seats(_request: Request) -> Response:
+        profiles = healing_supervisor.list_profiles()
+        return JSONResponse({
+            "seats": [p.to_dict() for p in profiles],
+            "count": len(profiles),
+        })
+
+    @mcp.custom_route("/v1/supervisor/reconstitute", methods=["POST"])
+    async def reconstitute_seat(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        seat = body.get("seat")
+        if not seat or seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid or missing seat. Allowed: {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+
+        result = healing_supervisor.reconstitute_seat(seat)
+        return JSONResponse(result, status_code=200 if result.get("ok") else 500)
+
     return mcp
 
 
@@ -2277,6 +2414,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         alerting=alerting_components,
         edge=edge_gw,
         wan=wan_components,
+        chaos=None,
+        supervisor=None,
     )
     origins = [
         "http://127.0.0.1",
@@ -2309,7 +2448,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         await services.live.serve(websocket)
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
-    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router, edge_gateway=edge_gw))
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router, edge_gateway=edge_gw, supervisor=getattr(mcp, "_healing_supervisor", None)))
     app.state = {
         "store": store,
         "services": services,
@@ -2329,6 +2468,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "edge_gateway": edge_gw,
         "wan_router": wan_router,
         "impairment_manager": impairment_mgr,
+        "chaos_harness": getattr(mcp, "_chaos_harness", None),
+        "supervisor": getattr(mcp, "_healing_supervisor", None),
     }
     return app, settings
 

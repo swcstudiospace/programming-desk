@@ -84,6 +84,8 @@ class Settings:
     extra_allowed_origins: list[str] = field(default_factory=list)
     view_passphrase: str = ""
     view_secret: str = ""
+    intake_queue_max_depth: int = 100
+    intake_rate_limit_per_minute: int = 60
 
     @property
     def issuer_url(self) -> str:
@@ -176,4 +178,6 @@ class Settings:
             extra_allowed_origins=_csv(_env("EXTRA_ALLOWED_ORIGINS")),
             view_passphrase=_env("DESK_VIEW_PASSPHRASE"),
             view_secret=_env("DESK_VIEW_SECRET"),
+            intake_queue_max_depth=int(_env("INTAKE_QUEUE_MAX_DEPTH", "100")),
+            intake_rate_limit_per_minute=int(_env("INTAKE_RATE_LIMIT_PER_MINUTE", "60")),
         )

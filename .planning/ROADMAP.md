@@ -69,8 +69,22 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
   3. All five substrate URLs cut over to verified MagicDNS paths; restarted substrate brief and events are observed with bearer authentication retained.
   4. Actual G-6 approval and recreation rollback precede retirement of the Timescale proxy and Greptime domain; optional public Hindsight UI requires Ove's choice. Receipt records probes/removal/rollback and every unverified path.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**:
+**Wave 1**
+- [/] 02-01-PLAN.md — Reconcile forwarder port mappings, listener isolation, persistence, and railway-app non-adoption boundary
+- [/] 02-02-PLAN.md — Enforce exact-port ACL policy, reject broad ranges, and verify Grok Bot perimeter isolation
+
+**Wave 2** *(blocked on Wave 1)*
+- [ ] 02-03-PLAN.md — Execute VPS protocol probes, collect separate Mac mini administrative evidence, and verify WireGuard + bearer auth
+
+**Wave 3** *(blocked on Wave 2)*
+- [ ] 02-04-PLAN.md — Execute substrate environment cutover, resolve port 7410 collision, restart substrate-mcp, and verify /brief & events_emit
+- [ ] 02-05-PLAN.md — Govern Timescale proxy and Greptime domain retirement under Gate G-6 with verified rollback and Hindsight UI access choice
+
+**Wave 4** *(blocked on Wave 3)*
+- [ ] 02-06-PLAN.md — Consolidate, validate, and publish independently approved n2-network.json receipt satisfying Gates G-1 through G-7
+
+**Status**: Ready to execute
 **Responsibility**: INFRA. Primary requirement assignment is Phase 2; later consumer evidence is retained in source references.
 **Human/runtime checkpoint**: Real account/deployment authorization, secrets held privately, actual VPS/Mac mini/XPS probes, and G-6 approval with rollback precede access/exposure changes. Source mappings never expand to observed extra listeners 4002/9382.
 

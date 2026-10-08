@@ -82,6 +82,8 @@ class Settings:
     asc_private_key_path: str = ""
     pack_api_bases: dict[str, str] = field(default_factory=dict)
     extra_allowed_origins: list[str] = field(default_factory=list)
+    view_passphrase: str = ""
+    view_secret: str = ""
 
     @property
     def issuer_url(self) -> str:
@@ -172,4 +174,6 @@ class Settings:
             asc_private_key_path=_env("ASC_PRIVATE_KEY_PATH"),  # pragma: allowlist secret (env var name)
             pack_api_bases={k: v.rstrip("/") for k, v in packs.items() if v},
             extra_allowed_origins=_csv(_env("EXTRA_ALLOWED_ORIGINS")),
+            view_passphrase=_env("DESK_VIEW_PASSPHRASE"),
+            view_secret=_env("DESK_VIEW_SECRET"),
         )

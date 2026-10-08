@@ -1,4 +1,4 @@
-"""The three HTML pages the gateway serves: landing, consent, message."""
+"""The HTML pages the gateway serves: landing, consent, desk view sign-in, message."""
 
 from __future__ import annotations
 
@@ -47,6 +47,25 @@ def consent_page(*, request_id: str, client_name: str, client_id: str, redirect_
         f"<input id='passphrase' name='passphrase' type='password' autocomplete='off' required autofocus>"
         f"<button type='submit' name='action' value='approve'>Approve</button>"
         f"<button type='submit' name='action' value='deny'>Deny</button></form>",
+    )
+
+
+def view_login_page(error: str | None = None) -> str:
+    if error == "throttled":
+        err = "<p class='err'>Too many attempts. Wait ten minutes and try again.</p>"
+    elif error:
+        err = "<p class='err'>That passphrase is not the desk view passphrase.</p>"
+    else:
+        err = ""
+    return _page(
+        "Programming Desk",
+        f"<h1>Programming Desk</h1>"
+        f"<p>Enter the desk view passphrase to watch the desk.</p>{err}"
+        f"<form method='post' action='/view/login'>"
+        f"<label for='passphrase'>Desk view passphrase</label>"
+        f"<input id='passphrase' name='passphrase' type='password' autocomplete='off' required autofocus>"
+        f"<button type='submit'>Sign in</button></form>"
+        f"<p class='muted'>Connecting a Grok Bot instead? See <code>/connect</code>.</p>",
     )
 
 

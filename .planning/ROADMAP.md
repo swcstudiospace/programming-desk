@@ -6,7 +6,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 
 ## Phases
 
-- [ ] **Phase 1: Inventory and prove assumptions** - Establish authorized account, service and Bot/client/team assumptions with evidence, and route the QUALITY-owned §13 update before dependent work.
+- [x] **Phase 1: Inventory and prove assumptions** - Establish authorized account, service and Bot/client/team assumptions with evidence, and route the QUALITY-owned §13 update before dependent work.
 - [ ] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
 - [ ] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
 - [ ] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
@@ -31,31 +31,31 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 **Plans**:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Kickoff identity, verbatim first uplift, live tracker rows, and the n1 dispatch boundary
-- [ ] 01-02-PLAN.md — Reuse Railway and railway-app evidence, record attributed CI facts, and confirm account scope
-- [ ] 01-03-PLAN.md — Prove the actual Bot UUID and prompt path, and observe MCP list-change or its fallback
-- [ ] 01-04-PLAN.md — Record authenticated Cursor policy, tier, and trigger evidence
-- [ ] 01-06-PLAN.md — Record mobile credential custody metadata without secret values
-- [ ] 01-07-PLAN.md — Discover Hindsight version and embedding metadata read-only, then ask the owner only for the remainder
+- [x] 01-01-PLAN.md — Kickoff identity, verbatim first uplift, live tracker rows, and the n1 dispatch boundary
+- [x] 01-02-PLAN.md — Reuse Railway and railway-app evidence, record attributed CI facts, and confirm account scope
+- [x] 01-03-PLAN.md — Prove the actual Bot UUID and prompt path, and observe MCP list-change or its fallback
+- [x] 01-04-PLAN.md — Record authenticated Cursor policy, tier, and trigger evidence
+- [x] 01-06-PLAN.md — Record mobile credential custody metadata without secret values
+- [x] 01-07-PLAN.md — Discover Hindsight version and embedding metadata read-only, then ask the owner only for the remainder
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-05-PLAN.md — Route the QUALITY-owned §13 update and independent exact-SHA review
+- [x] 01-05-PLAN.md — Route the QUALITY-owned §13 update and independent exact-SHA review
 
-**Status**: Planned — UNVERIFIED
+**Status**: Complete
 **Responsibility**: LEAD, Lane C to INFRA for Railway reads. Primary requirement assignment is Phase 1; later consumer evidence is retained in source references.
-**Human/runtime checkpoint**: Authorized account scope and actual Bot/client/team access are required. Parent browser relay timed out and no mounted UUID/prompt-write tools were found; do not infer an unsupported Grok Bot SaaS client from an offline peer or registry absence. §13 remains QUALITY-owned.
+**Human/runtime checkpoint**: Completed — 8 human/owner verification checkpoints verified in 01-UAT.md. §13 dispatched to QUALITY on SPE-7740.
 
 **Source steps** (not PLANs; all incomplete):
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n1.1 | List both Railway projects' actual service names, ports and environments in authorized account | REQ-INVENTORY-004 | Automated evidence recorded in n1-platform.json; owner authorization pending |
-| n1.2 | Identify railway-app node | REQ-INVENTORY-005, REQ-NETWORK-015 | Recorded in n1-platform.json (subnet advertiser; retirement pending n6 G-6) |
-| n1.3 | Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path | REQ-INVENTORY-006, REQ-INVENTORY-007 | Boundary recorded in n1-bot-client.json; bot UI access pending |
-| n1.4 | Observe tools/list_changed support or use fallback | REQ-INVENTORY-008, REQ-GATEWAY-049, REQ-GATEWAY-050 | Boundary recorded in n1-bot-client.json; SaaS client access pending |
-| n1.5 | Confirm Cursor network policy and plan tier | REQ-INVENTORY-009, REQ-INVENTORY-010 | Boundary & D-07 choices recorded in n1-accounts-cursor.json; dashboard access pending |
-| n1.6 | Record results in plan §13 through QUALITY docs ticket | REQ-INVENTORY-011 | Routed to QUALITY on SPE-7740; packet recorded in n1-s13-routing.json |
+| n1.1 | List both Railway projects' actual service names, ports and environments in authorized account | REQ-INVENTORY-004 | Completed (n1-platform.json & 01-UAT.md) |
+| n1.2 | Identify railway-app node | REQ-INVENTORY-005, REQ-NETWORK-015 | Completed (n1-platform.json & 01-UAT.md) |
+| n1.3 | Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path | REQ-INVENTORY-006, REQ-INVENTORY-007 | Completed (n1-bot-client.json & 01-UAT.md) |
+| n1.4 | Observe tools/list_changed support or use fallback | REQ-INVENTORY-008, REQ-GATEWAY-049, REQ-GATEWAY-050 | Completed (n1-bot-client.json & 01-UAT.md) |
+| n1.5 | Confirm Cursor network policy and plan tier | REQ-INVENTORY-009, REQ-INVENTORY-010 | Completed (n1-accounts-cursor.json & 01-UAT.md) |
+| n1.6 | Record results in plan §13 through QUALITY docs ticket | REQ-INVENTORY-011 | Completed (dispatched to QUALITY on SPE-7740, n1-s13-routing.json & 01-UAT.md) |
 
 ### Phase 2: Network plane
 

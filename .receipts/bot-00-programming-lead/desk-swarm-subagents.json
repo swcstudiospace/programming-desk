@@ -2,6 +2,7 @@
   "task_id": "desk-swarm-subagents",
   "branch": "bot-00-programming-lead/desk-swarm-subagents",
   "bot": "bot-00-programming-lead",
+  "approved_by": "SomeRandmGuyy",
   "started_at": "2026-10-07T23:00:00Z",
   "completed_at": "2026-10-07T23:35:00Z",
   "commands": [

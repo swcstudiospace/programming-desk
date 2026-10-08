@@ -12,37 +12,37 @@ Source: [approved plan](../docs/upgrade-plan-desk-v2.md) §§5–13 and Appendic
 
 ### INVENTORY — Phase 1: Inventory and prove assumptions
 
-- [ ] **REQ-INVENTORY-001**: Given the operator's original ask, when LEAD performs the first uplift, then ORIGINAL contains the verbatim §1 block, not a paraphrase.
+- [x] **REQ-INVENTORY-001**: Given the operator's original ask, when LEAD performs the first uplift, then ORIGINAL contains the verbatim §1 block, not a paraphrase.
   - Source: P §1; §12 kickoff L314; source step / responsibility: n1 kickoff; LEAD; acceptance ID: AC-INVENTORY-001.
-- [ ] **REQ-INVENTORY-002**: Given the selected full graph, when kickoff is recorded, then all seven nodes and their 41 source steps have traceable node issues and step sub-issues in the Notion Agent Task Graph and Linear Spectrum Web Co.
+- [x] **REQ-INVENTORY-002**: Given the selected full graph, when kickoff is recorded, then all seven nodes and their 41 source steps have traceable node issues and step sub-issues in the Notion Agent Task Graph and Linear Spectrum Web Co.
   - Source: P §12 kickoff L314; G Flow 3–4; source step / responsibility: n1 kickoff; LEAD; acceptance ID: AC-INVENTORY-002.
-- [ ] **REQ-INVENTORY-003**: Given created tracker rows, when the second uplift is dispatched, then its ISSUES section contains the live Notion/Linear URLs for the assigned node and steps.
+- [x] **REQ-INVENTORY-003**: Given created tracker rows, when the second uplift is dispatched, then its ISSUES section contains the live Notion/Linear URLs for the assigned node and steps.
   - Source: P §12 kickoff L314; G Flow 5–6; source step / responsibility: n1 kickoff; LEAD; acceptance ID: AC-INVENTORY-003.
-- [ ] **REQ-INVENTORY-004**: Given access to Ove's two Railway projects, when inventory is recorded, then actual service names, ports and environments are recorded for GreptimeDB, TimescaleDB, DragonflyDB, Hindsight and RAGFlow; provisional defaults are labelled until confirmed.
+- [x] **REQ-INVENTORY-004**: Given access to Ove's two Railway projects, when inventory is recorded, then actual service names, ports and environments are recorded for GreptimeDB, TimescaleDB, DragonflyDB, Hindsight and RAGFlow; provisional defaults are labelled until confirmed.
   - Source: P §12 n1.1; §5 mapping table; §13 service names; source step / responsibility: n1.1; LEAD → INFRA; acceptance ID: AC-INVENTORY-004.
-- [ ] **REQ-INVENTORY-005**: Given the railway-app tailnet node, when its identity is investigated, then its Railway project, role and advertised routes are recorded with evidence rather than inferred from online status.
+- [x] **REQ-INVENTORY-005**: Given the railway-app tailnet node, when its identity is investigated, then its Railway project, role and advertised routes are recorded with evidence rather than inferred from online status.
   - Source: P §12 n1.2; §5 railway-app; §13 railway-app; source step / responsibility: n1.2; INFRA; acceptance ID: AC-INVENTORY-005.
-- [ ] **REQ-INVENTORY-006**: Given an actual Bot computer, when its UUID is read, then the receipt names the exact agent-data path and observed UUID.
+- [x] **REQ-INVENTORY-006**: Given an actual Bot computer, when its UUID is read, then the receipt names the exact agent-data path and observed UUID.
   - Source: P §12 n1.3; §9.2 step 3; §13 Bot path; source step / responsibility: n1.3; LEAD / participating Bot; acceptance ID: AC-INVENTORY-006.
-- [ ] **REQ-INVENTORY-007**: Given that Bot's own SYSTEM_PROMPT.xml, when write access is proved, then the result and exact writable path are recorded; a cited architecture path alone is not proof.
+- [x] **REQ-INVENTORY-007**: Given that Bot's own SYSTEM_PROMPT.xml, when write access is proved, then the result and exact writable path are recorded; a cited architecture path alone is not proof.
   - Source: P §12 n1.3; §13 Bot path; source step / responsibility: n1.3; LEAD / participating Bot; acceptance ID: AC-INVENTORY-007.
-- [ ] **REQ-INVENTORY-008**: Given Grok Bot's MCP client, when a pack changes the tools list, then observed notification support is recorded, or the fallback connector path is selected on observed non-support.
+- [x] **REQ-INVENTORY-008**: Given Grok Bot's MCP client, when a pack changes the tools list, then observed notification support is recorded, or the fallback connector path is selected on observed non-support.
   - Source: P §12 n1.4; §7.4; §13 tools/list_changed; source step / responsibility: n1.4; LEAD / SYSTEMS; acceptance ID: AC-INVENTORY-008.
-- [ ] **REQ-INVENTORY-009**: Given the Cursor team's network settings, when inspected, then open versus Team-allowlist-only policy is recorded and the gateway allowlist need is identified.
+- [x] **REQ-INVENTORY-009**: Given the Cursor team's network settings, when inspected, then open versus Team-allowlist-only policy is recorded and the gateway allowlist need is identified.
   - Source: P §12 n1.5; §5 Bot computers; §13 network policy; source step / responsibility: n1.5; INFRA; acceptance ID: AC-INVENTORY-009.
-- [ ] **REQ-INVENTORY-010**: Given the team's plan, when inventoried, then its tier is recorded without assuming Enterprise Team Setup is available.
+- [x] **REQ-INVENTORY-010**: Given the team's plan, when inventoried, then its tier is recorded without assuming Enterprise Team Setup is available.
   - Source: P §12 n1.5; §13 plan tier; source step / responsibility: n1.5; LEAD; acceptance ID: AC-INVENTORY-010.
-- [ ] **REQ-INVENTORY-011**: Given n1 findings, when the plan's assumptions are updated, then §13 distinguishes observed results, unresolved assumptions and unexercised behavior with source evidence.
+- [x] **REQ-INVENTORY-011**: Given n1 findings, when the plan's assumptions are updated, then §13 distinguishes observed results, unresolved assumptions and unexercised behavior with source evidence.
   - Source: P §12 n1.6; §13; source step / responsibility: n1.6; LEAD → QUALITY docs ticket; acceptance ID: AC-INVENTORY-011.
-- [ ] **REQ-INVENTORY-012**: Given the mobile release integrations, when credentials are inventoried, then availability and ownership of Play Developer and App Store Connect credentials are recorded without disclosing their values to Bots or templates.
+- [x] **REQ-INVENTORY-012**: Given the mobile release integrations, when credentials are inventoried, then availability and ownership of Play Developer and App Store Connect credentials are recorded without disclosing their values to Bots or templates.
   - Source: P §13 Play/App Store credentials; §7.1 upstreams; source step / responsibility: n4.3 prerequisite; INFRA; acceptance ID: AC-INVENTORY-012.
-- [ ] **REQ-INVENTORY-013**: Given Railway Hindsight, when preparing to store data, then its actual version and embedding dimensions are established before the first stored data; the cited template version is not asserted as the live version.
+- [x] **REQ-INVENTORY-013**: Given Railway Hindsight, when preparing to store data, then its actual version and embedding dimensions are established before the first stored data; the cited template version is not asserted as the live version.
   - Source: P §13 Hindsight version/model; §12 n3.2; source step / responsibility: n3.2 prerequisite; SYSTEMS in agent-substrate; acceptance ID: AC-INVENTORY-013.
-- [ ] **REQ-INVENTORY-014**: Given the PR gate workflow, when CI activation is claimed, then an active root .github/workflows/gates.yml is evidenced rather than inferred from ci/.github/workflows/gates.yml or the historical inventory.
+- [x] **REQ-INVENTORY-014**: Given the PR gate workflow, when CI activation is claimed, then an active root .github/workflows/gates.yml is evidenced rather than inferred from ci/.github/workflows/gates.yml or the historical inventory.
   - Source: P §11 CI activation; §13 GitHub Actions; source step / responsibility: n5.1; INFRA / QUALITY; acceptance ID: AC-INVENTORY-014.
-- [ ] **REQ-INVENTORY-015**: Given the team's Cursor integrations, when intake event triggers are evaluated, then their actual availability is recorded and the ten-minute polling floor remains when triggers are unavailable.
+- [x] **REQ-INVENTORY-015**: Given the team's Cursor integrations, when intake event triggers are evaluated, then their actual availability is recorded and the ten-minute polling floor remains when triggers are unavailable.
   - Source: P §13 desk-intake-poll; §8.1 item 7; §10 Slack; source step / responsibility: n6.3; LEAD; acceptance ID: AC-INVENTORY-015.
-- [ ] **REQ-INVENTORY-016**: Given a new Desk v2 path, when work is assigned, then ownership already covers it with last-match-wins resolution and declared contract consumers; an unowned path fails G-1.
+- [x] **REQ-INVENTORY-016**: Given a new Desk v2 path, when work is assigned, then ownership already covers it with last-match-wins resolution and declared contract consumers; an unowned path fails G-1.
   - Source: P §11 ownership; Appendix A; opening policy; source step / responsibility: n1 / before n4–n5 path creation; QUALITY; acceptance ID: AC-INVENTORY-016.
 
 ### NETWORK — Phase 2: Network plane
@@ -490,22 +490,22 @@ None deferred from the approved scope. All original n1–n7 steps remain in this
 
 | Requirement | Phase | Status |
 | --- | --- | --- |
-| REQ-INVENTORY-001 | Phase 1 | Pending |
-| REQ-INVENTORY-002 | Phase 1 | Pending |
-| REQ-INVENTORY-003 | Phase 1 | Pending |
-| REQ-INVENTORY-004 | Phase 1 | Pending |
-| REQ-INVENTORY-005 | Phase 1 | Pending |
-| REQ-INVENTORY-006 | Phase 1 | Pending |
-| REQ-INVENTORY-007 | Phase 1 | Pending |
-| REQ-INVENTORY-008 | Phase 1 | Pending |
-| REQ-INVENTORY-009 | Phase 1 | Pending |
-| REQ-INVENTORY-010 | Phase 1 | Pending |
-| REQ-INVENTORY-011 | Phase 1 | Pending |
-| REQ-INVENTORY-012 | Phase 1 | Pending |
-| REQ-INVENTORY-013 | Phase 1 | Pending |
-| REQ-INVENTORY-014 | Phase 1 | Pending |
-| REQ-INVENTORY-015 | Phase 1 | Pending |
-| REQ-INVENTORY-016 | Phase 1 | Pending |
+| REQ-INVENTORY-001 | Phase 1 | Complete |
+| REQ-INVENTORY-002 | Phase 1 | Complete |
+| REQ-INVENTORY-003 | Phase 1 | Complete |
+| REQ-INVENTORY-004 | Phase 1 | Complete |
+| REQ-INVENTORY-005 | Phase 1 | Complete |
+| REQ-INVENTORY-006 | Phase 1 | Complete |
+| REQ-INVENTORY-007 | Phase 1 | Complete |
+| REQ-INVENTORY-008 | Phase 1 | Complete |
+| REQ-INVENTORY-009 | Phase 1 | Complete |
+| REQ-INVENTORY-010 | Phase 1 | Complete |
+| REQ-INVENTORY-011 | Phase 1 | Complete |
+| REQ-INVENTORY-012 | Phase 1 | Complete |
+| REQ-INVENTORY-013 | Phase 1 | Complete |
+| REQ-INVENTORY-014 | Phase 1 | Complete |
+| REQ-INVENTORY-015 | Phase 1 | Complete |
+| REQ-INVENTORY-016 | Phase 1 | Complete |
 | REQ-NETWORK-001 | Phase 2 | Pending |
 | REQ-NETWORK-002 | Phase 2 | Pending |
 | REQ-NETWORK-003 | Phase 2 | Pending |

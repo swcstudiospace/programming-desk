@@ -2,16 +2,16 @@
 
 ## Milestones
 
-- 🟡 **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (in progress)
+- ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09)
 - ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08) — [Archive](milestones/v2.1-ROADMAP.md)
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
 
-### 🟡 v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11)
+### ✅ v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11) — SHIPPED 2026-10-09
 
 - [x] Phase 10: Multi-Desk Federation & Inter-Seat Routing (2/2 plans)
-- [ ] Phase 11: Automated Staging & VPS Environment Promotion (1/2 plans)
+- [x] Phase 11: Automated Staging & VPS Environment Promotion (2/2 plans)
 
 #### Phase 10: Multi-Desk Federation & Inter-Seat Routing
 
@@ -27,7 +27,7 @@
 **Requirements**: REQ-STAGE-001 through REQ-STAGE-005
 **Plans**:
 - [x] 11-01-PLAN.md — Declarative VPS deployment pipeline with rollback & zero-downtime reload (REQ-STAGE-001, REQ-STAGE-002)
-- [ ] 11-02-PLAN.md — Ephemeral lease pruning, staging promotion harness & companion contract alignment (REQ-STAGE-003, REQ-STAGE-004, REQ-STAGE-005)
+- [x] 11-02-PLAN.md — Ephemeral lease pruning, staging promotion harness & companion contract alignment (REQ-STAGE-003, REQ-STAGE-004, REQ-STAGE-005)
 
 ### Completed Milestones
 

@@ -76,6 +76,7 @@ INTAKE_SCHEMA: dict[str, Any] = {
 
 current_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_seat", default=None)
 current_pack: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_pack", default=None)
+_origin_request_timestamps: dict[str, list[float]] = {}
 
 INSTRUCTIONS = """\
 Programming Desk gateway. You are connected as one seat; tools/list is your contract
@@ -542,6 +543,35 @@ def create_mcp(
             return JSONResponse({"error": "forbidden", "reason": f"token belongs to origin {origin}"}, status_code=403)
         if contains_secret(item["ask"]) or contains_secret(item["title"]):
             return JSONResponse({"error": "secret_refused", "reason": "the ask contains a credential shape; remove it and resend"}, status_code=422)
+
+        # Rate limiting check per origin (REQ-DRILL-004)
+        now = time.time()
+        window_start = now - 60.0
+        timestamps = [ts for ts in _origin_request_timestamps.get(origin, []) if ts > window_start]
+        if len(timestamps) >= settings.intake_rate_limit_per_minute:
+            return problem_response(
+                status=429,
+                title="Intake Rate Limit Exceeded",
+                detail=f"rate limit of {settings.intake_rate_limit_per_minute} requests per minute exceeded for origin {origin}",
+                error_code="rate_limited",
+                instance="/v1/intake",
+                headers={"Retry-After": "60"},
+            )
+        timestamps.append(now)
+        _origin_request_timestamps[origin] = timestamps
+
+        # Backpressure check on pending intake queue depth (REQ-DRILL-004)
+        queued_count = store.intake_counts().get("queued", 0)
+        if queued_count >= settings.intake_queue_max_depth:
+            return problem_response(
+                status=429,
+                title="Intake Queue Saturated",
+                detail=f"intake queue reached maximum depth capacity ({settings.intake_queue_max_depth}); backpressure applied",
+                error_code="backpressure",
+                instance="/v1/intake",
+                headers={"Retry-After": "30"},
+            )
+
         record = store.intake_create(item)
         _live(services.live.request_received, record["intake_id"], item["title"])
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}

@@ -211,6 +211,102 @@ async def test_intake_flow_only_lead_can_drain(client, rpc):
     assert out["notify"]["delivered"] is False
 
 
+async def test_intake_rate_limiting_and_backpressure_drill(monkeypatch, tmp_path):
+    """REQ-DRILL-004: Rate limiting and backpressure integration test for desk-gateway intake queues."""
+    import httpx
+    from asgi_lifespan import LifespanManager
+    from desk_gateway import server
+    from desk_gateway.config import Settings
+    from desk_gateway.server import build_app
+
+    server._origin_request_timestamps.clear()
+
+    # Configure custom settings with tight rate limit (3/min) and max depth (2)
+    custom_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "drill_data",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        intake_rate_limit_per_minute=3,
+        intake_queue_max_depth=2,
+    )
+    application, _ = build_app(custom_settings)
+    async with LifespanManager(application):
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            # First 2 requests should be accepted (queued)
+            res1 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 1", "ask": "Ask description for item 1 in drill.", "idempotency_key": "k1"},
+            )
+            assert res1.status_code == 202
+            assert res1.json()["ok"] is True
+
+            res2 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 2", "ask": "Ask description for item 2 in drill.", "idempotency_key": "k2"},
+            )
+            assert res2.status_code == 202
+
+            # 3rd request reaches max queue depth (2 queued items already in queue) -> Backpressure HTTP 429
+            res3 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 3", "ask": "Ask description for item 3 in drill.", "idempotency_key": "k3"},
+            )
+            assert res3.status_code == 429
+            assert "application/problem+json" in res3.headers["content-type"]
+            p_bp = res3.json()
+            assert p_bp["error"] == "backpressure"
+            assert p_bp["title"] == "Intake Queue Saturated"
+            assert res3.headers["Retry-After"] == "30"
+
+    # Now test rate limiting independently with higher queue capacity
+    server._origin_request_timestamps.clear()
+    rate_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "drill_data_rate",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        intake_rate_limit_per_minute=2,
+        intake_queue_max_depth=100,
+    )
+    app_rate, _ = build_app(rate_settings)
+    async with LifespanManager(app_rate):
+        transport = httpx.ASGITransport(app=app_rate)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            r1 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 1", "ask": "Rate test ask description 1.", "idempotency_key": "r1"},
+            )
+            assert r1.status_code == 202
+
+            r2 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 2", "ask": "Rate test ask description 2.", "idempotency_key": "r2"},
+            )
+            assert r2.status_code == 202
+
+            # 3rd request within window exceeds 2 requests/min limit -> Rate limited HTTP 429
+            r3 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 3", "ask": "Rate test ask description 3.", "idempotency_key": "r3"},
+            )
+            assert r3.status_code == 429
+            assert "application/problem+json" in r3.headers["content-type"]
+            p_rl = r3.json()
+            assert p_rl["error"] == "rate_limited"
+            assert p_rl["title"] == "Intake Rate Limit Exceeded"
+            assert r3.headers["Retry-After"] == "60"
+
+
 async def test_packs_load_unload_and_ceiling(rpc):
     out = await rpc.call("ios", "desk_app_tools_load", {"app": "kanbanos", "task_id": "feat-push"})
     assert out["ok"] and out["live_tools"] == 20

@@ -89,6 +89,9 @@ class Settings:
     webhook_secrets: dict[str, str] = field(default_factory=dict)
     idempotency_window_sec: float = 300.0
     intake_max_retries: int = 3
+    federation_enabled: bool = False
+    federation_peer_keys: dict[str, str] = field(default_factory=dict)
+    federation_peers: dict[str, str] = field(default_factory=dict)
 
     @property
     def issuer_url(self) -> str:
@@ -147,6 +150,16 @@ class Settings:
             "desklanes": _env("PACK_DESKLANES_API_BASE"),
             "clippyos": _env("PACK_CLIPPYOS_API_BASE"),
         }
+        fed_peers: dict[str, str] = {}
+        for pair in _csv(_env("FEDERATION_PEERS")):
+            desk_id, _, peer_url = pair.partition(":")
+            if desk_id and peer_url:
+                fed_peers[desk_id.strip()] = peer_url.strip()
+        fed_keys: dict[str, str] = {}
+        for pair in _csv(_env("FEDERATION_PEER_KEYS")):
+            key_id, _, key_pem = pair.partition(":")
+            if key_id and key_pem:
+                fed_keys[key_id.strip()] = key_pem.strip().replace("\\n", "\n")
         return cls(
             public_host=_env("PUBLIC_HOST", "desk.swcstudio.space"),
             host=_env("HOST", "127.0.0.1"),
@@ -194,4 +207,7 @@ class Settings:
             webhook_secrets=webhook_sec,
             idempotency_window_sec=float(_env("IDEMPOTENCY_WINDOW_SEC", "300.0")),
             intake_max_retries=int(_env("INTAKE_MAX_RETRIES", "3")),
+            federation_enabled=_env("FEDERATION_ENABLED", "false").lower() in ("true", "1", "yes"),
+            federation_peer_keys=fed_keys,
+            federation_peers=fed_peers,
         )

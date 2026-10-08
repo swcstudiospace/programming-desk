@@ -3,7 +3,7 @@
   "bot": "bot-06-quality-security",
   "receipt_kind": "docs_change",
   "started_at": "2026-10-08T15:41:00Z",
-  "completed_at": "2026-10-08T15:48:15Z",
+  "completed_at": "2026-10-08T15:49:47Z",
   "repo": "https://github.com/swcstudiospace/programming-desk",
   "branch": "bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18",
   "base": "main",
@@ -105,7 +105,35 @@
       "exit_code": 1,
       "duration_s": 0.029,
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md",
-      "note": "The only problem printed. approved_by stays absent until an independent reviewer stamps it. Re-run after this command was appended printed the same failure."
+      "note": "The only problem printed. approved_by stays absent until an independent reviewer stamps it. Re-run after commands 14 to 17 were appended printed the same failure."
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.058,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths",
+      "note": "Re-run after both scope files were committed."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.038,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected",
+      "note": "Re-run after both scope files were committed."
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.051,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched",
+      "note": "Re-run after both scope files were committed."
+    },
+    {
+      "cmd": "git diff --name-only origin/main...HEAD",
+      "exit_code": 0,
+      "duration_s": 0.002,
+      "output_tail": ".receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json\n.receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
+      "note": "Re-run after both scope files were committed."
     }
   ],
   "claims": [
@@ -146,6 +174,22 @@
       "claim": "G-2 fails closed on this receipt because approved_by is absent",
       "evidence_command_index": 13,
       "expects_failure": true
+    },
+    {
+      "claim": "The two files in the diff are within paths owned by bot-06-quality-security",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "The diff scan detects no secret",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "The diff against origin/main touches no contract surface",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "git diff --name-only origin/main...HEAD lists the two scope receipt paths",
+      "evidence_command_index": 17
     }
   ],
   "unverified": [

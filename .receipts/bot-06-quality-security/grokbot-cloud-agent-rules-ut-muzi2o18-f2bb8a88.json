@@ -1,0 +1,127 @@
+{
+  "task_id": "grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88",
+  "bot": "bot-06-quality-security",
+  "receipt_kind": "docs_change",
+  "started_at": "2026-10-08T12:45:39Z",
+  "completed_at": "2026-10-08T12:51:00Z",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "branch": "grokbot/cloud-agent-rules",
+  "base": "main",
+  "base_sha": "61c79005b4c71504845e7f3a92a4830bd7237c03",
+  "runtime": "cursor-cloud",
+  "graph_id": "ut-muzi2o18-f2bb8a88",
+  "brief_read_at": 1791463539.0240884,
+  "files_changed": [
+    "AGENTS.md",
+    ".cursor/rules/desk.mdc",
+    ".cursor/environment.json",
+    "ownership.yaml",
+    ".receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json"
+  ],
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files AGENTS.md .cursor/rules/desk.mdc .cursor/environment.json .cursor/agents/example.md ownership.yaml .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 6 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files AGENTS.md .cursor/rules/desk.mdc .cursor/environment.json ownership.yaml",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.03,
+      "output_tail": "G-3 PASS — no files to scan",
+      "note": "Run before this branch had a commit. HEAD was still origin/main, so the diff was empty. The --files scan above is the evidence for the working tree."
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -v",
+      "exit_code": 0,
+      "duration_s": 9.23,
+      "output_tail": "230 passed in 9.05s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json --bot bot-06-quality-security --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL — 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-06-quality-security/grokbot-cloud-agent-rules-ut-muzi2o18-f2bb8a88.json",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 1 file(s) scanned, no secrets detected"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml manifest self-check passes after the AGENTS.md and .cursor/** rules",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "AGENTS.md, .cursor/rules/desk.mdc, .cursor/environment.json and .cursor/agents/example.md resolve to bot-06-quality-security",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The new rule files and ownership.yaml contain no detected secret",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ci/tests passes",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-5/G-6 passes because the receipt records no deployment and no destructive command",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-2 fails closed because approved_by is absent",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "desk_brief substrate.error=not_configured and recall.error=not_configured; both reasons were 'substrate is not configured on the gateway; record this under unverified'. generated_at 1791463539.0240884 is brief_read_at. The response had no cached key (desk-operating-model treats absence as false) and no etag. No human granted a loop_ack, so loop_acks is an empty list. docs/desk-operating-model.md calls a failed brief without that ack a blocker; the unit BUILD_PROMPT still required the edit.",
+    "approved_by is absent. These paths are owned by bot-06-quality-security, and docs/quality-gates.md says QUALITY does not stamp its own receipt. LEAD (bot-00-programming-lead) or a human has not reviewed it, so G-2 fails closed until that stamp. That is the documented pre-review state, not a self-approval.",
+    "Greptile has not run. No pull request existed when these commands ran. A FAILED, SKIPPED or unavailable review blocks a merge claim (skills/greptile-merge-gate).",
+    "check_secrets.py --base origin/main scanned no files because this command ran while HEAD was still origin/main. Re-run it after the commit so the diff is the thing scanned.",
+    "check_contracts.py --base origin/main also compared HEAD to origin/main before the commit, so an empty diff is why it reported no contract surface. The changed paths are not contract surfaces in ownership.yaml; re-run after the commit.",
+    "G-5 does not apply: this receipt records no deployment command, so check_rollback.py does not require a rollback plan (docs/quality-gates.md: no deployment without a plan). rollback_plan is null. Nothing was deployed or exercised in staging.",
+    "GitHub Actions on this branch was not run here. .github/workflows/gates.yml rejects a head ref whose prefix is not bot-0N-name, and docs/github-sot-orchestration.md §3.1 requires that prefix. The unit TARGET branch is grokbot/cloud-agent-rules, which will fail the acting-bot step.",
+    "desk_ownership_resolve on origin/main reported AGENTS.md and .cursor/** as unowned, and reported this session (LEAD seat) as mine=false for ownership.yaml and the quality receipt path. The unit decision assigns the new paths to bot-06-quality-security.",
+    "A fresh Cursor cloud agent was not booted to observe that it loads AGENTS.md and .cursor/rules/desk.mdc.",
+    "A .proto file under .cursor/ stays a QUALITY contract surface because **/*.proto remains the last rule. This diff does not add one."
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

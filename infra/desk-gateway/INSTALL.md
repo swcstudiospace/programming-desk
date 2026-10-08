@@ -25,7 +25,7 @@ Canonical checkout after install: `/opt/programming-desk`. Leave `DESK_GATE_USER
 |---|---|---|
 | `DESK_SERVICE_UNIT` | `desk-gateway.service` | Unit passed to `systemctl reload-or-restart` when `systemctl` is on `PATH` |
 | `SYSTEMCTL_BIN` | `systemctl` | systemctl binary. Tests point this at a recorder |
-| `DESK_GATEWAY_PID_FILE` | unset | Used only when `systemctl` is absent. The file must contain one numeric PID |
+| `DESK_GATEWAY_PID_FILE` | unset | Used only when `systemctl` is absent. The file must contain one numeric PID in 1..4194303. SIGHUP uses an external `kill` when one is on `PATH`, and Bash's builtin otherwise |
 | `DESK_RELOAD_NGINX` | `false` | Set to `true` or `1` to run `nginx -t` and reload nginx. Off unless passed explicitly |
 | `NGINX_BIN` | `nginx` | nginx binary |
 | `DESK_RELOAD_DRY_RUN` | `0` | Set to `1` to print each command and run none |

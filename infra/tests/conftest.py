@@ -17,11 +17,71 @@ from pathlib import Path
 
 import pytest
 
+# Standard locations are searched even when the runner's PATH omits sbin.
+# `/usr/sbin/nginx` is a normal install and is often absent from PATH.
+_STANDARD_BIN_DIRS = (
+    "/usr/local/sbin",
+    "/usr/sbin",
+    "/sbin",
+    "/usr/local/bin",
+    "/usr/bin",
+    "/bin",
+)
+
+
+def _command_text(value: object) -> str | None:
+    """String form of an argv or env value subprocess would execute."""
+    if isinstance(value, bytes):
+        return os.fsdecode(value)
+    if isinstance(value, str):
+        return value
+    if isinstance(value, os.PathLike):
+        rendered = os.fspath(value)
+        if isinstance(rendered, str):
+            return rendered
+        return os.fsdecode(rendered)
+    return None
+
+
+def _host_realpaths(value: object) -> set[str]:
+    """Normalize one host path, or several, to real paths."""
+    if value is None:
+        return set()
+    if isinstance(value, (list, tuple)):
+        found: set[str] = set()
+        for item in value:
+            found |= _host_realpaths(item)
+        return found
+    text = _command_text(value)
+    if not text:
+        return set()
+    return {os.path.realpath(text)}
+
+
+def discover_host_service_bins(
+    names: tuple[str, ...] = ("systemctl", "nginx"),
+) -> dict[str, tuple[str, ...]]:
+    """Host service binaries, including those outside the initial PATH."""
+    path_dirs = [part for part in os.environ.get("PATH", "").split(os.pathsep) if part]
+    found: dict[str, tuple[str, ...]] = {}
+    for name in names:
+        reals: list[str] = []
+        seen: set[str] = set()
+        for directory in (*_STANDARD_BIN_DIRS, *path_dirs):
+            candidate = os.path.join(directory, name)
+            if not os.path.isfile(candidate) or not os.access(candidate, os.X_OK):
+                continue
+            real = os.path.realpath(candidate)
+            if real in seen:
+                continue
+            seen.add(real)
+            reals.append(real)
+        found[name] = tuple(reals)
+    return found
+
+
 # Captured at import, before the autouse fixture rewrites PATH.
-HOST_SERVICE_BINS: dict[str, str | None] = {
-    "systemctl": shutil.which("systemctl"),
-    "nginx": shutil.which("nginx"),
-}
+HOST_SERVICE_BINS: dict[str, tuple[str, ...]] = discover_host_service_bins()
 
 
 # Env keys that select a service binary even when PATH points at a recorder.
@@ -42,24 +102,25 @@ def _command_search_path(env: dict | None) -> str:
 
 def reachable_host_service_bins(
     env: dict | None,
-    host: dict[str, str | None] | None = None,
+    host: dict | None = None,
 ) -> list[str]:
     """Host service binaries that `env` would execute."""
     host_bins = HOST_SERVICE_BINS if host is None else host
     path = _command_search_path(env)
     reached: list[str] = []
-    for name, host_path in host_bins.items():
-        if not host_path or not path:
+    for name in _SERVICE_BIN_ENV.values():
+        reals = _host_realpaths(host_bins.get(name))
+        if not reals or not path:
             continue
         found = shutil.which(name, path=path)
-        if found and os.path.realpath(found) == os.path.realpath(host_path):
+        if found and os.path.realpath(found) in reals:
             reached.append(f"{name} -> {found}")
     return reached
 
 
 def selected_service_bins(
     env: dict | None,
-    host: dict[str, str | None] | None = None,
+    host: dict | None = None,
 ) -> list[str]:
     """SYSTEMCTL_BIN / NGINX_BIN values that resolve to the host binary."""
     host_bins = HOST_SERVICE_BINS if host is None else host
@@ -68,33 +129,36 @@ def selected_service_bins(
     hits: list[str] = []
     for key, name in _SERVICE_BIN_ENV.items():
         chosen = source.get(key)
-        host_path = host_bins.get(name)
-        if not chosen or not host_path:
+        reals = _host_realpaths(host_bins.get(name))
+        if not chosen or not reals:
             continue
         if os.path.isabs(chosen):
             candidate = chosen
         else:
             candidate = shutil.which(chosen, path=path) or ""
-        if candidate and os.path.realpath(candidate) == os.path.realpath(host_path):
+        if candidate and os.path.realpath(candidate) in reals:
             hits.append(f"{key} -> {candidate}")
     return hits
 
 
 def argv_reaches_host_service(
     args: object,
-    host: dict[str, str | None] | None = None,
+    host: dict | None = None,
 ) -> list[str]:
-    """Absolute argv0 that is the host systemctl or nginx binary."""
+    """Absolute argv0 that is the host systemctl or nginx binary.
+
+    subprocess accepts str, bytes, and pathlib.Path. All three are checked.
+    """
     host_bins = HOST_SERVICE_BINS if host is None else host
     if not isinstance(args, (list, tuple)) or not args:
         return []
-    exe = args[0]
-    if not isinstance(exe, str) or not os.path.isabs(exe):
+    exe = _command_text(args[0])
+    if exe is None or not os.path.isabs(exe):
         return []
     real = os.path.realpath(exe)
     hits: list[str] = []
-    for name, host_path in host_bins.items():
-        if host_path and real == os.path.realpath(host_path):
+    for name in _SERVICE_BIN_ENV.values():
+        if real in _host_realpaths(host_bins.get(name)):
             hits.append(f"{name} -> {exe}")
     return hits
 
@@ -102,7 +166,7 @@ def argv_reaches_host_service(
 def reject_host_service_bins(
     args: object,
     env: dict | None,
-    host: dict[str, str | None] | None = None,
+    host: dict | None = None,
 ) -> None:
     hits = (
         reachable_host_service_bins(env, host)

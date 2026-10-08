@@ -4,9 +4,12 @@
 # when systemctl is absent. Never selects a process by command-line pattern.
 set -euo pipefail
 
-# Bash implements kill as a builtin, which ignores PATH. Disable it so a test
-# can place a recorder named kill on PATH, and a host runs the external kill.
-enable -n kill
+# Bash implements kill as a builtin, which ignores PATH. When an external kill
+# is on PATH, disable the builtin so a test recorder is what runs. A host with
+# no external kill keeps the builtin and can still signal one PID file.
+if type -P kill >/dev/null 2>&1; then
+  enable -n kill
+fi
 
 UNIT="${DESK_SERVICE_UNIT:-desk-gateway.service}"
 READY_URL="${DESK_READY_URL:-http://127.0.0.1:8791/readyz}"

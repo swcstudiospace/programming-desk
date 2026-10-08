@@ -690,3 +690,65 @@ def test_guard_rejects_selected_host_binary(tmp_path):
             {"PATH": str(stub.parent), "SYSTEMCTL_BIN": str(host_bin)},
             host={"systemctl": str(host_bin), "nginx": None},
         )
+
+
+def test_discover_finds_nginx_outside_path(tmp_path, monkeypatch):
+    """A host nginx under sbin is recorded even when that directory is not on PATH."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    sbin = tmp_path / "sbin"
+    sbin.mkdir()
+    nginx = sbin / "nginx"
+    _write_executable(nginx, "#!/bin/sh\necho guard-regression >&2\nexit 99\n")
+    monkeypatch.setattr(conftest, "_STANDARD_BIN_DIRS", (str(sbin),))
+    monkeypatch.setenv("PATH", str(tmp_path / "empty-path"))
+    found = conftest.discover_host_service_bins()
+    assert os.path.realpath(nginx) in found["nginx"]
+
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    _write_executable(stub / "nginx", "#!/bin/sh\nexit 0\n")
+    with pytest.raises(Failed, match="NGINX_BIN"):
+        conftest.reject_host_service_bins(
+            ["echo", "untouched"],
+            {"PATH": str(stub), "NGINX_BIN": str(nginx)},
+            host=found,
+        )
+
+
+def test_guard_rejects_pathlike_host_binary(tmp_path, monkeypatch):
+    """subprocess accepts pathlib.Path; that form is still a host binary."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_bin = tmp_path / "host" / "systemctl"
+    host_bin.parent.mkdir()
+    _write_executable(host_bin, "#!/bin/sh\necho guard-regression >&2\nexit 99\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="systemctl"):
+        subprocess.run(
+            [Path(host_bin), "restart", "desk-gateway.service"],
+            check=False,
+        )
+
+
+def test_reload_pid_file_keeps_builtin_kill_without_external(tmp_path, decoy_gateway):
+    """No external kill leaves Bash's builtin in place, so the PID file can still be signalled."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    target = _unused_pid()
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text(f"{target}\n", encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode != 0
+    assert "command not found" not in proc.stderr
+    assert "No such process" in proc.stderr
+    assert decoy_gateway.poll() is None

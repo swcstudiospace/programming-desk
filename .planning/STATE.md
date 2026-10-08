@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.5
-milestone_name: Multi-Tenant Governance & Inter-Desk Agent Mesh
-status: Milestone v2.5 complete (10/10 requirements verified). Archived.
-stopped_at: Completed Milestone v2.5 audit and archival. Ready for next milestone.
-last_updated: "2026-10-09T20:00:00.000Z"
-last_activity: 2026-10-09
-last_activity_desc: Completed and audited Milestone v2.5 (Multi-Tenant Governance & Inter-Desk Agent Mesh).
+milestone: v2.6
+milestone_name: FinOps Dynamic Token Budgeting & LLM Tier Optimization
+status: in_progress
+stopped_at: Completed Plan 18-01. Ready for Plan 18-02.
+last_updated: "2026-10-10T00:30:00.000Z"
+last_activity: 2026-10-10
+last_activity_desc: Completed Plan 18-01 (Token Ledger, Tariffs, Spend Circuit Breaker).
 progress:
-  total_phases: 17
+  total_phases: 19
   completed_phases: 17
-  total_plans: 58
-  completed_plans: 58
-  percent: 100
-current_phase: 17
-current_phase_name: Inter-Desk Agent Mesh & Distributed Work Distribution
+  total_plans: 61
+  completed_plans: 59
+  percent: 96
+current_phase: 18
+current_phase_name: FinOps Dynamic Token Budgeting & Cost Governance
 ---
 
 # Project State
@@ -24,28 +24,26 @@ current_phase_name: Inter-Desk Agent Mesh & Distributed Work Distribution
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.5 complete.
-**Milestone:** v2.5 — Multi-Tenant Governance & Inter-Desk Agent Mesh (Shipped)
+**Current focus:** Milestone v2.6 — FinOps Dynamic Token Budgeting & LLM Tier Optimization
+**Milestone:** v2.6 — FinOps Dynamic Token Budgeting & LLM Tier Optimization (In Progress)
 
 ## Current Position
 
-Phase: Phase 17 (Inter-Desk Agent Mesh & Distributed Work Distribution).
-Milestone: Milestone v2.5 (Phases 16 & 17) — 100% complete and verified.
-Status: Completed and archived.
-Last activity: 2026-10-09 — Milestone v2.5 audit and archival.
+Phase: Phase 18 (FinOps Dynamic Token Budgeting & Cost Governance).
+Milestone: Milestone v2.6 (Phases 18 & 19).
+Status: In progress.
+Last activity: 2026-10-10 — Initialized Milestone v2.6.
 
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v2.0 (Desk v2, 7 phases, 217 requirements) 100% completed and archived.
-- Milestone v2.1 (Live Drills & Intake Hardening, 2 phases, 20 requirements) 100% completed and archived.
-- Milestone v2.2 (Multi-Desk Federation & Staging Deployments, 2 phases, 10 requirements) 100% completed, tagged (`v2.2.0`), and archived.
-- Milestone v2.3 (Production Cutover, Dynamic Failover & Telemetry Alerting, 2 phases, 10 requirements) 100% completed, tagged (`v2.3.0`), and archived.
-- Milestone v2.4 (Multi-Region Edge Federation & Autonomous Chaos Recovery, 2 phases, 10 requirements) 100% completed, tagged (`v2.4.0`), and archived.
-- Milestone v2.5 (Multi-Tenant Governance & Inter-Desk Agent Mesh, 2 phases, 10 requirements) 100% completed, tagged (`v2.5.0`), and archived.
+- Milestone v2.0 through v2.5 (Phases 1-17, 58 plans) 100% completed, tagged (`v2.0.0` through `v2.5.0`), and archived.
+- Milestone v2.6 initialized covering FinOps Dynamic Token Budgeting (Phase 18) and LLM Tier Routing (Phase 19).
 
 ### Pending Todos
 
-- Ready for next milestone initialization or new instructions.
+- Execute Plan 18-01: Token consumption ledger, multi-model cost translation engine & spend circuit-breaker (REQ-FINOPS-001, REQ-FINOPS-002, REQ-FINOPS-004).
+- Execute Plan 18-02: Seat-level quota allocation matrix & tamper-evident expenditure receipts (REQ-FINOPS-003, REQ-FINOPS-005).
+- Execute Plan 19-01: Complexity-aware task classifier, dynamic fallback cascade, prompt cache optimizer & FinOps verification (REQ-TIER-001 through REQ-TIER-005).

@@ -103,6 +103,12 @@ from desk_gateway.mesh import (
     MeshError,
     ReceiptCoSigner,
 )
+from desk_gateway.finops import (
+    CircuitBreakerStatus,
+    ModelTariff,
+    SpendCircuitBreaker,
+    TokenLedger,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -2882,6 +2888,78 @@ def create_mcp(
             "verification": "inter_desk_mesh_ready",
         })
 
+    token_ledger = TokenLedger()
+    spend_circuit_breaker = SpendCircuitBreaker(token_ledger)
+    setattr(mcp, "_token_ledger", token_ledger)
+    setattr(mcp, "_spend_circuit_breaker", spend_circuit_breaker)
+
+    @mcp.custom_route("/v1/finops/tokens/record", methods=["POST"])
+    async def finops_tokens_record(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        record_id = body.get("record_id", f"rec-{int(time.time()*1000)}")
+        tenant_id = body.get("tenant_id", "default")
+        seat_id = body.get("seat_id", "lead")
+        model_id = body.get("model_id", "claude-3-5-sonnet")
+        input_tokens = int(body.get("input_tokens", 0))
+        output_tokens = int(body.get("output_tokens", 0))
+        cached_tokens = int(body.get("cached_tokens", 0))
+
+        record = token_ledger.record_usage(
+            record_id=record_id,
+            tenant_id=tenant_id,
+            seat_id=seat_id,
+            model_id=model_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cached_tokens=cached_tokens,
+        )
+        cb_eval = spend_circuit_breaker.evaluate(tenant_id)
+        return JSONResponse({
+            "ok": True,
+            "record": {
+                "record_id": record.record_id,
+                "tenant_id": record.tenant_id,
+                "seat_id": record.seat_id,
+                "model_id": record.model_id,
+                "input_tokens": record.input_tokens,
+                "output_tokens": record.output_tokens,
+                "cached_tokens": record.cached_tokens,
+                "cost_micro_dollars": record.cost_micro_dollars,
+            },
+            "circuit_breaker": cb_eval,
+        })
+
+    @mcp.custom_route("/v1/finops/spend", methods=["GET"])
+    async def finops_spend_get(request: Request) -> Response:
+        tenant_id = request.query_params.get("tenant_id", "default")
+        seat_id = request.query_params.get("seat_id")
+        tenant_spend = token_ledger.get_tenant_spend(tenant_id)
+        res: Dict[str, Any] = {
+            "ok": True,
+            "tenant_id": tenant_id,
+            "tenant_spend_micro_dollars": tenant_spend,
+            "circuit_breaker": spend_circuit_breaker.evaluate(tenant_id),
+        }
+        if seat_id:
+            res["seat_id"] = seat_id
+            res["seat_spend_micro_dollars"] = token_ledger.get_seat_spend(tenant_id, seat_id)
+        return JSONResponse(res)
+
+    @mcp.custom_route("/v1/finops/budget", methods=["POST"])
+    async def finops_budget_set(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        tenant_id = body.get("tenant_id", "default")
+        budget = body.get("budget_micro_dollars")
+        if budget is None:
+            return problem_response(status=400, title="Bad Request", detail="budget_micro_dollars is required", error_code="missing_budget", instance=request.url.path)
+        spend_circuit_breaker.set_budget(tenant_id, int(budget))
+        return JSONResponse({
+            "ok": True,
+            "tenant_id": tenant_id,
+            "budget_micro_dollars": int(budget),
+            "circuit_breaker": spend_circuit_breaker.evaluate(tenant_id),
+        })
+
     return mcp
 
 
@@ -3002,6 +3080,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "agent_bus": getattr(mcp, "_agent_bus", None),
         "receipt_cosigner": getattr(mcp, "_receipt_cosigner", None),
         "delegation_sm": getattr(mcp, "_delegation_sm", None),
+        "token_ledger": getattr(mcp, "_token_ledger", None),
+        "spend_circuit_breaker": getattr(mcp, "_spend_circuit_breaker", None),
     }
     return app, settings
 

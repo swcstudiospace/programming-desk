@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🔄 **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (in progress)
 - ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
 - ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
 - ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
@@ -11,13 +12,13 @@
 
 ## Phases
 
-### Active Milestone: v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh
+### Active Milestone: v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization
 
-- [x] **Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement** (2/2 plans)
-  - [x] 16-01: Multi-tenant namespace isolation engine & ABAC/RBAC policy evaluation (REQ-TENANT-001, REQ-TENANT-002)
-  - [x] 16-02: Tenant-partitioned memory & dataset encryption, quota policer & tamper-evident audit hashing (REQ-TENANT-003, REQ-TENANT-004, REQ-TENANT-005)
-- [x] **Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution** (1/1 plan)
-  - [x] 17-01: Inter-desk discovery, asynchronous RPC, receipt co-signing & task delegation state machine (REQ-MESH-001 through REQ-MESH-005)
+- [ ] **Phase 18: FinOps Dynamic Token Budgeting & Cost Governance** (2 plans)
+  - [x] 18-01: Token consumption ledger, multi-model cost translation engine & spend circuit-breaker (REQ-FINOPS-001, REQ-FINOPS-002, REQ-FINOPS-004)
+  - [ ] 18-02: Seat-level quota allocation matrix & tamper-evident expenditure receipts (REQ-FINOPS-003, REQ-FINOPS-005)
+- [ ] **Phase 19: LLM Tier Routing & Cost-Aware Model Optimization** (1 plan)
+  - [ ] 19-01: Complexity-aware task classifier, dynamic fallback cascade, prompt cache optimizer & FinOps verification (REQ-TIER-001 through REQ-TIER-005)
 
 ### Completed Milestones
 
@@ -79,6 +80,3 @@ See [milestones/v2.1-ROADMAP.md](milestones/v2.1-ROADMAP.md) for full phase deta
 
 See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase details and execution history.
 </details>
-
-
-[You have received this identical output 3 times. Re-reading '.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]

@@ -38,12 +38,14 @@ from desk_gateway.cutover import (
     EmergencyIsolationManager,
     SeatIsolatedError,
 )
+from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
     FederationError,
     FederationRegistry,
     PeerDeskClient,
 )
+from desk_gateway.health import UpstreamHealthPoller
 from desk_gateway.live import (
     CLOSE_FORBIDDEN_ORIGIN,
     CLOSE_UNAUTHORIZED,
@@ -240,11 +242,13 @@ class SeatRouter:
         provider: SeatOAuthProvider,
         rosters: Rosters,
         isolation_manager: EmergencyIsolationManager | None = None,
+        failover_router: FailoverRouter | None = None,
     ) -> None:
         self.app = app
         self.provider = provider
         self.rosters = rosters
         self.isolation_manager = isolation_manager
+        self.failover_router = failover_router
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -267,19 +271,45 @@ class SeatRouter:
             return
         # Quarantine / Emergency Seat Isolation Check (REQ-CUTOVER-005)
         if self.isolation_manager and self.isolation_manager.is_isolated(seat):
+            # Check if failover can divert to a healthy peer desk (REQ-CUTOVER-002)
+            diverted = False
+            divert_target = None
+            divert_reason = None
+            if self.failover_router:
+                diverted, divert_target, divert_reason = self.failover_router.should_divert_seat(seat)
+
             iso_record = self.isolation_manager.get_isolation(seat)
             reason = iso_record.reason if iso_record else "anomaly detected"
             prob = problem_details(
                 status=503,
                 title="Seat Isolated",
-                detail=f"Seat '{seat}' has been isolated and quarantined: {reason}",
+                detail=f"Seat '{seat}' has been isolated and quarantined: {reason}" + (f" (failover target: {divert_target})" if diverted else ""),
                 error_code="seat_isolated",
                 instance=path,
                 seat=seat,
                 reason=reason,
+                failover_diverted=diverted,
+                failover_target=divert_target,
             )
             await _json(send, 503, prob)
             return
+
+        # Failover check for degraded seat dependencies (REQ-CUTOVER-002)
+        if self.failover_router:
+            divert, divert_target, divert_reason = self.failover_router.should_divert_seat(seat)
+            if divert:
+                prob = problem_details(
+                    status=503,
+                    title="Seat Failover Diverted",
+                    detail=f"Seat '{seat}' is diverted to peer desk '{divert_target}': {divert_reason}",
+                    error_code="seat_diverted",
+                    instance=path,
+                    seat=seat,
+                    failover_target=divert_target,
+                    reason=divert_reason,
+                )
+                await _json(send, 503, prob)
+                return
         token = _bearer(scope)
         if token:
             access = await self.provider.load_access_token(token)
@@ -390,6 +420,7 @@ def create_mcp(
     view: DeskView,
     federation: tuple[FederationRegistry, FederatedTokenValidator, PeerDeskClient] | None = None,
     cutover: tuple[CutoverOrchestrator, EmergencyIsolationManager] | None = None,
+    failover: tuple[FailoverRouter, UpstreamHealthPoller] | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -413,6 +444,14 @@ def create_mcp(
         CutoverOrchestrator(settings),
         EmergencyIsolationManager(settings.isolated_seats),
     )
+    fail_router, health_poller = failover if failover else (
+        FailoverRouter(
+            FederationRegistry(settings),
+            health_poller=UpstreamHealthPoller(services),
+            isolation_manager=iso_mgr,
+        ),
+        UpstreamHealthPoller(services),
+    )
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -428,6 +467,11 @@ def create_mcp(
                     "ingress_target": cut_orch.ingress_target,
                     "canary_percentage": cut_orch.canary_router.percentage,
                     "isolated_seats_count": len(iso_mgr.list_isolated()),
+                },
+                "failover": {
+                    "enabled": fail_router.enabled,
+                    "active_diverts": fail_router.get_status()["active_diverts_count"],
+                    "upstream_health": health_poller.get_status()["overall"],
                 },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
@@ -538,6 +582,22 @@ def create_mcp(
         ])
         for iso_rec in sorted(iso_mgr.list_isolated(), key=lambda r: r.seat):
             lines.append(f'desk_gateway_seat_isolated{{seat="{iso_rec.seat}"}} 1')
+
+        # Failover and Upstream health metrics (REQ-CUTOVER-002, REQ-CUTOVER-003)
+        fail_status = fail_router.get_status()
+        health_status = health_poller.get_status()
+        lines.extend([
+            "# HELP desk_gateway_failover_enabled Dynamic multi-desk failover routing status",
+            "# TYPE desk_gateway_failover_enabled gauge",
+            f"desk_gateway_failover_enabled {1 if fail_router.enabled else 0}",
+            "# HELP desk_gateway_failover_diverted_seats_total Number of currently diverted seats",
+            "# TYPE desk_gateway_failover_diverted_seats_total gauge",
+            f"desk_gateway_failover_diverted_seats_total {fail_status['active_diverts_count']}",
+            "# HELP desk_gateway_upstream_healthy Health status of backing Railway service",
+            "# TYPE desk_gateway_upstream_healthy gauge",
+        ])
+        for svc_name, rec in sorted(health_status["services"].items()):
+            lines.append(f'desk_gateway_upstream_healthy{{service="{svc_name}"}} {1 if rec["healthy"] else 0}')
 
         lines.append("")
         return Response(content="\n".join(lines), media_type="text/plain; version=0.0.4")
@@ -1413,6 +1473,168 @@ def create_mcp(
 
         return JSONResponse({"ok": True, "seat": target_seat, "status": "restored"}, status_code=200)
 
+    # -------------------------------------------------------------------------
+    # Upstream Health & Dynamic Failover Routes (REQ-CUTOVER-002, REQ-CUTOVER-003)
+    # -------------------------------------------------------------------------
+    @mcp.custom_route("/v1/health/upstreams", methods=["GET"])
+    async def health_upstreams_get(request: Request) -> Response:
+        """Poll and report upstream Railway services health (REQ-CUTOVER-003)."""
+        force_poll = request.query_params.get("refresh", "false").lower() in ("true", "1", "yes")
+        if force_poll:
+            status = await health_poller.poll_all()
+        else:
+            status = health_poller.get_status()
+        status_code = 200 if status["overall"] in ("healthy", "degraded") else 503
+        return JSONResponse({"ok": status["overall"] != "down", "upstreams": status}, status_code=status_code)
+
+    @mcp.custom_route("/v1/failover/status", methods=["GET"])
+    async def failover_status_get(_request: Request) -> Response:
+        """Report multi-desk seat failover routing table status (REQ-CUTOVER-002)."""
+        status = fail_router.get_status()
+        return JSONResponse({"ok": True, "failover": status}, status_code=200)
+
+    @mcp.custom_route("/v1/failover/divert", methods=["POST"])
+    async def failover_divert_post(request: Request) -> Response:
+        """Set manual failover divert for a seat to a peer desk (REQ-CUTOVER-002)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth != "lead":
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead seat authorization required to configure manual failover divert.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        seat = body.get("seat")
+        target_desk_id = body.get("target_desk_id")
+        reason = body.get("reason", "manual operator divert")
+        ttl_sec = body.get("ttl_sec")
+
+        if not seat or seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Seat must be one of {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+        if not target_desk_id:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="target_desk_id is required",
+                error_code="missing_target_desk",
+                instance=request.url.path,
+            )
+
+        try:
+            override = fail_router.set_manual_divert(
+                seat=seat,
+                target_desk_id=target_desk_id,
+                reason=reason,
+                ttl_sec=float(ttl_sec) if ttl_sec is not None else None,
+            )
+        except FailoverError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Failover Divert Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        event = {
+            "kind": "failover.divert",
+            "summary": f"Seat {seat} diverted to peer {target_desk_id}: {reason}",
+            "payload": override.to_dict(),
+            "actor": seat_auth,
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
+        store.audit_append(event)
+        services.audit.fire_and_forget(event)
+
+        return JSONResponse({"ok": True, "divert": override.to_dict()}, status_code=200)
+
+    @mcp.custom_route("/v1/failover/clear", methods=["POST"])
+    async def failover_clear_post(request: Request) -> Response:
+        """Clear active divert override for a seat (REQ-CUTOVER-002)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth != "lead":
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead seat authorization required to clear failover divert.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Invalid JSON payload.",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        seat = body.get("seat")
+        if not seat or seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Seat must be one of {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+
+        cleared = fail_router.clear_divert(seat)
+        if not cleared:
+            return problem_response(
+                status=404,
+                title="Not Found",
+                detail=f"Seat '{seat}' has no active divert override.",
+                error_code="divert_not_found",
+                instance=request.url.path,
+            )
+
+        event = {
+            "kind": "failover.cleared",
+            "summary": f"Seat {seat} failover divert cleared",
+            "payload": {"seat": seat},
+            "actor": seat_auth,
+            "ts_gateway": time.time(),
+        }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
+        store.audit_append(event)
+        services.audit.fire_and_forget(event)
+
+        return JSONResponse({"ok": True, "seat": seat, "status": "cleared"}, status_code=200)
+
     return mcp
 
 
@@ -1436,6 +1658,14 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     cutover_orchestrator = CutoverOrchestrator(settings, isolation_manager=iso_manager)
     cutover_components = (cutover_orchestrator, iso_manager)
 
+    health_poller = UpstreamHealthPoller(services)
+    failover_router = FailoverRouter(
+        fed_registry,
+        health_poller=health_poller,
+        isolation_manager=iso_manager,
+    )
+    failover_components = (failover_router, health_poller)
+
     mcp = create_mcp(
         settings,
         services,
@@ -1444,6 +1674,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         view=DeskView(DESK_VIEW_HTML),
         federation=federation_components,
         cutover=cutover_components,
+        failover=failover_components,
     )
     origins = [
         "http://127.0.0.1",
@@ -1476,7 +1707,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         await services.live.serve(websocket)
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
-    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager))
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router))
     app.state = {
         "store": store,
         "services": services,
@@ -1489,6 +1720,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "federation_client": fed_client,
         "cutover_orchestrator": cutover_orchestrator,
         "isolation_manager": iso_manager,
+        "failover_router": failover_router,
+        "health_poller": health_poller,
     }
     return app, settings
 

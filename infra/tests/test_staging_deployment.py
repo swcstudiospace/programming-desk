@@ -71,6 +71,10 @@ def _private_env(stub_dir: Path, **extra: str) -> dict[str, str]:
     env["DESK_SERVICE_UNIT"] = "nonexistent-test-service.service"
     env.pop("DESK_GATEWAY_PID_FILE", None)
     env.pop("DESK_RELOAD_DRY_RUN", None)
+    # Drop inherited overrides before extra. A runner that exported
+    # SYSTEMCTL_BIN=/usr/bin/systemctl must not bypass the recorder.
+    env.pop("SYSTEMCTL_BIN", None)
+    env.pop("NGINX_BIN", None)
     env.update(extra)
     return env
 
@@ -118,21 +122,21 @@ def decoy_gateway(forbid_host_systemctl_and_nginx):
         [sys.executable, "-c", "import time; time.sleep(180)", "desk-gateway"],
         start_new_session=True,
     )
-    cmdline = ""
-    deadline = time.monotonic() + 1
-    while time.monotonic() < deadline:
-        if proc.poll() is not None:
-            pytest.fail(f"decoy exited during setup with status {proc.returncode}")
-        try:
-            cmdline = Path(f"/proc/{proc.pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode()
-        except FileNotFoundError:
-            cmdline = ""
-        if "desk-gateway" in cmdline:
-            break
-        time.sleep(0.02)
-    else:
-        pytest.fail(f"decoy command line did not contain desk-gateway: {cmdline!r}")
     try:
+        cmdline = ""
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                pytest.fail(f"decoy exited during setup with status {proc.returncode}")
+            try:
+                cmdline = Path(f"/proc/{proc.pid}/cmdline").read_bytes().replace(b"\x00", b" ").decode()
+            except FileNotFoundError:
+                cmdline = ""
+            if "desk-gateway" in cmdline:
+                break
+            time.sleep(0.02)
+        else:
+            pytest.fail(f"decoy command line did not contain desk-gateway: {cmdline!r}")
         yield proc
     finally:
         if proc.poll() is None:
@@ -478,3 +482,149 @@ def test_guard_allows_stub_ahead_of_host_binary(tmp_path):
         {"PATH": f"{stub.parent}{os.pathsep}{host_bin.parent}"},
         host={"systemctl": None, "nginx": str(host_bin)},
     )
+
+
+def test_private_env_drops_inherited_service_bins(tmp_path, monkeypatch):
+    """A host SYSTEMCTL_BIN or NGINX_BIN from the runner does not survive into the test env."""
+    monkeypatch.setenv("SYSTEMCTL_BIN", "/usr/bin/systemctl")
+    monkeypatch.setenv("NGINX_BIN", "/usr/sbin/nginx")
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    env = _private_env(stub_dir)
+    assert "SYSTEMCTL_BIN" not in env
+    assert "NGINX_BIN" not in env
+    chosen = stub_dir / "systemctl"
+    _write_executable(chosen, "#!/bin/sh\nexit 0\n")
+    overridden = _private_env(stub_dir, SYSTEMCTL_BIN=str(chosen))
+    assert overridden["SYSTEMCTL_BIN"] == str(chosen)
+
+
+@pytest.mark.parametrize("contents", ["0", "0\n", "00\n"])
+def test_reload_rejects_zero_pid(tmp_path, decoy_gateway, contents):
+    """PID 0 is rejected. kill -HUP 0 would signal the process group."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    _recorder(stub_dir, "pgrep", "pgrep.log", stdout=str(decoy_gateway.pid))
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text(contents, encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode != 0
+    assert "positive" in proc.stderr
+    assert _read_log(stub_dir, "kill.log") == ""
+    assert decoy_gateway.poll() is None
+
+
+def test_reload_accepts_pid_file_without_trailing_newline(tmp_path, decoy_gateway):
+    """A single positive PID with no trailing newline is the signal target."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    target = _unused_pid()
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_bytes(str(target).encode("ascii"))
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode == 0, proc.stderr
+    assert f"-HUP {target}" in _read_log(stub_dir, "kill.log")
+    assert str(decoy_gateway.pid) not in _read_log(stub_dir, "kill.log")
+    assert decoy_gateway.poll() is None
+
+
+def test_reload_normalizes_zero_padded_pid(tmp_path):
+    """A zero-padded PID is signalled in base 10, not left for kill to parse."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text("010\n", encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode == 0, proc.stderr
+    kill_log = _read_log(stub_dir, "kill.log")
+    assert "-HUP 10" in kill_log
+    assert "-HUP 010" not in kill_log
+
+
+def test_reload_rejects_pid_file_with_several_lines(tmp_path, decoy_gateway):
+    """A file with more than one PID line is not a single target."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    target = _unused_pid()
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text(f"{target}\n{target}\n", encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode != 0
+    assert _read_log(stub_dir, "kill.log") == ""
+    assert decoy_gateway.poll() is None
+
+
+def test_deploy_rejects_missing_systemctl_bin_before_cutover(tmp_path):
+    """An explicit missing SYSTEMCTL_BIN fails before the release symlink moves."""
+    src_dir = tmp_path / "src_repo"
+    src_dir.mkdir()
+    (src_dir / "README.md").write_text("# Test Repo\n")
+    releases_root = tmp_path / "releases"
+    current_link = tmp_path / "current_symlink"
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+
+    env = _private_env(
+        stub_dir,
+        DESK_RELEASES_ROOT=str(releases_root),
+        DESK_CURRENT_LINK=str(current_link),
+        SYSTEMCTL_BIN=str(tmp_path / "missing-systemctl"),
+    )
+    proc = _run(DEPLOY_SCRIPT, env, str(src_dir), "rel-bad")
+
+    assert proc.returncode != 0
+    assert "SYSTEMCTL_BIN" in proc.stderr
+    assert not current_link.exists()
+    assert not (releases_root / "rel-bad").exists()
+
+
+def test_guard_rejects_env_without_path():
+    """Omitting PATH uses Python's default search path, which can see the host binary."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    if not conftest.HOST_SERVICE_BINS.get("systemctl"):
+        pytest.skip("host systemctl is not installed")
+    with pytest.raises(Failed, match="systemctl"):
+        conftest.reject_host_service_bins(["echo", "untouched"], {})
+    with pytest.raises(Failed, match="systemctl"):
+        subprocess.run(
+            ["systemctl", "is-active", "nonexistent-test-service.service"],
+            env={"HOME": "/tmp"},
+            check=False,
+        )
+
+
+def test_guard_rejects_selected_host_binary(tmp_path):
+    """SYSTEMCTL_BIN is checked even when PATH itself points at a recorder."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_bin = tmp_path / "host" / "systemctl"
+    host_bin.parent.mkdir()
+    _write_executable(host_bin, "#!/bin/sh\nexit 0\n")
+    stub = tmp_path / "stub" / "systemctl"
+    stub.parent.mkdir()
+    _write_executable(stub, "#!/bin/sh\nexit 0\n")
+    with pytest.raises(Failed, match="SYSTEMCTL_BIN"):
+        conftest.reject_host_service_bins(
+            ["echo", "untouched"],
+            {"PATH": str(stub.parent), "SYSTEMCTL_BIN": str(host_bin)},
+            host={"systemctl": str(host_bin), "nginx": None},
+        )

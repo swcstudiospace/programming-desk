@@ -7,13 +7,11 @@ DEFAULT_TARGET_ROOT="/opt/programming-desk"
 RELEASE_ROOT="${DESK_RELEASES_ROOT:-/opt/programming-desk-releases}"
 CURRENT_LINK="${DESK_CURRENT_LINK:-$DEFAULT_TARGET_ROOT}"
 UNIT="${DESK_SERVICE_UNIT:-desk-gateway.service}"
-# Test hook: point SYSTEMCTL_BIN at a recorder so this script cannot restart a host unit.
-SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 # Nginx reload is opt-in on reload-nginx-gateway.sh. State the flag explicitly
 # here (default off). This staging script does not invoke nginx; pass
 # DESK_RELOAD_NGINX=true or 1 when invoking the reload script.
 DESK_RELOAD_NGINX="${DESK_RELOAD_NGINX:-false}"
-export DESK_RELOAD_NGINX SYSTEMCTL_BIN
+export DESK_RELOAD_NGINX
 GATEWAY_URL="${DESK_HEALTH_URL:-http://127.0.0.1:8791/healthz}"
 MAX_HEALTH_ATTEMPTS="${DESK_HEALTH_ATTEMPTS:-15}"
 HEALTH_INTERVAL="${DESK_HEALTH_INTERVAL:-1}"
@@ -26,6 +24,20 @@ err() {
   printf '[deploy-staging %s] ERROR: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
 }
 
+# An explicit SYSTEMCTL_BIN must exist. Unset means systemctl on PATH, which
+# may be absent on a host without systemd. A missing override is not that case:
+# the release symlink must not move while the restart is silently skipped.
+require_explicit_systemctl_bin() {
+  if [[ ! -v SYSTEMCTL_BIN ]]; then
+    SYSTEMCTL_BIN="systemctl"
+    return 0
+  fi
+  if [[ -z "$SYSTEMCTL_BIN" ]] || ! command -v "$SYSTEMCTL_BIN" >/dev/null 2>&1; then
+    err "SYSTEMCTL_BIN is set but not executable: ${SYSTEMCTL_BIN:-empty}"
+    exit 1
+  fi
+}
+
 # 1. Validation & Pre-flight
 SRC_DIR="${1:-}"
 if [[ -z "$SRC_DIR" ]]; then
@@ -34,6 +46,8 @@ if [[ -z "$SRC_DIR" ]]; then
 fi
 
 SRC_DIR="$(cd "$SRC_DIR" && pwd)"
+require_explicit_systemctl_bin
+export SYSTEMCTL_BIN
 RELEASE_ID="${2:-$(date -u +'%Y%m%d%H%M%S')-$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo 'manual')}"
 TARGET_RELEASE="$RELEASE_ROOT/$RELEASE_ID"
 

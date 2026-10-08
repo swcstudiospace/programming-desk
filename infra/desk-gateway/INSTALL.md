@@ -40,6 +40,6 @@ DESK_RELOAD_DRY_RUN=1 DESK_RELOAD_NGINX=true ./infra/desk-gateway/reload-nginx-g
 
 ## Release directory
 
-Run the gateway from the release directory `deploy-staging.sh` publishes. The script copies the tree to `DESK_RELEASES_ROOT` (default `/opt/programming-desk-releases/<release-id>`) and points `DESK_CURRENT_LINK` (default `/opt/programming-desk`) at that directory. Do not point the unit at a shared git checkout. Another agent switches that checkout between branches, and the running process follows the switch.
+Run the gateway from the release directory `deploy-staging.sh` publishes. The script copies the tree to `DESK_RELEASES_ROOT/<release-id>` (`DESK_RELEASES_ROOT` defaults to `/opt/programming-desk-releases`) and points `DESK_CURRENT_LINK` (default `/opt/programming-desk`) at that directory. Do not point the unit at a shared git checkout. Another agent switches that checkout between branches, and the running process follows the switch. Set `DESK_RELEASES_ROOT` to the parent directory; the script appends the release id.
 
 Moving a host that still runs from a shared checkout is an operator step. It waits for a separate approval and is not performed by installing this script.

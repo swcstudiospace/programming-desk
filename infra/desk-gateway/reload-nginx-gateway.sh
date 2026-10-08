@@ -59,12 +59,17 @@ read_single_pid() {
     err "${label} is set but not a file: ${file}"
     exit 1
   fi
-  IFS= read -r raw < "$file" || raw=""
-  if [[ ! "$raw" =~ ^[[:space:]]*[0-9]+[[:space:]]*$ ]]; then
-    err "${label} does not contain a single numeric PID: ${file}"
+  # Keep a PID that has no trailing newline. Trailing newlines are stripped
+  # by the substitution; any further PID line remains and fails the check.
+  # A zero PID is rejected: kill -HUP 0 signals the process group.
+  raw="$(< "$file")"
+  if [[ ! "$raw" =~ ^[[:space:]]*0*[1-9][0-9]*[[:space:]]*$ ]]; then
+    err "${label} does not contain a single positive numeric PID: ${file}"
     exit 1
   fi
   pid="${raw//[[:space:]]/}"
+  # Force base 10 so a zero-padded value is not treated as octal.
+  pid="$((10#$pid))"
   printf '%s' "$pid"
 }
 

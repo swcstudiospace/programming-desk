@@ -24,20 +24,29 @@ HOST_SERVICE_BINS: dict[str, str | None] = {
 }
 
 
+# Env keys that select a service binary even when PATH points at a recorder.
+_SERVICE_BIN_ENV = {
+    "SYSTEMCTL_BIN": "systemctl",
+    "NGINX_BIN": "nginx",
+}
+
+
+def _command_search_path(env: dict | None) -> str:
+    """PATH the child searches.
+
+    An explicit env that omits PATH is not empty: Python uses
+    os.defpath (`/bin:/usr/bin`) for that process.
+    """
+    return os.pathsep.join(os.get_exec_path(env))
+
+
 def reachable_host_service_bins(
     env: dict | None,
     host: dict[str, str | None] | None = None,
 ) -> list[str]:
-    """Host service binaries that `env`'s PATH would execute.
-
-    A missing PATH key is an empty search path: the child cannot inherit
-    the host PATH when the caller passed an explicit environment.
-    """
+    """Host service binaries that `env` would execute."""
     host_bins = HOST_SERVICE_BINS if host is None else host
-    if env is None:
-        path = os.environ.get("PATH", "")
-    else:
-        path = env.get("PATH", "")
+    path = _command_search_path(env)
     reached: list[str] = []
     for name, host_path in host_bins.items():
         if not host_path or not path:
@@ -46,6 +55,29 @@ def reachable_host_service_bins(
         if found and os.path.realpath(found) == os.path.realpath(host_path):
             reached.append(f"{name} -> {found}")
     return reached
+
+
+def selected_service_bins(
+    env: dict | None,
+    host: dict[str, str | None] | None = None,
+) -> list[str]:
+    """SYSTEMCTL_BIN / NGINX_BIN values that resolve to the host binary."""
+    host_bins = HOST_SERVICE_BINS if host is None else host
+    source = os.environ if env is None else env
+    path = _command_search_path(env)
+    hits: list[str] = []
+    for key, name in _SERVICE_BIN_ENV.items():
+        chosen = source.get(key)
+        host_path = host_bins.get(name)
+        if not chosen or not host_path:
+            continue
+        if os.path.isabs(chosen):
+            candidate = chosen
+        else:
+            candidate = shutil.which(chosen, path=path) or ""
+        if candidate and os.path.realpath(candidate) == os.path.realpath(host_path):
+            hits.append(f"{key} -> {candidate}")
+    return hits
 
 
 def argv_reaches_host_service(
@@ -72,7 +104,11 @@ def reject_host_service_bins(
     env: dict | None,
     host: dict[str, str | None] | None = None,
 ) -> None:
-    hits = reachable_host_service_bins(env, host) + argv_reaches_host_service(args, host)
+    hits = (
+        reachable_host_service_bins(env, host)
+        + selected_service_bins(env, host)
+        + argv_reaches_host_service(args, host)
+    )
     if hits:
         pytest.fail(
             "test environment would reach a real service binary: " + ", ".join(hits)

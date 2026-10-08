@@ -3395,6 +3395,84 @@ def create_mcp(
     setattr(mcp, "_downsampler", downsampler)
     setattr(mcp, "_audit_logger", audit_logger)
 
+    # Milestone v2.8 (Phase 22): Autonomous Swarm Load Balancing & Backpressure Mesh
+    from desk_gateway.swarm_balancer import SwarmSeatLoadBalancer, SwarmTaskAssignment, TaskPriority
+    swarm_balancer = SwarmSeatLoadBalancer()
+    setattr(mcp, "_swarm_balancer", swarm_balancer)
+
+    @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
+    async def swarm_telemetry_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        active_jobs = int(body.get("active_jobs", 0))
+        latency_ms = float(body.get("latency_ms", 10.0))
+        queue_depth = body.get("queue_depth")
+        max_concurrency = body.get("max_concurrency")
+        status = swarm_balancer.record_telemetry(
+            seat_id=seat_id,
+            active_jobs=active_jobs,
+            latency_ms=latency_ms,
+            queue_depth=int(queue_depth) if queue_depth is not None else None,
+            max_concurrency=int(max_concurrency) if max_concurrency is not None else None,
+        )
+        return JSONResponse({
+            "ok": True,
+            "seat_id": status.seat_id,
+            "active_jobs": status.active_jobs,
+            "max_concurrency": status.max_concurrency,
+            "latency_ms": status.latency_ms,
+            "capacity_score": round(status.capacity_score, 2),
+            "circuit_state": status.circuit_state.value,
+        })
+
+    @mcp.custom_route("/v1/swarm/dispatch", methods=["POST"])
+    async def swarm_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        target_seat = body.get("target_seat", "lead")
+        priority_str = body.get("priority", "normal")
+        try:
+            priority = TaskPriority(priority_str.lower())
+        except ValueError:
+            priority = TaskPriority.NORMAL
+        fallback_seats = body.get("fallback_seats", [])
+        payload = body.get("payload", {})
+
+        assignment = SwarmTaskAssignment(
+            task_id=task_id,
+            target_seat=target_seat,
+            priority=priority,
+            payload=payload,
+            fallback_seats=fallback_seats,
+        )
+        result = swarm_balancer.dispatch_task(assignment)
+        return JSONResponse(result)
+
+    @mcp.custom_route("/v1/swarm/complete", methods=["POST"])
+    async def swarm_complete_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        swarm_balancer.complete_task(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id})
+
+    @mcp.custom_route("/v1/swarm/failure", methods=["POST"])
+    async def swarm_failure_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        circuit_state = swarm_balancer.record_failure(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "circuit_state": circuit_state.value})
+
+    @mcp.custom_route("/v1/swarm/status", methods=["GET"])
+    async def swarm_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **swarm_balancer.get_status()})
+
+    @mcp.custom_route("/v1/swarm/reset-breaker", methods=["POST"])
+    async def swarm_reset_breaker_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        success = swarm_balancer.reset_breaker(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "reset": success})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3620,6 +3698,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "client_multiplexer": getattr(mcp, "_client_multiplexer", None),
         "downsampler": getattr(mcp, "_downsampler", None),
         "audit_logger": getattr(mcp, "_audit_logger", None),
+        "swarm_balancer": getattr(mcp, "_swarm_balancer", None),
     }
     return app, settings
 

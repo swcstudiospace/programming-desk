@@ -1,19 +1,19 @@
-# Requirements: Milestone v2.7 — Multi-Modal Processing & Streaming Tool Execution
+# Requirements: Milestone v2.8 — Autonomous Swarm Self-Balancing & Work Distribution Mesh
 
-This document defines the requirements for Milestone v2.7 of Programming Desk.
+This document defines the requirements for Milestone v2.8 of Programming Desk.
 
-## 1. Multi-Modal Processing & Streaming Tool Execution (Phase 20)
+## 1. Dynamic Seat Load Balancing & Swarm Backpressure Management (Phase 22)
 
-- [x] **REQ-MM-001**: Multi-modal artifact ingestion pipeline handling image, audio, and binary attachments with content inspection and MIME verification.
-- [x] **REQ-MM-002**: Streaming tool execution bus enabling chunked SSE/streaming responses from MCP tools with intermediate telemetry frames.
-- [x] **REQ-MM-003**: Tool execution cancellation & backpressure supervisor supporting mid-stream client disconnects and resource reclamation.
-- [x] **REQ-MM-004**: Multi-modal sensory memory indexer storing and retrieving multi-modal vector embeddings linked to desk ledger transactions.
-- [x] **REQ-MM-005**: Multi-modal streaming verification harness validating chunk delivery latencies (<20ms per frame), RPO=0 audit compliance, and resource cleanup under sudden connection aborts.
+- [x] **REQ-SWARM-001**: Real-time seat concurrency and workload telemetry tracking across active seats in the programming desk.
+- [x] **REQ-SWARM-002**: Dynamic task re-queuing and backpressure spillover handler redirecting task assignments when target seat exceeds concurrency thresholds.
+- [x] **REQ-SWARM-003**: Priority preemption engine ensuring critical-path leadership and security tasks bypass standard queuing delays.
+- [x] **REQ-SWARM-004**: Latency-aware and capacity-weighted seat selection across local and federated peer desks.
+- [x] **REQ-SWARM-005**: Automated worker health circuit breaker triggering fail-fast fallback routing upon repeated seat degradation.
 
-## 2. Dynamic Streaming Tool Mesh & Real-Time Telemetry (Phase 21)
+## 2. Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts (Phase 23)
 
-- [x] **REQ-STREAM-001**: Bi-directional streaming RPC transport between federated desks with heartbeat-governed keepalive and flow control.
-- [x] **REQ-STREAM-002**: Distributed multi-modal media cache synchronized across edge nodes with cryptographic content hashing and LRU eviction.
-- [x] **REQ-STREAM-003**: Dynamic client multiplexing allowing multiple subscriber seats to observe streaming tool output simultaneously with per-seat permission masking.
-- [x] **REQ-STREAM-004**: Adaptive compression and downsampling engine dynamically optimizing media payloads based on WAN network bandwidth and peer latency.
-- [x] **REQ-STREAM-005**: End-to-end streaming tool audit logger validating complete receipt verification for streaming execution sessions.
+- [ ] **REQ-SWARM-006**: Recursive subagent task decomposition and delegation protocol supporting nested parent-child task DAGs.
+- [ ] **REQ-SWARM-007**: Cryptographic task handoff and acceptance receipts with timestamped nonces and task fingerprinting.
+- [ ] **REQ-SWARM-008**: Dual-party signature verification for cross-seat delegation acknowledging receipt before execution state transitions.
+- [ ] **REQ-SWARM-009**: Byzantine dispute arbitration and timeout reclamation engine handling unresponsive or conflicting subagent claims.
+- [ ] **REQ-SWARM-010**: End-to-end swarm execution audit receipt aggregation validating hierarchical delegation integrity and non-repudiation.

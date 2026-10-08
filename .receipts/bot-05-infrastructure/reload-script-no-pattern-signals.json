@@ -4,7 +4,7 @@
   "branch": "bot-05-infrastructure/reload-script-no-pattern-signals",
   "graph_id": "ut-mv00tcgl-d8215d3e",
   "started_at": "2026-10-08T21:20:00Z",
-  "completed_at": "2026-10-08T22:12:14Z",
+  "completed_at": "2026-10-08T22:50:35Z",
   "commands": [
     {
       "cmd": "git worktree add --detach /tmp/r1-479d627 479d627 && cp infra/tests/test_staging_deployment.py infra/tests/conftest.py /tmp/r1-479d627/infra/tests/ && python3 -m pytest -q /tmp/r1-479d627/infra/tests/test_staging_deployment.py::test_reload_does_not_signal_decoy_desk_gateway --tb=short",
@@ -15,37 +15,37 @@
     {
       "cmd": "python3 -m pytest -q infra/tests/test_staging_deployment.py --tb=short",
       "exit_code": 0,
-      "duration_s": 0.34,
-      "output_tail": "30 passed in 0.34s"
+      "duration_s": 0.4,
+      "output_tail": "33 passed in 0.40s"
     },
     {
       "cmd": "python3 -m pytest -q infra/tests --tb=line",
       "exit_code": 1,
-      "duration_s": 0.49,
-      "output_tail": "FileNotFoundError: [Errno 2] No such file or directory: 'uv'\nFAILED infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite\n1 failed, 37 passed in 0.49s"
+      "duration_s": 0.51,
+      "output_tail": "FileNotFoundError: [Errno 2] No such file or directory: 'uv'\nFAILED infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite\n1 failed, 40 passed in 0.51s"
     },
     {
       "cmd": "shellcheck infra/desk-gateway/reload-nginx-gateway.sh infra/desk-gateway/deploy-staging.sh",
       "exit_code": 0,
-      "duration_s": 0.13,
+      "duration_s": 0.12,
       "output_tail": ""
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
-      "duration_s": 0.07,
+      "duration_s": 0.05,
       "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.07,
+      "duration_s": 0.06,
       "output_tail": "G-1 PASS — bot-05-infrastructure: 6 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.06,
+      "duration_s": 0.05,
       "output_tail": "G-3 PASS — 6 file(s) scanned, no secrets detected"
     },
     {
@@ -68,7 +68,7 @@
       "expects_failure": true
     },
     {
-      "claim": "Stubbed deploy and reload tests pass: the decoy is not signalled, a PID that bash arithmetic would wrap to 0 is rejected, and a missing SYSTEMCTL_BIN exits before the release symlink is created",
+      "claim": "Stubbed deploy and reload tests pass: the decoy is not signalled, a pathlib.Path argv naming the host binary is rejected, and a PID-file reload with no external kill does not fail with command not found",
       "evidence_command_index": 1
     },
     {
@@ -96,7 +96,7 @@
     "approved_by is absent until bot-00-programming-lead or a human stamps this receipt; local check_receipt.py --strict fails only on that missing field",
     "desk_receipt_check did not read this file: it reported the path is not on origin/bot-06-quality-security/desk-v2-assembled-prompts",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite exits with FileNotFoundError because the uv binary is not installed on this VM; that test was not changed",
-    "Greptile review 5463433254 on commit b54d103 scored 4/5 and left comments 4224635250 and 4224635256. Commit 4799e4f addresses both. The follow-up review is not terminal yet; a FAILED, SKIPPED, or unavailable review blocks a merge claim",
+    "Greptile review of commit 2178145 scored 2/5 and left comments 4224916105, 4224916109, and 4224916116. Commit 122aaaa addresses those three. The follow-up review is not terminal yet; a FAILED, SKIPPED, or unavailable review blocks a merge claim",
     "The reload and deploy scripts were not executed on the shared VPS, and no unit was restarted there",
     "Moving production desk-gateway off the shared checkout onto the deploy-staging.sh release directory waits for Ming's separate approval",
     "Swarm session is advisory: SWARM_ED25519_KEY is unset, so orch_plan does not record an approval"

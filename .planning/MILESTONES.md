@@ -21,3 +21,33 @@
 - Executed dependency-ordered rollout DAG, per-node rollback procedures, tracker synchronization, and destructive legacy decommissioning under Gate G-6.
 
 ---
+
+## v2.1 Live Drills & Intake Hardening (Shipped: 2026-10-08)
+
+**Phases completed:** 2 phases, 8 plans, 0 tasks
+
+**Key accomplishments:**
+- Gateway resiliency drills, RFC 7807 error responses, intake backpressure limits, and subagent verification suites.
+- Intake verification runbooks, Grok Bot skills index synchronization, and GreptimeDB event telemetry Solana devnet anchoring.
+
+---
+
+## v2.2 Multi-Desk Federation & Staging Deployments (Shipped: 2026-10-09)
+
+**Phases completed:** 2 phases, 4 plans, 0 tasks
+
+**Key accomplishments:**
+- Multi-desk federation registry, asymmetric JWT token validation, cross-desk routing, and vector clock task graph merge.
+- Automated declarative VPS staging deployment, zero-downtime hot reloads, ephemeral lease reconciliation, and companion cross-repo contract verification.
+
+---
+
+## v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Shipped: 2026-10-09)
+
+**Phases completed:** 2 phases, 4 plans, 0 tasks
+
+**Key accomplishments:**
+- Zero-downtime production cutover orchestrator, canary traffic splitting with deterministic SHA-256 partition hashing, and emergency seat isolation (<5s).
+- Dynamic upstream health polling, multi-desk failover diverting, Prometheus SLO metrics export, automated alert threshold dispatch, and Solana devnet anchor verification.
+
+---

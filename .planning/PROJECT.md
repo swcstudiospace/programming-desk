@@ -4,7 +4,7 @@
 
 Programming Desk v2 is Ove's seven-seat programming desk, installed from seven Team-only Grok Bot templates and bootstrapped into a six-member group with QUALITY independent and off-channel. Its VPS Desk Gateway exposes contract-defined tools per seat, connects to five Railway data services through private project forwarders, and admits outside work only through LEAD.
 
-The current milestone is **v2.3 — Production Cutover, Dynamic Failover & Telemetry Alerting**: zero-downtime traffic migration, canary routing, emergency seat isolation, multi-desk failover, and Prometheus SLO alerts.
+The current milestone is **v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery**: multi-region edge ingress routing, distributed DragonflyDB rate limiting, cross-region WAN inter-seat routing, high-latency vector clock convergence, and autonomous chaos recovery.
 
 ## Core Value
 
@@ -30,9 +30,10 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 
 All 257 requirements shipped and verified across Milestones v2.0, v2.1, v2.2, and v2.3.
 
-### Active
+### Active (Milestone v2.4)
 
-None! All planned milestones (v2.0, v2.1, v2.2, v2.3) are 100% complete and validated.
+- Phase 14: Multi-Region Edge Federation & WAN Routing — REQ-EDGE-001 through REQ-EDGE-005
+- Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience — REQ-CHAOS-001 through REQ-CHAOS-005
 
 ### Out of Scope
 

@@ -32,6 +32,44 @@ async def test_health(client):
     assert body["packs"] == expected_apps
 
 
+async def test_healthz_and_readyz_and_metrics(client):
+    # Test /healthz
+    h_resp = await client.get("/healthz")
+    assert h_resp.status_code == 200
+    h_body = h_resp.json()
+    assert h_body["status"] == "ok"
+    assert h_body["service"] == "desk-gateway"
+    assert "timestamp" in h_body
+
+    # Test /readyz
+    r_resp = await client.get("/readyz")
+    assert r_resp.status_code == 200
+    r_body = r_resp.json()
+    assert r_body["status"] == "ready"
+    assert r_body["ready"] is True
+    assert r_body["checks"]["store"] == "ok"
+    assert "seats loaded" in r_body["checks"]["rosters"]
+
+    # Test /metrics (Prometheus exposition format)
+    m_resp = await client.get("/metrics")
+    assert m_resp.status_code == 200
+    assert "text/plain" in m_resp.headers["content-type"]
+    text = m_resp.text
+    assert "desk_gateway_up 1" in text
+    assert "desk_gateway_active_viewers" in text
+    assert "desk_gateway_seat_tools_total{seat=\"lead\"} 15" in text
+    assert "desk_gateway_intake_queue_total" in text
+
+
+async def test_concurrent_probes_loopback(client):
+    # Simulate concurrent probes across /healthz, /readyz, /metrics, /health
+    endpoints = ["/healthz", "/readyz", "/metrics", "/health"] * 10
+    tasks = [client.get(ep) for ep in endpoints]
+    responses = await asyncio.gather(*tasks)
+    for resp in responses:
+        assert resp.status_code == 200
+
+
 @pytest.mark.parametrize("seat", list(EXPECTED))
 async def test_each_seat_sees_its_own_roster(rpc, seat):
     names = await rpc.tools(seat)

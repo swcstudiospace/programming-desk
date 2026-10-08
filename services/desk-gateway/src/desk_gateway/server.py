@@ -319,6 +319,89 @@ def create_mcp(
             }
         )
 
+    @mcp.custom_route("/healthz", methods=["GET"])
+    async def healthz(_request: Request) -> Response:
+        return JSONResponse(
+            {
+                "status": "ok",
+                "service": "desk-gateway",
+                "version": __version__,
+                "timestamp": time.time(),
+            }
+        )
+
+    @mcp.custom_route("/readyz", methods=["GET"])
+    async def readyz(_request: Request) -> Response:
+        # Verify store readiness (ability to read roster/intake) and roster integrity
+        is_ready = True
+        details: dict[str, Any] = {}
+        try:
+            roster = store.roster()
+            details["store"] = "ok"
+        except Exception as exc:
+            is_ready = False
+            details["store"] = f"error: {exc}"
+
+        try:
+            roster_count = len(services.rosters.seats)
+            if roster_count == 0:
+                is_ready = False
+                details["rosters"] = "empty"
+            else:
+                details["rosters"] = f"{roster_count} seats loaded"
+        except Exception as exc:
+            is_ready = False
+            details["rosters"] = f"error: {exc}"
+
+        status_code = 200 if is_ready else 503
+        return JSONResponse(
+            {
+                "status": "ready" if is_ready else "not_ready",
+                "service": "desk-gateway",
+                "ready": is_ready,
+                "checks": details,
+            },
+            status_code=status_code,
+        )
+
+    @mcp.custom_route("/metrics", methods=["GET"])
+    async def metrics(_request: Request) -> Response:
+        intake_counts = store.intake_counts()
+        total_intake = sum(intake_counts.values())
+        seat_tool_counts = {
+            s: len(services.rosters.seats[s].tools) if s in services.rosters.seats else 0
+            for s in SEATS
+        }
+        lines = [
+            "# HELP desk_gateway_up Whether the desk-gateway service is up",
+            "# TYPE desk_gateway_up gauge",
+            "desk_gateway_up 1",
+            "# HELP desk_gateway_active_viewers Current active websocket viewers connected to live desk",
+            "# TYPE desk_gateway_active_viewers gauge",
+            f"desk_gateway_active_viewers {len(services.live.viewers)}",
+            "# HELP desk_gateway_intake_queue_total Current items in the intake queue by state",
+            "# TYPE desk_gateway_intake_queue_total gauge",
+        ]
+        for state, count in sorted(intake_counts.items()):
+            lines.append(f'desk_gateway_intake_queue_total{{state="{state}"}} {count}')
+        if not intake_counts:
+            lines.append('desk_gateway_intake_queue_total{state="queued"} 0')
+        lines.extend([
+            "# HELP desk_gateway_registered_seats_total Number of registered seats with active agent uuids",
+            "# TYPE desk_gateway_registered_seats_total gauge",
+        ])
+        roster = store.roster()
+        reg_seats = len([k for k, v in (roster.get("seats") or {}).items() if v.get("agent_uuid")])
+        lines.append(f"desk_gateway_registered_seats_total {reg_seats}")
+        lines.extend([
+            "# HELP desk_gateway_seat_tools_total Configured tool count per seat roster",
+            "# TYPE desk_gateway_seat_tools_total gauge",
+        ])
+        for s, count in sorted(seat_tool_counts.items()):
+            lines.append(f'desk_gateway_seat_tools_total{{seat="{s}"}} {count}')
+        lines.append("")
+        return Response(content="\n".join(lines), media_type="text/plain; version=0.0.4")
+
     @mcp.custom_route("/", methods=["GET"])
     async def root(request: Request) -> Response:
         # With the desk view off (or its bundle absent) `/` stays the connect landing page.

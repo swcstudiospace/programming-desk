@@ -59,6 +59,35 @@ class PeerGateway:
     status: str = "active"
     last_seen: float = field(default_factory=time.time)
     registered_at: float = field(default_factory=time.time)
+    # Partition tolerance / Circuit Breaker tracking (REQ-FED-005)
+    failure_count: int = 0
+    circuit_state: str = "closed"  # closed, open, half-open
+    last_failure_time: float = 0.0
+
+    def allow_request(self, recovery_timeout_sec: float = 30.0) -> bool:
+        """Check whether outbound requests to peer are allowed or partitioned (REQ-FED-005)."""
+        if self.circuit_state == "closed":
+            return True
+        now = time.monotonic()
+        if self.circuit_state == "open":
+            if now - self.last_failure_time >= recovery_timeout_sec:
+                self.circuit_state = "half-open"
+                return True
+            return False
+        return True
+
+    def record_success(self) -> None:
+        self.failure_count = 0
+        self.circuit_state = "closed"
+        self.status = "active"
+        self.last_seen = time.time()
+
+    def record_failure(self, threshold: int = 3) -> None:
+        self.failure_count += 1
+        self.last_failure_time = time.monotonic()
+        if self.failure_count >= threshold or self.circuit_state == "half-open":
+            self.circuit_state = "open"
+            self.status = "degraded"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -70,6 +99,8 @@ class PeerGateway:
             "status": self.status,
             "last_seen": self.last_seen,
             "registered_at": self.registered_at,
+            "circuit_state": self.circuit_state,
+            "failure_count": self.failure_count,
         }
 
 
@@ -307,11 +338,26 @@ class PeerDeskClient:
         method: str,
         headers: dict[str, str],
         body: bytes | None = None,
+        fail_open: bool = True,
     ) -> httpx.Response:
-        """Route an inter-seat ticket or MCP invocation to a peer desk gateway (REQ-FED-003)."""
+        """Route an inter-seat ticket or MCP invocation to a peer desk gateway with circuit breaking (REQ-FED-003, REQ-FED-005)."""
         peer = self.registry.get_peer(target_desk_id)
         if not peer:
             raise PeerNotFoundError(target_desk_id)
+
+        # Check circuit state (REQ-FED-005)
+        if not peer.allow_request():
+            if fail_open:
+                logger.warning("Peer %s circuit is OPEN; fail-open fallback returning 503 circuit_open", target_desk_id)
+                return httpx.Response(
+                    status_code=503,
+                    json={
+                        "error": "peer_circuit_open",
+                        "desk_id": target_desk_id,
+                        "detail": f"Circuit breaker open for peer desk {target_desk_id}; request degraded locally.",
+                    },
+                )
+            raise FederationError("peer_circuit_open", f"Circuit open for peer {target_desk_id}", 503)
 
         target_url = f"{peer.url.rstrip('/')}{path}"
         client = await self._get_client()
@@ -326,7 +372,57 @@ class PeerDeskClient:
                 headers=req_headers,
                 content=body,
             )
+            if resp.status_code >= 500:
+                peer.record_failure()
+            else:
+                peer.record_success()
             return resp
+        except (httpx.RequestError, httpx.TimeoutException) as exc:
+            peer.record_failure()
+            if fail_open:
+                logger.warning("Peer %s communication failed: %s; failing open with 504", target_desk_id, exc)
+                return httpx.Response(
+                    status_code=504,
+                    json={
+                        "error": "peer_unreachable",
+                        "desk_id": target_desk_id,
+                        "detail": f"Peer gateway {target_desk_id} unreachable ({exc}); partition fail-open applied.",
+                    },
+                )
+            raise FederationError("peer_unreachable", str(exc), 504) from exc
         finally:
             if should_close:
                 await client.aclose()
+
+    async def sync_task_graph(
+        self,
+        target_desk_id: str,
+        graph_payload: dict[str, Any],
+        token: str,
+    ) -> dict[str, Any]:
+        """Synchronize task graph with remote peer gateway (REQ-FED-004, REQ-FED-005)."""
+        peer = self.registry.get_peer(target_desk_id)
+        if not peer:
+            raise PeerNotFoundError(target_desk_id)
+
+        endpoint = "/v1/federation/graphs/sync"
+        resp = await self.forward_cross_desk_route(
+            target_desk_id=target_desk_id,
+            target_seat="lead",
+            path=endpoint,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            },
+            body=json.dumps(graph_payload).encode("utf-8"),
+            fail_open=True,
+        )
+        if resp.status_code != 200:
+            raise FederationError(
+                "sync_failed",
+                f"Sync with {target_desk_id} failed with status {resp.status_code}: {resp.text}",
+                status_code=resp.status_code,
+            )
+        return resp.json()
+

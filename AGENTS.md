@@ -104,3 +104,28 @@ python3 ci/gates/check_contracts.py --base origin/main --change contracts/change
 [`.github/workflows/gates.yml`](.github/workflows/gates.yml). G-2 is expected
 to fail on a missing `approved_by` until an independent reviewer stamps the
 receipt. Any other G-2 failure is yours to fix before pushing.
+
+## Running the swarm here
+
+`.cursor/agents/` is the Cursor export of agent-swarm (`a01-orchestrator`
+through `a15-docs`), copied by `scripts/_install_cursor.py` from
+[swcstudiospace/agent-swarm](https://github.com/swcstudiospace/agent-swarm)
+commit `92b964c72cf18c9af09120f9c980ec85a70a198b` (branch
+`grokbot/cursor-agents-export`). This repo does not vendor that runtime.
+[`.cursor/environment.json`](.cursor/environment.json) keeps the gate install
+and clones that commit to `$HOME/.local/share/agent-swarm`, then exports
+`SWARM_ROOT` to that absolute path. The same path is written for later login
+shells (`/etc/profile.d/swarm-root.sh`) and interactive bash (`~/.bashrc`).
+
+Brief a run by spawning `a01-orchestrator` (`subagent_type`
+`a01-orchestrator`) with the brief. A01 may spawn `a02-requirements` through
+`a15-docs`. Those specialists must not spawn further subagents. Swarm tools
+are `python3 "$SWARM_ROOT/scripts/<tool>.py" --root <git toplevel> --json`.
+If `SWARM_ROOT` is unset, stop and report `BLOCKED` with `needs` `SWARM_ROOT`.
+Do not treat this repo's `scripts/` as swarm tools.
+
+The session is advisory. `SWARM_ED25519_KEY` and `SWARM_REQUIRE_KEY` are
+unset, so a gate script records nothing and nothing here counts as APPROVED.
+The merge gate is Greptile via Desk Quality. Substrate wiring is off. Do not
+start an unattended headless runner. The rule file is
+[`.cursor/rules/agent-swarm.mdc`](.cursor/rules/agent-swarm.mdc).

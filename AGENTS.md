@@ -84,6 +84,8 @@ python3 ci/gates/check_ownership.py --bot <bot-id> --base origin/main
 python3 ci/gates/check_desk_integrity.py --repo .
 python3 ci/gates/check_secrets.py --base origin/main
 python3 ci/gates/check_contracts.py --base origin/main
+# For contract-surface edits, point check_contracts.py at the change record:
+# python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
 python3 ci/gates/check_rollback.py --receipt .receipts/<bot-id>/<task-id>.json
 python3 ci/gates/check_receipt.py --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id> --strict
 python3 -m pytest ci/tests/ -v

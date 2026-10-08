@@ -66,7 +66,7 @@ cannot fabricate a `0` that survives re-execution.
 **Enforced by.** `ci/gates/check_receipt.py`
 
 ```bash
-python3 ci/gates/check_receipt.py --receipt .receipts/bot-03-android/feat-push.json --bot bot-03-android
+python3 ci/gates/check_receipt.py --receipt .receipts/bot-03-android/feat-push.json --bot bot-03-android --strict
 ```
 
 **Checks:**
@@ -252,7 +252,7 @@ python3 ci/gates/check_ownership.py --bot <bot-id> --files <changed paths>
 python3 ci/gates/check_secrets.py   --files <changed paths>
 python3 ci/gates/check_contracts.py --base origin/main         # add --change <doc> for contract work
 python3 ci/gates/check_rollback.py  --receipt .receipts/<bot-id>/<task-id>.json
-python3 ci/gates/check_receipt.py   --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id>
+python3 ci/gates/check_receipt.py   --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id> --strict
 ```
 
 **G-4 needs `--change` as soon as the diff touches a contract surface.** Without it,

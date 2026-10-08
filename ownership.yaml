@@ -408,6 +408,20 @@ ownership:
   - pattern: ".claude/settings.json"
     owner: bot-06-quality-security
 
+  # Cursor cloud agents load AGENTS.md, .cursor/rules/*.mdc and
+  # .cursor/environment.json from the repo root. Same owner as README.md and
+  # docs/**: bot-06-quality-security.
+  #
+  # Placed after the language globs and the .claude/ block so last match wins
+  # for every file under .cursor/, including .cursor/agents/** and any
+  # .py/.ts/.json that would otherwise follow a suffix rule. **/*.proto stays
+  # the last pattern, so a .proto under .cursor/ remains a QUALITY contract
+  # surface.
+  - pattern: "AGENTS.md"
+    owner: bot-06-quality-security
+  - pattern: ".cursor/**"
+    owner: bot-06-quality-security
+
   # After every directory rule. web3/api.proto and chains/foo.proto stay QUALITY
   # contract_surface. Do not duplicate this pattern; validate-manifest rejects duplicates.
   - pattern: "**/*.proto"

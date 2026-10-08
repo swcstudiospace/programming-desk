@@ -1,0 +1,16 @@
+---
+description: Programming Desk rules that apply on every Cursor cloud-agent turn
+alwaysApply: true
+---
+
+# Programming Desk
+
+The long form is [AGENTS.md](../../AGENTS.md). These are the same rules.
+
+- This repo is the seven-seat Programming Desk. Seats, gates and the operating model: [README.md](../../README.md), [docs/quality-gates.md](../../docs/quality-gates.md), [docs/desk-operating-model.md](../../docs/desk-operating-model.md), [docs/cross-bot-protocol.md](../../docs/cross-bot-protocol.md), [docs/github-sot-orchestration.md](../../docs/github-sot-orchestration.md).
+- Resolve every path in [ownership.yaml](../../ownership.yaml) before the first edit. Last match wins. An unowned path fails `python3 ci/gates/check_ownership.py`.
+- Feature branch and a **draft** pull request only. Do not merge, enable auto-merge, or force-push.
+- No completion claim without a receipt under `.receipts/<seat>/`. Format: [skills/verification-receipts/SKILL.md](../../skills/verification-receipts/SKILL.md).
+- The Greptile merge gate is run by QUALITY via Programming Lead ([skills/greptile-merge-gate/SKILL.md](../../skills/greptile-merge-gate/SKILL.md)). Do not claim merge-ready while a finding is unaddressed. `FAILED`, `SKIPPED`, or unavailable is a blocker, not a pass.
+- No secrets. Do not print or commit tokens, keys, passphrases, bus secrets, tailnet names, or `*.railway.internal` hosts. Name environment variables only.
+- Local gate commands are in [AGENTS.md](../../AGENTS.md).

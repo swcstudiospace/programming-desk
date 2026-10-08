@@ -1756,3 +1756,111 @@ async def test_upstream_graceful_degradation_fallbacks():
         assert bus_res["fallback"]["status"] == "queued_local_fallback"
         assert bus_res["fallback"]["runtime"] == "python"
 
+
+async def test_intake_dlq_retries_and_terminal_failure(tmp_path):
+    """REQ-INTAKE-008: Dead-letter queue captures intake events exceeding retry policy and audit trails failure."""
+    from desk_gateway.server import build_app
+    from desk_gateway.config import Settings
+    from asgi_lifespan import LifespanManager
+    import httpx
+    import json
+
+    intake_token = "tok-github-dlq"
+    settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "dlq_test",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": intake_token},
+        intake_max_retries=3,
+    )
+    app, _ = build_app(settings)
+    store = app.state["store"]
+
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            # 1. Post intake item
+            res = await client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"title": "Flaky task", "ask": "Do some complex flaky step", "idempotency_key": "flaky-1"},
+            )
+            assert res.status_code == 202
+            intake_id = res.json()["intake_id"]
+
+            # DLQ initially empty
+            dlq_res = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res.status_code == 200
+            assert dlq_res.json()["count"] == 0
+
+            # 2. Record 1st failure -> stays queued, retry_count=1
+            f1 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "connection timeout on worker", "error_code": "timeout"},
+            )
+            assert f1.status_code == 200
+            data1 = f1.json()
+            assert data1["state"] == "queued"
+            assert data1["retry_count"] == 1
+            assert data1["terminal"] is False
+            assert len(data1["failures"]) == 1
+
+            # 3. Record 2nd failure -> stays queued, retry_count=2
+            f2 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "worker crashed during compile", "error_code": "worker_crash"},
+            )
+            assert f2.status_code == 200
+            assert f2.json()["retry_count"] == 2
+            assert f2.json()["terminal"] is False
+
+            # 4. Record 3rd failure -> max_retries reached (3) -> terminal dead_letter!
+            f3 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "fatal out of memory", "error_code": "oom"},
+            )
+            assert f3.status_code == 200
+            data3 = f3.json()
+            assert data3["state"] == "dead_letter"
+            assert data3["retry_count"] == 3
+            assert data3["terminal"] is True
+            assert len(data3["failures"]) == 3
+
+            # DLQ now has 1 item
+            dlq_res2 = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res2.status_code == 200
+            assert dlq_res2.json()["count"] == 1
+            dlq_item = dlq_res2.json()["dlq"][0]
+            assert dlq_item["intake_id"] == intake_id
+            assert dlq_item["state"] == "dead_letter"
+            assert dlq_item["dead_letter_reason"] == "fatal out of memory"
+
+            # Check audit trail captured terminal failure
+            audit_file = settings.data_dir / "audit.jsonl"
+            assert audit_file.exists()
+            lines = [json.loads(line) for line in audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            dead_letter_events = [ev for ev in lines if ev.get("kind") == "intake.dead_letter"]
+            assert len(dead_letter_events) == 1
+            assert dead_letter_events[0]["payload"]["intake_id"] == intake_id
+            assert dead_letter_events[0]["payload"]["error_code"] == "oom"
+
+            # 5. Replay dead-lettered item back to queue
+            rep = await client.post(
+                f"/v1/intake/{intake_id}/replay",
+                headers={"Authorization": f"Bearer {intake_token}"},
+            )
+            assert rep.status_code == 200
+            assert rep.json()["state"] == "queued"
+
+            # Verify it's removed from DLQ and active in intake
+            dlq_res3 = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res3.json()["count"] == 0
+            item_now = store.intake_get(intake_id)
+            assert item_now["state"] == "queued"
+            assert item_now["retry_count"] == 0
+
+

@@ -642,6 +642,7 @@ def create_mcp(
                 headers={"Retry-After": "30"},
             )
 
+        item.setdefault("max_retries", settings.intake_max_retries)
         record = store.intake_create(item)
         _live(services.live.request_received, record["intake_id"], item["title"])
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
@@ -651,6 +652,127 @@ def create_mcp(
         if idem_key:
             _idempotency_cache[f"{origin}:{idem_key}"] = (now, (record["intake_id"], resp_data))
         return JSONResponse(resp_data, status_code=202)
+
+    @mcp.custom_route("/v1/intake/dlq", methods=["GET"])
+    async def intake_dlq_get(request: Request) -> Response:
+        """Inspect Dead-Letter Queue items (REQ-INTAKE-008)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        origin = settings.origin_for_intake_token(token)
+        seat = settings.seat_for_passphrase(token)
+        if origin is None and seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="valid origin token or seat passphrase required to inspect DLQ",
+                error_code="unauthorized",
+                instance="/v1/intake/dlq",
+            )
+        origin_filter = origin if origin else request.query_params.get("origin")
+        items = store.intake_dlq_list(origin=origin_filter)
+        return JSONResponse({"ok": True, "dlq": items, "count": len(items)}, status_code=200)
+
+    @mcp.custom_route("/v1/intake/{intake_id}/fail", methods=["POST"])
+    async def intake_fail_post(request: Request) -> Response:
+        """Record dispatch failure for an intake item; dead-letters on terminal retry exhaustion (REQ-INTAKE-008)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        origin = settings.origin_for_intake_token(token)
+        seat = settings.seat_for_passphrase(token)
+        if origin is None and seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="valid origin token or seat passphrase required to report intake failure",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        intake_id = request.path_params["intake_id"]
+        try:
+            raw_body = await request.body()
+            body = json.loads(raw_body.decode("utf-8")) if raw_body else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+        reason = body.get("reason", "Intake dispatch failed")
+        error_code = body.get("error_code", "dispatch_failure")
+
+        record = store.intake_fail(intake_id, reason=reason, error_code=error_code, max_retries=settings.intake_max_retries)
+        if record is None:
+            return problem_response(
+                status=404,
+                title="Intake Not Found",
+                detail=f"no intake found for id {intake_id}",
+                error_code="not_found",
+                instance=request.url.path,
+            )
+
+        if record["state"] == "dead_letter":
+            terminal_event = {
+                "kind": "intake.dead_letter",
+                "summary": f"terminal intake failure for {intake_id} from {record.get('origin')}: {reason}",
+                "payload": {
+                    "intake_id": intake_id,
+                    "origin": record.get("origin"),
+                    "retry_count": record.get("retry_count"),
+                    "max_retries": record.get("max_retries"),
+                    "reason": reason,
+                    "error_code": error_code,
+                },
+                "actor": "system",
+                "ts_gateway": time.time(),
+            }
+            store.audit_append(terminal_event)
+            services.audit.fire_and_forget(terminal_event)
+            logger.error("Intake %s dead-lettered after %s retries: %s", intake_id, record.get("retry_count"), reason)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "intake_id": record["intake_id"],
+                "state": record["state"],
+                "retry_count": record.get("retry_count", 0),
+                "max_retries": record.get("max_retries", settings.intake_max_retries),
+                "terminal": record["state"] == "dead_letter",
+                "failures": record.get("failures", []),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/intake/{intake_id}/replay", methods=["POST"])
+    async def intake_dlq_replay_post(request: Request) -> Response:
+        """Replay dead-lettered intake item back to queued status (REQ-INTAKE-008)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        origin = settings.origin_for_intake_token(token)
+        seat = settings.seat_for_passphrase(token)
+        if origin is None and seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="valid origin token or seat passphrase required to replay DLQ",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        intake_id = request.path_params["intake_id"]
+        replayed = store.intake_dlq_replay(intake_id, reset_retries=True)
+        if replayed is None:
+            return problem_response(
+                status=404,
+                title="DLQ Item Not Found",
+                detail=f"no dead_letter intake item found with id {intake_id}",
+                error_code="not_found",
+                instance=request.url.path,
+            )
+        replay_event = {
+            "kind": "intake.replay",
+            "summary": f"replayed dead-lettered intake {intake_id}",
+            "payload": {"intake_id": intake_id, "origin": replayed.get("origin")},
+            "actor": seat or origin or "operator",
+            "ts_gateway": time.time(),
+        }
+        store.audit_append(replay_event)
+        services.audit.fire_and_forget(replay_event)
+        return JSONResponse({"ok": True, "intake_id": intake_id, "state": replayed["state"]}, status_code=200)
 
     return mcp
 

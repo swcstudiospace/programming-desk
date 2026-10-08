@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-INTAKE_STATES = ("queued", "claimed", "accepted", "rejected", "in_progress", "done")
+INTAKE_STATES = ("queued", "claimed", "accepted", "rejected", "in_progress", "done", "dead_letter")
 
 
 def _now() -> float:
@@ -124,6 +124,9 @@ class Store:
                 "state": "queued",
                 "created_at": _now(),
                 "claimed_at": None,
+                "retry_count": 0,
+                "max_retries": int(item.get("max_retries", 3)),
+                "failures": [],
                 "acks": [],
                 **item,
             }
@@ -207,6 +210,70 @@ class Store:
             for record in self._read("intake", []):
                 counts[record["state"]] = counts.get(record["state"], 0) + 1
             return counts
+
+    def intake_fail(
+        self,
+        intake_id: str,
+        reason: str,
+        *,
+        error_code: str = "dispatch_failure",
+        max_retries: int | None = None,
+    ) -> dict[str, Any] | None:
+        """Record an execution/dispatch failure against an intake item.
+
+        Increments retry_count. If retry_count exceeds max_retries, moves the item
+        to terminal 'dead_letter' state (DLQ) and records dead_letter_at and dead_letter_reason.
+        Otherwise resets state to 'queued' so it can be retried.
+        """
+        with self._lock:
+            queue = self._read("intake", [])
+            for record in queue:
+                if record["intake_id"] == intake_id:
+                    retries = record.get("retry_count", 0) + 1
+                    record["retry_count"] = retries
+                    effective_max = max_retries if max_retries is not None else record.get("max_retries", 3)
+                    failure_entry = {
+                        "attempt": retries,
+                        "reason": reason,
+                        "error_code": error_code,
+                        "at": _now(),
+                    }
+                    record.setdefault("failures", []).append(failure_entry)
+                    if retries >= effective_max:
+                        record["state"] = "dead_letter"
+                        record["dead_letter_at"] = _now()
+                        record["dead_letter_reason"] = reason
+                        record["dead_letter_error_code"] = error_code
+                    else:
+                        record["state"] = "queued"
+                        record["claimed_at"] = None
+                    self._write("intake", queue)
+                    return record
+            return None
+
+    def intake_dlq_list(self, origin: str | None = None) -> list[dict[str, Any]]:
+        """List items currently in dead-letter queue (state == 'dead_letter')."""
+        with self._lock:
+            queue = self._read("intake", [])
+            items = [r for r in queue if r.get("state") == "dead_letter"]
+            if origin:
+                items = [r for r in items if r.get("origin") == origin]
+            return items
+
+    def intake_dlq_replay(self, intake_id: str, *, reset_retries: bool = True) -> dict[str, Any] | None:
+        """Replay a dead-lettered item back into the active intake queue ('queued')."""
+        with self._lock:
+            queue = self._read("intake", [])
+            for record in queue:
+                if record["intake_id"] == intake_id and record.get("state") == "dead_letter":
+                    record["state"] = "queued"
+                    record["replayed_at"] = _now()
+                    record["claimed_at"] = None
+                    if reset_retries:
+                        record["retry_count"] = 0
+                    self._write("intake", queue)
+                    return record
+            return None
 
     def acks(self) -> dict[str, Any]:
         with self._lock:

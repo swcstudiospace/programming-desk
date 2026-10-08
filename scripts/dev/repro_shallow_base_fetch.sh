@@ -9,8 +9,8 @@
 #
 # `git fetch --no-tags --depth=1 origin main` records the new tip as a shallow
 # boundary, so `origin/main...HEAD` has no merge base. The same clone, fetched
-# with an explicit refspec and no --depth, still has the fork commit as the
-# merge base.
+# with the base-ref line read from both gates workflows, still has the fork
+# commit as the merge base.
 #
 # --old-only stops after the depth-1 fetch and exits 1 when that merge-base
 # failure is the one the gates job prints. The default run requires the old
@@ -86,7 +86,41 @@ if [[ $old_only -eq 1 ]]; then
   exit 1
 fi
 
-git -C "$root/new" fetch -q --no-tags origin "+refs/heads/main:refs/remotes/origin/main"
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+fetch_line=$(python3 - "$repo" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+root = Path(sys.argv[1])
+files = [
+    root / ".github/workflows/gates.yml",
+    root / "ci/.github/workflows/gates.yml",
+]
+found = []
+for path in files:
+    doc = yaml.safe_load(path.read_text())
+    for job in doc["jobs"].values():
+        for step in job.get("steps") or []:
+            for line in (step.get("run") or "").splitlines():
+                stripped = line.strip()
+                if stripped.startswith("git fetch"):
+                    found.append(stripped)
+unique = list(dict.fromkeys(found))
+if len(found) != 4 or len(unique) != 1:
+    sys.exit(f"expected one identical base-ref fetch in both workflows, got {found}")
+if "--depth" in unique[0]:
+    sys.exit(f"workflow fetch is shallow: {unique[0]}")
+print(unique[0])
+PY
+)
+(
+  cd "$root/new"
+  BASE_REF=main
+  export BASE_REF
+  bash -c "$fetch_line"
+) >/dev/null
 base=$(git -C "$root/new" merge-base origin/main HEAD)
 if [[ "$base" != "$fork" ]]; then
   echo "new fetch merge-base $base != fork $fork" >&2

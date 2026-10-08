@@ -3,7 +3,7 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/gates-full-base-fetch",
   "started_at": "2026-10-08T23:24:00Z",
-  "completed_at": "2026-10-08T23:32:00Z",
+  "completed_at": "2026-10-08T23:43:21Z",
   "approved_by": null,
   "commands": [
     {
@@ -71,6 +71,36 @@
       "exit_code": 0,
       "duration_s": 0.028,
       "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\nimport subprocess, sys\nfiles = [Path('.github/workflows/gates.yml'), Path('ci/.github/workflows/gates.yml')]\noriginal = {p: p.read_text() for p in files}\nold = 'git fetch --no-tags --depth=1 origin \"$BASE_REF\"'\nnew = 'git fetch --no-tags origin \"+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF\"'\ntry:\n    for p, text in original.items():\n        assert text.count(new) == 2\n        p.write_text(text.replace(new, old))\n    r = subprocess.run([sys.executable, '-m', 'pytest', 'ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow', '-q', '--tb=line'], capture_output=True, text=True)\n    print(r.stdout)\n    print(r.stderr)\n    sys.exit(r.returncode)\nfinally:\n    for p, text in original.items():\n        p.write_text(text)\nPY",
+      "exit_code": 1,
+      "duration_s": 0.35,
+      "output_tail": "FAILED ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow::test_workflow_fetches_the_base_ref_at_full_depth[.github/workflows/gates.yml]\nFAILED ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow::test_workflow_fetches_the_base_ref_at_full_depth[ci/.github/workflows/gates.yml]\n2 failed, 1 passed in 0.17s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.203,
+      "output_tail": "3 passed in 0.04s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 10.799,
+      "output_tail": "294 passed in 10.64s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml ci/.github/workflows/gates.yml ci/tests/test_gates.py scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 1,
+      "duration_s": 0.071,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)\n  FOREIGN  ci/tests/test_gates.py  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml ci/tests/test_gates.py scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.088,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
     }
   ],
   "claims": [
@@ -104,17 +134,36 @@
     {
       "claim": "The receipt records no deployment and no destructive operation",
       "evidence_command_index": 10
+    },
+    {
+      "claim": "Restoring --depth=1 in the live workflow and the template fails the test that reads the fetch from each file",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "The base-ref fetch guard passes against the workflows on this branch",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The gate self-test suite passes with the base-ref fetch guard included",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "ci/tests/test_gates.py is foreign to bot-05-infrastructure, along with the gate template",
+      "evidence_command_index": 14,
+      "expects_failure": true
     }
   ],
   "unverified": [
     "The self-hosted GitHub Actions runner has not executed this branch yet. Local git is 2.43.0, the version logged on run 37854476144, but the reproduction uses a temporary local remote rather than that runner's persistent work directory.",
-    "G-1 path ownership fails on ci/.github/workflows/gates.yml. The earlier rule ci/.github/workflows/** assigns it to bot-05-infrastructure, and the later rule ci/.github/** assigns it to bot-06-quality-security, which wins. ownership.yaml belongs to bot-06, so this seat cannot move that rule. The gates job will fail path ownership on the template until QUALITY restores that file to bot-05-infrastructure.",
+    "G-1 path ownership fails on ci/.github/workflows/gates.yml and ci/tests/test_gates.py. The later rules ci/.github/** and ci/tests/** assign both to bot-06-quality-security. ownership.yaml belongs to bot-06, so this seat cannot move those rules. The gates job will fail path ownership on those two paths until QUALITY assigns them to bot-05-infrastructure. Greptile P2 on the reproduction script asked for the ci/tests guard, and gates-template-sync requires the template to change with the live workflow.",
     "approved_by is empty pending Lead or Ming. Greptile has not reviewed this head yet."
   ],
   "files_changed": [
     ".github/workflows/gates.yml",
     "ci/.github/workflows/gates.yml",
     "scripts/dev/repro_shallow_base_fetch.sh",
+    "ci/tests/test_gates.py",
     ".receipts/bot-05-infrastructure/CI1.json"
   ],
   "contract_changes": [],

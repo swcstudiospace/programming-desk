@@ -194,7 +194,7 @@
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json --bot bot-06-quality-security --strict",
       "exit_code": 0,
-      "duration_s": 0.041,
+      "duration_s": 0.029,
       "output_tail": "G-2 PASS \u2014 grokbot-swarm-agents-ut-muzi2o18-f2bb8a88: 25 command(s), 24 substantiated claim(s), 11 unverified item(s)",
       "note": "Re-run on bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18 after approved_by was corrected to human:SomeRandmGuyy. Before 90aea3c this command exited 1: G-2 FAIL \u2014 'approved_by' is missing."
     }
@@ -300,7 +300,7 @@
   ],
   "unverified": [
     "approved_by records Ming's approval (human:SomeRandmGuyy), pushed in 90aea3c (later squashed into 344709a) on PR 71 and confirmed in chat 2026-10-09 AEDT; Lead did not review.",
-    "Greptile on https://github.com/swcstudiospace/programming-desk/pull/71 was not a pass, and the PR merged as 41e9f39 at 2026-10-08T14:17:21Z (01:17 AEDT Oct 9) with findings open. An earlier review scored Confidence 1/5 (Desk Quality gate report, head named as 130c10b; GitHub shows that review's inline comments on a949a0f, 2026-10-08T13:26Z). The latest review, on 42d5ed7 (2026-10-08T13:56:54Z), scored Confidence 2/5. The merged head 344709a was never reviewed. Open at merge, P1: advisory runs require signing keys and all 15 agents demand E-DEP (r4219507451); swarm/<task_id> worker branches fail the gates.yml bot-id check (r4219507472); maintenance agents may merge, .cursor/agents/a14-maintenance.md:85 (r4219843429). P2: the a02 change example reuses top-level task state (r4219507485).",
+    "Greptile on https://github.com/swcstudiospace/programming-desk/pull/71 was not a pass, and the PR merged as 41e9f39 at 2026-10-08T14:17:21Z (01:17 AEDT Oct 9) with findings open. An earlier review scored Confidence 1/5 (Desk Quality gate report, head named as 130c10b; GitHub shows that review's inline comments on a949a0f, 2026-10-08T13:26Z). A later review, on 42d5ed7 (2026-10-08T13:56:54Z), scored Confidence 2/5. Greptile's 4th and last review covered the merged head 344709a: check run 113353737939 (Greptile Review) ran 2026-10-08T14:06:35Z to 14:16:20Z (01:06:35 to 01:16:20 AEDT Oct 9) and finished 61 s before the merge, reporting 20 files reviewed and 0 comments added. The PR summary then read Reviews (4), last reviewed commit 344709a, Confidence 2/5. It added no comments, so GitHub holds no review object for it. Open at merge, P1: advisory runs require signing keys and all 15 agents demand E-DEP (r4219507451); swarm/<task_id> worker branches fail the gates.yml bot-id check (r4219507472); maintenance agents may merge, .cursor/agents/a14-maintenance.md:85 (r4219843429). P2: the a02 change example reuses top-level task state (r4219507485).",
     "No Cursor environment build was triggered, and a fresh cloud agent was not booted from a snapshot to observe that install is skipped and that /etc/profile.d/swarm-root.sh still exports SWARM_ROOT. The install script was executed in this VM only.",
     "No swarm task was run. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY were not set, so a gate verdict from this checkout would be advisory. Substrate wiring was left off.",
     "No memory brief was fetched. The unit forbids calling an outside planning engine, and substrate MCP is not wired.",

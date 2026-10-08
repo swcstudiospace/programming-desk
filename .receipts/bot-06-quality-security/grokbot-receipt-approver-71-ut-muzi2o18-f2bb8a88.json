@@ -3,7 +3,7 @@
   "bot": "bot-06-quality-security",
   "receipt_kind": "docs_change",
   "started_at": "2026-10-08T15:41:00Z",
-  "completed_at": "2026-10-08T15:49:47Z",
+  "completed_at": "2026-10-08T17:43:22Z",
   "repo": "https://github.com/swcstudiospace/programming-desk",
   "branch": "bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18",
   "base": "main",
@@ -19,27 +19,27 @@
     {
       "cmd": "pip install pyyaml pytest",
       "exit_code": 0,
-      "duration_s": 0.955,
+      "duration_s": 0.38,
       "output_tail": "Defaulting to user installation because normal site-packages is not writeable\nRequirement already satisfied: pyyaml in /usr/lib/python3/dist-packages (6.0.1)\nRequirement already satisfied: pytest in /home/ubuntu/.local/lib/python3.12/site-packages (9.1.1)\nRequirement already satisfied: iniconfig>=1.0.1 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest) (2.3.1)\nRequirement already satisfied: packaging>=22 in /usr/lib/python3/dist-packages (from pytest) (24.0)\nRequirement already satisfied: pluggy<2,>=1.5 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest) (1.6.0)\nRequirement already satisfied: pygments>=2.7.2 in /home/ubuntu/.local/lib/python3.12/site-packages (from pytest) (2.21.0)"
     },
     {
       "cmd": "python3 -m json.tool .receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json > /dev/null",
       "exit_code": 0,
-      "duration_s": 0.024,
+      "duration_s": 0.025,
       "output_tail": "",
       "note": "stdout and stderr were empty."
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
       "exit_code": 0,
-      "duration_s": 0.064,
+      "duration_s": 0.05,
       "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
       "exit_code": 0,
       "duration_s": 0.057,
-      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 1 file(s) within owned paths",
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths",
       "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
     },
     {
@@ -51,14 +51,14 @@
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.034,
-      "output_tail": "G-3 PASS \u2014 1 file(s) scanned, no secrets detected",
+      "duration_s": 0.041,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected",
       "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.05,
+      "duration_s": 0.051,
       "output_tail": "G-4 PASS \u2014 no contract surfaces touched",
       "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
     },
@@ -77,8 +77,8 @@
     {
       "cmd": "python3 -m pytest ci/tests/ -v",
       "exit_code": 0,
-      "duration_s": 9.236,
-      "output_tail": "============================= 230 passed in 9.01s =============================="
+      "duration_s": 9.055,
+      "output_tail": "============================= 230 passed in 8.90s =============================="
     },
     {
       "cmd": "rg -n \"bot-00-programming-lead|Greptile review completed\" .receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
@@ -91,7 +91,7 @@
       "cmd": "git diff --name-only origin/main...HEAD",
       "exit_code": 0,
       "duration_s": 0.002,
-      "output_tail": ".receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
+      "output_tail": ".receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json\n.receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
       "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records both scope files."
     },
     {
@@ -103,21 +103,21 @@
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json --bot bot-06-quality-security --strict",
       "exit_code": 1,
-      "duration_s": 0.029,
+      "duration_s": 0.028,
       "output_tail": "G-2 FAIL \u2014 .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md",
       "note": "The only problem printed. approved_by stays absent until an independent reviewer stamps it. Re-run after commands 14 to 17 were appended printed the same failure."
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.058,
+      "duration_s": 0.057,
       "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths",
       "note": "Re-run after both scope files were committed."
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.038,
+      "duration_s": 0.041,
       "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected",
       "note": "Re-run after both scope files were committed."
     },
@@ -195,11 +195,12 @@
   "unverified": [
     "desk_brief substrate.error=not_configured and recall.error=not_configured; reason was 'substrate is not configured on the gateway; record this under unverified'. generated_at 1791474099.1856563 is brief_read_at. The response had no cached key and no etag. No human granted a loop_ack for this turn. desk_brief reported seat LEAD. desk_ownership_resolve on that endpoint returned owner bot-06-quality-security and mine=false for both scope paths (ref e0ad62ad61567fe339c33cf50007e1382afb3ded). The desk-quality namespace failed live tool discovery and listed no tools.",
     "approved_by is absent. QUALITY authored this correction and does not self-approve. Ming or LEAD stamps it later.",
-    "Greptile has not run on this pull request. That is a blocker to a merge claim, not a pass.",
+    "Greptile reviewed da5a2ad at Confidence 5/5 with 0 comments. The FX1 commit needs its own review; a review covers only the commit it ran on.",
     "Spec base 41e9f39c5efe168f1217e3b5b8f22ca8fffc162b is behind origin/main at daa45a98cbcd19eb07b93e7ec760eff4b5276d1e. The #71 receipt blob is identical on those two commits. This receipt's base_sha is daa45a98cbcd19eb07b93e7ec760eff4b5276d1e.",
     "The appended stale-history line says command notes 17 to 24 describe merging c110ca1. Edit 6 then replaced note 24, so notes 17 to 23 still carry that sentence and note 24 does not. The mandated sentence was left unchanged.",
     "pip install pyyaml pytest used the user site because system site-packages is not writable. python3 -m pytest still reported 230 passed in 9.01s.",
-    "desk_receipt_check on the LEAD endpoint returned error not_found: .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json is not on origin/bot-06-quality-security/desk-v2-assembled-prompts. It did not evaluate this branch. Local check_receipt.py --strict is the G-2 evidence."
+    "desk_receipt_check on the LEAD endpoint returned error not_found: .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json is not on origin/bot-06-quality-security/desk-v2-assembled-prompts. It did not evaluate this branch. Local check_receipt.py --strict is the G-2 evidence.",
+    "FX1: the #71 receipt's unverified[1] said the merged head 344709a was never reviewed. That was false. Greptile check run 113353737939 reviewed 344709a (2026-10-08T14:06:35Z to 14:16:20Z, 0 comments added, still 2/5). The sentence was corrected; the F1b spec had supplied the wrong fact."
   ],
   "contract_changes": [],
   "rollback_plan": null,

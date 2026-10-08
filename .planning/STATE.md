@@ -1,21 +1,21 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.0
-milestone_name: Desk v2
-status: Awaiting next milestone
-stopped_at: All 7 milestone phases complete. Delivered plans, UAT, summaries, and receipts across Phase 1 through Phase 7. Gates G-1 through G-7 pass 100% cleanly.
-last_updated: "2026-10-08T15:24:41.098Z"
+milestone: v2.1
+milestone_name: Live Drills & Intake Hardening
+status: Planning Phase 8
+stopped_at: Initialized Milestone v2.1 requirements and roadmap for Phase 8 and Phase 9.
+last_updated: "2026-10-08T15:45:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Milestone v2.0 completed and archived
-state_head: 5a3081b3c6fe48add568391b633bc6b8944f15f5
+last_activity_desc: Milestone v2.1 initialized (Phase 8 & 9)
+state_head: daa45a99ef87b00ec5e5dc8d542387114e912443
 progress:
-  total_phases: 7
+  total_phases: 9
   completed_phases: 7
   total_plans: 41
   completed_plans: 41
-  percent: 100
-current_phase: 7
-current_phase_name: Ordered rollout and rollback
+  percent: 85
+current_phase: 8
+current_phase_name: Gateway Resiliency & Subagent Execution Drills
 ---
 
 # Project State

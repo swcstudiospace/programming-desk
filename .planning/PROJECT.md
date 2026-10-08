@@ -26,7 +26,8 @@ All 217 requirements shipped and verified in Milestone v2.0.
 
 ### Active
 
-None (v2.0 milestone complete). Fresh requirements to be defined in next milestone.
+- [ ] Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010.
+- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010.
 
 ### Out of Scope
 

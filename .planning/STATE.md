@@ -1,21 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.1
-milestone_name: Live Drills & Intake Hardening
-status: Milestone v2.1 Complete
-stopped_at: Completed Phase 9 Plan 04 (OTel trace propagation, secrets redaction & telemetry anchoring).
-last_updated: "2026-10-08T19:00:00.000Z"
+milestone: v2.2
+milestone_name: Multi-Desk Federation & Staging Deployments
+status: Planning Phase 10
+stopped_at: Initialized Milestone v2.2 requirements and roadmap for Phase 10 and Phase 11.
+last_updated: "2026-10-08T19:30:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Plan 09-04 executed and merged (PR #97); Milestone v2.1 completed
-state_head: 6be819c6292b3c20ba523274640194c739d2ca1e
+last_activity_desc: Milestone v2.2 initialized (Phase 10 & 11)
 progress:
-  total_phases: 9
+  total_phases: 11
   completed_phases: 9
-  total_plans: 49
-  completed_plans: 49
-  percent: 100
-current_phase: 9
-current_phase_name: External Intake Hardening & Telemetry Anchoring
+  total_plans: 45
+  completed_plans: 41
+  percent: 91
+current_phase: 10
+current_phase_name: Multi-Desk Federation & Inter-Seat Routing
 ---
 
 # Project State
@@ -25,47 +24,25 @@ current_phase_name: External Intake Hardening & Telemetry Anchoring
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.1 Complete
-**Milestone:** v2.1 — Live Drills & Intake Hardening (Shipped)
+**Current focus:** Phase 10 — Multi-Desk Federation & Inter-Seat Routing
+**Milestone:** v2.2 — Multi-Desk Federation & Staging Deployments
 
 ## Current Position
 
-Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring (Complete)
-Plan: 09-04 completed
-Status: Milestone v2.1 complete. All plans across Phase 8 and Phase 9 verified and merged.
-Last activity: 2026-10-08 — Plan 09-04 completed and merged via PR #97.
+Phase: Phase 10 — Multi-Desk Federation & Inter-Seat Routing
+Plan: 10-01 planning
+Status: Initializing Phase 10
+Last activity: 2026-10-08 — Milestone v2.2 initialized with 10 requirements across Phases 10 and 11.
 
 ## Accumulated Context
 
 ### Decisions
 
-Full decisions: PROJECT.md Key Decisions and INGEST-CONFLICTS.md.
-
-- User selected Initialize from Desk v2 plan, then Weekly reflect, Mac mini and XPS, and Authorized human operator, then Create planning setup.
-- D-1/D-2/D-3 remain locked; D-4 remains original-authoring-session scoped.
-- Independent approval must resolve against exact current reviewed SHA without a new tip. No approvals, acknowledgements or signatures are manufactured.
-- Full seven-phase scope and all 41 source steps are completed and verified on `main`.
+- Milestone v2.0 (Desk v2, 7 phases, 217 requirements) and Milestone v2.1 (Live Drills & Intake Hardening, 2 phases, 20 requirements) 100% completed and archived.
+- Total validated requirements in repository: 237/237.
+- Milestone v2.2 scopes Multi-Desk Federation & Inter-Seat Routing (Phase 10) and Automated Staging & VPS Environment Promotion (Phase 11).
 
 ### Pending Todos
 
-None; all 41 source steps and 217 requirements across Phases 1–7 are completed and verified.
-
-### Blockers/Concerns
-
-None for repository code/planning in `programming-desk`. Live external infrastructure actions (Railway template deploy, Tailscale console ACL save, companion `agent-substrate` code) are tracked for companion repository execution and human operator action.
-
-## Session Continuity
-
-Last session: 2026-10-08
-Stopped at: Milestone v2.1 complete. PR #97 and PR #98 merged to main. All 427 tests and quality gates pass.
-Resume file: None
-Evidence: [implementation map](intel/implementation-map.md), [Phase 1 inventory](phases/01-inventory-and-prove-assumptions/01-INVENTORY.md), [machine inventory](phases/01-inventory-and-prove-assumptions/01-INVENTORY.json).
-
-## Operator Next Steps
-
-- Start the next milestone with /gsd-new-milestone
-
-
-[You have received this identical output 3 times. Re-reading '.planning/STATE.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
-
-[You have received this identical output 3 times. Re-reading '.planning/STATE.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
+- Author Phase 10 Plan 01 (Federated peering & JWT token validation).
+- Land pending seat verify skills and harnesses from specialist draft PRs.

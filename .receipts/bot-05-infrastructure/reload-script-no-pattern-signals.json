@@ -4,7 +4,7 @@
   "branch": "bot-05-infrastructure/reload-script-no-pattern-signals",
   "graph_id": "ut-mv00tcgl-d8215d3e",
   "started_at": "2026-10-08T21:20:00Z",
-  "completed_at": "2026-10-08T22:50:35Z",
+  "completed_at": "2026-10-08T23:00:18Z",
   "commands": [
     {
       "cmd": "git worktree add --detach /tmp/r1-479d627 479d627 && cp infra/tests/test_staging_deployment.py infra/tests/conftest.py /tmp/r1-479d627/infra/tests/ && python3 -m pytest -q /tmp/r1-479d627/infra/tests/test_staging_deployment.py::test_reload_does_not_signal_decoy_desk_gateway --tb=short",
@@ -15,8 +15,8 @@
     {
       "cmd": "python3 -m pytest -q infra/tests/test_staging_deployment.py --tb=short",
       "exit_code": 0,
-      "duration_s": 0.4,
-      "output_tail": "33 passed in 0.40s"
+      "duration_s": 0.38,
+      "output_tail": "33 passed in 0.38s"
     },
     {
       "cmd": "python3 -m pytest -q infra/tests --tb=line",
@@ -68,7 +68,7 @@
       "expects_failure": true
     },
     {
-      "claim": "Stubbed deploy and reload tests pass: the decoy is not signalled, a pathlib.Path argv naming the host binary is rejected, and a PID-file reload with no external kill does not fail with command not found",
+      "claim": "Stubbed deploy and reload tests pass: the decoy is not signalled, and a PID-file reload with no external kill delivers SIGHUP to a child the test owns",
       "evidence_command_index": 1
     },
     {
@@ -96,7 +96,7 @@
     "approved_by is absent until bot-00-programming-lead or a human stamps this receipt; local check_receipt.py --strict fails only on that missing field",
     "desk_receipt_check did not read this file: it reported the path is not on origin/bot-06-quality-security/desk-v2-assembled-prompts",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite exits with FileNotFoundError because the uv binary is not installed on this VM; that test was not changed",
-    "Greptile review of commit 2178145 scored 2/5 and left comments 4224916105, 4224916109, and 4224916116. Commit 122aaaa addresses those three. The follow-up review is not terminal yet; a FAILED, SKIPPED, or unavailable review blocks a merge claim",
+    "Greptile review of commit bf51f40 scored 4/5 and left comment 4224985489. Commit a0e114d points that test at a child the test owns. The follow-up review is not terminal yet; a FAILED, SKIPPED, or unavailable review blocks a merge claim",
     "The reload and deploy scripts were not executed on the shared VPS, and no unit was restarted there",
     "Moving production desk-gateway off the shared checkout onto the deploy-staging.sh release directory waits for Ming's separate approval",
     "Swarm session is advisory: SWARM_ED25519_KEY is unset, so orch_plan does not record an approval"

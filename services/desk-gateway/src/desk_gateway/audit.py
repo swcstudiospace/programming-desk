@@ -11,6 +11,7 @@ from typing import Any
 
 from desk_gateway.redact import redact_value
 from desk_gateway.store import Store
+from desk_gateway.telemetry import get_current_trace_context
 from desk_gateway.upstreams import Substrate
 
 logger = logging.getLogger("desk_gateway.audit")
@@ -58,6 +59,9 @@ class Audit:
             "actor": "agent",
             "ts_gateway": time.time(),
         }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
         self.store.audit_append(event)
         return event
 

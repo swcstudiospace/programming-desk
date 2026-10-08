@@ -1864,3 +1864,94 @@ async def test_intake_dlq_retries_and_terminal_failure(tmp_path):
             assert item_now["retry_count"] == 0
 
 
+async def test_trace_context_propagation_and_redaction(client, app, monkeypatch):
+    """REQ-INTAKE-006: OTel trace context propagation, and REQ-INTAKE-009: secrets redaction filter."""
+    import io
+    import logging
+    from desk_gateway.telemetry import RedactionFilter, StructuredJsonFormatter, parse_traceparent
+
+    # Test traceparent parser
+    tp_valid = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    parsed = parse_traceparent(tp_valid)
+    assert parsed == ("4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7", "01")
+    assert parse_traceparent("invalid") is None
+    assert parse_traceparent("ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01") is None
+
+    # Test StructuredJsonFormatter and RedactionFilter with credentials
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(StructuredJsonFormatter())
+    handler.addFilter(RedactionFilter())
+    test_logger = logging.getLogger("test.telemetry")
+    test_logger.handlers = [handler]
+    test_logger.setLevel(logging.INFO)
+
+    secret_key = "ghp_abcdefghijklmnopqrstuvwxyz012345"  # pragma: allowlist secret (redaction test fixture)
+    test_logger.info("Connecting with secret %s", secret_key)
+    log_text = stream.getvalue()
+    assert secret_key not in log_text
+    assert "<redacted>" in log_text
+    parsed_log = json.loads(log_text.strip())
+    assert parsed_log["level"] == "INFO"
+    assert "<redacted>" in parsed_log["message"]
+
+    # Test W3C traceparent context injected via HTTP request headers into intake audit events
+    store = app.state["store"]
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    span_id = "00f067aa0ba902b7"
+    tp_header = f"00-{trace_id}-{span_id}-01"
+    res = await client.post(
+        "/v1/intake",
+        headers={
+            "Authorization": f"Bearer {INTAKE_TOKEN}",
+            "traceparent": tp_header,
+            "tracestate": "congo=t61rcWkgMzE",
+        },
+        json={"title": "Trace test task", "ask": "Inspect trace propagation through gateway pipeline."},
+    )
+    assert res.status_code == 202
+    intake_id = res.json()["intake_id"]
+
+    # Verify audit event captured the trace context
+    audit_file = app.state["services"].store.dir / "audit.jsonl"
+    lines = [json.loads(line) for line in audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    intake_events = [ev for ev in lines if ev.get("payload", {}).get("intake_id") == intake_id]
+    assert len(intake_events) >= 1
+    assert "trace" in intake_events[0]
+    assert intake_events[0]["trace"]["trace_id"] == trace_id
+    assert intake_events[0]["trace"]["span_id"] == span_id
+    assert intake_events[0]["trace"]["tracestate"] == "congo=t61rcWkgMzE"
+
+
+async def test_telemetry_anchoring_prometheus_metrics_export(client):
+    """REQ-INTAKE-010: End-to-end telemetry anchoring test validating metrics export compatibility."""
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+
+    content = resp.text
+    # Validate standard Prometheus exposition format requirements
+    required_metrics = [
+        "desk_gateway_up",
+        "desk_gateway_active_viewers",
+        "desk_gateway_intake_queue_total",
+        "desk_gateway_registered_seats_total",
+        "desk_gateway_seat_tools_total",
+    ]
+    for metric in required_metrics:
+        assert f"# HELP {metric}" in content
+        assert f"# TYPE {metric}" in content
+        assert metric in content
+
+    # Validate metric line formatting
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        assert len(parts) == 2, f"Invalid metric exposition line: {line}"
+        val = float(parts[1])
+        assert val >= 0.0
+
+
+

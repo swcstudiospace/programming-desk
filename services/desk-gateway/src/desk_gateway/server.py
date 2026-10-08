@@ -48,9 +48,18 @@ from desk_gateway.redact import contains_secret, redact_value
 from desk_gateway.rosters import RosterError, Rosters, ToolSpec
 from desk_gateway.schema import SchemaError, validate
 from desk_gateway.store import Store
+from desk_gateway.telemetry import (
+    RedactionFilter,
+    get_current_trace_context,
+    parse_traceparent,
+    span_id_var,
+    trace_id_var,
+    tracestate_var,
+)
 from desk_gateway.tools import Services, ToolContext, resolve
 
 logger = logging.getLogger("desk_gateway")
+logger.addFilter(RedactionFilter())
 
 PAGE_HEADERS = {
     "Cache-Control": "no-store",
@@ -316,6 +325,25 @@ class ConnectorKeyHeader:
             if connector_key and not has_auth:
                 scope = dict(scope)
                 scope["headers"] = [*headers, (b"authorization", b"Bearer " + connector_key)]
+
+            # W3C traceparent and tracestate extraction (REQ-INTAKE-006)
+            header_map = {k.lower(): v for k, v in headers}
+            tp_raw = header_map.get(b"traceparent")
+            ts_raw = header_map.get(b"tracestate")
+            traceparent_str = tp_raw.decode("utf-8", errors="ignore").strip() if tp_raw else None
+            tracestate_str = ts_raw.decode("utf-8", errors="ignore").strip() if ts_raw else ""
+
+            parsed_tp = parse_traceparent(traceparent_str)
+            t_token = trace_id_var.set(parsed_tp[0] if parsed_tp else "")
+            s_token = span_id_var.set(parsed_tp[1] if parsed_tp else "")
+            st_token = tracestate_var.set(tracestate_str)
+            try:
+                await self.app(scope, receive, send)
+            finally:
+                trace_id_var.reset(t_token)
+                span_id_var.reset(s_token)
+                tracestate_var.reset(st_token)
+            return
         await self.app(scope, receive, send)
 
 
@@ -646,6 +674,9 @@ def create_mcp(
         record = store.intake_create(item)
         _live(services.live.request_received, record["intake_id"], item["title"])
         event = {"kind": "handoff", "summary": f"intake from {origin}: {item['title'][:80]}", "payload": {"intake_id": record["intake_id"], "origin": origin, "priority": item.get("priority")}, "actor": "human" if origin in {"github", "slack", "shortcut"} else "agent"}
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
         store.audit_append({**event, "ts_gateway": time.time()})
         services.audit.fire_and_forget(event)
         resp_data = {"ok": True, "intake_id": record["intake_id"], "state": record["state"], "queue": store.intake_counts()}
@@ -721,6 +752,9 @@ def create_mcp(
                 "actor": "system",
                 "ts_gateway": time.time(),
             }
+            trace_ctx = get_current_trace_context()
+            if trace_ctx:
+                terminal_event["trace"] = trace_ctx
             store.audit_append(terminal_event)
             services.audit.fire_and_forget(terminal_event)
             logger.error("Intake %s dead-lettered after %s retries: %s", intake_id, record.get("retry_count"), reason)
@@ -770,6 +804,9 @@ def create_mcp(
             "actor": seat or origin or "operator",
             "ts_gateway": time.time(),
         }
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            replay_event["trace"] = trace_ctx
         store.audit_append(replay_event)
         services.audit.fire_and_forget(replay_event)
         return JSONResponse({"ok": True, "intake_id": intake_id, "state": replayed["state"]}, status_code=200)
@@ -839,7 +876,15 @@ def _load_env_file(path: Path) -> None:
 
 
 def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s", stream=sys.stderr)
+    from desk_gateway.telemetry import RedactionFilter, StructuredJsonFormatter
+
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(StructuredJsonFormatter())
+    handler.addFilter(RedactionFilter())
+    root_log = logging.getLogger()
+    root_log.setLevel(logging.INFO)
+    root_log.handlers = [handler]
+
     _load_env_file(Path(os.environ.get("GATEWAY_ENV_FILE", "/etc/desk-gateway/gateway.env")))
     app, settings = build_app()
     missing = [s for s in SEATS if s not in settings.seat_passphrases]

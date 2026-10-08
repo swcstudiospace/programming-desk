@@ -1,0 +1,123 @@
+{
+  "task_id": "CI1",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/gates-full-base-fetch",
+  "started_at": "2026-10-08T23:24:00Z",
+  "completed_at": "2026-10-08T23:32:00Z",
+  "approved_by": null,
+  "commands": [
+    {
+      "cmd": "bash scripts/dev/repro_shallow_base_fetch.sh --old-only",
+      "exit_code": 1,
+      "duration_s": 0.158,
+      "output_tail": "OLD fetch: origin/main...HEAD has no merge base (diff exit 128)\nfatal: origin/main...HEAD: no merge base"
+    },
+    {
+      "cmd": "bash scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.183,
+      "output_tail": "OLD fetch: origin/main...HEAD has no merge base (diff exit 128)\nfatal: origin/main...HEAD: no merge base\nNEW fetch: merge-base is the fork b6bbc97b5212f9ca32ed6b1400b0eb6829ecd493"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\ndef body(p):\n    lines = Path(p).read_text().splitlines(keepends=True)\n    i = 0\n    while i < len(lines) and (lines[i].lstrip().startswith(\"#\") or not lines[i].strip()):\n        i += 1\n    return \"\".join(lines[i:])\nlive = body(\".github/workflows/gates.yml\")\ntmpl = body(\"ci/.github/workflows/gates.yml\")\nassert live == tmpl, \"bodies differ\"\nassert \"--depth=1\" not in live\nneedle = 'git fetch --no-tags origin \"+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF\"'\nn = live.count(needle)\nassert n == 2, n\nprint(f\"Gate definitions match — {len(live.splitlines())} lines shared. full fetches: {n}\")\nPY",
+      "exit_code": 0,
+      "duration_s": 0.021,
+      "output_tail": "Gate definitions match — 206 lines shared. full fetches: 2"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 10.38,
+      "output_tail": "291 passed in 10.05s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.056,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 1,
+      "duration_s": 0.061,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.053,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.153,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/CI1.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "duration_s": 0.03,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/CI1.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/CI1.json",
+      "exit_code": 0,
+      "duration_s": 0.028,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "A depth-1 fetch of main after it moves past the fork point leaves origin/main...HEAD with no merge base",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "Fetching the base ref with an explicit refspec and no --depth keeps the fork commit as the merge base",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The live gates workflow and the distributable template share one body, with two full base-ref fetches and no --depth=1",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The gate self-test suite passes",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ci/.github/workflows/gates.yml is foreign to bot-05-infrastructure under the current ownership manifest",
+      "evidence_command_index": 5,
+      "expects_failure": true
+    },
+    {
+      "claim": "Strict G-2 fails because approved_by is empty",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "The receipt records no deployment and no destructive operation",
+      "evidence_command_index": 10
+    }
+  ],
+  "unverified": [
+    "The self-hosted GitHub Actions runner has not executed this branch yet. Local git is 2.43.0, the version logged on run 37854476144, but the reproduction uses a temporary local remote rather than that runner's persistent work directory.",
+    "G-1 path ownership fails on ci/.github/workflows/gates.yml. The earlier rule ci/.github/workflows/** assigns it to bot-05-infrastructure, and the later rule ci/.github/** assigns it to bot-06-quality-security, which wins. ownership.yaml belongs to bot-06, so this seat cannot move that rule. The gates job will fail path ownership on the template until QUALITY restores that file to bot-05-infrastructure.",
+    "approved_by is empty pending Lead or Ming. Greptile has not reviewed this head yet."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    "ci/.github/workflows/gates.yml",
+    "scripts/dev/repro_shallow_base_fetch.sh",
+    ".receipts/bot-05-infrastructure/CI1.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

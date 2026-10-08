@@ -28,7 +28,7 @@
 **Requirements**: REQ-ALERT-001 through REQ-ALERT-005
 **Plans**:
 - [x] 13-01-PLAN.md — Prometheus SLO metrics export, alert threshold dispatcher & on-call webhook notification (REQ-ALERT-001, REQ-ALERT-002, REQ-ALERT-003)
-- [ ] 13-02-PLAN.md — Solana devnet anchor verification & synthetic telemetry stress test suite (REQ-ALERT-004, REQ-ALERT-005)
+- [x] 13-02-PLAN.md — Solana devnet anchor verification & synthetic telemetry stress test suite (REQ-ALERT-004, REQ-ALERT-005)
 
 ### Completed Milestones
 

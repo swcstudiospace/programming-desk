@@ -1,0 +1,48 @@
+{
+  "contract": "1.0.0",
+  "flavor": "core",
+  "milestone": "v2.0 — Desk v2",
+  "phases": [
+    {
+      "number": "1",
+      "name": "Inventory and prove assumptions",
+      "status": "pending"
+    },
+    {
+      "number": "2",
+      "name": "Network plane",
+      "status": "pending"
+    },
+    {
+      "number": "3",
+      "name": "Substrate data planes",
+      "status": "pending"
+    },
+    {
+      "number": "4",
+      "name": "Desk Gateway and contracts",
+      "status": "pending"
+    },
+    {
+      "number": "5",
+      "name": "Prompts, skills, templates, plugin",
+      "status": "pending"
+    },
+    {
+      "number": "6",
+      "name": "Fresh-desk acceptance and external intake",
+      "status": "pending"
+    },
+    {
+      "number": "7",
+      "name": "Ordered rollout and rollback",
+      "status": "pending"
+    }
+  ],
+  "next": {
+    "command": "/gsd:progress --next",
+    "label": "Advance to the next step",
+    "reason": "Phase 1 of 7 · executing"
+  },
+  "updated_at": "2026-10-08T04:16:55.262Z"
+}

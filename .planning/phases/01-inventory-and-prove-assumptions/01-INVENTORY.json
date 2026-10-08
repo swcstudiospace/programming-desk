@@ -1,0 +1,837 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-10-08",
+  "phase": "01-inventory-and-prove-assumptions",
+  "status": "incomplete_unverified",
+  "baseline_commit": "4f8e495e4eba1a799056adf3d4385522c59df359",
+  "evidence_policy": {
+    "runtime_observer": "parent",
+    "worker_execution": "read-only source/evidence reads and three assigned artifact writes only",
+    "not_claimed": [
+      "phase completion",
+      "deployed acceptance",
+      "independent approval",
+      "doctor acceptance",
+      "template publication"
+    ],
+    "limitations": [
+      "Companion source revision not recorded; references are repository-relative within swcstudiospace/agent-substrate.",
+      "Individual probe timestamps were not captured. The parent's actual mapped-service SSH commands are retained in parent_command_supplement.",
+      "Offline grok-bot-box and absent mounted Bot tools do not prove separate SaaS client capabilities.",
+      "Configured port, observed container listener, public health, tailnet traversal and authenticated client acceptance are distinct."
+    ]
+  },
+  "durable_references": {
+    "inventory_markdown": "01-INVENTORY.md",
+    "implementation_map": "../../intel/implementation-map.md",
+    "proposal": "../../../docs/upgrade-plan-desk-v2.md",
+    "governance": "../../../docs/desk-operating-model.md",
+    "ownership": "../../../ownership.yaml",
+    "decisions": "../../INGEST-CONFLICTS.md"
+  },
+  "parent_command_supplement": [
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project 67a98752-ba0a-4ae2-a881-8d0e33a89328 --environment 6cfcb6de-3175-418b-8e20-7817a3d31633 --service fcb79134-ca20-4816-8c10-ffaf18da5d7f -- printenv TAILSCALE_HOSTNAME","exit_code":0,"result_excerpt":"railway-app"},
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project 67a98752-ba0a-4ae2-a881-8d0e33a89328 --environment 6cfcb6de-3175-418b-8e20-7817a3d31633 --service 32ee49a2-61bb-4572-acc8-1aa5956b6c7f -- cat /proc/net/tcp /proc/net/tcp6","exit_code":0,"result_excerpt":"00000000:18EB state 0A; no tcp6 listeners"},
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project a3453be1-819a-4ac3-a787-c6cfa5550f18 --environment c50e0706-deb0-43ad-aaa0-53a92da3b396 --service 8ddda0d9-44d4-4e7a-8eec-6dbf91bb8d9e -- cat /proc/net/tcp /proc/net/tcp6","exit_code":0,"result_excerpt":"00000000:24A4, 00000000:24A6, 00000000:0050 state 0A; tcp6 entries were established outbound connections"},
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project 67a98752-ba0a-4ae2-a881-8d0e33a89328 --environment 6cfcb6de-3175-418b-8e20-7817a3d31633 --service b53b4c7d-df3c-4cd8-a15d-e5fb1a79e254 -- cat /proc/net/tcp /proc/net/tcp6","exit_code":0,"result_excerpt":"00000000:0FA0, 00000000:0FA1, 00000000:0FA2, 00000000:0FA3 state 0A"},
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project 67a98752-ba0a-4ae2-a881-8d0e33a89328 --environment 6cfcb6de-3175-418b-8e20-7817a3d31633 --service 1bd7a6fd-b7b2-4fe4-8b4f-0d76ead81d79 -- cat /proc/net/tcp /proc/net/tcp6","exit_code":0,"result_excerpt":"00000000:1538 and all-zero tcp6 local address:1538 state 0A"},
+    {"cmd":"RAILWAY_CALLER=skill:use-railway@1.6.1 RAILWAY_AGENT_SESSION=desk-v2-autonomous-20261008 railway ssh --project a3453be1-819a-4ac3-a787-c6cfa5550f18 --environment c50e0706-deb0-43ad-aaa0-53a92da3b396 --service 0436123d-6fff-4bd8-a9a5-bd38db9ffff1 -- cat /proc/net/tcp /proc/net/tcp6","exit_code":0,"result_excerpt":"00000000:22B8 state 0A"}
+  ],
+  "phase1_followup_evidence": {
+    "recorded_at": "2026-10-08T03:43:09.111Z",
+    "purpose": "Phase-1 bounded discovery follow-up; no phase acceptance, deployment, independent approval, or account-policy verdict",
+    "remote_ci": {
+      "observer": "InspectDeskRemoteCI delegated read-only metadata investigation",
+      "report": {
+        "result": "Actual GitHub metadata acquired read-only through authenticated gh API. Quality Gates is registered and active, repository Actions is enabled, and an applicable exact-SHA pull_request/main run exists—but its conclusion is failure, not current-green. No local checks or remote execution/mutations were performed.",
+        "observation_timestamp_utc": "2026-10-08T03:12:24Z",
+        "source_declarations": {
+          "file": ".github/workflows/gates.yml",
+          "read_lines": "1–228",
+          "facts": [
+            {
+              "lines": "23–29",
+              "declaration": "Workflow name Quality Gates; pull_request targeting main and push on main only."
+            },
+            {
+              "lines": "35–40",
+              "declaration": "gates job requires github.event_name == 'pull_request'; runs-on [self-hosted, Linux, X64]. Feature-branch pushes do not establish this gates run."
+            },
+            {
+              "lines": "46–60",
+              "declaration": "gates job fetches BASE_REF from github.base_ref || 'main' and overlays ci/gates/ from origin/$BASE_REF before gate execution."
+            },
+            {
+              "lines": "203–220",
+              "declaration": "gate-self-test uses the same self-hosted Linux/X64 labels; trusted-base ci/gates overlay is conditional on pull_request."
+            },
+            {
+              "lines": "13–17",
+              "declaration": "Comment asserts hosted-minute spending-limit problems. This is source commentary, not independently observed billing evidence."
+            },
+            {
+              "lines": "1–8",
+              "declaration": "Comment asserts required checks block merges. Branch-protection/ruleset enforcement was not acquired and is not established by that comment."
+            }
+          ]
+        },
+        "live_findings": {
+          "repository": {
+            "id": 1376007330,
+            "full_name": "swcstudiospace/programming-desk",
+            "url": "https://github.com/swcstudiospace/programming-desk",
+            "default_branch": "main",
+            "visibility": "public",
+            "private": false,
+            "archived": false,
+            "disabled": false,
+            "permissions": {
+              "admin": true,
+              "maintain": true,
+              "pull": true,
+              "push": true,
+              "triage": true
+            },
+            "permission_caveat": "These are API-reported access flags, not owner authorization or permission to mutate."
+          },
+          "branch": {
+            "local_and_remote_branch": "bot-00-programming-lead/desk-swarm-subagents",
+            "local_and_remote_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+            "remote_protected": false
+          },
+          "workflow": {
+            "id": 370453712,
+            "name": "Quality Gates",
+            "path": ".github/workflows/gates.yml",
+            "state": "active",
+            "url": "https://github.com/swcstudiospace/programming-desk/blob/main/.github/workflows/gates.yml",
+            "created_at": "2026-09-29T18:48:03.000Z",
+            "updated_at": "2026-09-30T03:12:30.000Z"
+          },
+          "actions_permissions": {
+            "enabled": true,
+            "allowed_actions": "all",
+            "selected_actions_url": null
+          },
+          "pull_request": {
+            "number": 65,
+            "state": "open",
+            "url": "https://github.com/swcstudiospace/programming-desk/pull/65",
+            "head_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+            "head_ref": "bot-00-programming-lead/desk-swarm-subagents",
+            "base_ref": "main",
+            "base_sha": "725ff0607342e6db4e7a94a436f6b54330ff5581",
+            "merged_at": null,
+            "merge_commit_sha": "3a5b7c1c2d6f9137fae5f9a6ca67f420f42af95c"
+          },
+          "applicable_quality_run": {
+            "id": 37697523618,
+            "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618",
+            "workflow_id": 370453712,
+            "event": "pull_request",
+            "head_branch": "bot-00-programming-lead/desk-swarm-subagents",
+            "head_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+            "pr_number": 65,
+            "base_ref": "main",
+            "status": "completed",
+            "conclusion": "failure",
+            "run_attempt": 1,
+            "created_at": "2026-10-07T22:39:05Z",
+            "updated_at": "2026-10-07T22:43:27Z",
+            "matching_query_total_count": 1
+          },
+          "other_branch_runs": {
+            "total_count": 3,
+            "all_returned": "All three returned runs are pull_request, PR 65 targeting main, at the same exact SHA; there are no additional pages implied by total_count.",
+            "runs": [
+              {
+                "id": 37697523539,
+                "name": "Gates template sync",
+                "path": ".github/workflows/gates-template-sync.yml",
+                "conclusion": "success",
+                "status": "completed",
+                "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523539"
+              },
+              {
+                "id": 37697523618,
+                "name": "Quality Gates",
+                "path": ".github/workflows/gates.yml",
+                "conclusion": "failure",
+                "status": "completed",
+                "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618"
+              },
+              {
+                "id": 37697523611,
+                "name": "Security PR Gate",
+                "path": ".github/workflows/security-pr.yml",
+                "conclusion": "success",
+                "status": "completed",
+                "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523611"
+              }
+            ]
+          },
+          "quality_jobs": [
+            {
+              "id": 113052811257,
+              "name": "gate-self-test",
+              "conclusion": "success",
+              "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618/job/113052811257",
+              "runner_id": 456,
+              "runner_name": "srv1778002",
+              "runner_group_id": 1,
+              "runner_group_name": "default",
+              "labels": [
+                "self-hosted",
+                "Linux",
+                "X64"
+              ],
+              "started_at": "2026-10-07T22:39:23Z",
+              "completed_at": "2026-10-07T22:39:51Z",
+              "trusted_base_overlay_step": "success",
+              "gate_test_suite_step": "success"
+            },
+            {
+              "id": 113052811492,
+              "name": "gates",
+              "conclusion": "failure",
+              "url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618/job/113052811492",
+              "runner_id": 456,
+              "runner_name": "srv1778002",
+              "runner_group_id": 1,
+              "runner_group_name": "default",
+              "labels": [
+                "self-hosted",
+                "Linux",
+                "X64"
+              ],
+              "started_at": "2026-10-07T22:43:06Z",
+              "completed_at": "2026-10-07T22:43:26Z",
+              "trusted_base_overlay_step": "success",
+              "G-1_manifest_and_path_ownership": "success",
+              "locate_receipt": "success",
+              "G-2_verification_receipt": "failure",
+              "G-3_G-4_G-5_G-6_G-7": "skipped",
+              "failure_caveat": "Job/step metadata identifies G-2 as the failing step. Logs were not fetched; the precise receipt diagnostic is not established."
+            }
+          ],
+          "runners": {
+            "repository_endpoint": {
+              "total_count": 0,
+              "runners": []
+            },
+            "organization_endpoint": {
+              "total_count": 1,
+              "runner": {
+                "id": 456,
+                "name": "srv1778002",
+                "os": "Linux",
+                "status": "online",
+                "busy": false,
+                "labels": [
+                  "self-hosted",
+                  "Linux",
+                  "X64",
+                  "ai-cluster"
+                ]
+              }
+            },
+            "default_group_members_endpoint": {
+              "total_count": 1,
+              "runner_id": 456
+            },
+            "groups": [
+              {
+                "id": 1,
+                "name": "Default",
+                "visibility": "all",
+                "allows_public_repositories": false,
+                "restricted_to_workflows": false,
+                "selected_workflows": [],
+                "inherited": false
+              },
+              {
+                "id": 3,
+                "name": "Default Larger Runners",
+                "visibility": "all",
+                "allows_public_repositories": true,
+                "restricted_to_workflows": false,
+                "selected_workflows": [],
+                "inherited": false
+              }
+            ],
+            "availability_caveat": "Org runner 456 is online and idle at observation, and historical exact-SHA jobs prove it executed this repository's workflow. Repository runner listing returned zero; this is not evidence of no organization/shared runner. Current group 1 reports allows_public_repositories=false despite this public repository and historical successful scheduling. Current eligibility for a future run is therefore not guaranteed by online/idle status; no configuration was altered."
+          }
+        },
+        "execution_receipt": {
+          "cwd": "/root/src/repos/programming-desk",
+          "output_policy": "Minimal selected non-secret metadata only; no tokens, environment values, logs, account display-name authorization claims, native Bot/tier probes, or created files.",
+          "commands": [
+            {
+              "command": "git branch --show-current && git rev-parse HEAD && git remote get-url origin",
+              "exit_code": 0,
+              "output": [
+                "bot-00-programming-lead/desk-swarm-subagents",
+                "4f8e495e4eba1a799056adf3d4385522c59df359",
+                "https://github.com/swcstudiospace/programming-desk.git"
+              ]
+            },
+            {
+              "command": "gh api --method GET repos/swcstudiospace/programming-desk --jq '{id,node_id,full_name,html_url,default_branch,visibility,private,archived,disabled,permissions}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "id": 1376007330,
+                "full_name": "swcstudiospace/programming-desk",
+                "default_branch": "main",
+                "visibility": "public",
+                "permissions": {
+                  "admin": true,
+                  "maintain": true,
+                  "pull": true,
+                  "push": true,
+                  "triage": true
+                }
+              }
+            },
+            {
+              "command": "gh api --method GET repos/swcstudiospace/programming-desk/actions/workflows/gates.yml --jq '{id,node_id,name,path,state,html_url,created_at,updated_at}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "id": 370453712,
+                "name": "Quality Gates",
+                "path": ".github/workflows/gates.yml",
+                "state": "active"
+              }
+            },
+            {
+              "command": "gh api --method GET repos/swcstudiospace/programming-desk/actions/permissions --jq '{enabled,allowed_actions,selected_actions_url}'",
+              "exit_code": 0,
+              "output": {
+                "allowed_actions": "all",
+                "enabled": true,
+                "selected_actions_url": null
+              }
+            },
+            {
+              "command": "gh api --method GET 'repos/swcstudiospace/programming-desk/actions/runners?per_page=100' --jq '{total_count,runners:[.runners[]|{id,name,os,status,busy,labels:[.labels[]|{id,name,type}]}]}'",
+              "exit_code": 0,
+              "output": {
+                "runners": [],
+                "total_count": 0
+              }
+            },
+            {
+              "command": "gh api --method GET repos/swcstudiospace/programming-desk/branches/bot-00-programming-lead/desk-swarm-subagents --jq '{name,commit_sha:.commit.sha,protected}'",
+              "exit_code": 0,
+              "output": {
+                "commit_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+                "name": "bot-00-programming-lead/desk-swarm-subagents",
+                "protected": false
+              }
+            },
+            {
+              "command": "gh api --method GET 'repos/swcstudiospace/programming-desk/actions/workflows/370453712/runs?branch=bot-00-programming-lead%2Fdesk-swarm-subagents&event=pull_request&head_sha=4f8e495e4eba1a799056adf3d4385522c59df359&per_page=100' --jq '{total_count,workflow_runs:[.workflow_runs[]|{id,name,path,workflow_id,event,head_branch,head_sha,status,conclusion,html_url,run_attempt,created_at,updated_at,pull_requests:[.pull_requests[]|{number,head_sha:.head.sha,base_ref:.base.ref,base_sha:.base.sha}]}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 1,
+                "id": 37697523618,
+                "event": "pull_request",
+                "head_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+                "conclusion": "failure",
+                "status": "completed",
+                "html_url": "https://github.com/swcstudiospace/programming-desk/actions/runs/37697523618"
+              }
+            },
+            {
+              "command": "gh api --method GET 'repos/swcstudiospace/programming-desk/actions/runs?branch=bot-00-programming-lead%2Fdesk-swarm-subagents&per_page=100' --jq '{total_count,workflow_runs:[.workflow_runs[]|{id,name,path,workflow_id,event,head_branch,head_sha,status,conclusion,html_url,run_attempt,created_at,updated_at,pull_requests:[.pull_requests[]|{number,head_sha:.head.sha,base_ref:.base.ref}]}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 3,
+                "runs": [
+                  [
+                    37697523539,
+                    "Gates template sync",
+                    "success"
+                  ],
+                  [
+                    37697523618,
+                    "Quality Gates",
+                    "failure"
+                  ],
+                  [
+                    37697523611,
+                    "Security PR Gate",
+                    "success"
+                  ]
+                ]
+              }
+            },
+            {
+              "command": "gh api --method GET 'orgs/swcstudiospace/actions/runners?per_page=100' --jq '{total_count,runners:[.runners[]|{id,name,os,status,busy,labels:[.labels[]|{id,name,type}]}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 1,
+                "id": 456,
+                "name": "srv1778002",
+                "os": "Linux",
+                "status": "online",
+                "busy": false,
+                "labels": [
+                  "self-hosted",
+                  "Linux",
+                  "X64",
+                  "ai-cluster"
+                ]
+              }
+            },
+            {
+              "command": "gh api --method GET 'repos/swcstudiospace/programming-desk/pulls?state=all&head=swcstudiospace%3Abot-00-programming-lead%2Fdesk-swarm-subagents&per_page=100' --jq '[.[]|{number,state,html_url,merged_at,head:{ref:.head.ref,sha:.head.sha},base:{ref:.base.ref,sha:.base.sha},merge_commit_sha}]'",
+              "exit_code": 0,
+              "minimal_output": {
+                "number": 65,
+                "state": "open",
+                "html_url": "https://github.com/swcstudiospace/programming-desk/pull/65",
+                "merged_at": null,
+                "head_sha": "4f8e495e4eba1a799056adf3d4385522c59df359",
+                "base_ref": "main"
+              }
+            },
+            {
+              "command": "gh api --method GET 'repos/swcstudiospace/programming-desk/actions/runs/37697523618/jobs?filter=latest&per_page=100' --jq '{total_count,jobs:[.jobs[]|{id,name,status,conclusion,html_url,head_sha,run_attempt,runner_id,runner_name,runner_group_id,runner_group_name,labels,started_at,completed_at,steps:[.steps[]|{name,number,status,conclusion}]}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 2,
+                "gate-self-test": {
+                  "conclusion": "success",
+                  "runner_id": 456
+                },
+                "gates": {
+                  "conclusion": "failure",
+                  "runner_id": 456,
+                  "failed_step": "G-2 — Verification receipt",
+                  "subsequent_gates": "skipped"
+                }
+              }
+            },
+            {
+              "command": "gh api --method GET 'orgs/swcstudiospace/actions/runner-groups?per_page=100' --jq '{total_count,runner_groups:[.runner_groups[]|{id,name,visibility,allows_public_repositories,restricted_to_workflows,selected_workflows,inherited,runners_url,selected_repositories_url}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 2,
+                "runner_groups": [
+                  {
+                    "id": 1,
+                    "name": "Default",
+                    "visibility": "all",
+                    "allows_public_repositories": false,
+                    "restricted_to_workflows": false
+                  },
+                  {
+                    "id": 3,
+                    "name": "Default Larger Runners",
+                    "visibility": "all",
+                    "allows_public_repositories": true,
+                    "restricted_to_workflows": false
+                  }
+                ]
+              }
+            },
+            {
+              "command": "date -u +%Y-%m-%dT%H:%M:%SZ",
+              "exit_code": 0,
+              "output": "2026-10-08T03:12:24Z"
+            },
+            {
+              "command": "gh api --method GET 'orgs/swcstudiospace/actions/runner-groups/1/runners?per_page=100' --jq '{total_count,runners:[.runners[]|{id,name,os,status,busy,labels:[.labels[]|{name,type}]}]}'",
+              "exit_code": 0,
+              "minimal_output": {
+                "total_count": 1,
+                "runner_id": 456,
+                "status": "online",
+                "busy": false
+              }
+            }
+          ],
+          "metadata_reads": "Root file read plus complete tool-managed output artifacts artifact://151 and artifact://157 were read to recover output-display truncation; no files were created by this investigation."
+        },
+        "limitations": {
+          "requested_fields_inaccessible": [],
+          "api_access_failures": [],
+          "unestablished": [
+            "No successful Quality Gates run for the relevant exact SHA; the sole applicable returned run failed.",
+            "Precise G-2 failure diagnostic was not obtained from logs.",
+            "Current future scheduling eligibility is not conclusively established because public-repository runner-group metadata conflicts with historical execution evidence.",
+            "Billing/spending limits and required-check enforcement were not independently acquired.",
+            "No independent approval or formal gate verdict is issued by this metadata investigation."
+          ]
+        },
+        "handoff": "Reusable remote facts only. Do not mark REQ-INVENTORY-014 satisfied, claim all-green/activation completion, or grant mutation authority from this result. No dispatch, rerun, install, configuration, billing, PR mutation, review trigger, CI dispatch, suite, gates, smoke, formatter, or lint was performed."
+      }
+    },
+    "baseline_g2_cause": {
+      "observer": "parent",
+      "command": "gh api --method GET repos/swcstudiospace/programming-desk/actions/jobs/113052811492/logs",
+      "exit_code": 0,
+      "observed_failure": "'approved_by' is missing — work must be reviewed by someone else",
+      "limitation": "Historical baseline run only. No approval was created, no pipeline rerun, no gate bypass."
+    },
+    "cursor_account_access": {
+      "attempts": [
+        {
+          "captured_at": "2026-10-08T02:42:38.961Z",
+          "purpose": "Direct managed-browser Cursor account-access inventory; no credentials or settings changed",
+          "observed": false,
+          "error": "ToolError: omp browser relay is serving at http://127.0.0.1:9224 but its extension never connected. Install it with `omp browser-relay install` and check the toolbar badge shows \"on\"."
+        },
+        {
+          "captured_at": "2026-10-08T02:50:57.545Z",
+          "purpose": "Explicit Chromium-mode account-access inventory; no credentials/settings changed",
+          "observed": false,
+          "error": "ToolError: omp browser relay is serving at http://127.0.0.1:9224 but its extension never connected. Install it with `omp browser-relay install` and check the toolbar badge shows \"on\"."
+        }
+      ],
+      "cleanup": {
+        "observed_at": "2026-10-08T03:13:01.057Z",
+        "tabs": []
+      },
+      "conclusion": "Authenticated account surface was not reached; relay failures establish neither tier nor egress policy"
+    },
+    "notion_tool_access": {
+      "observer": "parent",
+      "tool": "mcp__notion_get_tool_access",
+      "reported": {
+        "create_pages": "available",
+        "update_page": "available",
+        "query_data_sources": "available_with_limit"
+      },
+      "limitation": "Tool availability is not destination permissions or successful writes; no access/quota denial observed"
+    },
+    "notion_destination_schema": {
+      "observer": "parent",
+      "tool": "mcp__notion_fetch",
+      "collection_url": "collection://be3418f0-d2d8-411b-8677-fa8a95ee63be",
+      "database_url": "https://app.notion.com/p/843bc6ab56b04b27ae10e258711edcb0?pvs=204",
+      "identity_properties": [
+        "Item",
+        "Level",
+        "Graph ID",
+        "Repo",
+        "Branch",
+        "Spec Path",
+        "Issue ID"
+      ],
+      "hierarchy": "Task -> Issue -> Sub-Issue through Parent Item",
+      "schema_fetched": true,
+      "enhanced_markdown_spec_fetched": true,
+      "limitation": "Collection read and schema discovery do not prove successful materialization"
+    },
+    "initialization_smoke": {
+      "observer": "parent",
+      "command": "python3 /tmp/desk-v2-bootstrap-smoke.py",
+      "exit_code": 0,
+      "result": {
+        "local_links_resolved": 94,
+        "parsed_json_artifacts": 3,
+        "phase_acceptance_asserted": false,
+        "requirements_completed": 0,
+        "source_constraints": 33,
+        "source_nodes": 7,
+        "source_steps": 41,
+        "stable_requirements": 217,
+        "status": "pass",
+        "unique_primary_phase_rows": 217
+      },
+      "limitation": "GSD initialization integrity only; no implementation or phase acceptance"
+    }
+  },
+  "runtime_evidence": {
+    "recorded_on": "2026-10-08",
+    "repository": "swcstudiospace/programming-desk",
+    "baseline_commit": "4f8e495e4eba1a799056adf3d4385522c59df359",
+    "evidence_kind": "parent-observed reads; not deployment or approval",
+    "railway_scope": {
+      "observed_account_name": "Ming Chen",
+      "workspace_name": "Ming Chen's Projects",
+      "target_scope_note": "The connected account exposes projects matching the proposal names. No claim that account identity equals Ove's; confirm ownership/authorization before any mutation.",
+      "Ultrathink": {
+        "project_id": "67a98752-ba0a-4ae2-a881-8d0e33a89328",
+        "environment_id": "6cfcb6de-3175-418b-8e20-7817a3d31633",
+        "environment_name": "production",
+        "services": {
+          "GreptimeDB": {
+            "id": "b53b4c7d-df3c-4cd8-a15d-e5fb1a79e254",
+            "private_host": "greptimedb",
+            "observed_ports": [
+              4000,
+              4001,
+              4002,
+              4003
+            ],
+            "port_evidence": "describe_service configuration and Railway SSH /proc/net/tcp: 0FA0,0FA1,0FA2,0FA3 state 0A, exit 0",
+            "public_http_domain_present": true
+          },
+          "TimescaleDB": {
+            "id": "1bd7a6fd-b7b2-4fe4-8b4f-0d76ead81d79",
+            "private_host": "timescaledb",
+            "observed_ports": [
+              5432
+            ],
+            "port_evidence": "Railway SSH /proc/net/tcp and tcp6: 1538 state 0A, exit 0",
+            "public_tcp_proxy": "monorail.proxy.rlwy.net:49679"
+          },
+          "Dragonfly": {
+            "id": "32ee49a2-61bb-4572-acc8-1aa5956b6c7f",
+            "private_host": "dragonfly",
+            "observed_ports": [
+              6379
+            ],
+            "port_evidence": "Railway SSH /proc/net/tcp: 00000000:18EB state 0A, exit 0"
+          },
+          "tailscale-vpn": {
+            "id": "fcb79134-ca20-4816-8c10-ffaf18da5d7f",
+            "source_repo": "Andrew-Bekhiet/railway_tailscale_vpn",
+            "public_domain_target_port": 1055,
+            "deployment_status": "SUCCESS",
+            "tailnet_node_match": "railway-app confirmed by Railway SSH printenv TAILSCALE_HOSTNAME, exit 0"
+          }
+        },
+        "all_service_names": [
+          "Routines",
+          "OpenBot",
+          "Postgres",
+          "Agent",
+          "Gate",
+          "Dragonfly",
+          "tailscale-vpn",
+          "TimescaleDB",
+          "GreptimeDB"
+        ]
+      },
+      "Agent Substrate": {
+        "project_id": "a3453be1-819a-4ac3-a787-c6cfa5550f18",
+        "environment_id": "c50e0706-deb0-43ad-aaa0-53a92da3b396",
+        "environment_name": "production",
+        "services": {
+          "hindsight-api": {
+            "id": "0436123d-6fff-4bd8-a9a5-bd38db9ffff1",
+            "observed_ports": [
+              8888
+            ],
+            "image": "ghcr.io/vectorize-io/hindsight-api:0.9.1",
+            "port_evidence": "describe_service domain target and Railway SSH /proc/net/tcp: 22B8 state 0A, exit 0",
+            "public_domain_present": true
+          },
+          "ragflow": {
+            "id": "8ddda0d9-44d4-4e7a-8eec-6dbf91bb8d9e",
+            "observed_ports": [
+              9380,
+              9382,
+              80
+            ],
+            "port_evidence": "describe_service configuration and Railway SSH /proc/net/tcp: 24A4,24A6,0050 state 0A, exit 0",
+            "public_domains_present": true
+          }
+        },
+        "all_service_names": [
+          "hindsight-llm-bridge",
+          "hindsight-worker",
+          "hindsight-control-plane",
+          "Postgres",
+          "hindsight-api",
+          "ragflow-oauth-integration",
+          "ragflow-oauth-service",
+          "ragflow",
+          "elasticsearch",
+          "storage",
+          "mysql",
+          "redis"
+        ],
+        "forwarder_service_in_inventory": false
+      }
+    },
+    "tailscale": {
+      "command": "tailscale status --json",
+      "exit_code": 0,
+      "self": "vps",
+      "railway_app": {
+        "ip": "100.77.7.42",
+        "online": true,
+        "railway_project": "Ultrathink",
+        "railway_environment": "production",
+        "railway_service": "tailscale-vpn",
+        "identity_evidence": "Railway SSH printenv TAILSCALE_HOSTNAME returned railway-app, exit 0",
+        "advertised_routes": [
+          "10.128.0.0/9",
+          "fd12:4f8:a4d6:1::/64",
+          "fd12::10/128"
+        ],
+        "role": "observed subnet-route advertiser, not a verified per-project forwarder"
+      },
+      "grok_bot_box": {
+        "ip": "100.94.38.2",
+        "online": false,
+        "last_seen": "2026-10-02T02:45:28.1Z"
+      },
+      "mac_mini_online": true,
+      "planned_named_forwarders_present": false
+    },
+    "gateway": {
+      "local_health_url": "http://127.0.0.1:8791/health",
+      "health": "ok",
+      "version": "0.1.0",
+      "seat_endpoints": 7,
+      "packs": [
+        "clippyos",
+        "desklanes",
+        "kanbanos"
+      ],
+      "registered_seats": [],
+      "channel_registered": false,
+      "systemd_active_state": "active",
+      "public_health_url": "https://desk.swcstudio.space/health",
+      "public_reader_result": "failed DNS ETIMEOUT",
+      "dns_probe": {
+        "command": "getent ahostsv4 desk.swcstudio.space",
+        "exit_code": 2,
+        "output": ""
+      }
+    },
+    "substrate": {
+      "systemd_active_state": "active",
+      "command": "curl --silent --show-error --max-time 15 --write-out '\\nHTTP %{http_code}\\n' http://127.0.0.1:7410/healthz",
+      "exit_code": 0,
+      "http_status": 503,
+      "health_body": {
+        "index": false,
+        "greptime": false,
+        "appendOnly": null,
+        "eventsWritable": false,
+        "briefP95": 1,
+        "eventP95": 3
+      }
+    },
+    "additional_runtime_evidence": {
+      "hindsight_public_health": {
+        "url": "https://hindsight-api-production-014d.up.railway.app/health",
+        "body": {
+          "status": "healthy",
+          "database": "connected",
+          "db_acquire_ms": 9.3,
+          "db_pool_waiting": 0,
+          "db_pool_in_use": 0,
+          "db_pool_max": 100,
+          "db_pool_idle": 1
+        }
+      },
+      "cursor_policy_access": {
+        "method": "browser.open relay target cursor.com",
+        "result": "timed out after 12000ms",
+        "browser_tabs_remaining": 0
+      },
+      "railway_filtered_logs": {
+        "tailscale_identity_filters": [
+          "railway-app",
+          "hostname"
+        ],
+        "dragonfly_listener_filters": [
+          "6379",
+          "listening"
+        ],
+        "result": "no log entries; these probes did not establish identity or port"
+      },
+      "dragonfly_ss_attempt": {
+        "result": "ss: command not found",
+        "exit_code": 127,
+        "fallback": "kernel listener records confirmed 6379"
+      }
+    },
+    "not_exercised": [
+      "Bot UUID read/prompt write",
+      "Grok MCP tools/list_changed support",
+      "Cursor team tier/network policy",
+      "forwarder deployment",
+      "network cutover",
+      "database mutation",
+      "Team-only template publication",
+      "fresh-desk acceptance",
+      "iOS approval",
+      "independent review approval"
+    ]
+  },
+  "source_analyses": {
+    "MapGatewayDelivery": {
+      "original_provenance": "agent://MapGatewayDelivery/report",
+      "method": "completed bounded read-only source analysis; no executed checks",
+      "repository": "swcstudiospace/programming-desk",
+      "report": "Scope and evidence discipline\nOnly the five requested targets were inspected. No edits, commands, tests, builds, gates, formatting, commits or network probes were performed. docs/upgrade-plan-desk-v2.md is outside those five targets, so this is a complete capability/evidence matrix for the requested n4 concerns and n3 dependencies, not a claim to have independently checked the literal numbered §12 steps. Parent should join this matrix to its already-read plan criteria. Line references below are actual source locations; historical receipt claims are distinguished from new execution.\n\nImplementation coverage matrix\n\n1. Seat endpoints / roster contracts — implemented in source, not live acceptance proven. Rosters.load (rosters.py:85–140) loads eight core tools plus seven seat-specific tools for each seat: all seven effective rosters are 15 tools. It checks seat mapping, endpoint, duplicates, 10–15 band, gate requirements and pack name/count. SeatServer._surface/list_tools/call_tool (server.py:81–145) restricts listed and dispatched names to the authenticated seat surface. SeatRouter (server.py:152–202) rejects a valid token for another seat with actual HTTP 403 and checks pack.seats. Pack surfaces are separate connectors and do not merge core tools. Rosters.surface (rosters.py:144–157) caps merged surfaces at 20. app_tools_load (tools/packs.py:17–39) checks seat eligibility and projected ceiling before persisting. Pack records carry task_id but are seat-global and remain until explicit unload (store.py:78–107); no ticket-close expiry exists.\n\n2. OAuth / isolation — real authorization-code and refresh implementations exist. SeatOAuthProvider (oauth.py:91–354) persists DCR clients/access/refresh tokens in oauth-state.json, mode 0600 via replace; pending consents and authorization codes are memory-only. Consent uses constant-time passphrase lookup (config.py:104–113), chooses exactly one seat, expires after 600 s and locks after five wrong attempts (oauth.py:34–35, 207–237). It requires a PKCE challenge, stores it on a 600 s single-use authorization code; PKCE verifier processing is delegated to the MCP auth library, not implemented in this file. Tokens default to 24 h access / 30 d refresh, refresh rotates and rejects scope escalation (oauth.py:275–294). Static Grok clients accept HTTPS or loopback HTTP redirect URIs (oauth.py:58–72). Connector passphrases also act as non-expiring bearer tokens (oauth.py:296–307; server.py:219–231). MCP requires scope mcp but disables token resource validation (server.py:243–249); seat-path equality is the actual seat isolation boundary. This is not upstream row-level isolation: Hindsight uses configured per-seat bank names, while substrate fallback memory_search receives only query/limit (tools/core.py:106–122), not a seat-bank restriction.\n\n3. Schemas / secrets — partial schema implementation. schema.validate (schema.py:37–93) enforces primitive types, enum, lengths, regex, numeric bounds, array limits/items, required fields, defaults and additionalProperties:false. It does not interpret oneOf/not, which androidmetavr_ui_tap actually declares (androidmetavr.yaml:99–103), nor format:uri. ios-local.yaml:45–47 explicitly documents absence of combinators and expects a backend semantic rejection, but that backend is absent. server.py:115–122 refuses credential-shaped serialized arguments and redacts results; credential detection is shape-based rather than arbitrary secret discovery. No new security policy beyond the requested contract is proposed.\n\n4. Timeouts — implemented outer deadline, not universal work cancellation. config.py:28 sets 20 s; server.py:126–130 wraps backend dispatch. HttpUpstream uses bounded per-request clients (upstreams.py:78–109); substrate MCP uses asyncio.timeout (149–185). run_command cancels/reaps the process group on timeout or cancellation (upstreams.py:593–673). Timescale.query (upstreams.py:274–309) runs synchronous psycopg in asyncio.to_thread with connection timeout 5 s and read-only transaction default, but no SQL statement_timeout: canceling the await does not stop an already-running query thread. AgentBus.wait_job can poll for the requested 180 s default, yet desk_bus_wait_job is still cut off at the outer 20 s deadline (tools/lead.py:316–320; upstreams.py:214–225). Similarly gate calls carry 60/120 s inner budgets, prompt assembly 60 s, approval clone 90 s, all under 20 s. Parent must reconcile behavior with the plan's deadline contract, not simply increase all timeouts.\n\n5. Audit — real local mirror and best-effort substrate emission, not every attempted call. Audit.tool_event (audit.py:29–62) appends tool.call with seat, tool, outcome, elapsed time, redacted argument digest and g5/g6 fields; fire_and_forget/send (64–78) asynchronously POST substrate /events with a six-second budget and only logging on failures. server.py returns before Audit.tool_event for forbidden surface, unknown tool, invalid schema and secret-refused arguments (108–122), so README's 'every call' is broader than code. No event replay/acknowledged remote durability is implemented; this observation is not a request for additional telemetry scope. Explicit event_emit locally records before attempting substrate (core.py:181–196).\n\n6. Storage / n3 dependency — JSON, not Timescale index-of-record. Store._read/_write (store.py:32–48) tolerates unreadable/corrupt JSON by returning defaults, writes .tmp then replace with mode 0600, and uses a single-process RLock. There is no fsync or cross-process locking/transaction. roster, packs, intake, ack delivery, contract acks and doctor all use this Store. The file header explicitly says Timescale migration is future work (store.py:3–5). Timescale.query is SELECT/WITH-only and transaction-read-only; no write schema or mutation path is present. Dragonfly is bounded-TTL cache only; systems.cache namespaces keys with seat (tools/systems.py:33–37). Configured read adapters do not prove migrations, data import or substrate schema deployment. Minimal n3→n4 contract: establish authoritative storage schema and transactions for these currently persisted shapes, including origin-scoped intake idempotency and write-ahead per-ack delivery markers, then switch callers without a parallel shadow authority.\n\n7. Doctor / bootstrap — partial verification and prompt rendering. core.doctor (199–255) permits registering self UUID, and channel registration only by LEAD. install_prompt/repair return an assembled prompt and SHA plus installation hint; they do not write a bot container's prompt. render_prompt (276–324) requires all seven UUIDs and channel, exports configured main, runs the existing assembler and rejects leftover placeholders. check compares caller-supplied prompt SHA to stored expected SHA, caller-supplied installed_skills to declared names, and tests memory/substrate health plus roster counts. Connector is marked green because this call authenticated. Roster green only checks seven UUIDs and nonempty channel; quality_in_channel:false is hardcoded (core.py:246). lead.roster_status also derives in_channel from seat name (lead.py:323–351). Neither checks real channel membership nor actual installed files. Thus these outputs cannot prove fresh-desk acceptance without independent bot/container evidence.\n\n8. Intake and contract acknowledgements — implemented locally. /v1/intake (server.py:306–336) accepts origin-token auth, origin match, schema and title/ask secret checks, then persists intake and emits handoff. Static seat passphrases get 403; an OAuth seat token is not recognized as origin and falls through to 401, despite README's blanket seat-token-403 claim. Store.intake_create (109–134) deduplicates by origin plus idempotency_key; next atomically claims first queued item in one process (136–151). Only LEAD has next/ack. lead.intake_ack/_reply_once (35–170) posts GitHub-origin callbacks before state advance, writes delivery marker before posting, uses digest-keyed per-ack process-local lock, reads comment markers on ambiguous attempts, and refuses notify_unknown when outcome cannot be proven. GitHub-unconfigured first attempts may still persist ack with delivered:false. Non-GitHub origins have no callback (lead.py:230–238). quality.contract_ack/status (213–241) replaces each seat's ack, reads consumers_required from proposal YAML and reports missing/rejected; records are JSON, not durable substrate/Timescale contract registry. No inspected path automatically mirrors acknowledgement into a version-controlled change document.\n\nDeclared tool-family coverage\n\nCore eight: desk_brief, docs_search, memory_retain, memory_recall, ownership_resolve, receipt_check, event_emit, doctor → tools/core.py:19,49,81,106,125,161,181,199. Brief caches 300 s only after substrate succeeds; task_id is used for recall/cache but substrate brief gets repo=None and graph_id only. RAGFlow retrieval returns content/document/dataset/score (core.py:49–78), not the source commit promised in _core.yaml:31–34. Retain requires receipt_path or source and marks substrate memory agent-claimed; it does not validate cited evidence contents.\nLEAD seven: intake_next/ack, graph_register/state, bus_start/wait, roster_status → tools/lead.py:28,35,254,267,306,316,323. graph_state translates claim/release/complete/heartbeat, heartbeat requires lease_id; complete intentionally sends tests_pass:false rather than manufacturing verification. Claim/release/complete return ok:true after transport success without heartbeat's explicit semantic ok:false check.\nSYSTEMS seven: index_query/events_query/cache/lsp_diagnostics/contract_propose/design_artifact_get/app_tools_load → systems.py:19,26,33,51,73,183 plus packs.py:17. SQL is SELECT/WITH plus keyword/one-statement filtering; Timescale adds read-only transaction. LSP shells to the configured repository's broker; no broker execution was performed here. contract_propose builds proposal bundle/branch/draft PR or honestly returns an unpushed bundle.\nWEB seven: lsp_diagnostics, vercel_deployments/promote/rollback, preview_check, bundle_secret_scan, contract_ack → systems.py:51; web.py:24,41,50,59,86; quality.py:213. Vercel has configured project allowlist. preview_check refuses redirects by not following any redirect. No g5 approval validation exists.\nANDROID seven: play_track_status/staged_rollout/halt_rollout, artifact_size_delta, lint_baseline_diff, contract_ack, app_tools_load → mobile.py:18,32,100,128,141; quality.py:213; packs.py:17. Staged rollout reads and preserves existing releases; halt_threshold is echoed, not monitored automatically. Production 100% authorization is merely substring 'full' in approval_id (mobile.py:37–38).\niOS seven: testflight_status/appstore_phased_release/pause_release, entitlements_diff, review_risk_check, contract_ack, app_tools_load → mobile.py:176,196,217,241,267; quality.py:213; packs.py:17. ASC resolves bundle-specific app before version. Risk check is diff-pattern classification, not actual App Review acceptance; halt_signal is echoed rather than watched.\nINFRA seven: railway_status/logs/variable_names/redeploy, tailscale_status, vps_units, db_health → infra.py:49,102,129,139,185 and corresponding later functions. Redeploy checks current deployment equals supplied prior_deployment_id in selected production/default environment, then mutates; this is staleness protection, not approval authorization.\nQUALITY seven: gates_run, greptile_review, receipt_approve, waiver_record, contract_ack_status, supply_chain_check, secret_scan → quality.py:23,115,136,192,220,244,263. Gates use trusted installed scripts and refuse partial success when no receipt. supply_chain_check explicitly says license/CVE lookup is not wired (259); current output only identifies changed lockfiles/manifests, unpinned tokens and git dependencies.\n\nAll eight packs\nkanbanos (5), desklanes (5), clippyos (4): WEB/ANDROID/iOS; real packs.py functions for health, query, test push, flags, crashes, scoreboard, store listing, render job. Product bases are only configured for these three (config.py:134–138). Required product API contracts: GET /health, POST /desk/query, POST /desk/push-test, GET /desk/flags, /desk/crashes, /api/scoreboard, /desk/store-listing, /api/render-jobs/<id>. Pack HTTP adapter provides no configured authorization headers; test-device-only is forwarded as test_only:true rather than locally checking a registry. api_smoke calls only /health although KanbanOS description promises contract endpoint and Desk Lanes promises scoreboard too.\ncoordination (2): SYSTEMS and LEAD; real systems.graph_heartbeat/drift_scan (systems.py:190–229). Calls substrate graph_heartbeat and coord_drift_scan; heartbeat rejects semantic ok:false as lease_rejected. Live behavior/signatures not proven by the receipt.\nandroidlocal (5): emulator boot, adb devices, APK install, unit test, instrumented run → android_cli.* missing.\nandroidmetavr (4): logcat, screenshot, UI dump, UI tap → android_cli.* missing. Header lines 13–22 explicitly says underlying MetaVR bridge only resolves IDs, performs no MCP/network invocation, hardcodes connected=false and always raises DeviceUnavailable. This is documented upstream prerequisite, not a claim independently confirmed outside scope.\nioslocal (5): plist lint, entitlements scan, Linux SPM test, snapshot diff, xcodebuild receipt → ios.* missing.\niosmetavr (3): screenshot, UI dump, tap → ios.* missing; contract says executable lookup may honestly skip when unavailable, and directed tap cannot be honored until underlying CLI adds target (ios-metavr.yaml:54–66).\nMissing modules were established from the complete tools directory listing plus contract/backend search. Resolver import_module (tools/__init__.py:97–103) raises ModuleNotFoundError, which server's generic handler converts to internal, not backend_missing. Contracts can list unavailable tools successfully because loader does not resolve backends.\n\nApprovals: two distinct deficiencies\nA. g5/g6 approval_id: rosters._tool (64–68) enforces required field names only; runtime schema checks string length, not issuer/actor/resource/action authorization. Audit records claimed ID and rollback plan. infra.py:149–150 explicitly declares approval unverified by design, and output repeats this at 181. web/mobile mutations likewise only echo it; Android's 'full' substring is no trusted authorization. Minimal dependency: authoritative approval lookup bound to actor/seat, permitted action and target, plus genuine externally issued approval record; do not synthesize IDs or treat existing audit as approval. This is a code gap plus real external approval prerequisite.\nB. receipt approval / exact SHA: quality.receipt_approve reads tip, prevents QUALITY self-approval, stamps approved_by/approved_at, validates stamped candidate with strict G-2/G-3/G-5–6 and commits using expect_sha/content (136–189). _commit_file compares cloned tip/content, then atomically pushes with force-with-lease against found_sha (296–390): real TOCTOU protection exists. But there is no approval_ref input or assignment anywhere in the inspected gateway/contracts, and no reference tying independent approval to reviewed exact source SHA. Branch-tip conditional push is not exact-SHA independent approval. repo.resolve_ref (66–75) falls back to HEAD even for an explicit unresolved ref; historical TOCTOU receipt itself acknowledges this. Minimal dependency: independent reviewer-approved exact SHA/reference contract, persisted binding and strict unresolved-ref behavior; real reviewer approval cannot be supplied by code or this agent.\n\nReceipts and external blockers\n- desk-v2-gateway.json records 40 gateway tests/119 gate tests but explicitly only not_configured upstream paths and in-process OAuth, no real Grok card. Its outside-receipt smoke assertion is not evidence here.\n- trusted-gates and ack/Railway receipts explicitly say no restart/deploy and no upstream calls; tests use stubs/fake HTTP. Privilege dropping was not exercised.\n- TOCTOU receipt records local bare-remote tests, approved_by empty, no approval_ref.\n- coordination receipt records 114 tests and skip-clean smoke only; fabricated success/rejection response bodies, live signatures and integration unverified. approved_by is bot-00-programming-lead but approval_ref absent; that field alone does not satisfy exact-SHA approval.\n- None of the inspected receipts establish production health, real Grok OAuth, real bot prompt installation, actual channel membership, Timescale write migration, data-plane ingress or live platform mutation authorization.\nExternal prerequisites versus code: network forwarders/data-plane availability and credentials; substrate/bus tokens and real API signatures; Railway project IDs/token; Vercel team/project allowlist/token; Greptile/GitHub credentials; Play access token; ASC key/issuer/key file plus JWT dependency; product API bases implementing listed routes; actual mobile device/MetaVR executables and underlying unavailable-device/directed-tap capability; seven real bot UUIDs/channel and installed prompt/skills; independent exact-SHA review and genuine deploy/destructive approvals. Parent-supplied observations about DNS/forwarders/unregistered seats remain blockers without rerunning checks. Credentials alone do not fix JSON authority, missing adapters, ignored schema constraints or missing approval authorization.\n\nSuggested planning dependency order (contracts only, no extra scope)\nFirst join parent n3 schema/API decisions to the gateway Store shapes and event API. Next settle authoritative approval_id and exact-SHA approval_ref contracts with the independent reviewer; implement checks before exposing write-class platform mutations. Then implement missing declared mobile adapters against real CLI/device contracts, complete explicitly promised outputs (supply-chain lookup and pack smoke endpoints), and correct validation/doctor provenance. Finally parent runs its one verification wave and obtains real connector/upstream/fresh-desk evidence plus independent approval. No newly executed verification is claimed in this report."
+    },
+    "MapShareAndNetworkDelivery": {
+      "original_provenance": "agent://MapShareAndNetworkDelivery/report",
+      "method": "completed bounded read-only source analysis; no executed checks",
+      "repository": "swcstudiospace/programming-desk",
+      "report": "## Scope and evidence rules\nRead-only investigation of infra/, grokbot/, scripts/, skills/, and .receipts/bot-05-infrastructure, plus only concrete plan/gate/workflow/prompt/doctor sources needed to explain those artifacts. No build, test, lint, formatter, gate, smoke, git, deployment or state-changing command was executed. Historical receipt command results below are records, not fresh observations. Conclusions about missing packaging/publication evidence are bounded to these inspected paths. No external repository was inspected or changed. D-1/D-2/D-3 preserved; D-4 is the original authoring-session restriction, not an ongoing invented prohibition.\n\n## n2: six-step network coverage\n1. Ultrathink forwarder: infra/railway/forwarders.yaml:7–16 specifies production machine ultrathink-production-tailscale-forwarder and 4000/4001/4003 → greptimedb.railway.internal at matching ports, 5432 → timescaledb.railway.internal:5432, 6379 → dragonfly.railway.internal:6379. These are real authored mappings, explicitly provisional service names, NOT discovered deployed services.\n2. Agent Substrate forwarder: same file:18–24 specifies agent-substrate-production-tailscale-forwarder, 8888 → hindsight-api.railway.internal:8888, 9380 → ragflow.railway.internal:9380 and optional 80 → ragflow.railway.internal:80. infra/railway/README.md:20–62 documents reusable tagged TS_AUTHKEY, ephemeral off, preapproval when needed, deployment into each production environment, /var/lib/tailscale state volume and manually disabling resulting machine key expiry. Neither file contains applied Railway IDs or deployment evidence.\n3. ACL: infra/tailscale/policy.hujson:19–33 gives autogroup:admin ownership of tag:railway-forwarder/tag:vps/tag:admin and the sole grant from VPS/admin to forwarders. Everything else is denied absent another grant. Lines 36–51 declare accepted mapped ports and denied SSH/public-service directions. Concrete discrepancy: tcp:4000-4003 at line 32 includes TCP 4002 even though forwarders.yaml declares only 4000,4001,4003; the comment 'Exactly the forwarded ports' is therefore inaccurate. This is an authored least-privilege gap, not an observed live ACL. README:64–79 lists VPS probes and only repeat tailscale ping from Mac mini; it does not provide recorded Mac application-port probes. The example omits explicit 4001 and optional 80 probes, so it cannot alone establish every mapped port.\n4. Env cutover: README:81–87 requires changing both substrate and gateway env names, restarting both units, then checking /brief/events_emit/health. infra/substrate/SUBSTRATE-ENV.md:59–94 prefers MagicDNS but documents a historical public HTTPS + Basic fallback after a tailnet startup timeout. Lines 146–153 require root-owned 0600 dated file backup, restart, desk_db_health/events_emit/desk_brief and names-only diff receipt. infra/substrate/substrate.env.example:20–47 leaves real values absent and explicitly documents that fallback. Historical Phase A receipt says GREPTIME_URL remained public and no network cutover was performed in that change.\n5. G-6 retire exposure: README:89–102 requires recorded approval BEFORE removing Timescale TCP proxy and Greptime public domain, removal CLI/screenshot evidence, and recreation rollback. New TCP proxy gets a new public port; affected consumers must be updated. Optional Hindsight UI public exposure is an Ove choice, not silently included. No removal approval/removal evidence appeared in the inspected infrastructure receipts.\n6. Required network receipt: desk-v2-infra.json:100–105 explicitly says ACL not applied/validated and forwarders specified, not deployed. Its commands cover ownership/secrets/contracts, shell/YAML/systemd syntax and INFRA source XML only. They do not prove Tailscale status, any deployed port, app-level call, Mac access or public exposure retirement.\n\nExternal n2 gates remain: n1's actual project/service/env inventory; valid private tagged key; deployed persistent forwarders and expiry state; applied exact-port ACL; VPS and Mac evidence; successful substrate/gateway cutover; human G-6 approval and actual proxy/domain deletion/recovery references. Parent-provided current observation that named forwarders are absent corroborates noncompletion but was not re-probed here.\n\n## Gateway install and CI/intake activation dependencies\ninfra/desk-gateway/install.sh:20–80 canonicalizes /opt/programming-desk, using rsync -a --delete for updates; lines 149–163 preserve existing env, create a names-only 0600 template when absent, migrate DESK_REPO_DIR and warn against premature DESK_GATE_USER. Lines 165–215 sync dependencies, adjust traversal permissions, check desk-gate interpreter/readability, install unit, enable/restart and request loopback health. Existence of this installer does not mean these actions occurred. infra/desk-gateway/install-nginx.sh:15–39 installs HTTP/SSL config but enables SSL only when certificate exists; prints certbot rather than issuing it. DNS to VPS and certificate issuance/re-run are external activation steps. Initial receipt explicitly says DNS/cert/vhosts not active at its recording time; that historical statement must not replace current observation.\n\n.github/workflows/gates.yml:24–39 has PR-to-main and push-main triggers. gates is PR-only, both jobs use [self-hosted,Linux,X64]. PR jobs overlay ci/gates from origin/base before gate execution; receipt selection is task-diff-based with branch disambiguation; G-2 strict, G-3/G-4/G-5/G-6 and G-7 follow. run_all.py:62–66 also invokes G-7. This corrects the plan's stale §13 statement that root .github is absent, but does not establish required branch-protection settings or a current green run.\n\n.github/workflows/desk-intake.yml:1–68 handles only issues/labeled with desk:intake, no checkout/GITHUB_TOKEN permissions, ubuntu-latest, DESK_INTAKE_TOKEN secret, fixed public /v1/intake endpoint, github origin, issue URL/requester and github:repo:number idempotency key. Attacker issue strings enter env/jq arguments; title/body are padded/clipped to API bounds. curl has a 30-second deadline and fails on HTTP failure. Workflow intentionally leaves acknowledgement/commenting to LEAD's desk_intake_ack. The gate runner migration did NOT migrate intake: historical exhausted hosted minutes remain an intake activation risk. Need repository secret matching gateway INTAKE_TOKENS github token, public DNS/TLS/route, funded/usable hosted runner or an explicitly chosen migration, label-event POST evidence and LEAD acknowledgement evidence. desk-v2-infra.json:104 explicitly declares intake E2E unverified. GitHub/Slack event-driven Bot routine availability is also unverified in plan §13; templates retain the ten-minute floor.\n\n## n5: six-step prompt/skills/share coverage\n1. Core/assembly/G-7 exist. Shared core is currently version 1.4 at prompts/_shared/core-directives.xml:6, not merely v1.1; PD-8 appears at 62–65. All seven seat sources declare version 1.1 at line 3 and contain <tools>/<memory>/<connectors>. Exact starts: LEAD 78/98/105; SYSTEMS 73/92/98; WEB 68/88/94; ANDROID 67/87/93; IOS 68/88/94; INFRA 73/93/99; QUALITY 88/108/114. LEAD alone has explicit <routines> at 113. Searches of specialist/shared sources found no corresponding specialist <routines> sections; routines in their descriptions come from generator constants, so the requirement that EACH seat source has all four sections is not fully authored.\n2. Assembly behavior: scripts/assemble-prompts.sh:20–40 supports --roster / --roster= / ROSTER_FILE/default and --check. Lines 68–153 filter shared audience elements for build-seats/lead/quality, respecting comments/CDATA. Lines 155–179 require channel/gateway/version/seats and each seat UUID, fill team placeholders throughout shared+seat text; DEFAULT_BRANCH/BOT_ID substituted in shared prefix only. Lines 192–207 concatenate shared document and seat body; reject matching uppercase/colon placeholder syntax. Lines 209–248 compare both output sets in drift mode or write prompts-assembled/<SEAT>.xml and prompts/<SEAT>.xml. No parse of combined output or XML-value escaping exists here. Both sources retain XML declarations/root elements, so output is a concatenated prompt document, not proven one well-formed XML document. Regex only catches {{[A-Z_:]+}}, not every literal '{{'. A source version marker or existing output file does not establish assembled-and-parsed acceptance.\n3. All seven §8.2 skills are authored: desk-bootstrap:13–108 (desktop OAuth/register/channel/7-seat wait/install hash/paused routines); desk-doctor:12–89 (report, limited repair and evidence); desk-gateway:54–98 (read/write semantics, 20s, g5/g6 approval/rollback, 403/not_configured); hindsight-memory:12–110 (pd-* banks, receipt/source, redaction and recall discipline); ragflow-docs:12–100 (datasets, open current files before claims, source/commit citation); platforms/railway-tailscale:48–132 (forwarder/ACL/cutover/rollback); tool-packs:12–96 (load/unload, 20 ceiling, notification fallback). The railway skill is intentionally under platforms/, not missing at top level. These are policy text, not proof of runtime implementation or review. No independent current exact-SHA review evidence for this seven-skill set appeared in scope. Some prose asserts reflect/ingest/doctor behavior; do not count that as executed service behavior.\n4. Marketplace plugin/projector: no plugin manifest, packaging implementation, publication reference or concrete projector handoff artifact found in grokbot/scripts/infra/target receipts/skills README. Searched both content terms (swc-programming-desk, grok-bot, projector, skills_propose) and alternate packaging filename globs. Actual requirement is plan:222–232: swc-programming-desk skills + seven public connector definitions; grok-bot projector in agent-substrate/packages/projector from /root/agent-skills; reviewed proposals through skills_propose. This defines the intended external handoff, not evidence it was delivered. This assignment does not inspect the other repositories, so their state remains external/unverified.\n5. Seven generated descriptions exist in grokbot/templates/{LEAD,SYSTEMS,WEB,ANDROID,IOS,INFRA,QUALITY}.md, all line 3 says Share -> Create template -> Team-only. scripts/generate-templates.py:109–147 parses seat XML charter statements and always skills, validates contract seat/short/endpoint. Lines 69–97 add four base skills, hardcode routines and safety regexes; lines 152–198 render public gateway, bootstrap instruction, skills, paused routines and avatar PATH, not image/upload. Lines 203–282 support team roster/out/check, accumulate problems before writing and compare exact generated bytes. The static roster:1–43 has existing team IDs/version but is not runtime registration evidence. grokbot/avatars contains ONLY .gitkeep; README:10 calls avatars placeholders. NO Share-card screenshots, publication links/IDs, upload receipts or Team-only visibility evidence were found. Markdown descriptions are not published templates, and an avatar reference is not an avatar.\n6. Desk skill proposal: no skills_propose invocation/PR/result receipt found in these paths. Plan defines this route; skills/README.md:47–58 defines authoring/evidence discipline, not delivery into agent-skills. Current shared-library review/proposal and projection require external evidence, never invented approvals.\n\nConcrete generator/doctor integration gap: generator BASE_SKILLS includes desk-production-loop at scripts/generate-templates.py:69–74. The referenced real doctor source services/desk-gateway/src/desk_gateway/tools/core.py:258–273 appends only verification-receipts/desk-doctor/desk-bootstrap. The generator comment's mismatch is supported by concrete source: green doctor skills row is not blanket proof of base-four installation. render_prompt:276–333 exports repo.main_ref and derives roster version from updated_at, then runs assembler; unlike bootstrap skill:93 it does not explicitly select a pinned template tag. It does reject any remaining literal '{{', stronger than local assembler/G-7 regex. Do not claim pinned-version installation from skill prose alone.\n\n## G-7 precise guarantees and gaps\nci/gates/check_desk_integrity.py:115–161 validates tool name/kind/gates/description, object schema/additionalProperties:false and required gate fields. GATE_REQUIRED_FIELDS:56–59 demands rollback_plan+approval_id for g5, ONLY approval_id for g6; blanket wording 'all g5/g6 require both' would overstate actual code. Lines 191–233 enforce effective own+core count 10–15 and no duplicate tool names; packs 1–5 and app prefix. Lines 264–292 detect source UUIDs and assembled regex placeholders; source channel detection is UUID-only, no generic literal channel-ID rule or XML parse. Lines 311–323 scan template token shapes/tailnet/private host/UUID without reprinting leaked matches. They do NOT require images, publication, seven descriptions, Team-only visibility or absence of template placeholders. run:332–381 tolerates absent pack/prompt/assembled/template directories except missing roster directory, and does not enforce exact seven-seat completeness. Existing fixtures explicitly accept missing templates and a template with {{DESK_GATEWAY_URL}} (ci/tests/test_gates.py:1931–1942). Real-roster test:1722–1734 substitutes empty prompt/template directories. Therefore even a future green G-7 is bounded authored-integrity evidence, not n5 publication/assembly end-to-end acceptance.\n\n## n7: every step mapped\n1. Ordered n2→n3→n4→n5→n6, gateway-skeleton overlap: declared in docs/upgrade-plan-desk-v2.md:328; network docs preserve probe→env→restart→verify→G-6 ordering. No rollout execution receipt/dependency closure found in target paths. Parent says all phases remain milestone scope; do not narrow to authored pieces.\n2. Per-node rollback: network README:92–100 has proxy/domain recreation; railway skill:114–124 has env-file restore/restarts and forwarder redeploy (minutes/no data movement). Plan:328 adds forwarder deletion, additive gateway fallback, v1.0 reassembly with committed roster and template re-publication. Inspected scripts offer no version-selecting rollback option; executing historic v1.0 rollback requires selecting known historical source/roster bytes externally. No exercised prompt/template rollback or pinned previous publication receipt exists here. Install scripts deploy/restart but do not implement an explicit restore procedure. Historical CI-specific rollback is documented separately and is not full Desk rollback.\n3. Cutover announcement/LEAD audit notes: no actual window announcement or dispatched rollout-note evidence found in target paths.\n4. PR/Notion/Linear sync/report to Ove: historical receipts name branches/PRs/tickets but no current n7 synchronization result/report with all node receipts and unverified list found in target paths. These are external orchestrator actions; receipt filenames are not synced tracker evidence.\n5. railway-app retirement: infra/railway/README.md:104–109 says identify existing node, adopt if already forwarder, retire deprecated router/exit after verified replacement under G-6. Plan n7 requires after n6, a stricter timing dependency than the network prose. No identification or approved retirement receipt in scope. Parent current status says railway-app is online advertising routes; that is not proof of intended forwarder identity or permission to retire it.\n\n## Historical infrastructure receipts: what each actually covers\n• desk-v2-infra.json: initial static syntax/gate/source checks only; explicit nondeployment/non-ACL/nonpublic-intake statements at 100–105.\n• gates-root-wiring-20260929T184058Z-e85194ea.json: historical local wiring/injection checks, no Actions runner execution; explicit G-1 foreign ownership, branch protection not configured and QUALITY review missing. approved_by LEAD is not current independent exact-SHA approval.\n• infra-actions-self-hosted-vps-2026-09-30.md:44–62 records five runner-label changes in three files; 175–199 records runner execution before G-2 plus self-test/sync historical success, but G-3/4/5/6 never reached on runner, no runner config/isolation proof, serial throughput/label ambiguity and hosted billing unresolved. 201–207 ties historical CLEAR_WITH_WAIVERS to tip 1905e44. JSON retains a contradictory old unverified item saying approved_by null while top-level field is QUALITY; preserve this history discrepancy rather than treating either as current approval.\n• infra-pr33-greptile-p1-gates-isolation-2026-09-30.json:8,25–33 records base-ref overlay/intake padding static changes, null approval, separate runner isolation and Greptile tip-match gaps. This narrows the earlier arbitrary gate-script execution risk; it does not solve all PR-controlled test/workspace isolation.\n• infra-desk-gate-install-layout-2026-09-30.json:75–80 explicitly says live VPS not reinstalled at that tip, repo default carry-forward, privilege drop disabled and approval null. Syntax/install source checks are not installation evidence.\n• infra-phase-a-substrate-env-lease-stubs-2026-09-30.json and infra-spe4792-lease-reap-timer-2026-09-30.md:5,91–104 explicitly say no install/live authenticated coord_reap_leases call. Local fake MCP/loopback coverage does not prove real substrate, forwarder probes or network cutover. Historical public fallback and no retirement remain declared; approval null.\n• claude-mcp-json-hindsight-20260930T023348Z-239b2b18.json: project MCP configuration only, no cloud session/server contact, missing cloud API key, unexercised variable expansion, foreign manifest ownership and no independent review. Not Bot Marketplace connector publication; D-2 remains Bots→gateway.\n• infra-r1b-ragflow-mcp-json-2026-09-30.json:30–46: project MCP entry, missing cloud RAGFlow env, billing dependency; historical Path B approval at 89ef894. It explicitly left runner migration to #32. Not RAGFlow ingestion/publication evidence.\n• unified-lsp-tier1-ut-tlvsqj-b31b8fe2.json is outside n2/n5/n7 deployment/share scope; no conclusions drawn from it.\n\nNo historical stamp above approves the current milestone SHA. Exact-SHA independent approval, actual platform/network evidence and fresh-desk acceptance are separate required gates. The main agent should run consolidated verification only after implementation lands; this investigation exercised none."
+    },
+    "MapCompanionDataDelivery": {
+      "original_provenance": "agent://MapCompanionDataDelivery/report",
+      "method": "completed bounded read-only source analysis; no executed checks",
+      "repository": "swcstudiospace/agent-substrate",
+      "report": "## Scope and evidence rules\nRead-only investigation restricted to the five requested companion paths. No context-file search, runtime commands, builds, tests, gates, edits, commits or pushes. Source references below are relative to /root/src/repos/agent-substrate. Negative findings are bounded to those inspected paths, using broad symbol searches plus alternate DDL/adapter/projector searches. No claim is made about code in other packages or installed agents. The Desk plan itself was outside the five-path scope; matrix covers every n3 deliverable named in this assignment, without inventing additional §12 step names.\n\n## Source-backed delivery matrix\n| Desk deliverable | Actual implementation/evidence | Gap and prerequisites |\n|---|---|---|\n| Hindsight memory adapter: reads | planes.ts:114–124 POSTs /v1/default/banks/{encoded bank}/memories/recall, Bearer auth, budget low, max_tokens 400, 4-second timeout, returns first four nonempty result texts. service.ts:147–155 calls this after composeBrief and catches failures to empty recall. | Real read integration only. Returned IDs, provenance/citations, timestamps and bank metadata are discarded. Request query is repo, else graph_id, else generic recent-work query. Missing/failed recall is silently omitted; source is not evidence of a successful bank read. Requires reachable authenticated Hindsight URL and correct existing bank. |\n| Hindsight memory adapter: writes | service.ts:224–239 writes accepted memory through IndexStore only; index-store.ts:274–286 inserts memory_entries. | No Hindsight retain/write endpoint, adapter write operation, bank provisioning/list/verification, or write-through from PG/events found. Hindsight ownership and API/version contract need to be established before any Desk write can be claimed persisted. |\n| Hindsight bank evidence | planes.ts:32–48 config requires HINDSIGHT_URL plus HINDSIGHT_API_KEY; HINDSIGHT_BANK defaults to ultrathink. service.ts:155 labels brief with configured bank string. | Configured string is not bank existence, identity, tenant/isolation or successful persistence evidence. No live bank receipt, read-after-write receipt, or evidence IDs in inspected paths. Default ultrathink must not be treated as a dedicated verified Desk bank. |\n| Hindsight redaction | redact.ts:20–85 provides credential regexes/recursive sensitive-key masking. index-store.ts:278 redacts PG memory body; event.ts normalizeEvent performs event redaction before ledger storage, documented in docs/greptime-ledger.md:132–149. | hindsightRecall sends query unchanged and appends returned text unchanged. No Hindsight outbound write redactor because write adapter absent. PG metadata scope/writer/source_event is not covered by the memory-body redact call. Existing redactor is credential-focused, not comprehensive PII detection. Desk must establish the actual redaction boundary for requests, retained content, recalled content, logs and bank evidence. |\n| Hindsight version checks | URL hardcodes /v1/default; packages/mcp-server/package.json and mcp.ts:25 report local version 0.1.0. service.ts:328–344 health reports only PG/Greptime. | Hardcoded v1 API path/local package version is not server version compatibility verification. No Hindsight version probe, compatibility allowlist or version receipt found. Requires actual service version/API shape evidence. |\n| Dragonfly cache-only ownership | planes.ts:46 resolves DRAGONFLY_URL; :79–112 exposes standalone dragonflyCommand. docs/adr/0002 and governance.md:111–123 propose snapshots, outbox, breakers, leases and policy cache; infra template repeats those. | No caller of dragonflyCommand within inspected packages; no GET/SET snapshot service path. Historical outbox/lease design is not Desk cache-only delivery and must not be copied as durable coordination ownership. Decide/cache namespace and TTL in Desk without making Redis source of truth. |\n| Dragonfly fail-through | service.ts:147–155 has Hindsight fail-open; composeBrief uses PG/Greptime, not Dragonfly. dragonflyCommand rejects connection/timeout errors. | No integrated Redis cache lookup/recompute/fail-through path or outage receipt. Transport alone is not fail-through behavior. Requires primary storage/retrieval path and observable cache outage acceptance. |\n| Dragonfly rate counters | planes.ts:66–112 has generic RESP framing/command handling only. Alternate searches for INCR/EXPIRE/rate-limit/counters found no implementation in the scoped source. | No atomic counter+expiry, TTL/window/key scope, or unavailable-cache rate policy. Important transport limitation: socket data completion only recognizes +, -, $ reply prefixes, not integer ':' replies returned by INCR; an INCR result would not satisfy reply-count completion and would time out. Existing helper cannot safely be assumed to support rate counters. |\n| Dragonfly network/protocol prerequisites | parseRedisUrl:51–62 accepts redis and rediss, extracts host/port/password; dragonflyCommand:85 uses node:net.connect. | rediss still opens plaintext TCP (no TLS socket). Username/database path are ignored. Bulk framing detection is line-based and parseReply truncates at CRLF; it is not a complete Redis client. Private reachable endpoint/auth/TLS contract must be verified; do not reuse this transport blindly for Desk cache or rate limiting. |\n| Desk coordination tables | index-store.ts:38–112 creates graph_index, graph_nodes, graph_steps, memory_entries, anchors. graph_nodes lease columns and index are real. :201–257 claim/release/heartbeat uses PG CAS; memory uses GIN FTS. | No Desk-specific coordination schema/table names/migrations found. Generic graph index explicitly caches Notion/Linear, not source of truth (file header). It is not a substitute for every named Desk coordination table. Lease CAS permits renewal/overwrite by the same surface regardless of session, token is surface/session/timestamp, heartbeat extends a fixed hour; do not infer session isolation or strong fencing. Requires approved Desk schema, actual PG/Timescale target identity, applied migration receipts and concurrency acceptance. |\n| Desk hypertables | All index-store DDL is ordinary PG tables. Research docs/research/memory-bank-realtime-event-proposal.md:116 and v1.1 PLAN Tier 2 describe future hypertables/aggregates. | No create_hypertable, Timescale extension/version check, hypertable policy/migration, or applied hypertable receipt found. Greptime TIME INDEX is a different database feature and cannot satisfy Timescale acceptance. Requires Timescale capability/version evidence and Desk-owned DDL execution by authorized parent/operator. |\n| RAGFlow docs_search | mcp.ts:261–287 real tool POSTs /api/v1/retrieval with question/page/page_size=4, Bearer auth, 4-second timeout; returns ok/status/raw body. planes.ts:126–141 has a second retrieval helper formatting document_name and text but no caller found in scoped packages. Config requires RAGFLOW_URL and RAGFLOW_API_KEY. | HTTP retrieval, not historical plan's ragflow_retrieval MCP proxy. No dataset selection/configuration or normalized stable citation contract. Query and raw response are not redacted here; exception strings are returned raw. Need reachable authenticated server, confirmed dataset/API request contract and live citation evidence. No claims of dataset ingestion/search success from source existence. |\n| RAGFlow ingest | Historical 05-docs-hindsight/CONTEXT.md:10–12 calls for redacted ingest; PLAN.md:3–7 and SUMMARY.md explicitly describe stubs. | No docs_ingest tool, upload/document parse/ingest client, redacted ingest implementation, dataset readiness receipt or ingest→search citation receipt in inspected paths. Requires authorized existing dataset, supported upload/parse endpoints and redaction-before-upload behavior. |\n| n5 Grok Bot plugin projector | substrate-yaml-projector.ts:123–140 generates SUBSTRATE_URL, SUBSTRATE_TOKEN, SUBSTRATE_BRIEF_CMD and optional emit example; :143–212 parses CLI, filters surface, writes <surface>.env plus .bak. docs/grokbot-production-loop.md:7–45 is usage example. | Env-fragment projector only, not Grok Bot plugin manifest/config/tool installation. No plugin schema/capability probe, managed plugin block, rollback/removal, installed-plugin receipt or boot tool discovery evidence. --remove intentionally does nothing; --check prints would-write, does not compare deployed config. Requires actual Grok Bot plugin schema/install destination/ownership and connector interface evidence; connector-ext is only a historical pointer outside this allowed scope. |\n\n## Package boundaries and safe consumption\n1. Consume the companion as an external substrate service using its existing REST /brief and /events or MCP /mcp contracts (server.ts), not by importing CLI modules. Respect the event response stored flag: normalized/hash-bearing output is not a persisted receipt. Direct PG/Greptime/Dragonfly access by Desk seats would bypass the documented single-writer boundary.\n2. planes.ts exports small low-level clients, but @substrate/mcp-server is private and its main boots src/index.ts; there is no declared standalone adapter package/export contract. A deep import would couple Desk to companion source layout and Bun/runtime dependencies. Prefer a Desk-owned boundary over explicit configured service contracts rather than copying the incomplete companion implementation.\n3. @substrate/projector package.json main points to src/index.ts, but the complete source listing contains only cursor.ts and substrate-yaml-projector.ts. Both execute immediately on load. Do not import/run them as a reusable Grok Bot plugin library. Generate into a private staged destination only after parent validates supported plugin/config shape; preserve unrelated agent config with managed ownership and real rollback.\n4. Existing projector prints resolved token values to stdout, writes with default filesystem mode rather than explicit 0600, lacks shell escaping, and catches filesystem write errors while continuing to a success-style completion message. No invocation should receive production credentials or target live configs until these issues are addressed in the owning integration. Parsing a YAML version does not validate supported version.\n5. Do not alter companion .planning or adopt its archived phases as Desk milestones. Parent's Desk n1–n7 graph remains authoritative; attach specific source capabilities to it, explicitly tracking missing real behavior and external receipts rather than accepting archival completion labels.\n\n## Historical receipts: where to look and what they actually cover\n- .planning/ROADMAP.md:1–3 says v1.0 archived/complete. STATE.md has duplicated historical metadata and claims, while its final next step is start next milestone. These are history, not proof of deployed Desk prerequisites.\n- milestones/v1.0-phases/01-lane-b/SUMMARY.md:22–30 lists historical CLI/health/collector checks and projector --check. :42–49 explicitly says full GrokBot→Hermes→Omp live proof is deferred and handoff/claim was simulated. It points to packages/connector-ext/src/index.ts; that package was not opened because outside assigned paths.\n- milestones/v1.0-phases/02-claims/SUMMARY.md:16–22 distinguishes code/unit/smoke evidence; :32–35 leaves Dragonfly mirror and production live dispatch future. It cannot prove Desk session coordination or hypertables.\n- milestones/v1.0-phases/05-docs-hindsight/SUMMARY.md is only a stub/smoke assertion, with no bank ID, document ID, citation, timestamped request/response or deployment SHA.\n- milestones/v1.0-MILESTONE-AUDIT.md:12–17 lists deferred app wiring/live handoff; :32–39 and :51–54 admit stubs/smokes. Passed/8-of-8 labels do not override these limitations.\n- SELF_IMPROVING_MEMORY_BANK_PROPOSAL.md:14,36 says Dragonfly not wired; current planes.ts now contains primitive transport/env support but service is still unwired. docs/research proposal describes broader features as current that source does not support. Use source, not these inconsistent summaries, for implementation status.\n- phases/v1.1-memory-bank-realtime/PLAN.md explicitly says high-level skeleton/research-only and no ROADMAP/STATE edits; hypertables remain future Tier 2. No SUMMARY exists in the listed v1.1 phase directory.\n- infra/railway/substrate-governance.railway.yaml:1–3 explicitly labels itself TEMPLATE only. dragonfly-client.example.env and railway.toml are reference configuration, not deployed state.\n\n## Parent acceptance/evidence still needed\nAuthorized parent should separately obtain actual Hindsight version and dedicated bank identity plus redacted retain/recall receipts; Dragonfly cache miss/hit/outage and integer-counter expiry evidence; PG target identity, Desk table migration and Timescale hypertable receipts; RAGFlow redacted ingest→parse→search citation evidence; Grok Bot installed plugin discovery and functional projection/rollback proof. Source references and historical fixture claims are not deployment or independent exact-SHA approval. No approvals, credentials or stamps were discovered or manufactured by this investigation."
+    }
+  },
+  "pending_phase_1": [
+    {
+      "step": 1,
+      "state": "partially_observed",
+      "requirement": "Confirm authorized account scope; preserve actual inventory and listener evidence without declaring network acceptance."
+    },
+    {
+      "step": 2,
+      "state": "identity_observed_role_acceptance_pending",
+      "requirement": "railway-app matched to Ultrathink/production/tailscale-vpn; establish role/disposition; no retirement before n6/G-6."
+    },
+    {
+      "step": 3,
+      "state": "unverified",
+      "requirement": "Authenticated Bot UUID read and own SYSTEM_PROMPT.xml write/readback with exact actual path."
+    },
+    {
+      "step": 4,
+      "state": "unverified",
+      "requirement": "Actual Grok Bot SaaS MCP tools/list_changed behavior or proved fallback endpoints."
+    },
+    {
+      "step": 5,
+      "state": "unverified_attempt_timeout",
+      "requirement": "Authenticated Cursor team network policy and plan tier."
+    },
+    {
+      "step": 6,
+      "state": "pending_quality_routing",
+      "requirement": "Actual QUALITY-owned proposal section 13 update ticket; no source edit or fabricated ticket in this artifact."
+    }
+  ],
+  "resolved_policy": {
+    "reflection": "weekly only",
+    "network_clients": [
+      "VPS",
+      "Ove’s Mac mini",
+      "XPS"
+    ],
+    "network_rule": "exact mapped ports; deny by default",
+    "activation": "authorized human account owner through authorized account UI; seats proposal-only while skills.approve absent",
+    "D4": "original proposal-authoring session only",
+    "independent_approval": "exact current reviewed SHA; no manufactured approval or new tip"
+  },
+  "checks_executed_by_worker": [],
+  "companion_checkout_provenance": {
+    "repository": "swcstudiospace/agent-substrate",
+    "observed_at": "2026-10-08",
+    "observer": "parent",
+    "head": "21652a20a1b3ca98132e80ca76aadedc95c3369d",
+    "branch": "claude/greptime-events-ledger-7j1so8",
+    "behind_upstream_commits": 15,
+    "modified": [".planning/ROADMAP.md", "packages/mcp-server/src/store-lock.test.ts"],
+    "deleted": [".planning/phases/0.5-governance/CONTEXT.md", ".planning/phases/00-brief/0-UAT.md"],
+    "untracked": [".planning/milestones/v1.0-phases/0.5-governance/", ".planning/milestones/v1.0-phases/00-brief/", ".planning/phases/v1.1-memory-bank-realtime/"],
+    "limitation": "Current dirty-HEAD observation captured after source maps; not the exact map-time snapshot. Preserved user work; no fetch/reset/switch/restore/commit performed. Re-establish current-source applicability before Phase 3 companion implementation."
+  }
+}

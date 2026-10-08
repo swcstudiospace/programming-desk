@@ -1,0 +1,1241 @@
+{
+  "format": "desk-v2-staged-ingest-intelligence",
+  "task_id": "SynthesizeDeskV2Intel",
+  "correlation_id": "desk-v2-autonomous-2026-10-08",
+  "status": "STAGED_NOT_VALIDATED",
+  "mode": "new-initialization-user-approved-core-planning",
+  "authorization_context": {
+    "kind": "authenticated-parent-omp-delegation",
+    "user_selection": "Initialize from Desk v2 plan",
+    "bus_task_assign": false,
+    "bus_signature": null,
+    "core_routing_approval": "user explicitly selected Create planning setup after resolving W-01/W-02/W-03",
+    "independent_review_approval": "not-obtained"
+  },
+  "source_path": "docs/upgrade-plan-desk-v2.md",
+  "type": "PRD",
+  "confidence": "high",
+  "manifest_override": false,
+  "classification_basis": "Explicit user assignment identifies the selected document as approved source PRD; no manifest file was supplied.",
+  "title": "Programming Desk v2 — Upgrade Plan",
+  "summary": "Full seven-node upgrade covering inventory, private Railway networking, five substrate services, seat gateway contracts, prompt and skill sharing, fresh-desk acceptance, rollout and rollback.",
+  "scope": [
+    "INVENTORY",
+    "NETWORK",
+    "DATA",
+    "GATEWAY",
+    "SHARE",
+    "ACCEPT",
+    "ROLLOUT"
+  ],
+  "locked": false,
+  "precedence": null,
+  "notes": "Document-level PRD locked=false does not erase the explicit embedded D-1/D-2/D-3 locks or the original-session D-4 lock. Original proposal metadata is historical, not implementation status. No temporal precedence is inferred.",
+  "cross_refs": [
+    "docs/gotxcot-cloud-pipeline.md",
+    "docs/github-sot-orchestration.md",
+    "docs/desk-operating-model.md",
+    "docs/quality-gates.md",
+    "ownership.yaml",
+    "ARCHITECTURE.md",
+    "skills/README.md",
+    "docs/handoff-contracts.md",
+    "agent-substrate/docs/data-planes.md",
+    "agent-substrate/docs/railway-tailscale.md",
+    "grok-claude-cloud-connector/docs/grok-bot-setup.md",
+    "grokrouter/docs/FRESH-BOT-ACCEPTANCE.md"
+  ],
+  "domain_sources": [
+    {
+      "source_path": "docs/upgrade-plan-desk-v2.md",
+      "type": "PRD",
+      "confidence": "high",
+      "basis": "Explicit assignment source designation",
+      "document_locked": false,
+      "embedded_locked_decisions": [
+        "D-1",
+        "D-2",
+        "D-3",
+        "D-4"
+      ],
+      "source_header_status": "Proposal on a draft PR; no build/deploy/verification from original authoring session",
+      "evidence_interpretation": "Selected full feature source; historical status does not shrink scope or establish current runtime status"
+    },
+    {
+      "source_path": "docs/desk-operating-model.md",
+      "type": "SPEC",
+      "confidence": "medium",
+      "basis": "Current governance evidence contains normative production-loop, receipt, event and exact-SHA approval protocols; not classified as passive DOC context",
+      "document_locked": false,
+      "precedence": null,
+      "normative_sections": [
+        "The production loop (steps 7–8, every seat, every ticket)",
+        "Lane C ticket flow",
+        "Verification",
+        "Merge-claim head rule",
+        "Channel discipline (human-visible surface)",
+        "Direct-from-Ove and widgets"
+      ],
+      "context_sections": [
+        "Flow",
+        "Channel rules",
+        "Channel roster"
+      ],
+      "evidence_interpretation": "Assignment names this as current governance; exact-SHA/no-new-tip is also explicitly required by the assignment, not chosen by document date"
+    }
+  ],
+  "process_sources": [
+    {
+      "source_path": "/root/.agents/gsd-core/references/doc-conflict-engine.md",
+      "role": "process-contract",
+      "sections": [
+        "Severity Semantics",
+        "Report Format",
+        "Safety Gate",
+        "Workflow Responsibilities"
+      ],
+      "feature_source": false
+    },
+    {
+      "source_path": "/root/.agents/gsd-core/workflows/ingest-docs.md",
+      "role": "staging-and-routing-boundary",
+      "sections": [
+        "synthesize",
+        "conflict_gate",
+        "route_new_mode"
+      ],
+      "feature_source": false
+    }
+  ],
+  "reference_graph": {
+    "scope": "the two explicit domain sources; no transitive import of referenced documents",
+    "edges": [
+      {
+        "from": "docs/upgrade-plan-desk-v2.md",
+        "to": "docs/desk-operating-model.md",
+        "evidence": "opening policy L9"
+      }
+    ],
+    "in_set_cycle_found": false,
+    "basis": "Read plan references governance; no reverse upgrade-plan reference in the complete read governance document. Other references are not recursively synthesized or validated."
+  },
+  "decision_evidence": [
+    {
+      "id": "D-1",
+      "status": "locked",
+      "source": "docs/upgrade-plan-desk-v2.md",
+      "section": "§3 D-1",
+      "lines": [
+        47,
+        47
+      ],
+      "decision": "Ultrathink = GreptimeDB + TimescaleDB + DragonflyDB; Agent Substrate = Hindsight + RAGFlow; Agentmemory replaced by Hindsight",
+      "continuing_scope": true,
+      "requirements": [
+        "REQ-INVENTORY-004",
+        "REQ-DATA-001..038"
+      ]
+    },
+    {
+      "id": "D-2",
+      "status": "locked",
+      "source": "docs/upgrade-plan-desk-v2.md",
+      "section": "§3 D-2",
+      "lines": [
+        48,
+        48
+      ],
+      "decision": "Bots use VPS Desk Gateway, not tailnet enrollment; per-project Railway forwarders; no Bot DB credentials; retire public DB exposure after cutover",
+      "continuing_scope": true,
+      "requirements": [
+        "REQ-NETWORK-001..020",
+        "REQ-GATEWAY-004..012",
+        "REQ-DATA-037"
+      ]
+    },
+    {
+      "id": "D-3",
+      "status": "locked",
+      "source": "docs/upgrade-plan-desk-v2.md",
+      "section": "§3 D-3",
+      "lines": [
+        49,
+        49
+      ],
+      "decision": "Seven Team-only seat templates plus desk-bootstrap and desk-doctor; no template secrets, internal URLs beyond gateway host or UUIDs",
+      "continuing_scope": true,
+      "requirements": [
+        "REQ-SHARE-008..040",
+        "REQ-ACCEPT-001..019"
+      ]
+    },
+    {
+      "id": "D-4",
+      "status": "locked",
+      "source": "docs/upgrade-plan-desk-v2.md",
+      "section": "§3 D-4",
+      "lines": [
+        50,
+        50
+      ],
+      "decision": "Draft desk PR/shareable document plus companion draft docs PR; no merge, trackers or deploys from the original authoring session",
+      "continuing_scope": "explicit original authoring-session boundary only",
+      "resolution": "No invented indefinite execution ban; user separately approved Create planning setup, not runtime implementation or deployment"
+    }
+  ],
+  "requirement_evidence": {
+    "artifact": ".planning/intel/requirements.md",
+    "acceptance_id_rule": "Replace REQ- prefix with AC- for each Given/When/Then row; no criteria lint or validation was run",
+    "all_rows_retained": true,
+    "all_full_phases": "UNVERIFIED",
+    "groups": [
+      {
+        "group": "INVENTORY",
+        "first_id": "REQ-INVENTORY-001",
+        "last_id": "REQ-INVENTORY-016",
+        "count": 16,
+        "primary_phase": "n1",
+        "source_sections": [
+          "§1",
+          "§5",
+          "§11",
+          "§12 kickoff and n1",
+          "§13",
+          "Appendix A"
+        ]
+      },
+      {
+        "group": "NETWORK",
+        "first_id": "REQ-NETWORK-001",
+        "last_id": "REQ-NETWORK-022",
+        "count": 22,
+        "primary_phase": "n2",
+        "source_sections": [
+          "§3 D-2",
+          "§5",
+          "§12 n2",
+          "§12 n7.5"
+        ]
+      },
+      {
+        "group": "DATA",
+        "first_id": "REQ-DATA-001",
+        "last_id": "REQ-DATA-038",
+        "count": 38,
+        "primary_phase": "n3",
+        "source_sections": [
+          "§4 rule 4",
+          "§6",
+          "§12 n3",
+          "§13",
+          "Appendix D",
+          "governance production loop point 7"
+        ]
+      },
+      {
+        "group": "GATEWAY",
+        "first_id": "REQ-GATEWAY-001",
+        "last_id": "REQ-GATEWAY-054",
+        "count": 54,
+        "primary_phase": "n4",
+        "source_sections": [
+          "§4",
+          "§7.1..7.5",
+          "§10",
+          "§11",
+          "§12 n4",
+          "Appendix C",
+          "governance Merge-claim head rule"
+        ]
+      },
+      {
+        "group": "SHARE",
+        "first_id": "REQ-SHARE-001",
+        "last_id": "REQ-SHARE-040",
+        "count": 40,
+        "primary_phase": "n5",
+        "source_sections": [
+          "§3 D-3",
+          "§8.1..8.3",
+          "§9.1..9.3",
+          "§11",
+          "§12 n5",
+          "Appendix B",
+          "governance production loop point 8"
+        ]
+      },
+      {
+        "group": "ACCEPT",
+        "first_id": "REQ-ACCEPT-001",
+        "last_id": "REQ-ACCEPT-034",
+        "count": 34,
+        "primary_phase": "n6",
+        "source_sections": [
+          "§9.3..9.4",
+          "§10",
+          "§12 n6",
+          "governance production loop points 1..8",
+          "governance Flow/Verification/Channel discipline/Direct-from-Ove"
+        ]
+      },
+      {
+        "group": "ROLLOUT",
+        "first_id": "REQ-ROLLOUT-001",
+        "last_id": "REQ-ROLLOUT-013",
+        "count": 13,
+        "primary_phase": "n7",
+        "source_sections": [
+          "§5 rollback",
+          "§12 n7 and runtime lanes",
+          "§13 final paragraph",
+          "governance Verification/Merge-claim head rule"
+        ]
+      }
+    ],
+    "total": 217,
+    "source_invariant_crosswalk": [
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§5 Railway over Tailscale",
+        "lines": [
+          93,
+          114
+        ],
+        "requirements": [
+          "REQ-INVENTORY-004..010",
+          "REQ-NETWORK-001..022",
+          "REQ-ROLLOUT-002",
+          "REQ-ROLLOUT-011"
+        ],
+        "evidence_scope": "mapping, ACL, identity, environment, exposure, admin alternatives, egress, probes and rollback"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§6 Substrate data planes",
+        "lines": [
+          118,
+          130
+        ],
+        "requirements": [
+          "REQ-DATA-001..038"
+        ],
+        "evidence_scope": "all five stores, writers, TTLs, forbidden data, chain/anchor, transactional queue/claims/idempotency, banks, ingest, companion docs/replanning"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§7.1 Shape",
+        "lines": [
+          134,
+          147
+        ],
+        "requirements": [
+          "REQ-GATEWAY-001..012",
+          "REQ-GATEWAY-028..038"
+        ],
+        "evidence_scope": "ownership, deployment, OAuth, scopes, contracts, upstreams, all-call audit, approval/rollback fields, read/write failures and deadline"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§7.2 Shared core",
+        "lines": [
+          149,
+          160
+        ],
+        "requirements": [
+          "REQ-GATEWAY-013..020"
+        ],
+        "evidence_scope": "all eight core tools and their specific source backends"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§7.3 Seat rosters",
+        "lines": [
+          162,
+          178
+        ],
+        "requirements": [
+          "REQ-GATEWAY-021..029",
+          "REQ-GATEWAY-036..039"
+        ],
+        "constraints": [
+          "C-09",
+          "C-10",
+          "C-11",
+          "C-12",
+          "C-13",
+          "C-14",
+          "C-15"
+        ],
+        "evidence_scope": "every named seat tool/backend, gate tag, source count, native-tool exclusion and approval discrepancy"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§7.4 Tool packs",
+        "lines": [
+          180,
+          190
+        ],
+        "requirements": [
+          "REQ-INVENTORY-008",
+          "REQ-GATEWAY-047..053",
+          "REQ-ACCEPT-017"
+        ],
+        "evidence_scope": "three initial packs, all named tool examples, five/twenty ceilings, ticket lifetime, unload, notification and fallback"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§7.5 Observability",
+        "lines": [
+          192,
+          194
+        ],
+        "requirements": [
+          "REQ-DATA-028",
+          "REQ-GATEWAY-039"
+        ],
+        "evidence_scope": "heartbeat/rollups/gate outcomes, Langfuse trace boundary, status-page non-goal"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§8.1 Prompt changes",
+        "lines": [
+          198,
+          208
+        ],
+        "requirements": [
+          "REQ-SHARE-001..009",
+          "REQ-SHARE-039"
+        ],
+        "evidence_scope": "all placeholders/roster filling, per-seat sections, PD-8, memory, connector preference, three always skills and LEAD routines"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§8.2 New skills",
+        "lines": [
+          210,
+          222
+        ],
+        "requirements": [
+          "REQ-SHARE-010",
+          "REQ-DATA-014",
+          "REQ-SHARE-038"
+        ],
+        "evidence_scope": "all seven skills, named owners/purposes, user-resolved weekly reflection and recurring-mistake authoring discipline"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§8.3 Skill packaging",
+        "lines": [
+          224,
+          231
+        ],
+        "requirements": [
+          "REQ-SHARE-011..014",
+          "REQ-SHARE-040"
+        ],
+        "evidence_scope": "team plugin/seven connectors, manual initial path, shared grok-bot projector/PR route, other-team skills, seat connector allocation and no double action"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§9.1 Template contents",
+        "lines": [
+          235,
+          248
+        ],
+        "requirements": [
+          "REQ-SHARE-015..022"
+        ],
+        "evidence_scope": "Team-only seven templates, copied fields, description/skills/routines/avatar and explicit exclusions"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§9.2 Bootstrap sequence",
+        "lines": [
+          250,
+          258
+        ],
+        "requirements": [
+          "REQ-SHARE-023..030"
+        ],
+        "evidence_scope": "all seven bootstrap steps, desktop OAuth/per-team passphrase, own UUID, six-member group, pinned install/hash, green/unpause and memory seed"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§9.3 Doctor",
+        "lines": [
+          260,
+          272
+        ],
+        "requirements": [
+          "REQ-SHARE-031..038"
+        ],
+        "evidence_scope": "all seven doctor rows plus non-editing and repair-only bounds"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§9.4 Fresh-desk acceptance",
+        "lines": [
+          274,
+          276
+        ],
+        "requirements": [
+          "REQ-ACCEPT-001..009",
+          "REQ-ACCEPT-019",
+          "REQ-GATEWAY-036..038"
+        ],
+        "evidence_scope": "fresh recipient, seven green doctors, docs ask/double uplift/ticket/pending label, independently bound approval, roster events, origin intake and acknowledgement"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§10 Outside speaks only to LEAD",
+        "lines": [
+          280,
+          290
+        ],
+        "requirements": [
+          "REQ-GATEWAY-040..046",
+          "REQ-GATEWAY-054",
+          "REQ-ACCEPT-008..011"
+        ],
+        "evidence_scope": "all human/machine/GitHub/Slack/Bot entry routes, exact intake body, origin versus seat credentials and server-enforced LEAD-only tools"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§11 Repository changes",
+        "lines": [
+          294,
+          308
+        ],
+        "requirements": [
+          "REQ-INVENTORY-014",
+          "REQ-INVENTORY-016",
+          "REQ-GATEWAY-001..003",
+          "REQ-GATEWAY-034",
+          "REQ-SHARE-001..022",
+          "REQ-SHARE-039"
+        ],
+        "evidence_scope": "all owned surfaces, contract-first consumers, fixture/CI/assembly/generated description requirements and every G-7 fail condition"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "§13 Assumptions",
+        "lines": [
+          334,
+          349
+        ],
+        "requirements": [
+          "REQ-INVENTORY-004..015",
+          "REQ-DATA-011",
+          "REQ-ROLLOUT-013"
+        ],
+        "evidence_scope": "unverified services/paths/client/policy/node/CI/credentials/version/triggers and authoring/E2E limits; Bot-created-Bot not required"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "Appendix A ownership",
+        "lines": [
+          353,
+          377
+        ],
+        "requirements": [
+          "REQ-INVENTORY-016",
+          "REQ-GATEWAY-001..003",
+          "REQ-SHARE-003",
+          "REQ-SHARE-010"
+        ],
+        "evidence_scope": "owner patterns, last-match overrides, seven roster consumers and WEB/ANDROID/IOS pack consumers; historical gate claim not rerun"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "Appendix B prompt shape",
+        "lines": [
+          379,
+          396
+        ],
+        "requirements": [
+          "REQ-SHARE-004..007"
+        ],
+        "evidence_scope": "tools/gates/evidence memory and connector shape"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "Appendix C LEAD contract excerpt",
+        "lines": [
+          398,
+          420
+        ],
+        "requirements": [
+          "REQ-GATEWAY-021",
+          "REQ-GATEWAY-042"
+        ],
+        "constraints": [
+          "C-09"
+        ],
+        "evidence_scope": "intake origin schema and graph_state required fields/patterns/actions/backend mapping"
+      },
+      {
+        "source": "docs/upgrade-plan-desk-v2.md",
+        "section": "Appendix D companion changes",
+        "lines": [
+          423,
+          425
+        ],
+        "requirements": [
+          "REQ-DATA-001..006"
+        ],
+        "evidence_scope": "external document/env/data summary responsibilities, not authorized local core writes"
+      },
+      {
+        "source": "docs/desk-operating-model.md",
+        "section": "The production loop, points 1–8",
+        "lines": [
+          41,
+          136
+        ],
+        "requirements": [
+          "REQ-ACCEPT-020..030",
+          "REQ-ACCEPT-034",
+          "REQ-DATA-037",
+          "REQ-SHARE-040"
+        ],
+        "evidence_scope": "sparse/nested errors, missing revision marker, loop ack semantics, event kind/payload gap, partial retain/uncertain retry, no raw data-plane access, skill authority, unsigned handoff disclosure"
+      },
+      {
+        "source": "docs/desk-operating-model.md",
+        "section": "Merge-claim head rule",
+        "lines": [
+          202,
+          250
+        ],
+        "requirements": [
+          "REQ-GATEWAY-036..038",
+          "REQ-ACCEPT-006",
+          "REQ-ROLLOUT-013"
+        ],
+        "evidence_scope": "exact SHA/no new tip, approval_ref kinds, current-head resolution, no fake stamps, COMPLETED versus SKIPPED, evidence_command_index, withdrawn/stale waivers"
+      },
+      {
+        "source": "docs/desk-operating-model.md",
+        "section": "Flow, Lane C ticket flow, Verification, Channel rules/roster/discipline, Direct-from-Ove and widgets",
+        "lines": [
+          23,
+          283
+        ],
+        "requirements": [
+          "REQ-INVENTORY-001..003",
+          "REQ-ACCEPT-004..005",
+          "REQ-ACCEPT-019",
+          "REQ-ACCEPT-031..034",
+          "REQ-ROLLOUT-007..010"
+        ],
+        "evidence_scope": "existing uplift/tracker/ticket/receipt flow, owned-path execution, held polling, off-channel QUALITY, human-only widgets and honest clearance/reporting"
+      }
+    ],
+    "normalized_user_resolutions": [
+      "RW-01",
+      "RW-02",
+      "RW-03"
+    ]
+  },
+  "delivery_graph": {
+    "source": "docs/upgrade-plan-desk-v2.md §12",
+    "new_roadmap_design": false,
+    "node_count": 7,
+    "step_count": 41,
+    "nodes": [
+      {
+        "id": "n1",
+        "phase_group": "INVENTORY",
+        "source_line": 316,
+        "source_title": "understand — Inventory and prove the assumptions",
+        "owner": "LEAD, Lane C to INFRA for Railway reads",
+        "depends_on": [],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n1.1",
+            "description": "List both Railway projects' actual service names, ports and environments in authorized account",
+            "requirements": [
+              "REQ-INVENTORY-004"
+            ]
+          },
+          {
+            "id": "n1.2",
+            "description": "Identify railway-app node",
+            "requirements": [
+              "REQ-INVENTORY-005",
+              "REQ-NETWORK-015"
+            ],
+            "bounded_parent_evidence": "Ultrathink/production/tailscale-vpn hostname matched; subnet-route advertiser; no forwarder cutover"
+          },
+          {
+            "id": "n1.3",
+            "description": "Prove Bot UUID read and own SYSTEM_PROMPT.xml write, exact path",
+            "requirements": [
+              "REQ-INVENTORY-006",
+              "REQ-INVENTORY-007"
+            ]
+          },
+          {
+            "id": "n1.4",
+            "description": "Observe tools/list_changed support or use fallback",
+            "requirements": [
+              "REQ-INVENTORY-008",
+              "REQ-GATEWAY-049",
+              "REQ-GATEWAY-050"
+            ]
+          },
+          {
+            "id": "n1.5",
+            "description": "Confirm Cursor network policy and plan tier",
+            "requirements": [
+              "REQ-INVENTORY-009",
+              "REQ-INVENTORY-010"
+            ]
+          },
+          {
+            "id": "n1.6",
+            "description": "Record results in plan §13 through QUALITY docs ticket",
+            "requirements": [
+              "REQ-INVENTORY-011"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "n2",
+        "phase_group": "NETWORK",
+        "source_line": 318,
+        "source_title": "decompose — Network plane",
+        "owner": "INFRA",
+        "depends_on": [
+          "n1"
+        ],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n2.1",
+            "description": "Deploy/adopt Ultrathink forwarder with five mappings, tag and disabled expiry",
+            "requirements": [
+              "REQ-NETWORK-001",
+              "REQ-NETWORK-003",
+              "REQ-NETWORK-004"
+            ]
+          },
+          {
+            "id": "n2.2",
+            "description": "Deploy/adopt Agent Substrate forwarder for Hindsight/RAGFlow",
+            "requirements": [
+              "REQ-NETWORK-002",
+              "REQ-NETWORK-003",
+              "REQ-NETWORK-004"
+            ]
+          },
+          {
+            "id": "n2.3",
+            "description": "Apply exact-port deny-default ACL for VPS, Mac mini and XPS; evidence each permitted device path",
+            "requirements": [
+              "REQ-NETWORK-005",
+              "REQ-NETWORK-006",
+              "REQ-NETWORK-007",
+              "REQ-NETWORK-021",
+              "REQ-NETWORK-022"
+            ]
+          },
+          {
+            "id": "n2.4",
+            "description": "Cut substrate environment over, restart, verify brief/events",
+            "requirements": [
+              "REQ-NETWORK-008",
+              "REQ-NETWORK-009",
+              "REQ-NETWORK-010",
+              "REQ-NETWORK-019"
+            ]
+          },
+          {
+            "id": "n2.5",
+            "description": "Approved G-6 public Timescale/Greptime retirement and rollback",
+            "requirements": [
+              "REQ-NETWORK-011",
+              "REQ-NETWORK-012",
+              "REQ-NETWORK-013",
+              "REQ-NETWORK-014"
+            ]
+          },
+          {
+            "id": "n2.6",
+            "description": "Receipt with tailnet status, probes and unverified limits",
+            "requirements": [
+              "REQ-NETWORK-020"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "n3",
+        "phase_group": "DATA",
+        "source_line": 320,
+        "source_title": "generate — Substrate data planes",
+        "owner": "SYSTEMS in agent-substrate",
+        "depends_on": [
+          "n2"
+        ],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n3.1",
+            "description": "Gated companion docs/env/GSD replan integration",
+            "requirements": [
+              "REQ-DATA-001..006"
+            ]
+          },
+          {
+            "id": "n3.2",
+            "description": "Hindsight write/read/banks/redaction/version; back up and retire local memory paths",
+            "requirements": [
+              "REQ-DATA-007..016",
+              "REQ-INVENTORY-013"
+            ]
+          },
+          {
+            "id": "n3.3",
+            "description": "Dragonfly brief/search/recall/rate caches with fail-through, cache only",
+            "requirements": [
+              "REQ-DATA-017..022"
+            ]
+          },
+          {
+            "id": "n3.4",
+            "description": "Desk Timescale coordination migrations, hypertables and aggregates",
+            "requirements": [
+              "REQ-DATA-023..029"
+            ]
+          },
+          {
+            "id": "n3.5",
+            "description": "RAGFlow dataset ingest and docs_search integration",
+            "requirements": [
+              "REQ-DATA-033..037"
+            ]
+          },
+          {
+            "id": "n3.6",
+            "description": "Package receipts with actual bun test evidence",
+            "requirements": [
+              "REQ-DATA-038"
+            ]
+          }
+        ],
+        "cross_cutting_invariants": [
+          "REQ-DATA-030",
+          "REQ-DATA-031",
+          "REQ-DATA-032"
+        ]
+      },
+      {
+        "id": "n4",
+        "phase_group": "GATEWAY",
+        "source_line": 322,
+        "source_title": "generate — Desk Gateway and contracts",
+        "owner": "QUALITY contract first; SYSTEMS and INFRA owned work",
+        "depends_on": [
+          "n3 for data tools"
+        ],
+        "skeleton_may_start_after": "n1",
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n4.1",
+            "description": "Seven roster and three initial pack contracts, consumers ack, contract first",
+            "requirements": [
+              "REQ-GATEWAY-001..003",
+              "REQ-INVENTORY-016"
+            ]
+          },
+          {
+            "id": "n4.2",
+            "description": "Seat OAuth/routing, eight core tools and Greptime audit",
+            "requirements": [
+              "REQ-GATEWAY-004..008",
+              "REQ-GATEWAY-012..020",
+              "REQ-GATEWAY-029",
+              "REQ-DATA-030"
+            ]
+          },
+          {
+            "id": "n4.3",
+            "description": "All seat tools, g5/g6, deadlines/failures, pack behavior and roster fixtures",
+            "requirements": [
+              "REQ-GATEWAY-021..034",
+              "REQ-GATEWAY-036..039",
+              "REQ-GATEWAY-047..053",
+              "REQ-INVENTORY-012"
+            ]
+          },
+          {
+            "id": "n4.4",
+            "description": "Origin-token intake API and LEAD-only intake tools",
+            "requirements": [
+              "REQ-GATEWAY-040..046"
+            ]
+          },
+          {
+            "id": "n4.5",
+            "description": "Public DNS/nginx/TLS/systemd/env and needed allowlist",
+            "requirements": [
+              "REQ-GATEWAY-009..011",
+              "REQ-NETWORK-017"
+            ]
+          },
+          {
+            "id": "n4.6",
+            "description": "Scratch-Bot smoke: two distinct lists and wrong-seat 403",
+            "requirements": [
+              "REQ-GATEWAY-006",
+              "REQ-GATEWAY-007",
+              "REQ-GATEWAY-035"
+            ]
+          }
+        ]
+      },
+      {
+        "id": "n5",
+        "phase_group": "SHARE",
+        "source_line": 324,
+        "source_title": "refine — Prompts, skills, templates, plugin",
+        "owner": "QUALITY shared; each seat prompt; LEAD templates",
+        "depends_on": [
+          "n4; final tool names"
+        ],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n5.1",
+            "description": "Placeholders/roster assembly/core PD-8/G-7 and fixtures",
+            "requirements": [
+              "REQ-SHARE-001..003",
+              "REQ-SHARE-007",
+              "REQ-SHARE-039",
+              "REQ-INVENTORY-014"
+            ]
+          },
+          {
+            "id": "n5.2",
+            "description": "Every seat prompt sections, assembly and parsing",
+            "requirements": [
+              "REQ-SHARE-004..009"
+            ]
+          },
+          {
+            "id": "n5.3",
+            "description": "All seven §8.2 skills authored and reviewed with authorized lifecycle",
+            "requirements": [
+              "REQ-SHARE-008",
+              "REQ-SHARE-010",
+              "REQ-SHARE-019",
+              "REQ-SHARE-040"
+            ]
+          },
+          {
+            "id": "n5.4",
+            "description": "swc-programming-desk plugin and companion grok-bot projector",
+            "requirements": [
+              "REQ-SHARE-011",
+              "REQ-SHARE-012",
+              "REQ-SHARE-014",
+              "REQ-SHARE-040"
+            ]
+          },
+          {
+            "id": "n5.5",
+            "description": "Seven actual Team-only templates and Share-card screenshots",
+            "requirements": [
+              "REQ-SHARE-015..022"
+            ]
+          },
+          {
+            "id": "n5.6",
+            "description": "Desk pack skills_propose PR into agent-skills",
+            "requirements": [
+              "REQ-SHARE-013"
+            ]
+          }
+        ],
+        "bootstrap_and_doctor_invariants": [
+          "REQ-SHARE-023..038"
+        ]
+      },
+      {
+        "id": "n6",
+        "phase_group": "ACCEPT",
+        "source_line": 326,
+        "source_title": "critique — Fresh-desk acceptance and external intake",
+        "owner": "LEAD orchestrates; QUALITY judges",
+        "depends_on": [
+          "n5"
+        ],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n6.1",
+            "description": "Fresh recipient adds seven templates, bootstraps and seven doctors green",
+            "requirements": [
+              "REQ-ACCEPT-001",
+              "REQ-ACCEPT-002",
+              "REQ-SHARE-023..038"
+            ]
+          },
+          {
+            "id": "n6.2",
+            "description": "Docs-only LEAD ask, double uplift/ticket/pending result, independent exact-SHA approval",
+            "requirements": [
+              "REQ-ACCEPT-003..007",
+              "REQ-ACCEPT-020..034",
+              "REQ-GATEWAY-036..038"
+            ]
+          },
+          {
+            "id": "n6.3",
+            "description": "GitHub-label and curl-origin intake, LEAD acknowledgement to issue/origin",
+            "requirements": [
+              "REQ-ACCEPT-008",
+              "REQ-ACCEPT-009",
+              "REQ-INVENTORY-015",
+              "REQ-GATEWAY-040..045"
+            ]
+          },
+          {
+            "id": "n6.4",
+            "description": "Actual iOS message and push-notification g5 approval",
+            "requirements": [
+              "REQ-ACCEPT-010",
+              "REQ-ACCEPT-011",
+              "REQ-GATEWAY-054"
+            ]
+          },
+          {
+            "id": "n6.5",
+            "description": "Gateway/forwarder/cache/wrong-seat/pack-ceiling failure drills",
+            "requirements": [
+              "REQ-ACCEPT-012..017"
+            ]
+          },
+          {
+            "id": "n6.6",
+            "description": "Open acceptance questions to Ove capped at four",
+            "requirements": [
+              "REQ-ACCEPT-018"
+            ]
+          }
+        ],
+        "judgement_requirement": "REQ-ACCEPT-019"
+      },
+      {
+        "id": "n7",
+        "phase_group": "ROLLOUT",
+        "source_line": 328,
+        "source_title": "synthesize — Ordered rollout and rollback",
+        "owner": "LEAD; owned node rollbacks by specialists",
+        "depends_on": [
+          "n2",
+          "n3",
+          "n4",
+          "n5",
+          "n6"
+        ],
+        "full_completion": "UNVERIFIED",
+        "steps": [
+          {
+            "id": "n7.1",
+            "description": "Source order with allowed gateway skeleton overlap",
+            "requirements": [
+              "REQ-ROLLOUT-001",
+              "REQ-ROLLOUT-012"
+            ]
+          },
+          {
+            "id": "n7.2",
+            "description": "Network/env/gateway/prompt/template rollback evidence",
+            "requirements": [
+              "REQ-ROLLOUT-002..006"
+            ]
+          },
+          {
+            "id": "n7.3",
+            "description": "Desk cutover windows and dispatch-note audit trail",
+            "requirements": [
+              "REQ-ROLLOUT-007",
+              "REQ-ROLLOUT-008"
+            ]
+          },
+          {
+            "id": "n7.4",
+            "description": "PR-field sync and Ove report with all receipt paths/unverified",
+            "requirements": [
+              "REQ-ROLLOUT-009",
+              "REQ-ROLLOUT-010"
+            ]
+          },
+          {
+            "id": "n7.5",
+            "description": "If superseded, retire railway-app after n6 with G-6 approval",
+            "requirements": [
+              "REQ-ROLLOUT-011"
+            ]
+          }
+        ],
+        "clearance_requirement": "REQ-ROLLOUT-013"
+      }
+    ]
+  },
+  "conflicts": {
+    "report": ".planning/INGEST-CONFLICTS.md",
+    "buckets": {
+      "BLOCKERS": 0,
+      "WARNINGS": 0,
+      "INFO": 12
+    },
+    "core_gate": "USER_APPROVED_CREATE_PLANNING_SETUP",
+    "locked_decision_conflict_found": false,
+    "auto_resolved": [
+      {
+        "id": "I-01",
+        "subject": "original branch approval stamp versus exact-SHA/no-new-tip governance",
+        "basis": "explicit assignment plus current governance",
+        "original_variant_retained_as_discrepancy": true,
+        "approval_manufactured": false
+      },
+      {
+        "id": "I-02",
+        "subject": "D-4 original-session boundary versus indefinite execution ban",
+        "basis": "source's explicit session scope; no invented temporal precedence"
+      }
+    ],
+    "user_choices_or_authority_prerequisites": [
+      {
+        "id": "W-01",
+        "subject": "reflect cadence",
+        "variants": [
+          "nightly",
+          "weekly",
+          "explicitly distinguished operations only if owner specifies"
+        ],
+        "requirements": [
+          "REQ-DATA-013",
+          "REQ-DATA-014"
+        ],
+        "resolved": true,
+        "resolution": "Weekly reflect; no nightly or split-bank schedule",
+        "original_variants_provenance_only": true,
+        "runtime_completion_claimed": false
+      },
+      {
+        "id": "W-02",
+        "subject": "authorized administrative devices",
+        "variants": [
+          "VPS plus Mac mini only",
+          "VPS plus Mac mini and XPS"
+        ],
+        "requirements": [
+          "REQ-NETWORK-021",
+          "REQ-NETWORK-022"
+        ],
+        "resolved": true,
+        "resolution": "VPS plus Ove's Mac mini and XPS; exact mapped ports; deny by default",
+        "original_variants_provenance_only": true,
+        "runtime_completion_claimed": false
+      },
+      {
+        "id": "W-03",
+        "subject": "authorized bootstrap/private-skill lifecycle",
+        "incoming": "manual save/install and per-seat enablement",
+        "governance": "no seat install/enable/edit/publish/approve until skills.approve capability exists",
+        "requirements": [
+          "REQ-SHARE-008",
+          "REQ-SHARE-014",
+          "REQ-SHARE-019",
+          "REQ-SHARE-040"
+        ],
+        "resolved": true,
+        "policy_waiver_allowed_by_this_task": false,
+        "resolution": "Authorized human account owner reviews and installs/enables through account UI; seats proposal-only while skills.approve absent",
+        "original_variants_provenance_only": true,
+        "runtime_completion_claimed": false
+      }
+    ]
+  },
+  "environmental_execution_evidence": {
+    "source": "local://desk-v2-runtime-evidence.json",
+    "baseline_commit": "4f8e495e4eba1a799056adf3d4385522c59df359",
+    "attribution": "parent-observed reads, not rerun by this worker",
+    "does_not_block_document_ingest": true,
+    "positive_bounded_facts": [
+      "Gateway loopback health ok/version 0.1.0, seven endpoints/three packs; not fresh-desk proof",
+      "railway-app identity matched to Ultrathink/production/tailscale-vpn; subnet-route advertiser, not verified required forwarder",
+      "Actual LISTEN ports confirmed for all five mapped services; additional 4002/9382 do not expand approved mapping scope",
+      "Public Hindsight health healthy/database connected; not gateway/tailnet bank round-trip or compatibility proof"
+    ],
+    "missing_or_failed_prerequisites": [
+      "Bot computer offline; actual UUID read/prompt write unexercised",
+      "Gateway registered_seats empty, channel unregistered",
+      "Public gateway reader DNS ETIMEOUT; local resolver exit 2",
+      "Planned named forwarders absent; no network cutover or exposure retirement",
+      "Substrate healthz HTTP 503; index/greptime/eventsWritable false",
+      "Connected account ownership/authorization as Ove not established",
+      "Cursor tier/network policy browser probe timed out; tools/list_changed unexercised",
+      "Hindsight actual image 0.9.1 versus template assumption; version/embedding/bank evidence still needed",
+      "Real Marketplace/private-skill/template publication, fresh recipient/iOS approval and exact-SHA reviewer evidence not obtained"
+    ]
+  },
+  "bounded_source_maps": [
+    {
+      "source": "agent://MapGatewayDelivery/report",
+      "scope": "peer-inspected gateway/contracts/receipts",
+      "conclusion": "Source paths exist but Timescale authority, trusted mutation approvals, exact-SHA approval_ref, full doctor provenance and some promised backends are incomplete/unverified"
+    },
+    {
+      "source": "agent://MapShareAndNetworkDelivery/report",
+      "scope": "peer-inspected infrastructure/share/assembly/skills/receipts",
+      "conclusion": "Authored network/prompt/template/gate surfaces do not prove exact-port cutover, actual publication/avatar/plugin/skill proposal, rollback or current independent clearance"
+    },
+    {
+      "source": "agent://MapCompanionDataDelivery/report",
+      "scope": "peer-inspected companion packages/docs/projector",
+      "conclusion": "Read adapters and historical plans do not prove retain/banks/version, integrated caches, Desk Timescale migrations, RAGFlow ingest or Grok plugin projection"
+    }
+  ],
+  "output_boundary": {
+    "written_artifacts": [
+      ".planning/intel/classifications/desk-v2.json",
+      ".planning/intel/decisions.md",
+      ".planning/intel/requirements.md",
+      ".planning/intel/constraints.md",
+      ".planning/intel/context.md",
+      ".planning/intel/SYNTHESIS.md",
+      ".planning/INGEST-CONFLICTS.md"
+    ],
+    "other_repositories_edited": false,
+    "unrelated_web_desk3d_touched": false,
+    "implementation_or_roadmap_design": false,
+    "commit_or_push": false,
+    "original_staging_only_scope": [
+      ".planning/PROJECT.md",
+      ".planning/REQUIREMENTS.md",
+      ".planning/ROADMAP.md",
+      ".planning/STATE.md"
+    ],
+    "core_artifacts_authorized": true,
+    "core_routing_choice": "Create planning setup",
+    "roadmap_basis": "Parent-fixed seven phases; all incomplete/unverified"
+  },
+  "verification": {
+    "performed_by_this_worker": [],
+    "tests": "skipped-by-assignment",
+    "gates": "skipped-by-assignment",
+    "req_lint_python_and_bun": "skipped-by-assignment",
+    "build": "skipped-by-assignment",
+    "formatters": "skipped-by-assignment",
+    "source_extraction": "complete staged evidence, not VALIDATED",
+    "next_authority": "Parent continues Phase 1 discovery/discussion and consolidated verification; owners supply real external approvals and runtime receipts"
+  }
+}

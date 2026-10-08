@@ -120,3 +120,41 @@ class TenantIsolationEngine:
                 f"Partition mismatch: key '{partitioned_key}' does not belong to namespace '{tenant.namespace}'"
             )
         return partitioned_key[len(prefix) :]
+
+    def tenant_bank_name(self, tenant: TenantContext, seat: str) -> str:
+        """Partition Hindsight memory bank name per tenant and seat (REQ-TENANT-003)."""
+        clean_seat = seat.strip().lower()
+        return f"{tenant.org_id}-{tenant.tenant_id}-pd-{clean_seat}"
+
+    def parse_tenant_bank_name(self, bank_name: str) -> tuple[str, str, str]:
+        """Parse tenant bank name into (org_id, tenant_id, seat)."""
+        # Format: {org_id}-{tenant_id}-pd-{seat}
+        parts = bank_name.split("-pd-")
+        if len(parts) != 2:
+            raise TenantIsolationError(f"Malformed tenant memory bank name: '{bank_name}'")
+        org_and_tenant, seat = parts[0], parts[1]
+        org_tenant_parts = org_and_tenant.split("-", 1)
+        if len(org_tenant_parts) != 2:
+            raise TenantIsolationError(f"Malformed tenant prefix in bank name: '{bank_name}'")
+        return org_tenant_parts[0], org_tenant_parts[1], seat
+
+    def create_dataset_token(self, tenant: TenantContext, dataset_id: str, secret: str = "tenant-ragflow-boundary") -> str:
+        """Generate HMAC-SHA256 authenticated tenant boundary token for RAGFlow dataset access (REQ-TENANT-003)."""
+        import hmac
+        import hashlib
+        msg = f"{tenant.namespace}::{dataset_id}".encode("utf-8")
+        sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+        return f"{tenant.namespace}::{dataset_id}::{sig}"
+
+    def verify_dataset_token(self, tenant: TenantContext, dataset_id: str, token: str, secret: str = "tenant-ragflow-boundary") -> bool:
+        """Verify HMAC-SHA256 authenticated tenant boundary token for RAGFlow dataset isolation (REQ-TENANT-003)."""
+        import hmac
+        import hashlib
+        expected_prefix = f"{tenant.namespace}::{dataset_id}::"
+        if not token.startswith(expected_prefix):
+            return False
+        sig = token[len(expected_prefix) :]
+        msg = f"{tenant.namespace}::{dataset_id}".encode("utf-8")
+        expected_sig = hmac.new(secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(sig, expected_sig)
+

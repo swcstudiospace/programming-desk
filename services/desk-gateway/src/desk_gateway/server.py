@@ -79,6 +79,16 @@ from desk_gateway.tenant import (
     TenantIsolationError,
     current_tenant,
 )
+from desk_gateway.tenant_quota import (
+    QuotaExceededError,
+    TenantQuotaLimits,
+    TenantQuotaPolicer,
+)
+from desk_gateway.tenant_audit import (
+    AuditTamperError,
+    TenantAuditEvent,
+    TenantAuditLogger,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -537,9 +547,13 @@ def create_mcp(
     supervisor: SelfHealingSupervisor | None = None,
     tenant_engine: TenantIsolationEngine | None = None,
     rbac_engine: RBACPolicyEngine | None = None,
+    tenant_quota: TenantQuotaPolicer | None = None,
+    tenant_audit: TenantAuditLogger | None = None,
 ) -> SeatServer:
     t_engine = tenant_engine or TenantIsolationEngine()
     r_engine = rbac_engine or RBACPolicyEngine()
+    t_quota = tenant_quota or TenantQuotaPolicer()
+    t_audit = tenant_audit or TenantAuditLogger()
     mcp = SeatServer(
         services,
         rbac=r_engine,
@@ -2495,11 +2509,15 @@ def create_mcp(
             "drills": [drill_seat.to_dict(), drill_rebalance.to_dict()],
         })
 
-    # --- Multi-Tenant Governance & RBAC Endpoints (REQ-TENANT-001, REQ-TENANT-002) ---
+    # --- Multi-Tenant Governance, RBAC, Quota, & Audit Endpoints (REQ-TENANT-001 to REQ-TENANT-005) ---
     tenant_engine = t_engine
     rbac_engine = r_engine
+    tenant_quota_policer = t_quota
+    tenant_audit_logger = t_audit
     mcp._tenant_engine = tenant_engine  # type: ignore[attr-defined]
     mcp._rbac_engine = rbac_engine  # type: ignore[attr-defined]
+    mcp._tenant_quota = tenant_quota_policer  # type: ignore[attr-defined]
+    mcp._tenant_audit = tenant_audit_logger  # type: ignore[attr-defined]
 
     @mcp.custom_route("/v1/tenant/current", methods=["GET"])
     async def tenant_current_get(_request: Request) -> Response:
@@ -2560,6 +2578,98 @@ def create_mcp(
             "seat": result.seat,
             "action": result.action,
         })
+
+    @mcp.custom_route("/v1/tenant/quota", methods=["GET"])
+    async def tenant_quota_get(_request: Request) -> Response:
+        ctx = current_tenant.get()
+        status = tenant_quota_policer.get_quota_status(ctx)
+        return JSONResponse({
+            "ok": True,
+            "quota": status,
+        })
+
+    @mcp.custom_route("/v1/tenant/quota/acquire", methods=["POST"])
+    async def tenant_quota_acquire_post(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        cost = float(body.get("cost", 1.0))
+        ctx = current_tenant.get()
+        try:
+            res = tenant_quota_policer.acquire(ctx, cost=cost)
+            return JSONResponse({
+                "ok": True,
+                "result": res,
+            })
+        except QuotaExceededError as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": "quota_exceeded",
+                    "detail": str(exc),
+                    "retry_after": exc.retry_after,
+                },
+                status_code=429,
+                headers={"Retry-After": str(int(exc.retry_after) or 1)},
+            )
+
+    @mcp.custom_route("/v1/tenant/quota/release", methods=["POST"])
+    async def tenant_quota_release_post(_request: Request) -> Response:
+        ctx = current_tenant.get()
+        tenant_quota_policer.release(ctx)
+        return JSONResponse({
+            "ok": True,
+            "released": True,
+        })
+
+    @mcp.custom_route("/v1/tenant/audit", methods=["GET"])
+    async def tenant_audit_get(_request: Request) -> Response:
+        ctx = current_tenant.get()
+        events = tenant_audit_logger.get_audit_trail(ctx)
+        return JSONResponse({
+            "ok": True,
+            "count": len(events),
+            "events": [e.to_dict() for e in events],
+        })
+
+    @mcp.custom_route("/v1/tenant/audit/record", methods=["POST"])
+    async def tenant_audit_record_post(request: Request) -> Response:
+        body = await request.json() if request.headers.get("content-type") == "application/json" else {}
+        action = body.get("action", "unspecified_action")
+        seat = body.get("seat", "lead")
+        actor = body.get("actor", "agent")
+        details = body.get("details", {})
+        ctx = current_tenant.get()
+        evt = tenant_audit_logger.record_event(
+            tenant=ctx,
+            action=action,
+            seat=seat,
+            actor=actor,
+            details=details,
+        )
+        return JSONResponse({
+            "ok": True,
+            "event": evt.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/tenant/audit/verify", methods=["GET", "POST"])
+    async def tenant_audit_verify_post(_request: Request) -> Response:
+        ctx = current_tenant.get()
+        try:
+            verification = tenant_audit_logger.verify_chain(ctx)
+            return JSONResponse({
+                "ok": True,
+                "tamper_detected": False,
+                "verification": verification,
+            })
+        except AuditTamperError as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "tamper_detected": True,
+                    "error": "tamper_detected",
+                    "detail": str(exc),
+                },
+                status_code=409,
+            )
 
     return mcp
 
@@ -2675,6 +2785,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "resilience_verifier": getattr(mcp, "_resilience_verifier", None),
         "tenant_engine": getattr(mcp, "_tenant_engine", None),
         "rbac_engine": getattr(mcp, "_rbac_engine", None),
+        "tenant_quota": getattr(mcp, "_tenant_quota", None),
+        "tenant_audit": getattr(mcp, "_tenant_audit", None),
     }
     return app, settings
 

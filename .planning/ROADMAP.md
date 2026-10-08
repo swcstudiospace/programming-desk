@@ -2,27 +2,43 @@
 
 ## Milestones
 
-- ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08)
+- 🟡 **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (in progress)
+- ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08) — [Archive](milestones/v2.1-ROADMAP.md)
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
 
-### ✅ v2.1 Live Drills & Intake Hardening (Phases 8-9)
+### 🟡 v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11)
+
+- [ ] Phase 10: Multi-Desk Federation & Inter-Seat Routing (0/2 plans)
+- [ ] Phase 11: Automated Staging & VPS Environment Promotion (0/2 plans)
+
+#### Phase 10: Multi-Desk Federation & Inter-Seat Routing
+
+**Goal**: Deliver peer-to-peer desk coordination, federated JWT validation, cross-desk seat boundaries, and distributed task graph convergence.
+**Requirements**: REQ-FED-001 through REQ-FED-005
+**Plans**:
+- [ ] 10-01-PLAN.md — Peer gateway discovery, federated JWT validation & inter-desk routing (REQ-FED-001, REQ-FED-002, REQ-FED-003)
+- [ ] 10-02-PLAN.md — Distributed task graph synchronization & partition tolerance (REQ-FED-004, REQ-FED-005)
+
+#### Phase 11: Automated Staging & VPS Environment Promotion
+
+**Goal**: Implement automated declarative staging deployments, zero-downtime hot reloading, test lease reconciliation, and companion cross-repo contract verification.
+**Requirements**: REQ-STAGE-001 through REQ-STAGE-005
+**Plans**:
+- [ ] 11-01-PLAN.md — Declarative VPS deployment pipeline with rollback & zero-downtime reload (REQ-STAGE-001, REQ-STAGE-002)
+- [ ] 11-02-PLAN.md — Ephemeral lease pruning, staging promotion harness & companion contract alignment (REQ-STAGE-003, REQ-STAGE-004, REQ-STAGE-005)
+
+### Completed Milestones
+
+<details>
+<summary>✅ v2.1 Live Drills & Intake Hardening (Phases 8-9) — SHIPPED 2026-10-08</summary>
 
 - [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
 - [x] Phase 9: External Intake Hardening & Telemetry Anchoring (4/4 plans)
 
-### Phase 9: External Intake Hardening & Telemetry Anchoring
-
-**Goal**: Deliver cryptographic webhook verification, schema validation, idempotency deduplication, resilient caching, circuit breaking, DLQ handling, secrets filtering, and OpenTelemetry trace anchoring.
-**Requirements**: REQ-INTAKE-001 through REQ-INTAKE-010
-**Plans**:
-- [x] 09-01-PLAN.md — Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004)
-- [x] 09-02-PLAN.md — ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007)
-- [x] 09-03-PLAN.md — DLQ retry policies and terminal failure reporting (REQ-INTAKE-008)
-- [x] 09-04-PLAN.md — OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010)
-
-### Completed Milestones
+See [milestones/v2.1-ROADMAP.md](milestones/v2.1-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v2.0 Desk v2 (Phases 1-7) — SHIPPED 2026-10-08</summary>
@@ -37,13 +53,3 @@
 
 See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase details and execution history.
 </details>
-
-## Next Steps
-
-Milestone v2.1 complete! All requirements across Phase 8 (REQ-DRILL-001 through REQ-DRILL-010) and Phase 9 (REQ-INTAKE-001 through REQ-INTAKE-010) have been executed, verified, and merged to main.
-
-
-
-[You have received this identical output 3 times. Re-reading '/root/src/repos/programming-desk/.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]
-
-[You have received this identical output 3 times. Re-reading '.planning/ROADMAP.md:raw' will not change it — use a narrower selector (path:A-B), or proceed with the edit.]

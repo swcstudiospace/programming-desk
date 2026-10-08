@@ -4,7 +4,7 @@
 
 Programming Desk v2 is Ove's seven-seat programming desk, installed from seven Team-only Grok Bot templates and bootstrapped into a six-member group with QUALITY independent and off-channel. Its VPS Desk Gateway exposes contract-defined tools per seat, connects to five Railway data services through private project forwarders, and admits outside work only through LEAD.
 
-The current milestone is **v2.1 — Live Drills & Intake Hardening**: testing gateway resiliency, subagent prompt integrity, token handling, and telemetry anchoring. Existing authored surfaces and bounded runtime observations inform the work.
+The current milestone is **v2.2 — Multi-Desk Federation & Staging Deployments**: enabling inter-desk federation, cross-instance task graph synchronization, and automated staging/VPS deployments.
 
 ## Core Value
 
@@ -30,7 +30,8 @@ All 237 requirements shipped and verified across Milestones v2.0 and v2.1.
 
 ### Active
 
-None. All active milestone phases complete. Current milestone v2.1 is shipped.
+- Phase 10: Multi-Desk Federation & Inter-Seat Routing (REQ-FED-001 through REQ-FED-005)
+- Phase 11: Automated Staging & VPS Environment Promotion (REQ-STAGE-001 through REQ-STAGE-005)
 
 ### Out of Scope
 
@@ -80,4 +81,4 @@ Evidence-worker-owned durable artifacts: [implementation map](intel/implementati
 After each verified transition, update active/validated requirements and decisions only from actual evidence, preserving unverified limits. At milestone closure review scope, source crosswalk, external receipts and human checkpoints; do not infer completion from initialized files.
 
 ---
-*Last updated: 2026-10-08 after v2.1 milestone completion.*
+*Last updated: 2026-10-08 after v2.2 milestone initialization.*

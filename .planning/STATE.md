@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.3
-milestone_name: Production Cutover, Dynamic Failover & Telemetry Alerting
-status: Phase 13 completed (2/2 plans), Milestone v2.3 completed
-stopped_at: Completed 13-02-PLAN.md (Solana devnet anchor verification job & synthetic telemetry audit suite).
-last_updated: "2026-10-09T10:30:00.000Z"
+milestone: v2.4 (Archived)
+milestone_name: Multi-Region Edge Federation & Autonomous Chaos Recovery
+status: Milestone v2.4 Complete & Archived (Phase 14 & Phase 15 100% complete)
+stopped_at: Archived Milestone v2.4 audit and roadmap artifacts. Ready for next milestone directives.
+last_updated: "2026-10-09T16:15:00.000Z"
 last_activity: 2026-10-09
-last_activity_desc: Executed Phase 13 Plan 02
+last_activity_desc: Archived Milestone v2.4 roadmap, requirements, and audit reports.
 progress:
-  total_phases: 13
-  completed_phases: 13
-  total_plans: 51
-  completed_plans: 49
+  total_phases: 15
+  completed_phases: 15
+  total_plans: 55
+  completed_plans: 55
   percent: 100
-current_phase: 13
-current_phase_name: Advanced Telemetry, SLOs & Alert Thresholds
+current_phase: 15
+current_phase_name: Autonomous Chaos Recovery & Self-Healing Resilience
 ---
 
 # Project State
@@ -24,15 +24,15 @@ current_phase_name: Advanced Telemetry, SLOs & Alert Thresholds
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.3 — Production Cutover, Dynamic Failover & Telemetry Alerting (Complete)
-**Milestone:** v2.3 — Production Cutover, Dynamic Failover & Telemetry Alerting
+**Current focus:** Milestone v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery (COMPLETED)
+**Milestone:** v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery
 
 ## Current Position
 
-Phase: Phase 13 (Advanced Telemetry, SLOs & Alert Thresholds) completed.
-Milestone: Milestone v2.3 (Phases 12 and 13) completed.
-Status: Ready for Milestone v2.3 audit / archive or next milestone.
-Last activity: 2026-10-09 — Completed 13-02-PLAN.md.
+Phase: Phase 15 complete (Autonomous Chaos Recovery & Self-Healing Resilience).
+Milestone: Milestone v2.4 complete (Phase 14 completed, Phase 15 completed).
+Status: Milestone v2.4 shipped (10/10 requirements satisfied).
+Last activity: 2026-10-09 — Executed Phase 15 Plan 02.
 
 ## Accumulated Context
 
@@ -41,11 +41,15 @@ Last activity: 2026-10-09 — Completed 13-02-PLAN.md.
 - Milestone v2.0 (Desk v2, 7 phases, 217 requirements) 100% completed and archived.
 - Milestone v2.1 (Live Drills & Intake Hardening, 2 phases, 20 requirements) 100% completed and archived.
 - Milestone v2.2 (Multi-Desk Federation & Staging Deployments, 2 phases, 10 requirements) 100% completed, tagged (`v2.2.0`), and archived.
-- Milestone v2.3 completed:
-  - Phase 12 (REQ-CUTOVER-001 - REQ-CUTOVER-005): Production cutover canary routing, emergency seat isolation, upstream poller, and failover routing.
-  - Phase 13 (REQ-ALERT-001 - REQ-ALERT-005): Prometheus SLO metrics export, alert threshold dispatcher & on-call webhook notification, Solana devnet anchor verification job, and synthetic telemetry audit suite.
+- Milestone v2.3 (Production Cutover, Dynamic Failover & Telemetry Alerting, 2 phases, 10 requirements) 100% completed, tagged (`v2.3.0`), and archived.
+- Milestone v2.4 completed:
+  - Phase 14 Plan 01 completed: Edge ingress gateway, geo-steering router, and distributed token-bucket rate limiter with DragonflyDB/in-memory fallback (`REQ-EDGE-001`, `REQ-EDGE-002`).
+  - Phase 14 Plan 02 completed: WAN inter-seat routing, cryptographic attestation, vector clock convergence, and session evacuation (`REQ-EDGE-003`, `REQ-EDGE-004`, `REQ-EDGE-005`).
+  - Phase 14 completed (5/5 requirements).
+  - Phase 15 Plan 01 completed: Synthetic chaos injection harness and automated self-healing supervisor (`REQ-CHAOS-001`, `REQ-CHAOS-002`).
+  - Phase 15 Plan 02 completed: Autonomous workload rebalancer, automated DLQ replay orchestrator with backoff & poison vault, and continuous resilience verification suite confirming RPO=0 and RTO < 3.0s (`REQ-CHAOS-003`, `REQ-CHAOS-004`, `REQ-CHAOS-005`).
+  - Phase 15 completed (5/5 requirements).
 
 ### Pending Todos
 
-- Merge Plan 13-02 PR.
-- Audit / tag Milestone v2.3.
+- None. Milestone v2.4 (Phase 14 & Phase 15) is 100% complete and fully verified.

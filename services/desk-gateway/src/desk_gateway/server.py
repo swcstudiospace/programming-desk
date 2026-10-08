@@ -39,6 +39,40 @@ from desk_gateway.cutover import (
     EmergencyIsolationManager,
     SeatIsolatedError,
 )
+from desk_gateway.edge import (
+    DistributedRateLimiter,
+    EdgeError,
+    EdgeIngressGateway,
+    GeoSteeringRouter,
+    RateLimitExceeded,
+)
+from desk_gateway.wan_mesh import (
+    AttestationFailed,
+    RegionImpairmentManager,
+    RouteRevokedError,
+    SeatIdentityAttestor,
+    WanError,
+    WanMeshRouter,
+    WanPeerNode,
+    WanSeatEnvelope,
+)
+from desk_gateway.vector_clock import (
+    CausalityRelation,
+    ConflictResolver,
+    TaskNode,
+    VectorClockGraph,
+    compare_vector_clocks,
+    union_vector_clocks,
+)
+from desk_gateway.chaos import ChaosException, ChaosHarness, ChaosRule, FaultType
+from desk_gateway.dlq_replay import DLQReplayOrchestrator
+from desk_gateway.resilience import ResilienceVerifier
+from desk_gateway.supervisor import (
+    SeatHealthStatus,
+    SeatRuntimeProfile,
+    SelfHealingSupervisor,
+)
+from desk_gateway.workload import WorkloadRebalancer
 from desk_gateway.failover import FailoverError, FailoverRouter
 from desk_gateway.federation import (
     FederatedTokenValidator,
@@ -246,12 +280,16 @@ class SeatRouter:
         rosters: Rosters,
         isolation_manager: EmergencyIsolationManager | None = None,
         failover_router: FailoverRouter | None = None,
+        edge_gateway: EdgeIngressGateway | None = None,
+        supervisor: SelfHealingSupervisor | None = None,
     ) -> None:
         self.app = app
         self.provider = provider
         self.rosters = rosters
         self.isolation_manager = isolation_manager
         self.failover_router = failover_router
+        self.edge_gateway = edge_gateway
+        self.supervisor = supervisor
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http":
@@ -313,6 +351,26 @@ class SeatRouter:
                 )
                 await _json(send, 503, prob)
                 return
+        # Distributed rate limiting check on seat dispatch (REQ-EDGE-002)
+        rate_headers: list[tuple[bytes, bytes]] = []
+        if self.edge_gateway:
+            try:
+                hdrs = await self.edge_gateway.enforce_rate_limit(seat, amount=1)
+                rate_headers = [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in hdrs.items()]
+            except RateLimitExceeded as exc:
+                prob = problem_details(
+                    status=429,
+                    title="Seat Rate Limit Exceeded",
+                    detail=f"Rate limit exceeded for seat '{seat}': burst capacity {exc.limit} tokens reached.",
+                    error_code="rate_limit_exceeded",
+                    instance=path,
+                    seat=seat,
+                    retry_after=exc.retry_after,
+                )
+                headers = [(k.lower().encode("latin1"), v.encode("latin1")) for k, v in exc.headers.items()]
+                await _json(send, 429, prob, headers=headers)
+                return
+
         token = _bearer(scope)
         if token:
             access = await self.provider.load_access_token(token)
@@ -425,6 +483,10 @@ def create_mcp(
     cutover: tuple[CutoverOrchestrator, EmergencyIsolationManager] | None = None,
     failover: tuple[FailoverRouter, UpstreamHealthPoller] | None = None,
     alerting: tuple[AlertDispatcher, SLOEvaluator] | None = None,
+    edge: EdgeIngressGateway | None = None,
+    wan: tuple[WanMeshRouter, RegionImpairmentManager] | None = None,
+    chaos: ChaosHarness | None = None,
+    supervisor: SelfHealingSupervisor | None = None,
 ) -> SeatServer:
     mcp = SeatServer(
         services,
@@ -460,6 +522,19 @@ def create_mcp(
         AlertDispatcher(settings),
         SLOEvaluator(settings),
     )
+    edge_gw = edge if edge else EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
+    wan_router, impairment_mgr = wan if wan else (
+        WanMeshRouter(local_region_id=settings.edge_default_region, settings=settings),
+        None,
+    )
+    if impairment_mgr is None:
+        impairment_mgr = wan_router.impairment_manager
+    chaos_harness = chaos if chaos else ChaosHarness()
+    healing_supervisor = supervisor if supervisor else SelfHealingSupervisor(
+        rosters=services.rosters,
+        isolation_manager=iso_mgr,
+        edge_gateway=edge_gw,
+    )
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -480,6 +555,21 @@ def create_mcp(
                     "enabled": fail_router.enabled,
                     "active_diverts": fail_router.get_status()["active_diverts_count"],
                     "upstream_health": health_poller.get_status()["overall"],
+                },
+                "edge": {
+                    "regions_count": len(edge_gw.router.list_regions()),
+                    "default_region": edge_gw.router.default_region,
+                },
+                "wan_mesh": {
+                    "local_region": wan_router.local_region_id,
+                    "peers_count": len(impairment_mgr.list_peers()),
+                    "revoked_regions_count": len(impairment_mgr._revoked_regions),
+                },
+                "chaos": {
+                    "active_rules_count": len(chaos_harness.get_rules()),
+                },
+                "supervisor": {
+                    "seats_count": len(healing_supervisor.list_profiles()),
                 },
                 "seats": {s: f"/mcp/{s}" for s in SEATS},
                 "packs": sorted(services.rosters.packs),
@@ -1689,6 +1779,145 @@ def create_mcp(
 
         return JSONResponse({"ok": True, "seat": seat, "status": "cleared"}, status_code=200)
 
+    # -------------------------------------------------------------------------
+    # Edge Ingress & Geo-Steering Endpoints (REQ-EDGE-001, REQ-EDGE-002)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/edge/regions", methods=["GET"])
+    async def edge_regions_get(request: Request) -> Response:
+        """Inspect multi-region VPS gateway endpoints and health latencies (REQ-EDGE-001)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect edge regions.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+        regions = edge_gw.router.list_regions()
+        return JSONResponse(
+            {
+                "ok": True,
+                "default_region": edge_gw.router.default_region,
+                "latency_threshold_ms": edge_gw.router.latency_threshold_ms,
+                "regions": regions,
+                "regions_count": len(regions),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/edge/regions/{region_id}/health", methods=["POST"])
+    async def edge_region_health_post(request: Request) -> Response:
+        """Update region health status or observed latency (REQ-EDGE-001)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead, Infra, or Systems seat authorization required to update edge region health.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+        region_id = request.path_params.get("region_id", "")
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        healthy = bool(body.get("healthy", True))
+        force = bool(body.get("force", not healthy))
+        lat_val = body.get("latency_ms")
+        latency_ms = float(lat_val) if lat_val is not None else None
+        try:
+            ep = edge_gw.router.update_health(region_id, healthy=healthy, latency_ms=latency_ms, force=force)
+        except EdgeError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Edge Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        return JSONResponse({"ok": True, "region": ep.to_dict()}, status_code=200)
+
+    @mcp.custom_route("/v1/edge/route", methods=["POST"])
+    async def edge_route_post(request: Request) -> Response:
+        """Resolve optimal multi-region destination based on geo-steering and health (REQ-EDGE-001)."""
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        client_lat = body.get("latitude")
+        client_lon = body.get("longitude")
+        preferred = body.get("preferred_region")
+        obs_lat = body.get("observed_latencies")
+
+        try:
+            route_res = edge_gw.route_request(
+                client_lat=float(client_lat) if client_lat is not None else None,
+                client_lon=float(client_lon) if client_lon is not None else None,
+                preferred_region=str(preferred) if preferred else None,
+                observed_latencies={str(k): float(v) for k, v in obs_lat.items()} if isinstance(obs_lat, dict) else None,
+            )
+        except EdgeError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Routing Failed",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+        return JSONResponse({"ok": True, **route_res}, status_code=200)
+
+    @mcp.custom_route("/v1/edge/limits", methods=["GET"])
+    async def edge_limits_get(request: Request) -> Response:
+        """Inspect edge distributed rate limit configurations and status (REQ-EDGE-002)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect edge limits.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        configs = {}
+        for s in SEATS:
+            cfg = edge_gw.limiter.get_config(s)
+            configs[s] = {"rate_per_min": cfg.rate_per_min, "burst_capacity": cfg.burst_capacity}
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "default_rate_per_min": edge_gw.limiter.default_rate_per_min,
+                "default_burst": edge_gw.limiter.default_burst,
+                "seats": configs,
+                "dragonfly_connected": bool(edge_gw.limiter.dragonfly and getattr(edge_gw.limiter.dragonfly, "configured", False)),
+            },
+            status_code=200,
+        )
+
     @mcp.custom_route("/v1/alerts/status", methods=["GET"])
     async def alerts_status_get(request: Request) -> Response:
         """Inspect live SLO evaluation results, recent alerts, and alerting thresholds (REQ-ALERT-002, REQ-ALERT-003)."""
@@ -1772,6 +2001,446 @@ def create_mcp(
             status_code=200 if delivered or not settings.alert_webhook_url else 502,
         )
 
+    # -------------------------------------------------------------------------
+    # WAN Mesh Routing, Attestation, and Session Evacuation (REQ-EDGE-003, REQ-EDGE-005)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/wan/peers", methods=["GET"])
+    async def wan_peers_get(request: Request) -> Response:
+        """Inspect Tailnet overlay WAN mesh peer nodes and impairment statuses (REQ-EDGE-003, REQ-EDGE-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        origin = settings.origin_for_intake_token(token)
+        if seat is None and origin is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat passphrase or origin token required to inspect WAN mesh peers.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        peers = [p.to_dict() for p in impairment_mgr.list_peers()]
+        return JSONResponse(
+            {
+                "ok": True,
+                "local_region": wan_router.local_region_id,
+                "peers": peers,
+                "peers_count": len(peers),
+                "revoked_regions": sorted(impairment_mgr._revoked_regions),
+            },
+            status_code=200,
+        )
+
+    @mcp.custom_route("/v1/wan/route", methods=["POST"])
+    async def wan_route_post(request: Request) -> Response:
+        """Encapsulate, cryptographically attest, or verify a cross-region seat message (REQ-EDGE-003)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat authentication required for WAN message routing.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        # Check if this is an incoming verification or an outbound routing request
+        if "signature" in body and "payload_hash" in body:
+            # Verification path
+            try:
+                verified_envelope = wan_router.receive_seat_message(body)
+                return JSONResponse(
+                    {
+                        "ok": True,
+                        "status": "verified",
+                        "envelope": verified_envelope.to_dict(),
+                    },
+                    status_code=200,
+                )
+            except WanError as exc:
+                return problem_response(
+                    status=exc.status_code,
+                    title="WAN Verification Error",
+                    detail=exc.message,
+                    error_code=exc.code,
+                    instance=request.url.path,
+                )
+
+        # Outbound attestation path
+        target_region = body.get("target_region")
+        target_seat = body.get("target_seat")
+        action = body.get("action", "inter_seat_call")
+        payload = body.get("payload", {})
+
+        if not target_region or not target_seat:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="target_region and target_seat are required",
+                error_code="missing_fields",
+                instance=request.url.path,
+            )
+
+        try:
+            envelope = wan_router.route_seat_message(
+                target_region=target_region,
+                source_seat=seat,
+                target_seat=target_seat,
+                action=action,
+                payload=payload,
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "status": "attested",
+                    "envelope": envelope.to_dict(),
+                },
+                status_code=200,
+            )
+        except WanError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="WAN Routing Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+    @mcp.custom_route("/v1/wan/evacuate", methods=["POST"])
+    async def wan_evacuate_post(request: Request) -> Response:
+        """Trigger emergency session evacuation from an impaired region (REQ-EDGE-005)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat_auth = settings.seat_for_passphrase(token)
+        if seat_auth not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail="Lead, Infra, or Systems seat authorization required to trigger regional session evacuation.",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            body = {}
+
+        impaired_region = body.get("impaired_region")
+        target_region = body.get("target_region")
+
+        if not impaired_region:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="impaired_region is required",
+                error_code="missing_impaired_region",
+                instance=request.url.path,
+            )
+
+        try:
+            evac_res = impairment_mgr.evacuate_region(
+                impaired_region=impaired_region,
+                target_region=target_region,
+            )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    **evac_res,
+                },
+                status_code=200,
+            )
+        except WanError as exc:
+            return problem_response(
+                status=exc.status_code,
+                title="Evacuation Error",
+                detail=exc.message,
+                error_code=exc.code,
+                instance=request.url.path,
+            )
+
+    # -------------------------------------------------------------------------
+    # WAN Vector Clock Task Graph Synchronization (REQ-EDGE-004)
+    # -------------------------------------------------------------------------
+
+    @mcp.custom_route("/v1/wan/sync", methods=["POST"])
+    async def wan_sync_post(request: Request) -> Response:
+        """Synchronize multi-master task graph with vector clock conflict convergence (REQ-EDGE-004)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat is None:
+            return problem_response(
+                status=401,
+                title="Unauthorized",
+                detail="Valid seat authentication required for task graph synchronization.",
+                error_code="unauthorized",
+                instance=request.url.path,
+            )
+
+        try:
+            raw = await request.body()
+            body = json.loads(raw.decode("utf-8")) if raw else {}
+        except (ValueError, UnicodeDecodeError):
+            return problem_response(
+                status=400,
+                title="Invalid JSON",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        remote_graph = body.get("graph")
+        if not remote_graph or not isinstance(remote_graph, dict):
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="'graph' object is required",
+                error_code="missing_graph",
+                instance=request.url.path,
+            )
+
+        graph_id = remote_graph.get("graph_id")
+        if not graph_id:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="graph_id is required within graph object",
+                error_code="missing_graph_id",
+                instance=request.url.path,
+            )
+
+        # Retrieve existing local graph from store or initialize new
+        stored = store.task_graphs().get(graph_id)
+        if stored:
+            local_vc_graph = VectorClockGraph.from_dict(stored, local_region_id=wan_router.local_region_id)
+        else:
+            local_vc_graph = VectorClockGraph(graph_id=graph_id, local_region_id=wan_router.local_region_id)
+
+        merged_dict, resolution = local_vc_graph.merge_remote(remote_graph)
+        # Persist back to store
+        all_graphs = store.task_graphs()
+        all_graphs[graph_id] = merged_dict
+        store._write("task_graphs", all_graphs)
+
+        return JSONResponse(
+            {
+                "ok": True,
+                "resolution": resolution,
+                "graph": merged_dict,
+            },
+            status_code=200,
+        )
+
+    # Attach components for reference
+    mcp._chaos_harness = chaos_harness  # type: ignore[attr-defined]
+    mcp._healing_supervisor = healing_supervisor  # type: ignore[attr-defined]
+
+    # --- Chaos Injection REST Endpoints (REQ-CHAOS-001) ---
+    @mcp.custom_route("/v1/chaos/rules", methods=["GET"])
+    async def get_chaos_rules(_request: Request) -> Response:
+        rules = [r.to_dict() for r in chaos_harness.get_rules()]
+        return JSONResponse({"rules": rules, "count": len(rules)})
+
+    @mcp.custom_route("/v1/chaos/inject", methods=["POST"])
+    async def inject_chaos_rule(request: Request) -> Response:
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        auth_seat = settings.seat_for_passphrase(token)
+        # Operator seats lead, infra, systems, or loopback
+        if auth_seat not in {"lead", "infra", "systems"}:
+            return problem_response(
+                status=403,
+                title="Forbidden",
+                detail=f"Seat '{auth_seat}' is not permitted to inject synthetic chaos faults",
+                error_code="forbidden",
+                instance=request.url.path,
+            )
+
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        target_service = body.get("target") or body.get("target_service")
+        fault_type_str = body.get("fault_type")
+        if not target_service or not fault_type_str:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="target and fault_type are required",
+                error_code="missing_fields",
+                instance=request.url.path,
+            )
+
+        try:
+            fault_type = FaultType(fault_type_str)
+        except ValueError:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid fault_type '{fault_type_str}'. Allowed: {[f.value for f in FaultType]}",
+                error_code="invalid_fault_type",
+                instance=request.url.path,
+            )
+
+        delay_ms = float(body.get("delay_ms") or body.get("latency_ms") or 0.0)
+        prob = float(body.get("probability", 1.0))
+        err_code = int(body.get("error_code") or body.get("status_code") or 503)
+        err_msg = body.get("error_message", "Chaos injected upstream failure")
+        duration = float(body["ttl_seconds"]) if body.get("ttl_seconds") is not None else None
+
+        rule = chaos_harness.add_rule(
+            target=target_service,
+            fault_type=fault_type,
+            probability=prob,
+            delay_ms=delay_ms,
+            error_code=err_code,
+            error_message=err_msg,
+            duration_sec=duration,
+        )
+        return JSONResponse({"ok": True, "rule": rule.to_dict()}, status_code=201)
+
+    @mcp.custom_route("/v1/chaos/reset", methods=["POST"])
+    async def reset_chaos_rules(_request: Request) -> Response:
+        count = chaos_harness.clear_rules()
+        return JSONResponse({"ok": True, "cleared_rules_count": count})
+
+    # --- Self-Healing Supervisor REST Endpoints (REQ-CHAOS-002) ---
+    @mcp.custom_route("/v1/supervisor/seats", methods=["GET"])
+    async def get_supervisor_seats(_request: Request) -> Response:
+        profiles = healing_supervisor.list_profiles()
+        return JSONResponse({
+            "seats": [p.to_dict() for p in profiles],
+            "count": len(profiles),
+        })
+
+    @mcp.custom_route("/v1/supervisor/reconstitute", methods=["POST"])
+    async def reconstitute_seat(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        seat = body.get("seat")
+        if not seat or seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid or missing seat. Allowed: {sorted(SEATS)}",
+                error_code="invalid_seat",
+                instance=request.url.path,
+            )
+
+        result = healing_supervisor.reconstitute_seat(seat)
+        return JSONResponse(result, status_code=200 if result.get("ok") else 500)
+
+    # --- Workload Rebalancing REST Endpoints (REQ-CHAOS-003) ---
+    workload_rebalancer = WorkloadRebalancer(supervisor=healing_supervisor, store=store, local_region_id=wan_router.local_region_id)
+    mcp._workload_rebalancer = workload_rebalancer  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/workload/rebalance", methods=["POST"])
+    async def workload_rebalance_post(request: Request) -> Response:
+        try:
+            body = await request.json()
+        except Exception:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail="Request body must be valid JSON",
+                error_code="invalid_json",
+                instance=request.url.path,
+            )
+
+        failed_seat = body.get("failed_seat")
+        target_seat = body.get("target_seat")
+        if not failed_seat or failed_seat not in SEATS:
+            return problem_response(
+                status=400,
+                title="Bad Request",
+                detail=f"Invalid or missing failed_seat. Allowed: {sorted(SEATS)}",
+                error_code="invalid_failed_seat",
+                instance=request.url.path,
+            )
+
+        reassigned = workload_rebalancer.rebalance_all_stored_graphs(failed_seat, target_seat)
+        return JSONResponse({
+            "ok": True,
+            "failed_seat": failed_seat,
+            "target_seat": target_seat,
+            "reassigned_count": len(reassigned),
+            "reassigned_tasks": reassigned,
+        })
+
+    # --- Dead-Letter Queue (DLQ) Replay Orchestrator Endpoints (REQ-CHAOS-004) ---
+    dlq_orchestrator = DLQReplayOrchestrator(store=store)
+    mcp._dlq_orchestrator = dlq_orchestrator  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/dlq/replay", methods=["POST"])
+    async def dlq_replay_post(_request: Request) -> Response:
+        async def dummy_intake_handler(item: dict[str, Any]) -> None:
+            # If payload marked corrupted/poison in metadata, trigger failure
+            if item.get("poison") or item.get("corrupted"):
+                raise ValueError("Intake parser rejected poisonous payload")
+
+        results = await dlq_orchestrator.replay_all_dlq(dummy_intake_handler)
+        return JSONResponse({
+            "ok": True,
+            "replayed_count": len(results),
+            "results": [r.to_dict() for r in results],
+            "quarantined_count": len(dlq_orchestrator.get_quarantined_items()),
+        })
+
+    # --- Resilience Verification Drill Endpoints (REQ-CHAOS-005) ---
+    resilience_verifier = ResilienceVerifier(
+        chaos_harness=chaos_harness,
+        supervisor=healing_supervisor,
+        rebalancer=workload_rebalancer,
+        dlq_replay=dlq_orchestrator,
+        store=store,
+    )
+    mcp._resilience_verifier = resilience_verifier  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/resilience/verify", methods=["GET", "POST"])
+    async def resilience_verify_drill(_request: Request) -> Response:
+        drill_seat = await resilience_verifier.run_seat_failure_recovery_drill()
+        drill_rebalance = await resilience_verifier.run_workload_rebalance_drill()
+        summary = resilience_verifier.get_summary()
+        return JSONResponse({
+            "ok": summary["all_slas_met"],
+            "summary": summary,
+            "drills": [drill_seat.to_dict(), drill_rebalance.to_dict()],
+        })
+
     return mcp
 
 
@@ -1807,6 +2476,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     slo_evaluator = SLOEvaluator(settings)
     alerting_components = (alert_dispatcher, slo_evaluator)
 
+    edge_gw = EdgeIngressGateway(settings, dragonfly_service=services.dragonfly)
+
+    wan_router = WanMeshRouter(local_region_id=settings.edge_default_region, settings=settings)
+    impairment_mgr = wan_router.impairment_manager
+    wan_components = (wan_router, impairment_mgr)
+
     mcp = create_mcp(
         settings,
         services,
@@ -1817,6 +2492,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         cutover=cutover_components,
         failover=failover_components,
         alerting=alerting_components,
+        edge=edge_gw,
+        wan=wan_components,
+        chaos=None,
+        supervisor=None,
     )
     origins = [
         "http://127.0.0.1",
@@ -1849,7 +2528,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         await services.live.serve(websocket)
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
-    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router))
+    app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router, edge_gateway=edge_gw, supervisor=getattr(mcp, "_healing_supervisor", None)))
     app.state = {
         "store": store,
         "services": services,
@@ -1866,6 +2545,14 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "health_poller": health_poller,
         "alert_dispatcher": alert_dispatcher,
         "slo_evaluator": slo_evaluator,
+        "edge_gateway": edge_gw,
+        "wan_router": wan_router,
+        "impairment_manager": impairment_mgr,
+        "chaos_harness": getattr(mcp, "_chaos_harness", None),
+        "supervisor": getattr(mcp, "_healing_supervisor", None),
+        "workload_rebalancer": getattr(mcp, "_workload_rebalancer", None),
+        "dlq_orchestrator": getattr(mcp, "_dlq_orchestrator", None),
+        "resilience_verifier": getattr(mcp, "_resilience_verifier", None),
     }
     return app, settings
 

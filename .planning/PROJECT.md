@@ -25,13 +25,14 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 - ✓ Phase 7: Ordered rollout and rollback — REQ-ROLLOUT-001 through REQ-ROLLOUT-013 (v2.0)
 - ✓ Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010 (v2.1)
 - ✓ Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010 (v2.1)
+- ✓ Phase 10: Multi-Desk Federation & Inter-Seat Routing — REQ-FED-001 through REQ-FED-005 (v2.2)
+- ✓ Phase 11: Automated Staging & VPS Environment Promotion — REQ-STAGE-001 through REQ-STAGE-005 (v2.2)
 
-All 237 requirements shipped and verified across Milestones v2.0 and v2.1.
+All 247 requirements shipped and verified across Milestones v2.0, v2.1, and v2.2.
 
 ### Active
 
-- Phase 10: Multi-Desk Federation & Inter-Seat Routing (REQ-FED-001 through REQ-FED-005)
-- Phase 11: Automated Staging & VPS Environment Promotion (REQ-STAGE-001 through REQ-STAGE-005)
+None! All planned milestones (v2.0, v2.1, v2.2) are 100% complete and validated.
 
 ### Out of Scope
 

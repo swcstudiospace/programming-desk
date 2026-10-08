@@ -3,7 +3,7 @@
   "bot": "bot-06-quality-security",
   "branch": "bot-06-quality-security/security-gate-full-base-fetch",
   "started_at": "2026-10-08T23:20:00Z",
-  "completed_at": "2026-10-08T23:30:53Z",
+  "completed_at": "2026-10-08T23:41:18Z",
   "commands": [
     {
       "cmd": "git -C /tmp/ci2/bad rev-parse --is-shallow-repository && git -C /tmp/ci2/bad rev-list --count origin/main..HEAD; git -C /tmp/ci2/bad merge-base origin/main HEAD",
@@ -82,6 +82,24 @@
       "exit_code": 0,
       "duration_s": 0.06,
       "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 -c 'import re; cmd=\"git fetch --depth 1 origin main\"; old=(\"--depth=\" not in cmd); new=re.search(r\"--depth(?:=|\\s+)\\d+\", cmd) is not None; print(\"old_substring_misses_space_form=%s\" % old); print(\"new_regex_matches_space_form=%s\" % new); raise SystemExit(0 if old and new else 1)'",
+      "exit_code": 0,
+      "duration_s": 0.11,
+      "output_tail": "old_substring_misses_space_form=True\nnew_regex_matches_space_form=True"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_security_workflows.py -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "22 passed in 0.04s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 8.89,
+      "output_tail": "295 passed in 8.89s"
     }
   ],
   "claims": [
@@ -139,13 +157,25 @@
     {
       "claim": "The workflow, the regression test, and this receipt resolve to bot-06-quality-security",
       "evidence_command_index": 12
+    },
+    {
+      "claim": "A substring search for --depth= misses git fetch --depth 1, and the new depth-flag expression matches that form",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "Security workflow tests reject both depth-flag forms and a checkout fetch-depth other than 0",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "ci/tests suite passes after the Greptile P2 test tightening",
+      "evidence_command_index": 15
     }
   ],
   "unverified": [
-    "Self-hosted Security PR Gate jobs on the pull request have not reported yet. Local reproduction used git 2.43.0, gitleaks 8.21.2, and semgrep 1.180.0 on throwaway clones, not the VPS runner.",
-    "The throwaway PR commit was empty, branched from cc79a74, with main at f01ab87 (12 commits ahead). Same failure mode as PR #122, not a replay of that pull request's 133 commits.",
     "Bandit's finding diff, pip-audit, and Trivy were not re-executed. The bandit job lost the same --depth=1 fetch; its baseline scan was not run.",
-    "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict is expected to fail on that field alone."
+    "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict is expected to fail on that field alone.",
+    "Greptile re-review of the P2 test tightening has not completed. The first review on e3a34b6 scored no numeric confidence in the check summary and left one P2 comment.",
+    "Self-hosted Security PR Gate jobs were still queued at the first review. Bandit, pip-audit, and Trivy were not re-executed locally."
   ],
   "files_changed": [
     ".github/workflows/security-pr.yml",

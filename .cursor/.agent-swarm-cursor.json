@@ -1,0 +1,21 @@
+{
+  "installer": "agent-swarm-cursor",
+  "files": {
+    ".cursor/agents/a01-orchestrator.md": "93693a5be5b2c8129bb8677bca7f6643976591cb85be07b477665d60279039c3",
+    ".cursor/agents/a02-requirements.md": "67786a90ddacddd4db8acbcc4c1fa8970a46022a28232d7265532b82c3f0e082",
+    ".cursor/agents/a03-architect.md": "868c78cee83db62ccea0902f94d7eac5cd52f50a52fb5c9d76499ab217ab8e73",
+    ".cursor/agents/a04-ux-designer.md": "394a776ff748e21446dc1b77592cbb4ea41b494fe033344c6938ae5885d5e7f3",
+    ".cursor/agents/a05-backend.md": "3585dbbefacf7d61cd0f2347a9b5c7076a961135429e36bc7179c8eaf9c5bd50",
+    ".cursor/agents/a06-frontend.md": "aaa409e69eda8fdefa2201f96d9e7e4db5aeac2a038efd1cdde0e8caaa1b4f94",
+    ".cursor/agents/a07-data.md": "2bd14860ab7475bec0902d1f3b02d29d23814d092d379923fc297bafb9cd5138",
+    ".cursor/agents/a08-qa.md": "8768e64e38f043657ccb0fe222ed1497b497f7abddf59aa2aa599bc350f471d6",
+    ".cursor/agents/a09-reviewer.md": "a931971bb9fc68df96d1b5d9e2d6174c06ecf28548a44cf6a9dcde17ac91190b",
+    ".cursor/agents/a10-security.md": "d4d996403820757be842e91117df3b5859927d9ad984a3ebb41af23bc2bb94ca",
+    ".cursor/agents/a11-devops.md": "36153be511e08ec382f5fd8d42df9fe4f2b51bf3a03615438f5a8162c55ea4dd",
+    ".cursor/agents/a12-release.md": "6f57ad2bbb9d1aadb3db26075cad430ea6e8402f23b5cf5307e984b4aafa3eeb",
+    ".cursor/agents/a13-observability.md": "c2a5b01b8de25add44244950a79f1f540ebec2db7482f9fe354b7afadafb40f1",
+    ".cursor/agents/a14-maintenance.md": "57e9f6bf8c7c58d01d16ca6d51b5611e57a12c859d4f6f4caa119b0b10aed3a1",
+    ".cursor/agents/a15-docs.md": "c327ab44ebf9dbc41819a769072fca76e4e86b656ec95c1fe64db2c0e653246e",
+    ".cursor/rules/agent-swarm.mdc": "a69b7e1a56a88cc2fae15dd995f7af67d53c46a209ecfc126efe058e323edcd9"
+  }
+}

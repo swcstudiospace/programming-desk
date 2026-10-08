@@ -10,7 +10,7 @@
 ### 🟡 v2.1 Live Drills & Intake Hardening (Phases 8-9)
 
 - [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
-- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring (2/4 plans)
+- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring (3/4 plans)
 
 ### Phase 9: External Intake Hardening & Telemetry Anchoring
 
@@ -19,7 +19,7 @@
 **Plans**:
 - [x] 09-01-PLAN.md — Webhook HMAC verification, schema validation & sliding idempotency (REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004)
 - [x] 09-02-PLAN.md — ETag caching, circuit breaker & graceful degradation (REQ-INTAKE-002, REQ-INTAKE-005, REQ-INTAKE-007)
-- [ ] 09-03-PLAN.md — DLQ retry policies and terminal failure reporting (REQ-INTAKE-008)
+- [x] 09-03-PLAN.md — DLQ retry policies and terminal failure reporting (REQ-INTAKE-008)
 - [ ] 09-04-PLAN.md — OTel trace propagation, secrets redaction & telemetry anchoring (REQ-INTAKE-006, REQ-INTAKE-009, REQ-INTAKE-010)
 
 ### Completed Milestones

@@ -2,18 +2,18 @@
 gsd_state_version: "1.0"
 milestone: v2.1
 milestone_name: Live Drills & Intake Hardening
-status: Ready to execute Phase 9 Plan 02
-stopped_at: Completed Phase 9 Plan 01 (Webhook HMAC verification, schema validation & sliding idempotency).
-last_updated: "2026-10-08T18:20:00.000Z"
+status: Ready to execute Phase 9 Plan 04
+stopped_at: Completed Phase 9 Plan 03 (Dead-letter queue retry policies and terminal failure reporting).
+last_updated: "2026-10-08T18:50:00.000Z"
 last_activity: 2026-10-08
-last_activity_desc: Plan 09-01 executed and merged (PR #91)
-state_head: 6a41b0c034b07c87c71fbe53495f2693ba6eb0c5
+last_activity_desc: Plan 09-03 executed and merged (PR #95)
+state_head: 604df48c087961d15dbf1a26d11f7c352010eaee
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 49
-  completed_plans: 46
-  percent: 93
+  completed_plans: 47
+  percent: 95
 current_phase: 9
 current_phase_name: External Intake Hardening & Telemetry Anchoring
 ---
@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 ## Current Position
 
 Phase: Phase 9 — External Intake Hardening & Telemetry Anchoring
-Plan: 09-03 queued
-Status: Plan 09-02 completed and merged via PR #93; ready for Plan 09-03 (DLQ retry policies and terminal failure reporting)
-Last activity: 2026-10-08 — Plan 09-02 completed and merged via PR #93.
+Plan: 09-04 queued
+Status: Plan 09-03 completed and merged via PR #95; ready for Plan 09-04 (OTel trace propagation, secrets redaction & telemetry anchoring)
+Last activity: 2026-10-08 — Plan 09-03 completed and merged via PR #95.
 
 ## Accumulated Context
 

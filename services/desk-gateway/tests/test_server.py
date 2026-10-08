@@ -363,7 +363,7 @@ async def test_install_prompt_renders_with_full_roster(rpc):
     assert uuids["lead"] in prompt
     assert "4d78b294" in prompt
     assert 'gateway="https://desk.swcstudio.space/mcp/ios"' in out["prompt"]
-    check = await rpc.call("ios", "desk_doctor", {"action": "check", "prompt_sha256": out["sha256"], "installed_skills": ["ios", "desk-gateway", "hindsight-memory", "ragflow-docs", "tool-packs", "verification-receipts", "desk-doctor", "desk-bootstrap"]})
+    check = await rpc.call("ios", "desk_doctor", {"action": "check", "prompt_sha256": out["sha256"], "installed_skills": ["ios", "desk-gateway", "hindsight-memory", "ragflow-docs", "tool-packs", "verification-receipts", "desk-doctor", "desk-bootstrap", "desk-production-loop"]})
     assert check["checks"]["prompt"]["green"] is True
     assert check["checks"]["skills"]["green"] is True
     assert check["checks"]["roster"]["green"] is True

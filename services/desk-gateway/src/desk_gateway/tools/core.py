@@ -276,7 +276,7 @@ async def _declared_skills(ctx: ToolContext) -> list[str]:
         name = path.split("/")[-1]
         if name not in names:
             names.append(name)
-    for always in ("verification-receipts", "desk-doctor", "desk-bootstrap"):
+    for always in ("verification-receipts", "desk-doctor", "desk-bootstrap", "desk-production-loop"):
         if always not in names:
             names.append(always)
     return names

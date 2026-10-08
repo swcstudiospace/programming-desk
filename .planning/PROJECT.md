@@ -4,9 +4,11 @@
 
 Programming Desk v2 is Ove's seven-seat programming desk, installed from seven Team-only Grok Bot templates and bootstrapped into a six-member group with QUALITY independent and off-channel. Its VPS Desk Gateway exposes contract-defined tools per seat, connects to five Railway data services through private project forwarders, and admits outside work only through LEAD.
 
-The current milestone is **v2.0 — Desk v2**: the complete approved plan, seven delivery phases, all 41 source steps and all 217 stable requirements. Existing authored surfaces and bounded runtime observations inform the work; they do not establish delivered phases.
+The current milestone is **v2.1 — Live Drills & Intake Hardening**: testing gateway resiliency, subagent prompt integrity, token handling, and telemetry anchoring. Existing authored surfaces and bounded runtime observations inform the work.
 
 ## Core Value
+
+A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 
 A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 

@@ -68,8 +68,18 @@ read_single_pid() {
     exit 1
   fi
   pid="${raw//[[:space:]]/}"
-  # Force base 10 so a zero-padded value is not treated as octal.
-  pid="$((10#$pid))"
+  # Strip leading zeros in the string. Bash arithmetic wraps at 2^64, so
+  # 18446744073709551616 becomes 0 and kill -HUP 0 signals the process group.
+  while [[ "$pid" == 0* ]]; do
+    pid="${pid#0}"
+  done
+  # Linux pid_max is at most 2^22, one past the highest allocated PID.
+  # Longer values are rejected before any arithmetic. A 7-digit value fits
+  # in bash arithmetic, so the ceiling compare cannot wrap.
+  if [[ -z "$pid" || ${#pid} -gt 7 || ( ${#pid} -eq 7 && "$pid" -gt 4194303 ) ]]; then
+    err "${label} is outside the supported PID range (1-4194303): ${file}"
+    exit 1
+  fi
   printf '%s' "$pid"
 }
 

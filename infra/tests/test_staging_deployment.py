@@ -100,7 +100,12 @@ def _read_log(stub_dir: Path, log_name: str) -> str:
 
 
 def _unused_pid() -> int:
-    for candidate in range(2_100_000_000, 2_100_000_040):
+    """An allocated-range PID that is not a live process.
+
+    Signal 0 does not deliver a signal; it only checks whether the PID exists.
+    Linux will not allocate a PID above 4194303.
+    """
+    for candidate in range(4_194_303, 4_194_303 - 64, -1):
         try:
             os.kill(candidate, 0)
         except ProcessLookupError:
@@ -553,6 +558,48 @@ def test_reload_normalizes_zero_padded_pid(tmp_path):
     assert "-HUP 010" not in kill_log
 
 
+@pytest.mark.parametrize(
+    "contents",
+    [
+        "18446744073709551616\n",
+        "18446744073709551626\n",
+        "4194304\n",
+        "0004194304\n",
+    ],
+)
+def test_reload_rejects_pid_outside_supported_range(tmp_path, decoy_gateway, contents):
+    """A PID that bash arithmetic would wrap, or that Linux will not allocate, is not signalled."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    _recorder(stub_dir, "pgrep", "pgrep.log", stdout=str(decoy_gateway.pid))
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text(contents, encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode != 0
+    assert "range" in proc.stderr
+    assert _read_log(stub_dir, "kill.log") == ""
+    assert decoy_gateway.poll() is None
+
+
+def test_reload_accepts_highest_linux_pid(tmp_path):
+    """4194303 is the highest PID Linux allocates when pid_max is 2^22."""
+    stub_dir = tmp_path / "bin"
+    stub_dir.mkdir()
+    _recorder(stub_dir, "kill", "kill.log")
+    pid_file = tmp_path / "gateway.pid"
+    pid_file.write_text("4194303\n", encoding="utf-8")
+
+    env = _private_env(stub_dir, DESK_GATEWAY_PID_FILE=str(pid_file))
+    proc = _run(RELOAD_SCRIPT, env)
+
+    assert proc.returncode == 0, proc.stderr
+    assert "-HUP 4194303" in _read_log(stub_dir, "kill.log")
+
+
 def test_reload_rejects_pid_file_with_several_lines(tmp_path, decoy_gateway):
     """A file with more than one PID line is not a single target."""
     stub_dir = tmp_path / "bin"
@@ -594,13 +641,28 @@ def test_deploy_rejects_missing_systemctl_bin_before_cutover(tmp_path):
     assert not (releases_root / "rel-bad").exists()
 
 
-def test_guard_rejects_env_without_path():
-    """Omitting PATH uses Python's default search path, which can see the host binary."""
+def test_guard_rejects_env_without_path(tmp_path, monkeypatch):
+    """Omitting PATH searches Python's default path, independent of where the host keeps systemctl."""
     import conftest
     from _pytest.outcomes import Failed
 
-    if not conftest.HOST_SERVICE_BINS.get("systemctl"):
-        pytest.skip("host systemctl is not installed")
+    bin_dir = tmp_path / "default-search"
+    bin_dir.mkdir()
+    systemctl = bin_dir / "systemctl"
+    _write_executable(systemctl, "#!/bin/sh\necho guard-regression >&2\nexit 99\n")
+    host = {"systemctl": str(systemctl), "nginx": None}
+    monkeypatch.setattr(conftest, "HOST_SERVICE_BINS", host)
+    real_get_exec_path = os.get_exec_path
+
+    def controlled_exec_path(env=None):
+        # get_exec_path prefers confstr("CS_PATH") over os.defpath. Pin the
+        # omitted-PATH case to this temporary directory either way.
+        if env is not None and "PATH" not in env:
+            return [str(bin_dir)]
+        return real_get_exec_path(env)
+
+    monkeypatch.setattr(os, "get_exec_path", controlled_exec_path)
+
     with pytest.raises(Failed, match="systemctl"):
         conftest.reject_host_service_bins(["echo", "untouched"], {})
     with pytest.raises(Failed, match="systemctl"):

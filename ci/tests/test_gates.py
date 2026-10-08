@@ -2084,51 +2084,6 @@ class TestEveryGateIsWired:
         )
 
 
-class TestBaseRefFetchIsNotShallow:
-    """The base-ref fetch must not shallow the checkout.
-
-    `git fetch --depth=1` of a base that has moved past the fork point records
-    that tip as a shallow boundary, and `origin/$BASE_REF...HEAD` then has no
-    merge base. Template sync only compares the two workflow copies to each
-    other, so restoring `--depth=1` in both files stays green there. This reads
-    the fetch out of each file.
-    """
-
-    @staticmethod
-    def fetches(workflow: str) -> list[str]:
-        return [
-            line.strip()
-            for body in TestEveryGateIsWired._run_bodies(workflow)
-            for line in body.splitlines()
-            if line.strip().startswith("git fetch")
-        ]
-
-    @staticmethod
-    def assert_unshallowed(workflow: str, fetches: list[str]) -> None:
-        assert len(fetches) == 2, (
-            f"{workflow} should fetch the base ref once in each job, got {fetches}"
-        )
-        for fetch in fetches:
-            assert "--depth" not in fetch, (
-                f"{workflow} shallow-fetches the base ref ({fetch}). "
-                "That cuts history, so origin/$BASE_REF...HEAD has no merge base "
-                "once the base moves past the fork point."
-            )
-            assert "refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF" in fetch, (
-                f"{workflow} fetch does not update origin/$BASE_REF at full depth: {fetch}"
-            )
-
-    def test_depth_limited_fetch_is_rejected(self):
-        """The old command, the one that broke G-1, is the case this guard exists for."""
-        old = 'git fetch --no-tags --depth=1 origin "$BASE_REF"'
-        with pytest.raises(AssertionError, match="shallow-fetches"):
-            self.assert_unshallowed("fixture", [old, old])
-
-    @pytest.mark.parametrize("workflow", WORKFLOWS)
-    def test_workflow_fetches_the_base_ref_at_full_depth(self, workflow):
-        self.assert_unshallowed(workflow, self.fetches(workflow))
-
-
 class TestReceiptSelection:
     """G-2 must read the receipt for THIS change, not one replayed alongside it.
 

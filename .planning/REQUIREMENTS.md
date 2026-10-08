@@ -6,9 +6,9 @@ This document defines the requirements for Milestone v2.6 of Programming Desk.
 
 - [x] **REQ-FINOPS-001**: Real-time token consumption ledger tracking per-tenant, per-seat, and per-model input/output token usage with rolling expenditure calculation.
 - [x] **REQ-FINOPS-002**: Dynamic token budget enforcer with graduated spend limits (warning threshold at 80%, soft throttle at 95%, hard circuit-breaker at 100%).
-- [ ] **REQ-FINOPS-003**: Seat-level token allocation matrix distributing daily and monthly allowances across the seven seats with priority burst overdrafts.
+- [x] **REQ-FINOPS-003**: Seat-level token allocation matrix distributing daily and monthly allowances across the seven seats with priority burst overdrafts.
 - [x] **REQ-FINOPS-004**: Multi-currency cost translation engine converting provider token tariffs (Anthropic, OpenAI, Grok/xAI, DeepSeek) into real-time micro-dollar balances.
-- [ ] **REQ-FINOPS-005**: Cryptographic expenditure audit receipts chaining token usage vouchers with SHA-256 state anchors for cost reconciliation.
+- [x] **REQ-FINOPS-005**: Cryptographic expenditure audit receipts chaining token usage vouchers with SHA-256 state anchors for cost reconciliation.
 
 ## 2. LLM Tier Routing & Cost-Aware Model Optimization (Phase 19)
 

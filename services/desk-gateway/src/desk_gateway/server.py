@@ -105,7 +105,11 @@ from desk_gateway.mesh import (
 )
 from desk_gateway.finops import (
     CircuitBreakerStatus,
+    ExpenditureReceipt,
+    ExpenditureReceiptLedger,
     ModelTariff,
+    SeatAllocation,
+    SeatQuotaAllocationMatrix,
     SpendCircuitBreaker,
     TokenLedger,
 )
@@ -2890,8 +2894,12 @@ def create_mcp(
 
     token_ledger = TokenLedger()
     spend_circuit_breaker = SpendCircuitBreaker(token_ledger)
+    seat_allocation_matrix = SeatQuotaAllocationMatrix()
+    expenditure_receipt_ledger = ExpenditureReceiptLedger()
     setattr(mcp, "_token_ledger", token_ledger)
     setattr(mcp, "_spend_circuit_breaker", spend_circuit_breaker)
+    setattr(mcp, "_seat_allocation_matrix", seat_allocation_matrix)
+    setattr(mcp, "_expenditure_receipt_ledger", expenditure_receipt_ledger)
 
     @mcp.custom_route("/v1/finops/tokens/record", methods=["POST"])
     async def finops_tokens_record(request: Request) -> Response:
@@ -2904,6 +2912,11 @@ def create_mcp(
         output_tokens = int(body.get("output_tokens", 0))
         cached_tokens = int(body.get("cached_tokens", 0))
 
+        # Check seat quota allocation before or during recording
+        total_tokens = input_tokens + output_tokens
+        seat_allocation_matrix.record_usage(tenant_id, seat_id, total_tokens)
+        seat_eval = seat_allocation_matrix.evaluate_seat(tenant_id, seat_id)
+
         record = token_ledger.record_usage(
             record_id=record_id,
             tenant_id=tenant_id,
@@ -2914,6 +2927,20 @@ def create_mcp(
             cached_tokens=cached_tokens,
         )
         cb_eval = spend_circuit_breaker.evaluate(tenant_id)
+
+        # Generate cryptographic expenditure receipt
+        receipt = expenditure_receipt_ledger.issue_receipt(
+            tenant_id=tenant_id,
+            seat_id=seat_id,
+            record_id=record.record_id,
+            model_id=record.model_id,
+            input_tokens=record.input_tokens,
+            output_tokens=record.output_tokens,
+            cached_tokens=cached_tokens,
+            cost_micro_dollars=record.cost_micro_dollars,
+            cumulative_tenant_spend=cb_eval["current_spend_micro_dollars"],
+        )
+
         return JSONResponse({
             "ok": True,
             "record": {
@@ -2927,7 +2954,22 @@ def create_mcp(
                 "cost_micro_dollars": record.cost_micro_dollars,
             },
             "circuit_breaker": cb_eval,
+            "seat_allocation": seat_eval,
+            "receipt": receipt.to_dict(),
         })
+
+    @mcp.custom_route("/v1/finops/seat-quota", methods=["GET"])
+    async def finops_seat_quota_get(request: Request) -> Response:
+        tenant_id = request.query_params.get("tenant_id", "default")
+        seat_id = request.query_params.get("seat_id", "lead")
+        eval_result = seat_allocation_matrix.evaluate_seat(tenant_id, seat_id)
+        return JSONResponse({"ok": True, "seat_quota": eval_result})
+
+    @mcp.custom_route("/v1/finops/receipts/verify", methods=["GET"])
+    async def finops_receipts_verify(request: Request) -> Response:
+        tenant_id = request.query_params.get("tenant_id", "default")
+        verification = expenditure_receipt_ledger.verify_chain(tenant_id)
+        return JSONResponse({"ok": True, "verification": verification})
 
     @mcp.custom_route("/v1/finops/spend", methods=["GET"])
     async def finops_spend_get(request: Request) -> Response:
@@ -3082,6 +3124,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "delegation_sm": getattr(mcp, "_delegation_sm", None),
         "token_ledger": getattr(mcp, "_token_ledger", None),
         "spend_circuit_breaker": getattr(mcp, "_spend_circuit_breaker", None),
+        "seat_allocation_matrix": getattr(mcp, "_seat_allocation_matrix", None),
+        "expenditure_receipt_ledger": getattr(mcp, "_expenditure_receipt_ledger", None),
     }
     return app, settings
 

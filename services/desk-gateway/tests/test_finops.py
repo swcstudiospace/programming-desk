@@ -5,8 +5,13 @@ from starlette.testclient import TestClient
 
 from desk_gateway.finops import (
     CircuitBreakerStatus,
+    DEFAULT_SEAT_ALLOCATIONS,
     DEFAULT_TARIFFS,
+    ExpenditureReceipt,
+    ExpenditureReceiptLedger,
     ModelTariff,
+    SeatAllocation,
+    SeatQuotaAllocationMatrix,
     SpendCircuitBreaker,
     TokenLedger,
 )
@@ -131,3 +136,83 @@ def test_finops_gateway_endpoints():
     assert s_data["tenant_spend_micro_dollars"] == 450_000
     assert s_data["seat_spend_micro_dollars"] == 450_000
     assert s_data["circuit_breaker"]["status"] == "normal"
+
+    # 4. Check seat quota and receipts via endpoints
+    quota_res = client.get("/v1/finops/seat-quota?tenant_id=tenant-api&seat_id=lead")
+    assert quota_res.status_code == 200
+    assert quota_res.json()["ok"] is True
+    assert quota_res.json()["seat_quota"]["allowed"] is True
+
+    verify_res = client.get("/v1/finops/receipts/verify?tenant_id=tenant-api")
+    assert verify_res.status_code == 200
+    assert verify_res.json()["verification"]["valid"] is True
+    assert verify_res.json()["verification"]["count"] == 1
+
+
+def test_seat_quota_allocation_matrix():
+    matrix = SeatQuotaAllocationMatrix()
+    tenant = "tenant-seat-test"
+    seat = "web"
+    # Daily allowance: 1,200,000, 20% burst -> 1,440,000 ceiling
+
+    # Normal usage
+    matrix.record_usage(tenant, seat, 500_000)
+    ev1 = matrix.evaluate_seat(tenant, seat)
+    assert ev1["allowed"] is True
+    assert ev1["is_bursting"] is False
+    assert ev1["reason"] == "ok"
+
+    # Burst overdraft usage: total 1,300,000 (> 1,200,000 but <= 1,440,000)
+    matrix.record_usage(tenant, seat, 800_000)
+    ev2 = matrix.evaluate_seat(tenant, seat)
+    assert ev2["allowed"] is True
+    assert ev2["is_bursting"] is True
+    assert ev2["reason"] == "burst_overdraft_active"
+
+    # Ceiling exceeded: total 1,500,000 (> 1,440,000)
+    matrix.record_usage(tenant, seat, 200_000)
+    ev3 = matrix.evaluate_seat(tenant, seat)
+    assert ev3["allowed"] is False
+    assert ev3["reason"] == "daily_burst_ceiling_exceeded"
+
+
+def test_expenditure_receipt_ledger_integrity_and_tampering():
+    ledger = ExpenditureReceiptLedger(secret="test-finops-secret")
+    tenant = "tenant-tamper-check"
+
+    # Issue three sequential receipts
+    r1 = ledger.issue_receipt(tenant, "lead", "rec-1", "claude-3-5-sonnet", 1000, 100, 0, 4500, 4500)
+    r2 = ledger.issue_receipt(tenant, "quality", "rec-2", "gpt-4o-mini", 2000, 200, 0, 420, 4920)
+    r3 = ledger.issue_receipt(tenant, "systems", "rec-3", "deepseek-reasoner", 3000, 300, 0, 2307, 7227)
+
+    # Verification should succeed
+    res = ledger.verify_chain(tenant)
+    assert res["valid"] is True
+    assert res["count"] == 3
+    assert res["latest_receipt_hash"] == r3.receipt_hash
+
+    # Tampering test: alter cost in receipt 2
+    chain = ledger.get_chain(tenant)
+    tampered_r2 = ExpenditureReceipt(
+        receipt_id=r2.receipt_id,
+        tenant_id=r2.tenant_id,
+        seat_id=r2.seat_id,
+        record_id=r2.record_id,
+        model_id=r2.model_id,
+        input_tokens=r2.input_tokens,
+        output_tokens=r2.output_tokens,
+        cached_tokens=r2.cached_tokens,
+        cost_micro_dollars=999_999,  # tampered!
+        cumulative_tenant_spend=r2.cumulative_tenant_spend,
+        timestamp=r2.timestamp,
+        prev_receipt_hash=r2.prev_receipt_hash,
+        receipt_hash=r2.receipt_hash,
+    )
+    ledger._chains[tenant][1] = tampered_r2
+
+    # Verification must detect tamper
+    tamper_res = ledger.verify_chain(tenant)
+    assert tamper_res["valid"] is False
+    assert tamper_res["failed_index"] == 1
+    assert "Hash mismatch" in tamper_res["error"]
+

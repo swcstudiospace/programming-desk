@@ -4,11 +4,9 @@
 
 Programming Desk v2 is Ove's seven-seat programming desk, installed from seven Team-only Grok Bot templates and bootstrapped into a six-member group with QUALITY independent and off-channel. Its VPS Desk Gateway exposes contract-defined tools per seat, connects to five Railway data services through private project forwarders, and admits outside work only through LEAD.
 
-The current milestone is **v2.2 — Multi-Desk Federation & Staging Deployments**: enabling inter-desk federation, cross-instance task graph synchronization, and automated staging/VPS deployments.
+The current milestone is **v2.3 — Production Cutover, Dynamic Failover & Telemetry Alerting**: zero-downtime traffic migration, canary routing, emergency seat isolation, multi-desk failover, and Prometheus SLO alerts.
 
 ## Core Value
-
-A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 
 A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 
@@ -27,12 +25,14 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 - ✓ Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010 (v2.1)
 - ✓ Phase 10: Multi-Desk Federation & Inter-Seat Routing — REQ-FED-001 through REQ-FED-005 (v2.2)
 - ✓ Phase 11: Automated Staging & VPS Environment Promotion — REQ-STAGE-001 through REQ-STAGE-005 (v2.2)
+- ✓ Phase 12: Production Cutover & Dynamic Failover — REQ-CUTOVER-001 through REQ-CUTOVER-005 (v2.3)
+- ✓ Phase 13: Advanced Telemetry, SLOs & Alert Thresholds — REQ-ALERT-001 through REQ-ALERT-005 (v2.3)
 
-All 247 requirements shipped and verified across Milestones v2.0, v2.1, and v2.2.
+All 257 requirements shipped and verified across Milestones v2.0, v2.1, v2.2, and v2.3.
 
 ### Active
 
-None! All planned milestones (v2.0, v2.1, v2.2) are 100% complete and validated.
+None! All planned milestones (v2.0, v2.1, v2.2, v2.3) are 100% complete and validated.
 
 ### Out of Scope
 

@@ -2,17 +2,17 @@
 
 ## Milestones
 
-- 🟡 **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (in progress)
+- ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
 - ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09) — [Archive](milestones/v2.2-ROADMAP.md)
 - ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08) — [Archive](milestones/v2.1-ROADMAP.md)
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
 
-### 🟡 v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13)
+### ✅ v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13)
 
 - [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
-- [ ] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (1/2 plans)
+- [x] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (2/2 plans)
 
 #### Phase 12: Production Cutover & Dynamic Failover
 

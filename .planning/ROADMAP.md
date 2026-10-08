@@ -13,9 +13,9 @@
 
 ### Active Milestone: v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh
 
-- [ ] **Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement** (1/2 plans)
+- [x] **Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement** (2/2 plans)
   - [x] 16-01: Multi-tenant namespace isolation engine & ABAC/RBAC policy evaluation (REQ-TENANT-001, REQ-TENANT-002)
-  - [ ] 16-02: Tenant-partitioned memory & dataset encryption, quota policer & tamper-evident audit hashing (REQ-TENANT-003, REQ-TENANT-004, REQ-TENANT-005)
+  - [x] 16-02: Tenant-partitioned memory & dataset encryption, quota policer & tamper-evident audit hashing (REQ-TENANT-003, REQ-TENANT-004, REQ-TENANT-005)
 - [ ] **Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution** (0/2 plans)
 
 ### Completed Milestones

@@ -6,9 +6,9 @@ This document defines the requirements for Milestone v2.5 of Programming Desk.
 
 - [x] **REQ-TENANT-001**: Multi-tenant isolation engine enforcing organization and team namespaces across all gateway endpoints, preventing cross-tenant data leakage.
 - [x] **REQ-TENANT-002**: Attribute-based & role-based access control (ABAC/RBAC) policy engine governing per-seat tool invocation privileges and data-plane access.
-- [ ] **REQ-TENANT-003**: Tenant-scoped Hindsight memory partitions and RAGFlow document dataset isolation with cryptographically authenticated tenant boundaries.
-- [ ] **REQ-TENANT-004**: Multi-tenant quota and rate limiting policer with tenant-level burst ceilings and fair-share scheduling.
-- [ ] **REQ-TENANT-005**: Tenant audit trail verification with immutable per-tenant cryptographic event hashing and tamper detection.
+- [x] **REQ-TENANT-003**: Tenant-scoped Hindsight memory partitions and RAGFlow document dataset isolation with cryptographically authenticated tenant boundaries.
+- [x] **REQ-TENANT-004**: Multi-tenant quota and rate limiting policer with tenant-level burst ceilings and fair-share scheduling.
+- [x] **REQ-TENANT-005**: Tenant audit trail verification with immutable per-tenant cryptographic event hashing and tamper detection.
 
 ## 2. Inter-Desk Agent Mesh & Distributed Work Distribution (Phase 17)
 

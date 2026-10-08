@@ -1,19 +1,19 @@
-# Requirements: Milestone v2.3 — Production Cutover, Dynamic Failover & Telemetry Alerting
+# Requirements: Milestone v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery
 
-This document defines the requirements for Milestone v2.3 of Programming Desk.
+This document defines the requirements for Milestone v2.4 of Programming Desk.
 
-## 1. Production Cutover & Dynamic Failover (Phase 12)
+## 1. Multi-Region Edge Federation & WAN Inter-Seat Routing (Phase 14)
 
-- **REQ-CUTOVER-001**: Production live traffic migration orchestrator switching ingress routes from legacy stubs to federated VPS gateway endpoints with zero request drop.
-- **REQ-CUTOVER-002**: Automated multi-desk failover routing dynamically diverting seat dispatch to healthy peer desks upon gateway heartbeats failing threshold.
-- **REQ-CUTOVER-003**: Dynamic upstream health polling across Railway services (GreptimeDB, TimescaleDB, DragonflyDB, Hindsight, RAGFlow) updating gateway routing tables.
-- **REQ-CUTOVER-004**: Canary release traffic splitting mechanism in Desk Gateway admitting graduated percentages of external webhook intake.
-- **REQ-CUTOVER-005**: Automated emergency rollback trigger isolating compromised or degraded seat instances within 5 seconds of anomaly detection.
+- **REQ-EDGE-001**: Edge ingress gateway proxying and load balancing across multi-region VPS desk instances with latency-based geo-steering and health-aware failover.
+- **REQ-EDGE-002**: Distributed edge rate limiting and token-bucket traffic policing synchronized via DragonflyDB cache cluster with per-seat burst ceilings.
+- **REQ-EDGE-003**: Cross-region WAN inter-seat routing protocol enforcing cryptographic seat identity attestation and mutual TLS over Tailnet mesh.
+- **REQ-EDGE-004**: Vector clock conflict convergence with multi-master partitioned task graphs under high-latency WAN transit (>250ms).
+- **REQ-EDGE-005**: Dynamic edge route revocation and instantaneous session evacuation upon region-wide impairment detection.
 
-## 2. Advanced Telemetry, SLOs & Alert Thresholds (Phase 13)
+## 2. Autonomous Chaos Recovery & Self-Healing Resilience (Phase 15)
 
-- **REQ-ALERT-001**: Prometheus metrics export of per-seat invocation latency, DLQ saturation, and federated signature verification failure counts.
-- **REQ-ALERT-002**: Service Level Objective (SLO) alert rules for gateway 99th-percentile response time (< 500ms) and intake delivery success (> 99.9%).
-- **REQ-ALERT-003**: Automated webhook notification dispatch alerting on-call operator channels upon circuit breaker trip or DLQ threshold breach.
-- **REQ-ALERT-004**: GreptimeDB hourly devnet anchor verification job confirming Solana proof transaction hashes.
-- **REQ-ALERT-005**: End-to-end telemetry audit suite validating metrics, traces, and alert triggers under synthetic stress load.
+- **REQ-CHAOS-001**: Synthetic chaos injection harness simulating intermittent upstream network partitions, packet loss, and latency spikes across Railway dependencies.
+- **REQ-CHAOS-002**: Automated self-healing supervisor detecting corrupted or partitioned seat instances and triggering zero-downtime hot reconstitution.
+- **REQ-CHAOS-003**: Autonomous task graph rebalancing algorithm dynamically redistributing unacknowledged seat workloads upon seat crash or unresponsiveness.
+- **REQ-CHAOS-004**: Automated dead-letter queue (DLQ) replay orchestrator with exponential backoff, jitter, and poisonous payload quarantine.
+- **REQ-CHAOS-005**: Continuous resilience verification suite validating system-wide RPO (Recovery Point Objective = 0) and RTO (Recovery Time Objective < 3s) during chaos drills.

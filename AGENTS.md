@@ -84,7 +84,6 @@ python3 ci/gates/check_ownership.py --bot <bot-id> --base origin/main
 python3 ci/gates/check_desk_integrity.py --repo .
 python3 ci/gates/check_secrets.py --base origin/main
 python3 ci/gates/check_contracts.py --base origin/main
-python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
 python3 ci/gates/check_rollback.py --receipt .receipts/<bot-id>/<task-id>.json
 python3 ci/gates/check_receipt.py --receipt .receipts/<bot-id>/<task-id>.json --bot <bot-id> --strict
 python3 -m pytest ci/tests/ -v
@@ -92,9 +91,12 @@ python3 -m pytest ci/tests/ -v
 
 The bare `check_contracts.py --base origin/main` is only for a diff that
 touches no contract surface. The gate does not search for a change document.
-When the diff touches one, use the exact invocation above:
-`python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml`
-([docs/quality-gates.md](docs/quality-gates.md)).
+When the diff touches one, this is the exact invocation
+([docs/quality-gates.md](docs/quality-gates.md)):
+
+```bash
+python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/<change-id>.yaml
+```
 
 `check_receipt.py --strict` matches the G-2 step in
 [`.github/workflows/gates.yml`](.github/workflows/gates.yml). G-2 is expected

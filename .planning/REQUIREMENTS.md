@@ -284,85 +284,85 @@ Source: [approved plan](../docs/upgrade-plan-desk-v2.md) §§5–13 and Appendic
 
 ### SHARE — Phase 5: Prompts, skills, templates, plugin
 
-- [ ] **REQ-SHARE-001**: Given prompt sources, when v1.1 is authored, then hardcoded channel and seat UUIDs are replaced by DESK_CHANNEL_ID and all seven SEAT_UUID:<SEAT> placeholders plus DESK_GATEWAY_URL and DESK_ROSTER_VERSION.
+- [x] **REQ-SHARE-001**: Given prompt sources, when v1.1 is authored, then hardcoded channel and seat UUIDs are replaced by DESK_CHANNEL_ID and all seven SEAT_UUID:<SEAT> placeholders plus DESK_GATEWAY_URL and DESK_ROSTER_VERSION.
   - Source: P §8.1 item 1; §12 n5.1; source step / responsibility: n5.1; QUALITY; acceptance ID: AC-SHARE-001.
-- [ ] **REQ-SHARE-002**: Given --roster grokbot/rosters/<team>.json, when assembly runs, then roster substitutions are filled and any unfilled placeholder refuses assembly.
+- [x] **REQ-SHARE-002**: Given --roster grokbot/rosters/<team>.json, when assembly runs, then roster substitutions are filled and any unfilled placeholder refuses assembly.
   - Source: P §8.1 item 1; §11 assembly; §12 n5.1; source step / responsibility: n5.1; QUALITY; acceptance ID: AC-SHARE-002.
-- [ ] **REQ-SHARE-003**: Given the Spectrum Web Co roster, when versioned, then it is committed with its non-secret IDs; a recipient roster is produced by doctor registration instead of copying the source team's IDs.
+- [x] **REQ-SHARE-003**: Given the Spectrum Web Co roster, when versioned, then it is committed with its non-secret IDs; a recipient roster is produced by doctor registration instead of copying the source team's IDs.
   - Source: P §8.1 item 1; §11 grokbot; source step / responsibility: n5.1–2; LEAD / QUALITY; acceptance ID: AC-SHARE-003.
-- [ ] **REQ-SHARE-004**: Given a seat v1.1 prompt, when assembled/parsed, then its tools section names its contract and tool list, labels g5/g6 as PD-5 and states that unlisted tools do not exist and refused calls are blockers, not retry loops.
+- [x] **REQ-SHARE-004**: Given a seat v1.1 prompt, when assembled/parsed, then its tools section names its contract and tool list, labels g5/g6 as PD-5 and states that unlisted tools do not exist and refused calls are blockers, not retry loops.
   - Source: P §8.1 item 2; Appendix B; §12 n5.2; source step / responsibility: n5.2; each seat owns its prompt; acceptance ID: AC-SHARE-004.
-- [ ] **REQ-SHARE-005**: Given a seat memory section, when read, then it specifies pd-<seat>, turn-start desk_brief and evidence-backed facts, and excludes secrets, unverified claims and other seats' work.
+- [x] **REQ-SHARE-005**: Given a seat memory section, when read, then it specifies pd-<seat>, turn-start desk_brief and evidence-backed facts, and excludes secrets, unverified claims and other seats' work.
   - Source: P §8.1 item 3; Appendix B; §12 n5.2; source step / responsibility: n5.2; each seat; acceptance ID: AC-SHARE-005.
-- [ ] **REQ-SHARE-006**: Given a supported connector action, when performed, then the prompt prefers the connector and falls back to computer/browser use without using both for the same action.
+- [x] **REQ-SHARE-006**: Given a supported connector action, when performed, then the prompt prefers the connector and falls back to computer/browser use without using both for the same action.
   - Source: P §8.1 item 4; §8.3 marketplace policy; §12 n5.2; source step / responsibility: n5.2; each seat; acceptance ID: AC-SHARE-006.
-- [ ] **REQ-SHARE-007**: Given outside work, when PD-8 is applied, then only LEAD's 1:1 or intake tools admit it and a build seat sends a held handoff without acting.
+- [x] **REQ-SHARE-007**: Given outside work, when PD-8 is applied, then only LEAD's 1:1 or intake tools admit it and a build seat sends a held handoff without acting.
   - Source: P §8.1 item 5; §12 n5.1; source step / responsibility: n5.1; QUALITY; acceptance ID: AC-SHARE-007.
-- [ ] **REQ-SHARE-008**: Given a seat prompt/template, when the human account owner reviews and installs/enables skills through the authorized account UI, then verification-receipts, desk-doctor and desk-bootstrap are present with actual activation evidence, never seat self-installation.
+- [x] **REQ-SHARE-008**: Given a seat prompt/template, when the human account owner reviews and installs/enables skills through the authorized account UI, then verification-receipts, desk-doctor and desk-bootstrap are present with actual activation evidence, never seat self-installation.
   - Source: P §8.1 item 6; §9.1 enabled skills; RW-03; source step / responsibility: n5.1–3; QUALITY / authorized human account owner; acceptance ID: AC-SHARE-008.
-- [ ] **REQ-SHARE-009**: Given LEAD's Phase 0, when it starts a turn, then held handoffs are polled before intake; desk-held-poll runs every ten minutes unconditionally, while desk-intake-poll runs every ten minutes or uses a supported GitHub desk:intake label event.
+- [x] **REQ-SHARE-009**: Given LEAD's Phase 0, when it starts a turn, then held handoffs are polled before intake; desk-held-poll runs every ten minutes unconditionally, while desk-intake-poll runs every ten minutes or uses a supported GitHub desk:intake label event.
   - Source: P §8.1 item 7; source step / responsibility: n5.2; LEAD; acceptance ID: AC-SHARE-009.
-- [ ] **REQ-SHARE-010**: Given the seven new skill deliverables, when reviewed, then desk-bootstrap, desk-doctor, desk-gateway, hindsight-memory, ragflow-docs, platforms/railway-tailscale and tool-packs cover their source purposes and owners, with authoring grounded in the cited recurring mistake discipline.
+- [x] **REQ-SHARE-010**: Given the seven new skill deliverables, when reviewed, then desk-bootstrap, desk-doctor, desk-gateway, hindsight-memory, ragflow-docs, platforms/railway-tailscale and tool-packs cover their source purposes and owners, with authoring grounded in the cited recurring mistake discipline.
   - Source: P §8.2; §12 n5.3; source step / responsibility: n5.3; named skill owners / reviewers; acceptance ID: AC-SHARE-010.
-- [ ] **REQ-SHARE-011**: Given swc-programming-desk, when packaged for the Cursor team Marketplace, then it contains the desk skills and all seven public gateway connector definitions.
+- [x] **REQ-SHARE-011**: Given swc-programming-desk, when packaged for the Cursor team Marketplace, then it contains the desk skills and all seven public gateway connector definitions.
   - Source: P §8.3 item 1; §12 n5.4; source step / responsibility: n5.4; desk plugin owner; acceptance ID: AC-SHARE-011.
-- [ ] **REQ-SHARE-012**: Given the shared agent-skills checkout, when projected to Grok Bot, then a grok-bot projector target emits the plugin manifest by the PR-reviewed shared-library route; this remains a cross-repo deliverable.
+- [x] **REQ-SHARE-012**: Given the shared agent-skills checkout, when projected to Grok Bot, then a grok-bot projector target emits the plugin manifest by the PR-reviewed shared-library route; this remains a cross-repo deliverable.
   - Source: P §8.3 item 2; §12 n5.4; source step / responsibility: n5.4; agent-substrate projector owner; acceptance ID: AC-SHARE-012.
-- [ ] **REQ-SHARE-013**: Given the desk skill pack, when shared back to agent-skills, then skills_propose opens a reviewable PR and no proposal is claimed to be an installed skill.
+- [x] **REQ-SHARE-013**: Given the desk skill pack, when shared back to agent-skills, then skills_propose opens a reviewable PR and no proposal is claimed to be an installed skill.
   - Source: P §8.3 item 2; §12 n5.6; G production loop point 8; source step / responsibility: n5.6; LEAD / shared-library reviewers; acceptance ID: AC-SHARE-013.
-- [ ] **REQ-SHARE-014**: Given account-wide plugins, when the human owner reviews and installs/enables them through the authorized account UI, then GitHub is available to all, Linear/Notion to LEAD/QUALITY, Slack to LEAD, Greptile to QUALITY, Vercel to WEB and Railway to INFRA where connectors exist; actual activation is evidenced and seats remain proposal-only while skills.approve is absent.
+- [x] **REQ-SHARE-014**: Given account-wide plugins, when the human owner reviews and installs/enables them through the authorized account UI, then GitHub is available to all, Linear/Notion to LEAD/QUALITY, Slack to LEAD, Greptile to QUALITY, Vercel to WEB and Railway to INFRA where connectors exist; actual activation is evidenced and seats remain proposal-only while skills.approve is absent.
   - Source: P §8.3 marketplace policy; G production loop point 8; RW-03; source step / responsibility: n5.4; authorized human account owner; acceptance ID: AC-SHARE-014.
-- [ ] **REQ-SHARE-015**: Given generated prompt-derived descriptions, when the share is published, then exactly seven Team-only seat templates exist and their descriptions are not hand-edited.
+- [x] **REQ-SHARE-015**: Given generated prompt-derived descriptions, when the share is published, then exactly seven Team-only seat templates exist and their descriptions are not hand-edited.
   - Source: P D-3; §9.1; §11 grokbot; §12 n5.5; source step / responsibility: n5.5; LEAD; acceptance ID: AC-SHARE-015.
-- [ ] **REQ-SHARE-016**: Given a Team-only template copy, when inspected, then only profile/settings/enabled skills/routines/avatar are carried, not memory, history, credentials, computer or group membership.
+- [x] **REQ-SHARE-016**: Given a Team-only template copy, when inspected, then only profile/settings/enabled skills/routines/avatar are carried, not memory, history, credentials, computer or group membership.
   - Source: P §9.1; source step / responsibility: n5.5; LEAD; acceptance ID: AC-SHARE-016.
-- [ ] **REQ-SHARE-017**: Given a template description, when generated, then it contains the seat role-charter rules, First run: /desk bootstrap and the public gateway host, and nothing else.
+- [x] **REQ-SHARE-017**: Given a template description, when generated, then it contains the seat role-charter rules, First run: /desk bootstrap and the public gateway host, and nothing else.
   - Source: P §9.1 description; source step / responsibility: n5.5; LEAD; acceptance ID: AC-SHARE-017.
-- [ ] **REQ-SHARE-018**: Given template contents, when scanned/inspected, then UUIDs, channel ID, XML prompt body, tokens, tailnet names and receipts are absent.
+- [x] **REQ-SHARE-018**: Given template contents, when scanned/inspected, then UUIDs, channel ID, XML prompt body, tokens, tailnet names and receipts are absent.
   - Source: P D-3; §9.1 exclusions; §11 G-7; source step / responsibility: n5.5; LEAD / QUALITY; acceptance ID: AC-SHARE-018.
-- [ ] **REQ-SHARE-019**: Given human-reviewed account-UI activation, when bootstrap resolves enabled skills, then desk-bootstrap, desk-doctor, verification-receipts, the platform skill and seat load=always entries resolve to the private library at the pinned tag, with actual activation evidence and no seat self-installation.
+- [x] **REQ-SHARE-019**: Given human-reviewed account-UI activation, when bootstrap resolves enabled skills, then desk-bootstrap, desk-doctor, verification-receipts, the platform skill and seat load=always entries resolve to the private library at the pinned tag, with actual activation evidence and no seat self-installation.
   - Source: P §9.1 enabled skills; §9.3 skills; G production loop point 8; RW-03; source step / responsibility: n5.3–5; authorized human account owner; acceptance ID: AC-SHARE-019.
-- [ ] **REQ-SHARE-020**: Given a seat template, when created, then it uses that seat's grokbot/avatars asset.
+- [x] **REQ-SHARE-020**: Given a seat template, when created, then it uses that seat's grokbot/avatars asset.
   - Source: P §9.1 avatar; §11 grokbot; source step / responsibility: n5.5; LEAD; acceptance ID: AC-SHARE-020.
-- [ ] **REQ-SHARE-021**: Given fresh templates, when routines are installed, then LEAD held/intake polls and the seats' daily desk_brief heartbeat remain paused until the doctor-green condition is met.
+- [x] **REQ-SHARE-021**: Given fresh templates, when routines are installed, then LEAD held/intake polls and the seats' daily desk_brief heartbeat remain paused until the doctor-green condition is met.
   - Source: P §9.1 routines; §9.2 step 6; source step / responsibility: n5.5; LEAD / all seats; acceptance ID: AC-SHARE-021.
-- [ ] **REQ-SHARE-022**: Given seven actual Share cards, when their publication receipt is written, then it contains a screenshot of each card rather than generated descriptions alone.
+- [x] **REQ-SHARE-022**: Given seven actual Share cards, when their publication receipt is written, then it contains a screenshot of each card rather than generated descriptions alone.
   - Source: P §12 n5.5; source step / responsibility: n5.5; LEAD; acceptance ID: AC-SHARE-022.
-- [ ] **REQ-SHARE-023**: Given a recipient, when starting bootstrap, then all seven templates can be added in any order, with desktop required to run connector-card setup even if adding starts on mobile.
+- [x] **REQ-SHARE-023**: Given a recipient, when starting bootstrap, then all seven templates can be added in any order, with desktop required to run connector-card setup even if adding starts on mobile.
   - Source: P §9.2 step 1; source step / responsibility: n5 / n6.1; recipient; acceptance ID: AC-SHARE-023.
-- [ ] **REQ-SHARE-024**: Given /desk bootstrap, when a Bot connects, then it adds desk-<seat> at https://desk.swcstudio.space/mcp/<seat> using OAuth consent and the Ove-held per-team rotated passphrase, not a credential embedded in a template.
+- [x] **REQ-SHARE-024**: Given /desk bootstrap, when a Bot connects, then it adds desk-<seat> at https://desk.swcstudio.space/mcp/<seat> using OAuth consent and the Ove-held per-team rotated passphrase, not a credential embedded in a template.
   - Source: P §9.2 step 2; source step / responsibility: n5 bootstrap / n6.1; recipient / Ove; acceptance ID: AC-SHARE-024.
-- [ ] **REQ-SHARE-025**: Given a new Bot UUID, when desk_doctor register succeeds, then the gateway records seat-to-UUID for that team from the Bot's own agent-data path.
+- [x] **REQ-SHARE-025**: Given a new Bot UUID, when desk_doctor register succeeds, then the gateway records seat-to-UUID for that team from the Bot's own agent-data path.
   - Source: P §9.2 step 3; source step / responsibility: n5 bootstrap / n6.1; recipient / SYSTEMS; acceptance ID: AC-SHARE-025.
-- [ ] **REQ-SHARE-026**: Given a new desk group, when its channel ID is registered, then its six members are LEAD/SYSTEMS/WEB/ANDROID/IOS/INFRA and QUALITY remains off-channel.
+- [x] **REQ-SHARE-026**: Given a new desk group, when its channel ID is registered, then its six members are LEAD/SYSTEMS/WEB/ANDROID/IOS/INFRA and QUALITY remains off-channel.
   - Source: P §9.2 step 4; G Channel roster; source step / responsibility: n5 bootstrap / n6.1; Ove or existing LEAD; acceptance ID: AC-SHARE-026.
-- [ ] **REQ-SHARE-027**: Given seven registered seats and a channel ID, when install_prompt is requested, then the gateway renders the pinned-tag assembled seat XML using that team's roster; installation does not substitute source-team IDs.
+- [x] **REQ-SHARE-027**: Given seven registered seats and a channel ID, when install_prompt is requested, then the gateway renders the pinned-tag assembled seat XML using that team's roster; installation does not substitute source-team IDs.
   - Source: P §9.2 step 5; source step / responsibility: n5 bootstrap / n6.1; SYSTEMS / recipient; acceptance ID: AC-SHARE-027.
-- [ ] **REQ-SHARE-028**: Given rendered seat XML, when the Bot installs it, then it writes its own SYSTEM_PROMPT.xml and reports the actual SHA-256.
+- [x] **REQ-SHARE-028**: Given rendered seat XML, when the Bot installs it, then it writes its own SYSTEM_PROMPT.xml and reports the actual SHA-256.
   - Source: P §9.2 step 5; source step / responsibility: n5 bootstrap / n6.1; each recipient Bot; acceptance ID: AC-SHARE-028.
-- [ ] **REQ-SHARE-029**: Given seven doctor results, when LEAD unpauses routines, then all seven are green; a partial set is insufficient.
+- [x] **REQ-SHARE-029**: Given seven doctor results, when LEAD unpauses routines, then all seven are green; a partial set is insufficient.
   - Source: P §9.2 step 6; source step / responsibility: n5 bootstrap / n6.1; LEAD / all seats; acceptance ID: AC-SHARE-029.
-- [ ] **REQ-SHARE-030**: Given a new team, when first-turn desk_brief seeds context, then its pd-<seat> starts empty and pd-desk supplies shared environment facts rather than copied personal history.
+- [x] **REQ-SHARE-030**: Given a new team, when first-turn desk_brief seeds context, then its pd-<seat> starts empty and pd-desk supplies shared environment facts rather than copied personal history.
   - Source: P §9.2 step 7; source step / responsibility: n5 bootstrap / n6.1; SYSTEMS / all seats; acceptance ID: AC-SHARE-030.
-- [ ] **REQ-SHARE-031**: Given installed SYSTEM_PROMPT.xml, when doctor checks prompt integrity, then its SHA-256 equals the gateway's rendered seat prompt at DESK_ROSTER_VERSION and no unfilled placeholder remains.
+- [x] **REQ-SHARE-031**: Given installed SYSTEM_PROMPT.xml, when doctor checks prompt integrity, then its SHA-256 equals the gateway's rendered seat prompt at DESK_ROSTER_VERSION and no unfilled placeholder remains.
   - Source: P §9.3 Prompt; source step / responsibility: n5 doctor / n6.1; QUALITY contract / recipient; acceptance ID: AC-SHARE-031.
-- [ ] **REQ-SHARE-032**: Given prompt skill paths, when doctor checks them, then every one resolves to a private-library name and its version matches the tag.
+- [x] **REQ-SHARE-032**: Given prompt skill paths, when doctor checks them, then every one resolves to a private-library name and its version matches the tag.
   - Source: P §9.3 Skills; source step / responsibility: n5 doctor / n6.1; recipient; acceptance ID: AC-SHARE-032.
-- [ ] **REQ-SHARE-033**: Given seat memory, when doctor probes it, then gateway-mediated Hindsight health and pd-<seat> existence are proved by a successful redacted retain/recall round trip.
+- [x] **REQ-SHARE-033**: Given seat memory, when doctor probes it, then gateway-mediated Hindsight health and pd-<seat> existence are proved by a successful redacted retain/recall round trip.
   - Source: P §9.3 Memory; source step / responsibility: n5 doctor / n6.1; SYSTEMS / recipient; acceptance ID: AC-SHARE-033.
-- [ ] **REQ-SHARE-034**: Given tools/list, when doctor compares it, then the contract matches, base count is 10–15 or loaded count at most twenty, and every g5/g6 tool is marked.
+- [x] **REQ-SHARE-034**: Given tools/list, when doctor compares it, then the contract matches, base count is 10–15 or loaded count at most twenty, and every g5/g6 tool is marked.
   - Source: P §9.3 Tools; source step / responsibility: n5 doctor / n6.1; SYSTEMS / QUALITY; acceptance ID: AC-SHARE-034.
-- [ ] **REQ-SHARE-035**: Given a connector, when doctor checks it, then OAuth is valid for seat:<name> and another seat's endpoint rejects it with 403.
+- [x] **REQ-SHARE-035**: Given a connector, when doctor checks it, then OAuth is valid for seat:<name> and another seat's endpoint rejects it with 403.
   - Source: P §9.3 Connector; source step / responsibility: n5 doctor / n6.1; SYSTEMS / recipient; acceptance ID: AC-SHARE-035.
-- [ ] **REQ-SHARE-036**: Given desk registration, when doctor checks roster integrity, then the channel ID exists, LEAD is in, QUALITY is out, all seven UUIDs are registered and the heartbeat is within twenty-four hours.
+- [x] **REQ-SHARE-036**: Given desk registration, when doctor checks roster integrity, then the channel ID exists, LEAD is in, QUALITY is out, all seven UUIDs are registered and the heartbeat is within twenty-four hours.
   - Source: P §9.3 Roster; source step / responsibility: n5 doctor / n6.1; LEAD / recipient; acceptance ID: AC-SHARE-036.
-- [ ] **REQ-SHARE-037**: Given the substrate integration, when doctor checks it, then desk_event_emit lands in Greptime and desk_docs_search returns a hit for verification receipt.
+- [x] **REQ-SHARE-037**: Given the substrate integration, when doctor checks it, then desk_event_emit lands in Greptime and desk_docs_search returns a hit for verification receipt.
   - Source: P §9.3 Substrate; source step / responsibility: n5 doctor / n6.1; SYSTEMS / recipient; acceptance ID: AC-SHARE-037.
-- [ ] **REQ-SHARE-038**: Given doctor repair, when executed, then it only re-runs install_prompt and connector re-authentication and never edits gates, receipts or another seat's files.
+- [x] **REQ-SHARE-038**: Given doctor repair, when executed, then it only re-runs install_prompt and connector re-authentication and never edits gates, receipts or another seat's files.
   - Source: P §9.3 doctor boundaries; §8.2 desk-doctor; source step / responsibility: n5 doctor / n6; QUALITY / SYSTEMS; acceptance ID: AC-SHARE-038.
-- [ ] **REQ-SHARE-039**: Given G-7 fixtures, when integrity checks run, then each prohibited roster/schema/approval-field/source-UUID/assembled-placeholder/template-token-or-tailnet case fails and G-7 is included in run_all.py and test_gates.py.
+- [x] **REQ-SHARE-039**: Given G-7 fixtures, when integrity checks run, then each prohibited roster/schema/approval-field/source-UUID/assembled-placeholder/template-token-or-tailnet case fails and G-7 is included in run_all.py and test_gates.py.
   - Source: P §11 G-7; §12 n5.1; source step / responsibility: n5.1; QUALITY; future parent verification; acceptance ID: AC-SHARE-039.
-- [ ] **REQ-SHARE-040**: Given absent skills.approve, when lifecycle activation is required, then seats remain proposal-only and do not install, enable, edit, publish or approve skills; the authorized human owner reviews and installs/enables through the account UI, with actual activation/publication evidence required before bootstrap completion.
+- [x] **REQ-SHARE-040**: Given absent skills.approve, when lifecycle activation is required, then seats remain proposal-only and do not install, enable, edit, publish or approve skills; the authorized human owner reviews and installs/enables through the account UI, with actual activation/publication evidence required before bootstrap completion.
   - Source: G production loop point 8; P §8.3 / §9.2; RW-03; source step / responsibility: n5.3–5 / n6.1; authorized human account owner; acceptance ID: AC-SHARE-040.
 
 ### ACCEPT — Phase 6: Fresh-desk acceptance and external intake

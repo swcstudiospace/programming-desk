@@ -1,0 +1,54 @@
+{
+  "name": "swc-programming-desk",
+  "version": "1.0.0",
+  "publisher": "swcstudiospace",
+  "displayName": "Spectrum Web Co — Programming Desk v2",
+  "description": "Cursor Team Marketplace plugin providing the seven Desk Gateway MCP connectors and core desk skills.",
+  "connectors": [
+    {
+      "name": "desk-lead",
+      "url": "https://desk.swcstudio.space/mcp/lead",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-systems",
+      "url": "https://desk.swcstudio.space/mcp/systems",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-web",
+      "url": "https://desk.swcstudio.space/mcp/web",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-android",
+      "url": "https://desk.swcstudio.space/mcp/android",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-ios",
+      "url": "https://desk.swcstudio.space/mcp/ios",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-infra",
+      "url": "https://desk.swcstudio.space/mcp/infra",
+      "auth": "oauth2"
+    },
+    {
+      "name": "desk-quality",
+      "url": "https://desk.swcstudio.space/mcp/quality",
+      "auth": "oauth2"
+    }
+  ],
+  "skills": [
+    "desk-bootstrap",
+    "desk-doctor",
+    "desk-gateway",
+    "hindsight-memory",
+    "ragflow-docs",
+    "platforms/railway-tailscale",
+    "tool-packs",
+    "verification-receipts"
+  ]
+}

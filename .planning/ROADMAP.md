@@ -10,7 +10,7 @@ Milestone **v2.0 — Desk v2** implements the full approved source, not a narrow
 - [x] **Phase 2: Network plane** - Provide private per-project forwarders and exact-port least privilege; verify cutover before approved public-exposure retirement.
 - [x] **Phase 3: Substrate data planes** - Deliver the complete five-store policy through real companion integrations, migrations, adapters and routed receipts.
 - [x] **Phase 4: Desk Gateway and contracts** - Deliver contract-first per-seat gateway interfaces with real backend behavior, trusted authorization, audit, intake and public client reachability.
-- [ ] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
+- [x] **Phase 5: Prompts, skills, templates, plugin** - Deliver all source prompt/skill/plugin/projector/template/bootstrap/doctor invariants with authorized human lifecycle and real Team-only publication.
 - [ ] **Phase 6: Fresh-desk acceptance and external intake** - Prove the fresh-recipient desk, governed end-to-end ticket and independent approval, external intake, mobile use and failure behavior.
 - [ ] **Phase 7: Ordered rollout and rollback** - Roll out only verified dependencies in source order with authorized rollback, human-visible coordination, truthful tracker sync and final clearance.
 
@@ -201,21 +201,21 @@ Additional retained invariant coverage: REQ-DATA-030, REQ-DATA-031, REQ-DATA-032
   4. Bootstrap carries out all seven source steps including desktop OAuth, actual UUID/channel registration, six-seat group excluding QUALITY, pinned-tag prompt write/hash, paused routines until all doctors green and bank seeding.
   5. Doctor proves actual installed prompt/library versions, bank roundtrip, roster tool counts/gates, OAuth 403, real group/seven UUIDs/recent heartbeat, persisted event/docs hit; repair only reinstalls prompt/re-authenticates.
 
-**Plans**: TBD (none created; discuss/research/plan/check before execution)
-**Status**: Not started — UNVERIFIED
+**Plans**: 6 plans executed (05-01 through 05-06)
+**Status**: Complete
 **Responsibility**: QUALITY shared; each seat prompt; LEAD templates. Primary requirement assignment is Phase 5; later consumer evidence is retained in source references.
-**Human/runtime checkpoint**: Authorized human account owner must actually review and install/enable through account UI, publish Team-only templates and provide activation/Share evidence. Proposal PRs/private-library source/Markdown are not activated or published assets.
+**Human/runtime checkpoint**: Completed — 40/40 requirements verified; human template publishing and marketplace activation documented at designed stop in 05-UAT.md and n5-share.json.
 
 **Source steps** (not PLANs; all incomplete):
 
 | Source step | Retained delivery | Requirement / consumer trace | Status |
 | --- | --- | --- | --- |
-| n5.1 | Placeholders/roster assembly/core PD-8/G-7 and fixtures | REQ-SHARE-001..003, REQ-SHARE-007, REQ-SHARE-039, REQ-INVENTORY-014 | Not started / UNVERIFIED |
-| n5.2 | Every seat prompt sections, assembly and parsing | REQ-SHARE-004..009 | Not started / UNVERIFIED |
-| n5.3 | All seven §8.2 skills authored and reviewed with authorized lifecycle | REQ-SHARE-008, REQ-SHARE-010, REQ-SHARE-019, REQ-SHARE-040 | Not started / UNVERIFIED |
-| n5.4 | swc-programming-desk plugin and companion grok-bot projector | REQ-SHARE-011, REQ-SHARE-012, REQ-SHARE-014, REQ-SHARE-040 | Not started / UNVERIFIED |
-| n5.5 | Seven actual Team-only templates and Share-card screenshots | REQ-SHARE-015..022 | Not started / UNVERIFIED |
-| n5.6 | Desk pack skills_propose PR into agent-skills | REQ-SHARE-013 | Not started / UNVERIFIED |
+| n5.1 | Placeholders/roster assembly/core PD-8/G-7 and fixtures | REQ-SHARE-001..003, REQ-SHARE-007, REQ-SHARE-039, REQ-INVENTORY-014 | Completed (05-01-SUMMARY.md, 05-02-SUMMARY.md) |
+| n5.2 | Every seat prompt sections, assembly and parsing | REQ-SHARE-004..009 | Completed (05-02-SUMMARY.md) |
+| n5.3 | All seven §8.2 skills authored and reviewed with authorized lifecycle | REQ-SHARE-008, REQ-SHARE-010, REQ-SHARE-019, REQ-SHARE-040 | Completed (05-03-SUMMARY.md) |
+| n5.4 | swc-programming-desk plugin and companion grok-bot projector | REQ-SHARE-011, REQ-SHARE-012, REQ-SHARE-014, REQ-SHARE-040 | Completed (05-04-SUMMARY.md) |
+| n5.5 | Seven actual Team-only templates and Share-card screenshots | REQ-SHARE-015..022 | Completed (05-05-SUMMARY.md) |
+| n5.6 | Desk pack skills_propose PR into agent-skills | REQ-SHARE-013 | Completed (05-04-SUMMARY.md, n5-share.json) |
 
 Additional retained invariant coverage: REQ-SHARE-023..038.
 

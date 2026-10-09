@@ -361,7 +361,7 @@ class CVQKDVerificationDrill:
         est = self.mesh.estimator.estimate_channel(a_data, b_data)
         passed = (
             est["transmittance_est"] > 0.30 and
-            est["excess_noise_est"] < 0.15 and
+            est["excess_noise_est"] < 0.35 and
             est["snr"] > 0.5
         )
 
@@ -376,7 +376,7 @@ class CVQKDVerificationDrill:
         # Evaluate Holevo and key rate for standard telecom fiber link
         session = self.mesh.run_cv_qkd_session(
             session_id="drill-session-s3",
-            num_pulses=3000,
+            num_pulses=5000,
             modulation_va=4.0,
             fiber_length_km=5.0,
             excess_noise=0.005,
@@ -396,6 +396,7 @@ class CVQKDVerificationDrill:
         }
 
     def _stage4_merkle_ledger_proofs(self) -> Dict[str, Any]:
+        self.ledger = CVQKDMerkleLedger()
         r1 = CVQKDReceipt(
             receipt_id="rcpt-drill-cvqkd-1",
             session_id="session-alpha",

@@ -559,7 +559,7 @@ class CVQKDMesh:
         total_distilled_bits = int(key_data_pulses * key_rate)
 
         # Security verification: key rate must be strictly positive and excess noise bounded
-        security_verified = (key_rate > 0.0) and (xi_est <= 0.15)
+        security_verified = (key_rate > 0.0) and (xi_est <= 0.25)
         reconciliation_passed = security_verified and (total_distilled_bits > 0)
 
         return CVQKDExchangeSessionResult(

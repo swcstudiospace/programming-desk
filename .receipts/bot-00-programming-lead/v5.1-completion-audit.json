@@ -7,6 +7,22 @@
   "audit_status": "gaps_found",
   "source_snapshot": "main 2229570",
   "branch": "bot-00-programming-lead/v5.1-completion-audit",
+  "planning_evidence_addendum": {
+    "finding": "Greptile #212 finding 296100815 / PRRT_kwDOUgQ0os6q75AU",
+    "provenance": "New read-only observations by delegated audit documentation worker; original started_at, completed_at and commands[0] diagnostic timing/provenance are unchanged. These observations do not attest to earlier parent command execution.",
+    "cli_path": "/usr/local/bin/gsd-tools",
+    "resolved_cli_path": "/root/.gemini/antigravity/gsd-core/bin/gsd-tools.cjs",
+    "resolved_cli_evidence_command_index": 5,
+    "package_name": "@opengsd/gsd-core",
+    "version": "1.14.0",
+    "identity_evidence_command_index": 1,
+    "version_metadata": {
+      "path": "/root/.gemini/antigravity/gsd-core/VERSION",
+      "observed_content": "1.14.0",
+      "method": "Read tool, after glob discovery in the resolved installation; not a guessed CLI version flag."
+    },
+    "workflow_boundary": "Ongoing gsd-audit-milestone scope and verify:post discovery only; rendering hooks does not execute them or prove validation/security compliance."
+  },
   "commands": [
     {
       "cmd": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/desk-gateway/src python3 - <<'PY'\nfrom desk_gateway.quantum_teleportation import BellPairPool, BellStateType, EntanglementPurifier, QuantumRepeaterMesh, QuantumTeleportationProtocol\nfrom desk_gateway.quantum_qkd_mesh import QuantumTeleportationAnchorExporter, QuantumTeleportationReceiptLedger, QKDProtocolEngine, EavesdropDetector\npool=BellPairPool()\npair=pool.create_pair('alice','bob',BellStateType.PHI_PLUS,.90)\nok,purified,_=EntanglementPurifier.purify(pair,pair)\nprint({'same_pair_distillation_accepted':ok and purified is not None})\npair=pool.create_pair('alice','bob',BellStateType.PHI_MINUS,.90)\nprotocol=QuantumTeleportationProtocol(QuantumRepeaterMesh(pool))\nfirst=protocol.teleport_qubit('wrong-source','wrong-target',1+0j,1j,bell_pair=pair)\nsecond=protocol.teleport_qubit('wrong-source','wrong-target',1+0j,1j,bell_pair=pair)\nprint({'fidelity':first.fidelity,'required_fidelity':.95,'below_threshold_reported_success':first.success,'consumed_pair_reuse_accepted':second.success,'wrong_endpoints_accepted':first.success})\nengine=QKDProtocolEngine()\nfor name,call in [('bb84',lambda:engine.run_bb84_exchange('a','b',bit_length=0)),('e91',lambda:engine.run_e91_exchange('a','b',pair_count=0))]:\n    try:\n        call()\n    except Exception as exc:\n        print({'empty_exchange':name,'exception':type(exc).__name__})\nledger=QuantumTeleportationReceiptLedger()\nledger.append_event('DIAGNOSTIC',['alice','bob'],'audit-session',.90,{'audit':True})\nanchor=QuantumTeleportationAnchorExporter('http://127.0.0.1:1').export_commitment(ledger)\nprint({'unreachable_rpc_reported_confirmed':anchor['status']=='confirmed','reported_slot':anchor['slot'],'transaction_identifier_length':len(anchor['commitment_tx'])})\nprint({'qber_at_limit_aborts':EavesdropDetector.evaluate_eavesdropping(.11),'qber_above_limit_aborts':EavesdropDetector.evaluate_eavesdropping(.110001)})\nPY",
@@ -17,6 +33,64 @@
       "observed_by": "parent bot-00-programming-lead",
       "observed_at": "2026-10-09T19:52:01.482Z",
       "output_tail": "{'same_pair_distillation_accepted': True}\n{'fidelity': 0.9, 'required_fidelity': 0.95, 'below_threshold_reported_success': True, 'consumed_pair_reuse_accepted': True, 'wrong_endpoints_accepted': True}\n{'empty_exchange': 'bb84', 'exception': 'IndexError'}\n{'empty_exchange': 'e91', 'exception': 'IndexError'}\n{'unreachable_rpc_reported_confirmed': True, 'reported_slot': 298471000, 'transaction_identifier_length': 64}\n{'qber_at_limit_aborts': False, 'qber_above_limit_aborts': True}"
+    },
+    {
+      "cmd": "/usr/local/bin/gsd-tools runtime-identity --raw",
+      "cwd": "/tmp/desk-v51-audit",
+      "started_at": "2026-10-09T20:32:46.558Z",
+      "observed_at": "2026-10-09T20:32:46.826Z",
+      "exit_code": 0,
+      "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
+      "output_tail": "{\"packageName\":\"@opengsd/gsd-core\",\"version\":\"1.14.0\"}\n",
+      "stderr": "",
+      "stdout_sha256": "eb42e653eda9508697620b948897e09d6ce5afbfd69282d68caf068119ed7282"
+    },
+    {
+      "cmd": "/usr/local/bin/gsd-tools query init.milestone-op",
+      "cwd": "/tmp/desk-v51-audit",
+      "started_at": "2026-10-09T20:32:46.826Z",
+      "observed_at": "2026-10-09T20:32:47.021Z",
+      "exit_code": 0,
+      "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
+      "output_tail": "{\"commit_docs\":true,\"milestone_version\":\"v5.1\",\"milestone_name\":\"Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh\",\"phase_count\":2,\"completed_phases\":0,\"all_phases_complete\":false,\"project_root\":\"/tmp/desk-v51-audit\"}",
+      "stdout_filter": "Exact top-level fields retained: commit_docs, milestone_version, milestone_name, phase_count, completed_phases, all_phases_complete, project_root. Other init fields omitted; this is not full stdout.",
+      "stderr": "gsd-tools: warning: /root/.gsd/defaults.json sets model_profile, commit_docs, parallelization, resolve_model_ids, runtime but a project config takes precedence here — those global keys are ignored for model resolution. (#3532)\n",
+      "stdout_sha256": "67676a9fca2115d157b1950783b5e013586a7e2dbc167bdb2d43aadc395191d8"
+    },
+    {
+      "cmd": "/usr/local/bin/gsd-tools query roadmap.analyze",
+      "cwd": "/tmp/desk-v51-audit",
+      "started_at": "2026-10-09T20:32:47.022Z",
+      "observed_at": "2026-10-09T20:32:47.222Z",
+      "exit_code": 0,
+      "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
+      "output_tail": "{\"milestones\":[{\"version\":\"v5.1\"}],\"phases\":[{\"number\":\"68\",\"name\":\"Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing\",\"plan_count\":0,\"summary_count\":0,\"disk_status\":\"no_directory\",\"roadmap_complete\":false},{\"number\":\"69\",\"name\":\"Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring\",\"plan_count\":0,\"summary_count\":0,\"disk_status\":\"no_directory\",\"roadmap_complete\":false}],\"phase_count\":2,\"completed_phases\":0,\"total_plans\":0,\"total_summaries\":0,\"progress_percent\":null,\"progress_scope\":\"unscoped\",\"scope\":\"unscoped\"}",
+      "stdout_filter": "Exact selected JSON fields retained: milestones[].version; phases[].number, name, plan_count, summary_count, disk_status, roadmap_complete; phase_count, completed_phases, total_plans, total_summaries, progress_percent, progress_scope, scope. Other roadmap fields omitted; this is not full stdout.",
+      "stderr": "",
+      "stdout_sha256": "7487ba5bd310060283090080a15fb79450fa577fc5e0308634acddbcf85279e3"
+    },
+    {
+      "cmd": "/usr/local/bin/gsd-tools loop render-hooks verify:post --raw",
+      "cwd": "/tmp/desk-v51-audit",
+      "started_at": "2026-10-09T20:32:47.223Z",
+      "observed_at": "2026-10-09T20:32:47.416Z",
+      "exit_code": 0,
+      "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
+      "output_tail": "{\"point\":\"verify:post\",\"activeHooks\":[{\"capId\":\"nyquist\",\"kind\":\"step\",\"ref\":{\"skill\":\"validate-phase\"},\"produces\":[\"VALIDATION.md\"],\"consumes\":[\"SUMMARY.md\"],\"onError\":\"halt\"},{\"capId\":\"security\",\"kind\":\"step\",\"ref\":{\"skill\":\"secure-phase\"},\"produces\":[\"SECURITY.md\"],\"consumes\":[\"SUMMARY.md\"],\"onError\":\"halt\"},{\"capId\":\"ui\",\"kind\":\"step\",\"ref\":{\"skill\":\"ui-review\"},\"produces\":[\"UI-REVIEW.md\"],\"consumes\":[\"UI-SPEC.md\"],\"onError\":\"skip\"}]}",
+      "stdout_filter": "Exact point and activeHooks fields retained; each hook retains only capId, kind, ref, produces, consumes, onError. Conditional when configuration and rendered hook instructions omitted; this is not full stdout.",
+      "stderr": "gsd-tools: warning: /root/.gsd/defaults.json sets model_profile, commit_docs, parallelization, resolve_model_ids, runtime but a project config takes precedence here — those global keys are ignored for model resolution. (#3532)\n",
+      "stdout_sha256": "794551fff306ef10e454592cea26bb2e49780f6fb95a7879d37a06f1512992bf"
+    },
+    {
+      "cmd": "readlink -f /usr/local/bin/gsd-tools",
+      "cwd": "/tmp/desk-v51-audit",
+      "started_at": "2026-10-09T20:33:30.711Z",
+      "observed_at": "2026-10-09T20:33:30.713Z",
+      "exit_code": 0,
+      "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
+      "output_tail": "/root/.gemini/antigravity/gsd-core/bin/gsd-tools.cjs\n",
+      "stderr": "",
+      "stdout_sha256": "5d9a66e7725ed8dbc1f47930e30a6733709760711ec277cb9922158450b580ba"
     }
   ],
   "claims": [
@@ -39,11 +113,31 @@
     {
       "claim": "Narrow diagnostic observed the local QBER predicate: 0.11 does not abort and 0.110001 does abort.",
       "evidence_command_index": 0
+    },
+    {
+      "claim": "The observed installed CLI identifies as @opengsd/gsd-core 1.14.0.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "readlink resolves /usr/local/bin/gsd-tools to the Antigravity installation, not the separate .agents installation.",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "New init.milestone-op observation identifies v5.1 with two phases, zero completed and all_phases_complete=false.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "New roadmap.analyze observation identifies phases 68 and 69, each no_directory with zero plans and summaries and roadmap_complete=false. Output scope is unscoped; the returned roadmap has only v5.1.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "New verify:post hook rendering lists Nyquist validate-phase producing VALIDATION.md, security secure-phase producing SECURITY.md, and UI ui-review producing UI-REVIEW.md. Hook discovery is not hook execution or a compliance/security pass.",
+      "evidence_command_index": 4
     }
   ],
   "unverified": [
     "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",
-    "Phase 68/69 directories, plans, SUMMARY, VERIFICATION, VALIDATION and SECURITY artifacts are missing; none was fabricated. Active verify:post Nyquist/security hooks have missing artifacts.",
+    "Phase 68/69 directories, plans, SUMMARY, VERIFICATION, VALIDATION and SECURITY artifacts are missing; none was fabricated. Newly recorded verify:post rendering identifies Nyquist/security step hooks, but their workflows were not invoked, their conditional applicability was not evaluated and no validation/security pass is established.",
     "Real Bell-state distribution, three-qubit evolution, BSM/correction and measured fidelity >=0.95 are not established; execution backend APIs, node/qubit identifiers, topology and transport/classical-channel choices remain undecided.",
     "BB84/E91 reconciliation, independently matching receiver-derived keys, entropy/privacy-amplification guarantees and E91 repeater-resource use are not established.",
     "The threshold predicate diagnostic does not verify runtime key withholding, REST abort semantics or a physical/remote channel abort.",

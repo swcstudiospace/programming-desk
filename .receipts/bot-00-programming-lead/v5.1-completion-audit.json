@@ -1,0 +1,69 @@
+{
+  "task_id": "v5.1-completion-audit",
+  "bot": "bot-00-programming-lead",
+  "receipt_kind": "docs_change",
+  "started_at": "2026-10-09T19:52:01.299Z",
+  "completed_at": "2026-10-09T19:58:49Z",
+  "audit_status": "gaps_found",
+  "source_snapshot": "main 2229570",
+  "branch": "bot-00-programming-lead/v5.1-completion-audit",
+  "commands": [
+    {
+      "cmd": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=services/desk-gateway/src python3 - <<'PY'\nfrom desk_gateway.quantum_teleportation import BellPairPool, BellStateType, EntanglementPurifier, QuantumRepeaterMesh, QuantumTeleportationProtocol\nfrom desk_gateway.quantum_qkd_mesh import QuantumTeleportationAnchorExporter, QuantumTeleportationReceiptLedger, QKDProtocolEngine, EavesdropDetector\npool=BellPairPool()\npair=pool.create_pair('alice','bob',BellStateType.PHI_PLUS,.90)\nok,purified,_=EntanglementPurifier.purify(pair,pair)\nprint({'same_pair_distillation_accepted':ok and purified is not None})\npair=pool.create_pair('alice','bob',BellStateType.PHI_MINUS,.90)\nprotocol=QuantumTeleportationProtocol(QuantumRepeaterMesh(pool))\nfirst=protocol.teleport_qubit('wrong-source','wrong-target',1+0j,1j,bell_pair=pair)\nsecond=protocol.teleport_qubit('wrong-source','wrong-target',1+0j,1j,bell_pair=pair)\nprint({'fidelity':first.fidelity,'required_fidelity':.95,'below_threshold_reported_success':first.success,'consumed_pair_reuse_accepted':second.success,'wrong_endpoints_accepted':first.success})\nengine=QKDProtocolEngine()\nfor name,call in [('bb84',lambda:engine.run_bb84_exchange('a','b',bit_length=0)),('e91',lambda:engine.run_e91_exchange('a','b',pair_count=0))]:\n    try:\n        call()\n    except Exception as exc:\n        print({'empty_exchange':name,'exception':type(exc).__name__})\nledger=QuantumTeleportationReceiptLedger()\nledger.append_event('DIAGNOSTIC',['alice','bob'],'audit-session',.90,{'audit':True})\nanchor=QuantumTeleportationAnchorExporter('http://127.0.0.1:1').export_commitment(ledger)\nprint({'unreachable_rpc_reported_confirmed':anchor['status']=='confirmed','reported_slot':anchor['slot'],'transaction_identifier_length':len(anchor['commitment_tx'])})\nprint({'qber_at_limit_aborts':EavesdropDetector.evaluate_eavesdropping(.11),'qber_above_limit_aborts':EavesdropDetector.evaluate_eavesdropping(.110001)})\nPY",
+      "cwd": "/tmp/desk-v51-audit",
+      "exit_code": 0,
+      "duration_s": 0.17,
+      "duration_basis": "Parent-observed whole-tool wall time, rounded; not benchmark timing.",
+      "observed_by": "parent bot-00-programming-lead",
+      "observed_at": "2026-10-09T19:52:01.482Z",
+      "output_tail": "{'same_pair_distillation_accepted': True}\n{'fidelity': 0.9, 'required_fidelity': 0.95, 'below_threshold_reported_success': True, 'consumed_pair_reuse_accepted': True, 'wrong_endpoints_accepted': True}\n{'empty_exchange': 'bb84', 'exception': 'IndexError'}\n{'empty_exchange': 'e91', 'exception': 'IndexError'}\n{'unreachable_rpc_reported_confirmed': True, 'reported_slot': 298471000, 'transaction_identifier_length': 64}\n{'qber_at_limit_aborts': False, 'qber_above_limit_aborts': True}"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Narrow diagnostic reproduced acceptance of the same Bell pair as both distillation inputs.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Narrow diagnostic reproduced teleport success at fidelity 0.90 despite required 0.95, consumed-pair reuse acceptance and wrong-endpoint acceptance.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Narrow diagnostic observed IndexError for BB84 bit_length=0 and E91 pair_count=0.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Narrow diagnostic observed exporter-reported confirmed status, fabricated slot 298471000 and identifier length 64 with loopback RPC target; this is not observed chain confirmation.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Narrow diagnostic observed the local QBER predicate: 0.11 does not abort and 0.110001 does abort.",
+      "evidence_command_index": 0
+    }
+  ],
+  "unverified": [
+    "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",
+    "Phase 68/69 directories, plans, SUMMARY, VERIFICATION, VALIDATION and SECURITY artifacts are missing; none was fabricated. Active verify:post Nyquist/security hooks have missing artifacts.",
+    "Real Bell-state distribution, three-qubit evolution, BSM/correction and measured fidelity >=0.95 are not established; execution backend APIs, node/qubit identifiers, topology and transport/classical-channel choices remain undecided.",
+    "BB84/E91 reconciliation, independently matching receiver-derived keys, entropy/privacy-amplification guarantees and E91 repeater-resource use are not established.",
+    "The threshold predicate diagnostic does not verify runtime key withholding, REST abort semantics or a physical/remote channel abort.",
+    "REST route behavior, selected-pair consumption, malformed-input handling, ledger retrieval/proofs and explicit custom-route authorization were not exercised.",
+    "Durable append-only Bell lifecycle/session ledger and secure key handoff/commitment contracts are missing or undecided; source exposes key serialization, but no key material is included here.",
+    "Real publisher implementation, deployed devnet program/instruction/proof contract, authorized securely stored signer, funded fee payer, reachable devnet RPC and confirmation policy are missing or unresolved; no signed submission or external chain status was observed.",
+    "The full drill was not run and does not establish original acceptance through its private-state/fabricated-anchor model.",
+    "No pytest suite, documentation gate, linter, formatter, build, secret scan or security gate was run by this audit worker; parent owns subsequent documentation gates.",
+    "Independent quality/security review and signed acceptance approval are absent; current AgentSwarm artifacts are advisory/unavailable for acceptance.",
+    "Existing published v5.1.0 is not acceptance proof. No archive, tag, release, merge, auto-merge, force-push or PR operation was performed by this audit worker."
+  ],
+  "files_changed": [
+    ".planning/v5.1-MILESTONE-AUDIT.md",
+    ".planning/STATE.md",
+    ".planning/ROADMAP.md",
+    ".planning/REQUIREMENTS.md",
+    ".receipts/bot-00-programming-lead/v5.1-completion-audit.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

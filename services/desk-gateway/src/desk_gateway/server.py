@@ -3451,6 +3451,11 @@ def create_mcp(
     setattr(mcp, "_audit_exporter", audit_exporter)
     setattr(mcp, "_compliance_verifier", compliance_verifier)
 
+    # Milestone v3.1 (Phase 28): Dynamic MCP Tool Mesh Registry & Capability Scopes
+    from desk_gateway.mcp_mesh import DynamicMCPToolMeshRegistry, SeatPermissionScope
+    mcp_mesh_registry = DynamicMCPToolMeshRegistry()
+    setattr(mcp, "_mcp_mesh_registry", mcp_mesh_registry)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3932,6 +3937,104 @@ def create_mcp(
             }
         })
 
+    # Dynamic MCP Tool Mesh Registry (Phase 28)
+    @mcp.custom_route("/v1/mcp-mesh/server/register", methods=["POST"])
+    async def mcp_mesh_server_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "remote-mcp-1")
+        host = body.get("host", "http://127.0.0.1:9000")
+        transport = body.get("transport", "sse")
+        caps = body.get("capabilities", ["standard"])
+        max_concurrency = int(body.get("max_concurrency", 5))
+        max_rpm = int(body.get("max_rpm", 60))
+
+        ep = mcp_mesh_registry.register_server(
+            server_id=server_id,
+            host=host,
+            transport=transport,
+            capabilities=caps,
+            max_concurrency=max_concurrency,
+            max_rpm=max_rpm,
+        )
+        return JSONResponse({
+            "ok": True,
+            "server_id": ep.server_id,
+            "host": ep.host,
+            "transport": ep.transport,
+            "max_concurrency": ep.max_concurrency,
+            "circuit_state": ep.circuit_state.value,
+        })
+
+    @mcp.custom_route("/v1/mcp-mesh/tool/register", methods=["POST"])
+    async def mcp_mesh_tool_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        tool_name = body.get("tool_name", "")
+        description = body.get("description", "")
+        input_schema = body.get("input_schema", {})
+        output_schema = body.get("output_schema", {})
+        caps = body.get("required_capabilities", [])
+        is_sensitive = bool(body.get("is_sensitive", False))
+        try:
+            tool = mcp_mesh_registry.register_tool(
+                server_id=server_id,
+                tool_name=tool_name,
+                description=description,
+                input_schema=input_schema,
+                output_schema=output_schema,
+                required_capabilities=caps,
+                is_sensitive=is_sensitive,
+            )
+            return JSONResponse({
+                "ok": True,
+                "tool_name": tool.tool_name,
+                "server_id": tool.server_id,
+                "is_sensitive": tool.is_sensitive,
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/mcp-mesh/tools", methods=["GET"])
+    async def mcp_mesh_tools_list_route(request: Request) -> Response:
+        seat_id = request.query_params.get("seat_id", "lead")
+        tools = mcp_mesh_registry.list_tools_for_seat(seat_id=seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "tools": tools})
+
+    @mcp.custom_route("/v1/mcp-mesh/tools/authorize", methods=["POST"])
+    async def mcp_mesh_tools_authorize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "")
+        args = body.get("arguments", {})
+
+        auth_ok, auth_msg = mcp_mesh_registry.authorize_seat_tool_call(seat_id, tool_name)
+        if not auth_ok:
+            return JSONResponse({"ok": False, "authorized": False, "detail": auth_msg})
+
+        val_ok, val_msg = mcp_mesh_registry.validate_tool_arguments(tool_name, args)
+        if not val_ok:
+            return JSONResponse({"ok": False, "authorized": True, "valid_args": False, "detail": val_msg})
+
+        return JSONResponse({"ok": True, "authorized": True, "valid_args": True, "detail": "Authorized and arguments valid"})
+
+    @mcp.custom_route("/v1/mcp-mesh/slot/acquire", methods=["POST"])
+    async def mcp_mesh_slot_acquire_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        acquired, msg = mcp_mesh_registry.acquire_execution_slot(server_id)
+        return JSONResponse({"ok": acquired, "detail": msg})
+
+    @mcp.custom_route("/v1/mcp-mesh/slot/release", methods=["POST"])
+    async def mcp_mesh_slot_release_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        mcp_mesh_registry.release_execution_slot(server_id)
+        return JSONResponse({"ok": True, "server_id": server_id})
+
+    @mcp.custom_route("/v1/mcp-mesh/status", methods=["GET"])
+    async def mcp_mesh_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **mcp_mesh_registry.get_mesh_status()})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4168,6 +4271,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "merkle_tree": getattr(mcp, "_merkle_tree", None),
         "audit_exporter": getattr(mcp, "_audit_exporter", None),
         "compliance_verifier": getattr(mcp, "_compliance_verifier", None),
+        "mcp_mesh_registry": getattr(mcp, "_mcp_mesh_registry", None),
     }
     return app, settings
 

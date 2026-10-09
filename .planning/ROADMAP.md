@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (in progress)
 - ✅ **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (shipped 2026-10-10) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
@@ -16,12 +17,23 @@
 
 ## Phases
 
-### Current Milestone: v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+### Current Milestone: v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
 
-- [x] **Phase 26: Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS**
-  - [x] 26-01: Ephemeral Credentials, Dynamic mTLS CA, Enclave Attestation, Continuous Posture Check, and CRL Revocation (`REQ-ZERO-001`, `REQ-ZERO-002`, `REQ-ZERO-003`, `REQ-ZERO-004`, `REQ-ZERO-005`)
-- [x] **Phase 27: Continuous Merkle Proof Verification & Immutable Audit Export**
-  - [x] 27-01: Incremental Merkle Aggregator, Consistency Proofs, External Anchor Export, Tamper Scrubber, and Compliance Verification (`REQ-ZERO-006`, `REQ-ZERO-007`, `REQ-ZERO-008`, `REQ-ZERO-009`, `REQ-ZERO-010`)
+- [x] **Phase 28: Dynamic MCP Tool Mesh Registry & Capability Scopes**
+  - [x] 28-01: Capability Discovery, Scope Permissions, Schema Translation, Rate Limiting & Circuit Breaker (`REQ-MCP-001`, `REQ-MCP-002`, `REQ-MCP-003`, `REQ-MCP-004`, `REQ-MCP-005`)
+- [ ] **Phase 29: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts**
+  - [ ] 29-01: Async RPC Transport, Attested Signing, Streaming Proxy, Timeout Supervision & Execution Receipts (`REQ-MCP-006`, `REQ-MCP-007`, `REQ-MCP-008`, `REQ-MCP-009`, `REQ-MCP-010`)
+
+### Completed Milestones
+
+<details>
+<summary>✅ v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation (Phases 26-27) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 26: Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS (1/1 plan)
+- [x] Phase 27: Continuous Merkle Proof Verification & Immutable Audit Export (1/1 plan)
+
+See [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md) for full phase details and execution history.
+</details>
 
 ### Completed Milestones
 

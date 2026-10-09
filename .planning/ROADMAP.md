@@ -1,16 +1,16 @@
-# Roadmap: Milestone v4.3 — Autonomous Cross-Desk AI Model Distillation & Edge Compute Mesh
+# Roadmap: Milestone v4.4 — Autonomous Cross-Desk Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
 
-## Phase 52: Multi-Teacher Distillation & Quantized Model Synthesis
-- [x] Multi-Teacher Ensemble Distillation Engine (`EnsembleDistillationEngine`)
-- [x] Adaptive Quantization & Compression Pipeline (`QuantizationCompressor`)
-- [x] Fidelity & Regression Benchmarking Suite (`DistillationBenchmarker`)
-- [x] Student Model Artifact Registry (`ModelArtifactRegistry`)
-- [x] REST API routes under `/v1/distillation/*` in `services/desk-gateway/src/desk_gateway/server.py`
+## Phase 54: Zero-Knowledge Proof Synthesis & Circuit Verification
+- [x] Rank-1 Constraint System (R1CS) Arithmetic Circuit Compiler (`ZKCircuit`, `ZKConstraint`)
+- [x] Zero-Knowledge Proof Synthesis Engine (`ZKProofGenerator`)
+- [x] Zero-Knowledge Proof Verifier (`ZKProofVerifier`)
+- [x] Private Tool State Transition Prover (`ZKStateTransitionProver`)
+- [x] REST API routes under `/v1/zk/*` in `services/desk-gateway/src/desk_gateway/server.py`
 
-## Phase 53: Distributed Edge Compute Orchestration & Off-Chain Verification
-- [x] Heterogeneous Edge Compute Scheduler (`EdgeComputeScheduler`)
-- [x] Cryptographic Inference Attestation Engine (`InferenceProofEngine`)
-- [x] Edge Node Health & Failover Monitor (`EdgeClusterMonitor`)
-- [x] External Edge Inference Commitment Exporter (`EdgeCommitmentExporter`)
-- [x] End-to-End Distillation & Edge Inference Drill Simulator (`DistillationEdgeDrillSimulator`)
-- [x] REST API routes under `/v1/edge/*` in `services/desk-gateway/src/desk_gateway/server.py`
+## Phase 55: Homomorphic State Encapsulation & Multi-Party Private Inference
+- [x] Additively Homomorphic Encryption Simulator (`HomomorphicCipherEngine`)
+- [x] Shamir Threshold Secret Sharing Scheme (`ThresholdSecretSharing`)
+- [x] Privacy-Preserving Multi-Party Compute (MPC) Inference Coordinator (`SecureMPCInferenceCoordinator`)
+- [x] External Zero-Knowledge State Anchor Exporter (`PrivateZKAnchorExporter`)
+- [x] End-to-End ZK & Privacy Agent Swarm Drill Simulator (`ZKPrivacyAgentSwarmDrillSimulator`)
+- [x] REST API routes under `/v1/privacy/*` and `/v1/zk/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`

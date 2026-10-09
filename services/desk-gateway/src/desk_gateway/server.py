@@ -667,6 +667,40 @@ def create_mcp(
         edge_gateway=edge_gw,
     )
 
+    from desk_gateway.zk_proving import (
+        ZKCircuit,
+        ZKConstraint,
+        ZKProof,
+        ZKProofGenerator,
+        ZKProofReceipt,
+        ZKProofVerifier,
+        ZKStateTransitionProver,
+    )
+    from desk_gateway.zk_privacy import (
+        HomomorphicCipherEngine,
+        PrivateZKAnchorExporter,
+        SecureMPCInferenceCoordinator,
+        ThresholdSecretSharing,
+        ZKPrivacyAgentSwarmDrillSimulator,
+    )
+
+    zk_proof_generator = ZKProofGenerator()
+    zk_proof_verifier = ZKProofVerifier()
+    zk_state_prover = ZKStateTransitionProver(proof_generator=zk_proof_generator, verifier=zk_proof_verifier)
+    homomorphic_cipher = HomomorphicCipherEngine()
+    tss_engine = ThresholdSecretSharing()
+    mpc_coordinator = SecureMPCInferenceCoordinator()
+    zk_anchor_exporter = PrivateZKAnchorExporter()
+    zk_circuits_registry: dict[str, ZKCircuit] = {}
+
+    mcp._zk_proof_generator = zk_proof_generator  # type: ignore[attr-defined]
+    mcp._zk_proof_verifier = zk_proof_verifier  # type: ignore[attr-defined]
+    mcp._zk_state_prover = zk_state_prover  # type: ignore[attr-defined]
+    mcp._homomorphic_cipher = homomorphic_cipher  # type: ignore[attr-defined]
+    mcp._tss_engine = tss_engine  # type: ignore[attr-defined]
+    mcp._mpc_coordinator = mpc_coordinator  # type: ignore[attr-defined]
+    mcp._zk_anchor_exporter = zk_anchor_exporter  # type: ignore[attr-defined]
+
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
         roster = store.roster()
@@ -5061,6 +5095,233 @@ def create_mcp(
         drill_results = simulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.4: Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
+    @mcp.custom_route("/v1/zk/circuits/synthesize", methods=["POST"])
+    async def zk_circuits_synthesize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "custom-circuit")
+        circuit_name = body.get("name", "CustomArithmeticCircuit")
+        pub_wires = body.get("public_wires", ["one", "x", "y"])
+        priv_wires = body.get("private_wires", ["w"])
+        raw_constraints = body.get("constraints", [])
+
+        circuit = ZKCircuit(
+            circuit_id=circuit_id,
+            name=circuit_name,
+            public_wire_names=pub_wires,
+            private_wire_names=priv_wires,
+        )
+        for idx, c in enumerate(raw_constraints):
+            constraint = ZKConstraint(
+                constraint_id=c.get("constraint_id", f"c_{idx}"),
+                a_coefficients=c.get("a", {}),
+                b_coefficients=c.get("b", {}),
+                c_coefficients=c.get("c", {}),
+            )
+            circuit.add_constraint(constraint)
+
+        zk_circuits_registry[circuit_id] = circuit
+        return JSONResponse({
+            "ok": True,
+            "circuit_id": circuit_id,
+            "constraints_count": len(circuit.constraints),
+            "public_wires": circuit.public_wire_names,
+            "private_wires": circuit.private_wire_names,
+        })
+
+    @mcp.custom_route("/v1/zk/proof/generate", methods=["POST"])
+    async def zk_proof_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+        public_inputs = body.get("public_inputs", {})
+        private_witness = body.get("private_witness", {})
+        proof_type = body.get("proof_type", "GROTH16")
+
+        circuit = zk_circuits_registry.get(circuit_id)
+        if not circuit:
+            # Build default state transition circuit if not yet registered
+            circuit = zk_state_prover.build_state_transition_circuit(circuit_id)
+            zk_circuits_registry[circuit_id] = circuit
+
+        try:
+            proof = zk_proof_generator.generate_proof(
+                circuit=circuit,
+                public_inputs=public_inputs,
+                private_witness=private_witness,
+                proof_type=proof_type,
+            )
+            return JSONResponse({
+                "ok": True,
+                "proof": {
+                    "proof_id": proof.proof_id,
+                    "circuit_id": proof.circuit_id,
+                    "proof_type": proof.proof_type,
+                    "public_inputs": proof.public_inputs,
+                    "commitment_hash": proof.commitment_hash,
+                    "proof_bytes": proof.proof_bytes,
+                    "timestamp": proof.timestamp,
+                }
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/zk/proof/verify", methods=["POST"])
+    async def zk_proof_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+        proof_dict = body.get("proof", {})
+
+        circuit = zk_circuits_registry.get(circuit_id)
+        if not circuit:
+            circuit = zk_state_prover.build_state_transition_circuit(circuit_id)
+            zk_circuits_registry[circuit_id] = circuit
+
+        proof = ZKProof(
+            proof_id=proof_dict.get("proof_id", ""),
+            circuit_id=circuit_id,
+            proof_type=proof_dict.get("proof_type", "GROTH16"),
+            public_inputs=proof_dict.get("public_inputs", {}),
+            commitment_hash=proof_dict.get("commitment_hash", ""),
+            proof_bytes=proof_dict.get("proof_bytes", "{}"),
+            timestamp=float(proof_dict.get("timestamp", time.time())),
+        )
+        receipt = zk_proof_verifier.verify_proof(circuit, proof)
+        return JSONResponse({
+            "ok": True,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "proof_id": receipt.proof_id,
+                "circuit_id": receipt.circuit_id,
+                "is_valid": receipt.is_valid,
+                "verified_at": receipt.verified_at,
+                "verification_digest": receipt.verification_digest,
+                "public_inputs": receipt.public_inputs,
+            }
+        })
+
+    @mcp.custom_route("/v1/zk/state/prove", methods=["POST"])
+    async def zk_state_prove_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        initial_state = float(body.get("initial_state", 100.0))
+        delta = float(body.get("delta", 25.0))
+        secret_auth = float(body.get("secret_auth_code", 1234.0))
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+
+        proof, receipt = zk_state_prover.prove_state_transition(
+            initial_state=initial_state,
+            delta=delta,
+            secret_auth_code=secret_auth,
+            circuit_id=circuit_id,
+        )
+        return JSONResponse({
+            "ok": True,
+            "proof_id": proof.proof_id,
+            "is_valid": receipt.is_valid,
+            "final_state": initial_state + delta,
+            "verification_digest": receipt.verification_digest,
+        })
+
+    @mcp.custom_route("/v1/privacy/homomorphic/encrypt", methods=["POST"])
+    async def privacy_homomorphic_encrypt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        val = int(body.get("value", 42))
+        c = homomorphic_cipher.encrypt(val)
+        return JSONResponse({
+            "ok": True,
+            "ciphertext_id": c.ciphertext_id,
+            "encrypted_data": c.encrypted_data,
+            "modulus": c.modulus,
+            "public_key_fingerprint": c.public_key_fingerprint,
+        })
+
+    @mcp.custom_route("/v1/privacy/homomorphic/add", methods=["POST"])
+    async def privacy_homomorphic_add_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        val1 = int(body.get("val1", 10))
+        val2 = int(body.get("val2", 20))
+        c1 = homomorphic_cipher.encrypt(val1)
+        c2 = homomorphic_cipher.encrypt(val2)
+        c_res = homomorphic_cipher.add(c1, c2)
+        decrypted = homomorphic_cipher.decrypt(c_res)
+        return JSONResponse({
+            "ok": True,
+            "ciphertext_id": c_res.ciphertext_id,
+            "encrypted_data": c_res.encrypted_data,
+            "decrypted_sum": decrypted,
+        })
+
+    @mcp.custom_route("/v1/privacy/tss/split", methods=["POST"])
+    async def privacy_tss_split_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        secret = int(body.get("secret", 987654321))
+        threshold = int(body.get("threshold", 3))
+        total_shares = int(body.get("total_shares", 5))
+
+        shares = tss_engine.split_secret(secret, threshold=threshold, total_shares=total_shares)
+        return JSONResponse({
+            "ok": True,
+            "threshold": threshold,
+            "total_shares": total_shares,
+            "shares": [
+                {
+                    "share_index": s.share_index,
+                    "share_value": s.share_value,
+                }
+                for s in shares
+            ]
+        })
+
+    @mcp.custom_route("/v1/privacy/mpc/infer", methods=["POST"])
+    async def privacy_mpc_infer_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", f"mpc-{secrets.token_hex(4)}")
+        seat_inputs = body.get("seat_inputs", {
+            "lead": [0.5, 0.2, 0.1],
+            "systems": [0.4, 0.3, 0.2],
+            "infra": [0.6, 0.1, 0.3],
+        })
+        weights = body.get("weights", [0.8, -0.4, 1.2])
+
+        try:
+            res = mpc_coordinator.run_mpc_inference(
+                session_id=session_id,
+                seat_inputs=seat_inputs,
+                weights=weights,
+            )
+            return JSONResponse({
+                "ok": True,
+                "session_id": res.session_id,
+                "prediction": res.aggregated_prediction,
+                "participating_seats": res.participating_seats,
+                "commitment_hash": res.mpc_commitment_hash,
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/privacy/zk/commitments/export", methods=["POST"])
+    async def privacy_zk_commitments_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipts_data = body.get("receipts", [])
+        receipts = [
+            ZKProofReceipt(
+                receipt_id=r.get("receipt_id", f"zkrec-{secrets.token_hex(4)}"),
+                proof_id=r.get("proof_id", "zkp-default"),
+                circuit_id=r.get("circuit_id", "circuit-default"),
+                is_valid=bool(r.get("is_valid", True)),
+                verified_at=float(r.get("verified_at", time.time())),
+                verification_digest=r.get("verification_digest", "hash-dummy"),
+                public_inputs=r.get("public_inputs", {}),
+            )
+            for r in receipts_data
+        ]
+        anchor = zk_anchor_exporter.export_zk_commitment(receipts)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/zk/drill/simulate", methods=["POST"])
+    async def zk_drill_simulate_route(_request: Request) -> Response:
+        drill_results = ZKPrivacyAgentSwarmDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -6550,6 +6811,13 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "inference_proof_engine": getattr(mcp, "_inference_proof_engine", None),
         "edge_cluster_monitor": getattr(mcp, "_edge_cluster_monitor", None),
         "edge_commitment_exporter": getattr(mcp, "_edge_commitment_exporter", None),
+        "zk_proof_generator": getattr(mcp, "_zk_proof_generator", None),
+        "zk_proof_verifier": getattr(mcp, "_zk_proof_verifier", None),
+        "zk_state_prover": getattr(mcp, "_zk_state_prover", None),
+        "homomorphic_cipher": getattr(mcp, "_homomorphic_cipher", None),
+        "tss_engine": getattr(mcp, "_tss_engine", None),
+        "mpc_coordinator": getattr(mcp, "_mpc_coordinator", None),
+        "zk_anchor_exporter": getattr(mcp, "_zk_anchor_exporter", None),
     }
     return app, settings
 

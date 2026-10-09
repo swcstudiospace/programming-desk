@@ -7356,6 +7356,87 @@ def create_mcp(
         QuantumAnnealingSolanaAnchor,
         SimulatedAnnealingVerificationDrill,
     )
+    from desk_gateway.quantum_reservoir_comp_mesh import (
+        QuantumReservoirNode,
+        QuantumExtremeLearningMachine,
+    )
+    from desk_gateway.quantum_reservoir_comp_anchoring import (
+        QuantumReservoirMerkleLedger,
+        QuantumReservoirReceipt,
+        QuantumReservoirSolanaAnchorExporter,
+        QuantumReservoirVerificationDrill,
+    )
+
+    qres_node = QuantumReservoirNode(num_qubits=4)
+    qres_elm = QuantumExtremeLearningMachine(feature_dim=10)
+    qres_ledger = QuantumReservoirMerkleLedger()
+    qres_exporter = QuantumReservoirSolanaAnchorExporter()
+    mcp._qres_node = qres_node  # type: ignore[attr-defined]
+    mcp._qres_elm = qres_elm  # type: ignore[attr-defined]
+    mcp._qres_ledger = qres_ledger  # type: ignore[attr-defined]
+    mcp._qres_exporter = qres_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/reservoir/step", methods=["POST"])
+    async def quantum_reservoir_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        u_t = float(body.get("input_val", 0.5))
+        st = qres_node.inject_input(u_t)
+        return JSONResponse({"ok": True, "state": st.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/reservoir/elm/train", methods=["POST"])
+    async def quantum_reservoir_elm_train_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        inputs = body.get("inputs", [0.1, 0.4, -0.2, 0.7, 0.3])
+        targets = body.get("targets", [0.2, 0.5, -0.1, 0.8, 0.4])
+        features = []
+        for u in inputs:
+            st = qres_node.inject_input(u)
+            features.append(st.spin_expectations + st.pairwise_correlations)
+        feature_dim = len(features[0])
+        elm = QuantumExtremeLearningMachine(feature_dim=feature_dim)
+        weights = elm.fit(features, targets)
+        preds = [elm.predict(f) for f in features]
+        mse = sum((p - y) ** 2 for p, y in zip(preds, targets)) / len(targets)
+        w_norm = sum(w ** 2 for w in weights) ** 0.5
+
+        rcpt = QuantumReservoirReceipt(
+            receipt_id=f"rcpt-qrc-{int(time.time()*1000)}",
+            num_qubits=qres_node.num_qubits,
+            num_steps=len(inputs),
+            mean_reservoir_entropy=0.85,
+            readout_norm=w_norm,
+            prediction_mse=mse,
+            state_merkle_root=hashlib.sha256(json.dumps(weights).encode("utf-8")).hexdigest(),
+        )
+        qres_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "weights": [round(w, 6) for w in weights],
+            "prediction_mse": round(mse, 6),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qres_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/reservoir/anchor/export", methods=["POST"])
+    async def quantum_reservoir_anchor_export_route(_request: Request) -> Response:
+        anchor_payload = qres_exporter.generate_instruction_payload(
+            merkle_root=qres_ledger.get_merkle_root(),
+            num_receipts=len(qres_ledger.receipts),
+            mean_entropy=0.85,
+            prediction_mse=0.01,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": qres_exporter.export_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/reservoir/drill/simulate", methods=["POST"])
+    async def quantum_reservoir_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumReservoirVerificationDrill(num_qubits=4)
+        drill_results = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
 
     qanneal_ledger = QuantumAnnealingMerkleLedger()
     mcp._qanneal_ledger = qanneal_ledger  # type: ignore[attr-defined]
@@ -9027,6 +9108,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qem_ledger": getattr(mcp, "_qem_ledger", None),
         "qem_exporter": getattr(mcp, "_qem_exporter", None),
         "qanneal_ledger": getattr(mcp, "_qanneal_ledger", None),
+        "qres_node": getattr(mcp, "_qres_node", None),
+        "qres_elm": getattr(mcp, "_qres_elm", None),
+        "qres_ledger": getattr(mcp, "_qres_ledger", None),
+        "qres_exporter": getattr(mcp, "_qres_exporter", None),
     }
     return app, settings
 

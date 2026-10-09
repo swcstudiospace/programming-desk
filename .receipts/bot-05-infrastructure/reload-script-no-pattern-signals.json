@@ -4,7 +4,7 @@
   "branch": "bot-05-infrastructure/reload-script-no-pattern-signals",
   "graph_id": "ut-mv00tcgl-d8215d3e",
   "started_at": "2026-10-08T21:20:00Z",
-  "completed_at": "2026-10-09T04:19:07Z",
+  "completed_at": "2026-10-09T04:33:40Z",
   "commands": [
     {
       "cmd": "git worktree add --detach /tmp/r1-479d627 479d627 && cp infra/tests/test_staging_deployment.py infra/tests/conftest.py /tmp/r1-479d627/infra/tests/ && python3 -m pytest -q /tmp/r1-479d627/infra/tests/test_staging_deployment.py::test_reload_does_not_signal_decoy_desk_gateway --tb=short",
@@ -15,14 +15,14 @@
     {
       "cmd": "python3 -m pytest -q infra/tests/test_staging_deployment.py --tb=short",
       "exit_code": 0,
-      "duration_s": 0.41,
-      "output_tail": "36 passed in 0.41s"
+      "duration_s": 0.36,
+      "output_tail": "39 passed in 0.36s"
     },
     {
       "cmd": "python3 -m pytest -q infra/tests --tb=line",
       "exit_code": 1,
       "duration_s": 0.54,
-      "output_tail": "FileNotFoundError: [Errno 2] No such file or directory: 'uv'\nFAILED infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite\n1 failed, 43 passed in 0.54s"
+      "output_tail": "FileNotFoundError: [Errno 2] No such file or directory: 'uv'\nFAILED infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite\n1 failed, 49 passed in 0.54s"
     },
     {
       "cmd": "shellcheck infra/desk-gateway/reload-nginx-gateway.sh infra/desk-gateway/deploy-staging.sh",
@@ -65,6 +65,12 @@
       "exit_code": 1,
       "duration_s": 0.08,
       "output_tail": "Failed: DID NOT RAISE Failed\nFAILED test_guard_rejects_relative_executable_with_cwd\n1 failed in 0.08s"
+    },
+    {
+      "cmd": "python3 -m pytest -q infra/tests/test_staging_deployment.py::test_guard_rejects_relative_argv_with_cwd infra/tests/test_staging_deployment.py::test_guard_rejects_relative_systemctl_bin_with_cwd infra/tests/test_staging_deployment.py::test_logged_args_match_whole_pid_tokens --tb=line",
+      "exit_code": 1,
+      "duration_s": 0.06,
+      "output_tail": "Failed: DID NOT RAISE Failed\nFAILED test_guard_rejects_relative_argv_with_cwd\nFAILED test_guard_rejects_relative_systemctl_bin_with_cwd\n2 failed, 1 passed in 0.06s"
     }
   ],
   "claims": [
@@ -74,7 +80,7 @@
       "expects_failure": true
     },
     {
-      "claim": "Stubbed deploy and reload tests pass, including the relative executable= plus cwd guard. The decoy is not signalled, and a PID-file reload with no external kill delivers SIGHUP to a child the test owns",
+      "claim": "Stubbed deploy and reload tests pass, including relative argv and SYSTEMCTL_BIN checks against cwd, and whole-PID log tokens. The decoy is not signalled, and a PID-file reload with no external kill delivers SIGHUP to a child the test owns",
       "evidence_command_index": 1
     },
     {
@@ -101,6 +107,11 @@
       "claim": "Before cwd was applied, a relative executable= reached the stand-in binary",
       "evidence_command_index": 9,
       "expects_failure": true
+    },
+    {
+      "claim": "Before relative argv and SYSTEMCTL_BIN were resolved against cwd, those guard tests did not fail closed",
+      "evidence_command_index": 10,
+      "expects_failure": true
     }
   ],
   "unverified": [
@@ -108,7 +119,7 @@
     "Pull requests 140 and 139 are on main, and 139 merged as a35d70a. This branch merges that main so the depth-1 fetch can see a merge base. The check table for the merge head is not recorded yet",
     "desk_receipt_check did not read this file: it reported the path is not on origin/bot-06-quality-security/desk-v2-assembled-prompts",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite exits with FileNotFoundError because the uv binary is not installed on this VM; that test was not changed",
-    "Greptile review of 22e8961 scored 5/5 and left no unresolved threads. The review of the following origin/main merge head is not recorded yet",
+    "Greptile review of e153959 scored 4/5 and opened threads 4226619335 (relative argv and SYSTEMCTL_BIN versus cwd) and 4226619345 (PID digit substring). This change addresses both. The follow-up review of the new head is not recorded yet",
     "The reload and deploy scripts were not executed on the shared VPS, and no unit was restarted there",
     "Moving production desk-gateway off the shared checkout onto the deploy-staging.sh release directory waits for Ming's separate approval",
     "Swarm session is advisory: SWARM_ED25519_KEY is unset, so orch_plan does not record an approval"

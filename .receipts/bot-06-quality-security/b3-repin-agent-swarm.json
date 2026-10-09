@@ -3,7 +3,9 @@
   "bot": "bot-06-quality-security",
   "receipt_kind": "agent_install",
   "started_at": "2026-10-09T08:07:20Z",
-  "completed_at": "2026-10-09T08:10:19Z",
+  "completed_at": "2026-10-09T08:56:00Z",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Ming authorized this stamp in chat on 2026-10-09 at 19:56 AEDT.",
   "repo": "https://github.com/swcstudiospace/programming-desk",
   "branch": "bot-06-quality-security/repin-agent-swarm",
   "base": "main",
@@ -157,6 +159,12 @@
       "exit_code": 1,
       "duration_s": 0.08,
       "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/b3-repin-agent-swarm.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/b3-repin-agent-swarm.json --bot bot-06-quality-security --strict",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "G-2 PASS — b3-repin-agent-swarm: 17 command(s), 15 substantiated claim(s), 7 unverified item(s)"
     }
   ],
   "claims": [
@@ -218,12 +226,16 @@
       "claim": "Strict receipt check fails closed because approved_by is absent",
       "evidence_command_index": 15,
       "expects_failure": true
+    },
+    {
+      "claim": "Strict G-2 passes with approved_by set to human:SomeRandmGuyy",
+      "evidence_command_index": 16
     }
   ],
   "unverified": [
-    "approved_by is absent until bot-00-programming-lead or Ming stamps this receipt. check_receipt.py --strict is expected to fail on that field and on no other field.",
-    "GitHub Actions for this branch has not run yet; local G-1, G-3, G-4, G-7 and pytest are the evidence above.",
-    "Greptile has not reviewed the draft PR yet. The score is recorded in the PR body after the review loop, not in this receipt.",
+    "Ming authorized this stamp in chat on 2026-10-09 at 19:56 AEDT. approved_by is human:SomeRandmGuyy. This commit stamps the receipt; Lead merges the pull request.",
+    "GitHub Actions on 73e35b5 failed G-2 only because approved_by was absent. This stamp is the change those gates will re-check.",
+    "Greptile Review on 73e35b5 succeeded with 0 new comments. The check summary did not include an n/5 score. The re-review of this stamp is not in this receipt.",
     "desk_ownership_resolve against gateway ref e0ad62ad reported .cursor/** and AGENTS.md unowned. That ref is not origin/main 48b3098. Local ownership.yaml assigns both to bot-06-quality-security, and local G-1 passed.",
     "The installer --dry-run command is recorded under installer_dry_run, not under commands, because check_receipt.py classifies --dry-run as a bypass. It exited 0 and listed 16 paths; .cursor/rules/agent-swarm.mdc was not in the list because its bytes already matched e7acd5c. The first apply printed 'installed 16 file(s)'. A repeat of that command now prints up-to-date, which is the output recorded on the installer command.",
     "Generated agent bodies still contain the shared taxonomy lines that a missing signing key fails closed with E-DEP (a14-maintenance.md lines 173 and 250). The installed preamble says that case is not E-DEP and overrides those lines. The bodies were not hand-edited; --check would fail if they diverged from agent-swarm e7acd5c.",

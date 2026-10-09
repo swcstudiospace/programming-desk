@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh** — Phases 46-47 (shipped 2026-10-11) — [Archive](milestones/v4.0-ROADMAP.md)
 - ✅ **v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh** — Phases 44-45 (shipped 2026-10-11) — [Archive](milestones/v3.9-ROADMAP.md)
 - ✅ **v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus** — Phases 42-43 (shipped 2026-10-11) — [Archive](milestones/v3.8-ROADMAP.md)
 - ✅ **v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving** — Phases 40-41 (shipped 2026-10-11) — [Archive](milestones/v3.7-ROADMAP.md)
@@ -25,14 +26,23 @@
 
 ## Phases
 
-### Active Milestone: v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh
+### Active Milestone: v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh
 
-- [x] **Phase 44: Post-Quantum Hybrid Cryptographic Primitives & Lattice KEM** (1/1 plans completed)
-  - Plan 44-01: Hybrid KEM (X25519 + Kyber/ML-KEM-768), hybrid signature engine (Ed25519 + Dilithium/ML-DSA-65), encrypted channel session negotiation, downgrade attack detector, and REST endpoints.
-- [x] **Phase 45: Lattice-Attested Multi-Desk Ledger & Quantum-Resistant Audit Anchors** (1/1 plans completed)
-  - Plan 45-01: Quantum-resistant Merkle audit ledger (SHA3-256), seat identity certificates, cross-desk lattice verifier, external anchor exporter, and quantum attack drill simulator.
+- [x] **Phase 46: Autonomous Cross-Desk Swarm Workflow Engine** (1/1 plans completed)
+  - Plan 46-01: Cross-desk workflow DAG compiler, distributed task state machine, dependency pipeline, adaptive resource scheduler, and REST endpoints.
+- [x] **Phase 47: Self-Synthesizing Capability Federation & Autonomous Execution Verification** (1/1 plans completed)
+  - Plan 47-01: Capability federation broker, workflow receipt ledger, external anchor exporter, failure recovery synthesizer, and end-to-end drill simulator.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh (Phases 46-47) — SHIPPED 2026-10-11</summary>
+
+- [x] Phase 46: Autonomous Cross-Desk Swarm Workflow Engine (1/1 plan)
+- [x] Phase 47: Self-Synthesizing Capability Federation & Autonomous Execution Verification (1/1 plan)
+
+See [milestones/v4.0-ROADMAP.md](milestones/v4.0-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh (Phases 44-45) — SHIPPED 2026-10-11</summary>

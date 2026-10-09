@@ -1,5 +1,22 @@
 # Milestones
 
+## v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases (Phases 46-47), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Cross-Desk Workflow DAG Compiler (`CrossDeskWorkflowCompiler`) compiling multi-stage workflow definitions into distributed execution graphs with topological cycle detection and dynamic seat allocation.
+- Distributed Task State Machine & Checkpointer (`WorkflowExecutionEngine`) managing state transitions across nodes with crash-resilient checkpoint snapshots and automatic retry backoffs.
+- Swarm Dependency Resolver & Context Pipeline (`DependencyPipeline`) resolving cross-seat data dependencies with typed validation and zero-copy context streaming.
+- Adaptive Resource Allocator & Priority Preemption (`SwarmResourceScheduler`) dynamic load balancer prioritizing critical workflow tasks and preempting low-priority speculative background jobs.
+- Autonomous Capability Discovery & Federation Broker (`CapabilityFederationBroker`) dynamically indexing available tools, skills, and agents across federated desks with automatic schema adaptation.
+- Cryptographic Workflow Execution Receipt Ledger (`WorkflowReceiptLedger`) recording immutable execution receipts with seat signatures, task output hashes, and Merkle root verification.
+- External Workflow Attestation & Solana Devnet Anchor (`WorkflowAnchorExporter`) publishing workflow completion proofs and consensus signatures to Solana devnet and immutable WORM storage.
+- Cross-Desk Failure Recovery & Fallback Synthesizer (`WorkflowFailureSynthesizer`) automatically synthesizing alternative fallback execution DAGs upon node or tool failures.
+- End-to-End Swarm Orchestration & Execution Drill Simulator (`SwarmOrchestrationDrillSimulator`) verifying distributed DAG execution, failure recovery, priority preemption, and attestation anchoring.
+
+---
+
 ## v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases (Phases 44-45), 2 plans, 0 tasks

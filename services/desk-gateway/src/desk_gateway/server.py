@@ -3620,6 +3620,19 @@ def create_mcp(
         PQCAnchorExporter,
         QuantumAttackDrillSimulator,
     )
+    from desk_gateway.swarm_orchestration import (
+        CrossDeskWorkflowCompiler,
+        WorkflowExecutionEngine,
+        DependencyPipeline,
+        SwarmResourceScheduler,
+    )
+    from desk_gateway.swarm_federation import (
+        CapabilityFederationBroker,
+        WorkflowReceiptLedger,
+        WorkflowAnchorExporter,
+        WorkflowFailureSynthesizer,
+        SwarmOrchestrationDrillSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3672,6 +3685,15 @@ def create_mcp(
     pqc_verifier = CrossDeskLatticeVerifier(authority=pqc_ca)
     pqc_anchor_exporter = PQCAnchorExporter()
 
+    # Milestone v4.0 components
+    workflow_compiler = CrossDeskWorkflowCompiler()
+    workflow_scheduler = SwarmResourceScheduler()
+    workflow_pipeline = DependencyPipeline()
+    workflow_engine = WorkflowExecutionEngine(scheduler=workflow_scheduler, pipeline=workflow_pipeline)
+    capability_broker = CapabilityFederationBroker()
+    workflow_receipt_ledger = WorkflowReceiptLedger(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    workflow_anchor_exporter = WorkflowAnchorExporter()
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3695,6 +3717,11 @@ def create_mcp(
     setattr(mcp, "_pqc_ledger", pqc_ledger)
     setattr(mcp, "_pqc_verifier", pqc_verifier)
     setattr(mcp, "_pqc_anchor_exporter", pqc_anchor_exporter)
+    setattr(mcp, "_workflow_compiler", workflow_compiler)
+    setattr(mcp, "_workflow_engine", workflow_engine)
+    setattr(mcp, "_capability_broker", capability_broker)
+    setattr(mcp, "_workflow_receipt_ledger", workflow_receipt_ledger)
+    setattr(mcp, "_workflow_anchor_exporter", workflow_anchor_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4519,6 +4546,75 @@ def create_mcp(
     @mcp.custom_route("/v1/pqc/drill/simulate", methods=["POST"])
     async def pqc_drill_simulate_route(_request: Request) -> Response:
         drill_results = QuantumAttackDrillSimulator.run_quantum_attack_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.0 (Phases 46 & 47): Autonomous Swarm Orchestration & Self-Synthesizing Workflow Mesh
+    @mcp.custom_route("/v1/swarm/workflows/compile", methods=["POST"])
+    async def swarm_workflows_compile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        try:
+            dag = workflow_compiler.compile(body)
+            return JSONResponse({"ok": True, "workflow": dag.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/workflows/submit", methods=["POST"])
+    async def swarm_workflows_submit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        try:
+            dag = workflow_compiler.compile(body)
+            workflow_engine.submit_workflow(dag)
+            return JSONResponse({"ok": True, "workflow_id": dag.workflow_id, "status": "SUBMITTED"})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/step", methods=["POST"])
+    async def swarm_workflows_step_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        if workflow_id not in workflow_engine.workflows:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        res = workflow_engine.step_execution(workflow_id)
+        return JSONResponse({"ok": True, "execution": res})
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/status", methods=["GET"])
+    async def swarm_workflows_status_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        dag = workflow_engine.workflows.get(workflow_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        return JSONResponse({"ok": True, "workflow": dag.to_dict()})
+
+    @mcp.custom_route("/v1/swarm/capabilities/register", methods=["POST"])
+    async def swarm_capabilities_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        from desk_gateway.swarm_federation import FederatedCapability
+        cap = FederatedCapability(
+            capability_name=body.get("capability_name", "generic_cap"),
+            desk_id=body.get("desk_id", "desk-local"),
+            seat_id=body.get("seat_id", "systems"),
+            schema_contract=body.get("schema_contract", {}),
+            version=body.get("version", "1.0.0"),
+        )
+        capability_broker.register_capability(cap)
+        return JSONResponse({"ok": True, "capability": cap.to_dict()})
+
+    @mcp.custom_route("/v1/swarm/capabilities", methods=["GET"])
+    async def swarm_capabilities_list_route(_request: Request) -> Response:
+        return JSONResponse({"ok": True, "capabilities": capability_broker.list_capabilities()})
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/receipt", methods=["POST"])
+    async def swarm_workflows_receipt_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        dag = workflow_engine.workflows.get(workflow_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        receipt = workflow_receipt_ledger.record_execution(dag, duration_ms=50.0)
+        anchor = workflow_anchor_exporter.export_anchor(receipt)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict(), "anchor": anchor})
+
+    @mcp.custom_route("/v1/swarm/workflows/drill/simulate", methods=["POST"])
+    async def swarm_workflows_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SwarmOrchestrationDrillSimulator.run_swarm_orchestration_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -5986,6 +6082,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "pqc_ledger": getattr(mcp, "_pqc_ledger", None),
         "pqc_verifier": getattr(mcp, "_pqc_verifier", None),
         "pqc_anchor_exporter": getattr(mcp, "_pqc_anchor_exporter", None),
+        "workflow_compiler": getattr(mcp, "_workflow_compiler", None),
+        "workflow_engine": getattr(mcp, "_workflow_engine", None),
+        "capability_broker": getattr(mcp, "_capability_broker", None),
+        "workflow_receipt_ledger": getattr(mcp, "_workflow_receipt_ledger", None),
+        "workflow_anchor_exporter": getattr(mcp, "_workflow_anchor_exporter", None),
     }
     return app, settings
 

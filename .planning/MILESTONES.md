@@ -1,5 +1,25 @@
 # Milestones
 
+## v5.0 Autonomous Multi-Agent Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 66-67), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Quantum Circuit & State Vector Representation (`QuantumCircuitState`, `QuantumGateType`, `QuantumGate`) supporting arbitrary n-qubit unitary operations (Hadamard, Pauli-X/Y/Z, CNOT, Phase, Rotation-Z) and state vector evolution with normalization.
+- Swarm Variational Quantum Eigensolver (`VQEProcessor`, `HamiltonianOperator`, `AnsatzCircuit`) executing parameter optimization loops for ground state energy estimation.
+- Quantum Approximate Optimization Algorithm (`QAOAOptimizer`) executing cost and mixer Hamiltonian layering for combinatorial scheduling and partition optimization across desk nodes.
+- Noise & Decoherence Simulator (`QuantumDecoherenceSimulator`, `NoiseModel`) modeling depolarizing channel noise, amplitude damping, phase damping, and gate infidelity.
+- Quantum-Classical Hybrid Workload Scheduler (`QuantumWorkloadScheduler`) dynamically routing hybrid computational steps between classical CPU/GPU nodes and simulated Quantum Processing Units (QPUs).
+- Topological Qubit & Rotated Surface Code Lattice (`SurfaceCodeLattice`, `QubitNode`, `QubitType`) modeling data qubits and measure qubits on a 2D planar square lattice with code distance \(d\).
+- Quantum Error Syndrome Extractor (`SyndromeExtractor`, `StabilizerMeasurement`) measuring \(X\)-type (star) and \(Z\)-type (plaquette) stabilizers detecting bit-flip and phase-flip error chains.
+- Minimum-Weight Perfect Matching (MWPM) Syndrome Decoder (`MWPMDecoder`, `CorrectionOperator`) matching error defect pairs and applying Pauli corrections to preserve logical qubit fidelity.
+- Cryptographic Quantum State & Syndrome Receipt Ledger (`QuantumStateReceiptLedger`, `QuantumStateReceipt`) maintaining an append-only binary Merkle tree of verified syndrome extractions and logical state transitions.
+- External Solana Devnet Quantum State Exporter (`QuantumAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- End-to-End Quantum-Classical & Topological Verification Drill Simulator (`QuantumTopologicalDrillSimulator`) verifying circuit simulation, VQE convergence, QAOA partitioning, surface code syndrome extraction, MWPM error recovery, and Solana anchoring.
+- REST API routes under `/v1/quantum/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
 ## v4.9 Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh (Shipped: 2026-10-12)
 
 **Phases completed:** 2 phases (Phases 64-65), 2 plans, 0 tasks

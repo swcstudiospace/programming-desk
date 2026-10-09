@@ -1,22 +1,22 @@
-# Requirements: Milestone v4.9 — Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
+# Requirements: Milestone v5.0 — Autonomous Multi-Agent Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
 
-This document defines the requirements for Milestone v4.9 of Programming Desk.
+This document defines the requirements for Milestone v5.0 of Programming Desk.
 
-## 1. Delay-Tolerant Bundle Protocol & Orbital Ephemeris Routing (Phase 64)
+## 1. Quantum-Classical Hybrid Algorithmic Orchestration & VQE/QAOA Swarm Co-Processing (Phase 66)
 
-- [x] **REQ-SAGIN-001**: Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) defining satellite altitude, inclination, true anomaly, orbital velocity, slant range, and elevation contact windows.
-- [x] **REQ-SAGIN-002**: Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 compliant bundle representations with TTL, hop counts, and SHA-256 payload digests.
-- [x] **REQ-SAGIN-003**: Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) calculating earliest arrival paths over scheduled, time-varying contact graphs.
-- [x] **REQ-SAGIN-004**: Resilient Custodial Storage Management (`CustodialStorageManager`) supporting store-and-forward retention queues, custody acceptance/release, and HMAC-SHA256 custody receipts.
-- [x] **REQ-SAGIN-005**: Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) evaluating carrier frequency shifts, relative velocities, and SNR link degradation margins.
-- [x] **REQ-SAGIN-006**: SAGIN Phase 64 REST API endpoints under `/v1/sagin/ephemeris/*`, `/v1/sagin/doppler/*`, `/v1/sagin/bundle/*`, and `/v1/sagin/custody/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+- [x] **REQ-QUANTUM-001**: Quantum Circuit & State Vector Representation (`QuantumCircuitState`, `QuantumGateType`, `QuantumGate`) supporting arbitrary n-qubit unitary operations (Hadamard, Pauli-X/Y/Z, CNOT, Phase, Rotation-Z) and state vector evolution with normalization.
+- [x] **REQ-QUANTUM-002**: Swarm Variational Quantum Eigensolver (`VQEProcessor`, `HamiltonianOperator`, `AnsatzCircuit`) executing parameter optimization loops for ground state energy estimation.
+- [x] **REQ-QUANTUM-003**: Quantum Approximate Optimization Algorithm (`QAOAOptimizer`) executing cost and mixer Hamiltonian layering for combinatorial scheduling and partition optimization across desk nodes.
+- [x] **REQ-QUANTUM-004**: Noise & Decoherence Simulator (`QuantumDecoherenceSimulator`, `NoiseModel`) modeling depolarizing channel noise, amplitude damping, phase damping, and gate infidelity.
+- [x] **REQ-QUANTUM-005**: Quantum-Classical Hybrid Workload Scheduler (`QuantumWorkloadScheduler`) dynamically routing hybrid computational steps between classical CPU/GPU nodes and simulated Quantum Processing Units (QPUs).
+- [x] **REQ-QUANTUM-006**: Quantum Phase 66 REST API endpoints under `/v1/quantum/circuit/*`, `/v1/quantum/vqe/*`, `/v1/quantum/qaoa/*`, and `/v1/quantum/schedule/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## 2. Ground Station Downlink Consensus & Multi-Constellation State Anchoring (Phase 65)
+## 2. Topological Qubit Surface Code Error Correction, Syndrome Extraction & Solana Devnet Quantum State Anchoring (Phase 67)
 
-- [x] **REQ-SAGIN-007**: Earth Ground Station Terminal Representation (`GroundStationNode`) tracking ground station coordinates, antenna gain, slew rates, and concurrent satellite tracking passes.
-- [x] **REQ-SAGIN-008**: Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating cross-constellation passes with Doppler compensation and contact telemetry.
-- [x] **REQ-SAGIN-009**: Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent passes.
-- [x] **REQ-SAGIN-010**: Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) recording verifiable orbital state transitions and calculating Merkle tree roots.
-- [x] **REQ-SAGIN-011**: Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) exporting batch Merkle roots and orbital downlink proofs to Solana devnet targets.
-- [x] **REQ-SAGIN-012**: SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
-- [x] **REQ-SAGIN-013**: SAGIN Phase 65 REST API endpoints under `/v1/sagin/downlink/*`, `/v1/sagin/consensus/*`, `/v1/sagin/anchor/*`, and `/v1/sagin/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+- [x] **REQ-QUANTUM-007**: Topological Qubit & Rotated Surface Code Lattice (`SurfaceCodeLattice`, `QubitNode`, `QubitType`) modeling data qubits and measure qubits on a 2D planar square lattice with code distance \(d\).
+- [x] **REQ-QUANTUM-008**: Quantum Error Syndrome Extractor (`SyndromeExtractor`, `StabilizerMeasurement`) measuring \(X\)-type (star) and \(Z\)-type (plaquette) stabilizers detecting bit-flip and phase-flip error chains.
+- [x] **REQ-QUANTUM-009**: Minimum-Weight Perfect Matching (MWPM) Syndrome Decoder (`MWPMDecoder`, `CorrectionOperator`) matching error defect pairs and applying Pauli corrections to preserve logical qubit fidelity.
+- [x] **REQ-QUANTUM-010**: Cryptographic Quantum State & Syndrome Receipt Ledger (`QuantumStateReceiptLedger`, `QuantumStateReceipt`) maintaining an append-only binary Merkle tree of verified syndrome extractions and logical state transitions.
+- [x] **REQ-QUANTUM-011**: External Solana Devnet Quantum State Exporter (`QuantumAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] **REQ-QUANTUM-012**: Quantum-Classical & Topological Verification Drill Simulator (`QuantumTopologicalDrillSimulator`) verifying circuit simulation, VQE convergence, QAOA partitioning, surface code syndrome extraction, MWPM error recovery, and Solana anchoring.
+- [x] **REQ-QUANTUM-013**: Quantum Phase 67 REST API endpoints under `/v1/quantum/surface-code/*`, `/v1/quantum/syndrome/*`, `/v1/quantum/anchor/*`, and `/v1/quantum/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

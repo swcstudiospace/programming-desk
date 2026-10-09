@@ -2,7 +2,7 @@
   "task_id": "g2-breaker-timeouts",
   "bot": "bot-01-systems-backend",
   "started_at": "2026-10-09T09:28:00Z",
-  "completed_at": "2026-10-09T09:31:31Z",
+  "completed_at": "2026-10-09T09:33:00Z",
   "commands": [
     {
       "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py::test_docs_budget_timeout_opens_the_circuit_breaker tests/test_plane_budgets.py::test_recall_budget_timeout_opens_the_circuit_breaker tests/test_plane_budgets.py::test_caller_cancel_does_not_record_an_upstream_failure --tb=line",
@@ -32,13 +32,13 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-01-systems-backend: 2 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 3 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",

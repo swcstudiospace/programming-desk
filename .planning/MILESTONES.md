@@ -1,5 +1,16 @@
 # Milestones
 
+## v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases (Phases 40-41), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Formal verification pipeline evaluating synthesized code with pre/post-condition invariant contracts, static AST analysis (loop termination, memory safety, prohibited builtins), dynamic property-based fuzz distributions, counterexample triage diagnosis, and HMAC-SHA256 verification certificates (`formal_verification.py`).
+- Multi-seat synthesis review consensus engine coordinating independent seat evaluation with weighted ballots, quadratic review quorums, append-only SHA-256 Merkle proof receipt ledgers, inclusion proof generation/verification, and Solana devnet anchor exports (`synthesis_proving.py`).
+- End-to-end formal verification and consensus drill simulator verifying rejection of flawed invariant implementations and promotion of sound tools.
+
+---
+
 ## v2.0 Desk v2 (Shipped: 2026-10-08)
 
 **Phases completed:** 7 phases, 41 plans, 0 tasks

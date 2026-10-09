@@ -1,18 +1,18 @@
-# Roadmap: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
+# Roadmap: Milestone v4.9 — Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
 
-## Phase 62: Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh
-- [x] Threat Pattern & Vector Architecture (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) modeling Byzantine injection, latency poisoning, AST escapes, and entropy bursts.
-- [x] Immune Antibody Registry & HMAC-SHA256 Distribution (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) verifying antibody signatures and synchronizing cross-seat peer catalogs via anti-entropy digests.
-- [x] Genetic Antibody Evolution Engine (`GeneticAntibodyMutator`) generating evolved mitigation generations with perturbed entropy/latency thresholds and variant patterns.
-- [x] Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) injecting controlled stress drills, scoring post-perturbation antifragile fitness gains, and synthesizing novel antibodies upon breaches.
-- [x] Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) maintaining golden checkpoint snapshots, seat rollbacks, and score-based rehabilitation graduation.
-- [x] REST API routes under `/v1/immune/mesh/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 64: Delay-Tolerant Bundle Protocol & Orbital Ephemeris Routing
+- [x] Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) tracking semi-major axis, inclination, true anomaly, slant range, elevation angles, and contact pass duration.
+- [x] Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 inspired bundle structures with TTL enforcement, hops, and SHA-256 payload digests.
+- [x] Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) finding earliest arrival paths across scheduled orbital pass topologies.
+- [x] Resilient Custodial Storage Management (`CustodialStorageManager`) managing store-and-forward retention queues, capacity enforcement, custody release, and HMAC-SHA256 custody receipts.
+- [x] Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) computing relative velocity frequency shifts, Doppler PPM, and link SNR margins.
+- [x] REST API routes under `/v1/sagin/ephemeris/*`, `/v1/sagin/doppler/*`, `/v1/sagin/bundle/*`, and `/v1/sagin/custody/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## Phase 63: Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh
-- [x] Physical Resource Architecture (`PhysicalResourceNode`, `PhysicalResourceType`) tracking GPUs, neuromorphic crossbars, high-bandwidth storage, and edge PoW nodes across regions.
-- [x] Verifiable Resource Orchestrator (`VerifiableResourceOrchestrator`, `ResourceLease`) executing capacity-bounded reservations and lease tracking.
-- [x] Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) generating and verifying HMAC-SHA256 execution attestations binding work units and payload digests.
-- [x] DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) calculating binary Merkle tree roots across physical resource events.
-- [x] Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) publishing physical resource commitment proofs to Solana devnet targets.
-- [x] End-to-End Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`).
-- [x] REST API routes under `/v1/depin/*` and `/v1/immune/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 65: Ground Station Downlink Consensus & Multi-Constellation State Anchoring
+- [x] Earth Ground Station Terminal Representation (`GroundStationNode`) tracking terminal coordinates, antenna gain, slew rates, and concurrent passes.
+- [x] Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating concurrent passes across Starlink, Kuiper, and Iridium constellations with Doppler compensation.
+- [x] Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent satellite downlinks.
+- [x] Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) calculating binary Merkle roots over verified orbital telemetry events.
+- [x] Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) publishing Merkle roots and orbital downlink proofs to Solana devnet targets.
+- [x] End-to-End SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
+- [x] REST API routes under `/v1/sagin/downlink/*`, `/v1/sagin/consensus/*`, `/v1/sagin/anchor/*`, and `/v1/sagin/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

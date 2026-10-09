@@ -1,22 +1,22 @@
-# Requirements: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
+# Requirements: Milestone v4.9 — Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
 
-This document defines the requirements for Milestone v4.8 of Programming Desk.
+This document defines the requirements for Milestone v4.9 of Programming Desk.
 
-## 1. Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh (Phase 62)
+## 1. Delay-Tolerant Bundle Protocol & Orbital Ephemeris Routing (Phase 64)
 
-- [x] **REQ-IMM-001**: Threat Pattern & Signature Representation (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) defining structured models for Byzantine injection, latency poisoning, memory corruption, AST escape, and entropy bursts.
-- [x] **REQ-IMM-002**: Immune Antibody & Cryptographic Attestation (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) providing HMAC-SHA256 authenticated mitigation antibodies with peer-to-peer anti-entropy catalog digest synchronization.
-- [x] **REQ-IMM-003**: Genetic Antibody Mutator (`GeneticAntibodyMutator`) mutating indicators, entropy thresholds, and latency bounds across generations to counter zero-day attack variants.
-- [x] **REQ-IMM-004**: Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) applying controlled stress perturbations, evaluating payload threats, scoring post-stress resilience gains, and evolving novel antibodies.
-- [x] **REQ-IMM-005**: Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) managing golden state checkpoint snapshots, clean runtime resets, and post-quarantine rehabilitation graduation.
-- [x] **REQ-IMM-006**: Swarm Immune REST API endpoints under `/v1/immune/mesh/*` exposing antibody listing, antibody creation, perturbation drills, and runtime reconstitution.
+- [x] **REQ-SAGIN-001**: Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) defining satellite altitude, inclination, true anomaly, orbital velocity, slant range, and elevation contact windows.
+- [x] **REQ-SAGIN-002**: Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 compliant bundle representations with TTL, hop counts, and SHA-256 payload digests.
+- [x] **REQ-SAGIN-003**: Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) calculating earliest arrival paths over scheduled, time-varying contact graphs.
+- [x] **REQ-SAGIN-004**: Resilient Custodial Storage Management (`CustodialStorageManager`) supporting store-and-forward retention queues, custody acceptance/release, and HMAC-SHA256 custody receipts.
+- [x] **REQ-SAGIN-005**: Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) evaluating carrier frequency shifts, relative velocities, and SNR link degradation margins.
+- [x] **REQ-SAGIN-006**: SAGIN Phase 64 REST API endpoints under `/v1/sagin/ephemeris/*`, `/v1/sagin/doppler/*`, `/v1/sagin/bundle/*`, and `/v1/sagin/custody/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## 2. Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh (Phase 63)
+## 2. Ground Station Downlink Consensus & Multi-Constellation State Anchoring (Phase 65)
 
-- [x] **REQ-DEP-001**: Physical Resource Node Modeling (`PhysicalResourceNode`, `PhysicalResourceType`) tracking heterogeneous hardware capacity (GPU cluster, neuromorphic crossbar, high-bandwidth storage, edge compute) across geographical regions with reputation scoring.
-- [x] **REQ-DEP-002**: Verifiable Resource Orchestration & Leasing (`VerifiableResourceOrchestrator`, `ResourceLease`) dynamically matching consumer reservations to highest-reputation physical nodes with capacity tracking.
-- [x] **REQ-DEP-003**: Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) synthesizing and verifying HMAC-SHA256 attestation proofs binding completed compute units, workload digests, and execution latency.
-- [x] **REQ-DEP-004**: DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) recording immutable lease allocations, PoPW verification events, and capacity settlements with Merkle root computation.
-- [x] **REQ-DEP-005**: Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) anchoring batch Merkle roots and lease proofs to Solana devnet targets.
-- [x] **REQ-DEP-006**: Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`) verifying peer antibody distribution, genetic antibody mutation, runtime reconstitution, physical resource leasing, PoPW verification, and Solana devnet anchoring.
-- [x] **REQ-DEP-007**: DePIN REST API endpoints under `/v1/depin/*` and `/v1/immune/drill/simulate` exposing resource nodes, leasing, PoPW generation, Solana anchor exports, and resilience drills.
+- [x] **REQ-SAGIN-007**: Earth Ground Station Terminal Representation (`GroundStationNode`) tracking ground station coordinates, antenna gain, slew rates, and concurrent satellite tracking passes.
+- [x] **REQ-SAGIN-008**: Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating cross-constellation passes with Doppler compensation and contact telemetry.
+- [x] **REQ-SAGIN-009**: Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent passes.
+- [x] **REQ-SAGIN-010**: Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) recording verifiable orbital state transitions and calculating Merkle tree roots.
+- [x] **REQ-SAGIN-011**: Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) exporting batch Merkle roots and orbital downlink proofs to Solana devnet targets.
+- [x] **REQ-SAGIN-012**: SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
+- [x] **REQ-SAGIN-013**: SAGIN Phase 65 REST API endpoints under `/v1/sagin/downlink/*`, `/v1/sagin/consensus/*`, `/v1/sagin/anchor/*`, and `/v1/sagin/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

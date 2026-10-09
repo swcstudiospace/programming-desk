@@ -5973,6 +5973,146 @@ def create_mcp(
         drill_results = SwarmImmuneDePINDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.9 (Phases 64 & 65): Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
+    from desk_gateway.sagin_orbital_mesh import (
+        BundlePriority,
+        ContactGraphRouter,
+        ContactPlanEntry,
+        CustodialStorageManager,
+        DelayTolerantBundle,
+        DopplerTelemetryTracker,
+        OrbitalEphemeris,
+    )
+    from desk_gateway.sagin_downlink_consensus import (
+        GroundStationNode,
+        IntermittentGroundConsensusEngine,
+        MultiConstellationDownlinkManager,
+        SAGINAnchorExporter,
+        SAGINOrbitalVerificationDrillSimulator,
+        SatelliteMerkleReceiptLedger,
+    )
+
+    sagin_cgr = ContactGraphRouter(local_eid="dtn://gateway-orbital-0")
+    sagin_custody = CustodialStorageManager(custodian_eid="dtn://gateway-orbital-0")
+    sagin_downlink_mgr = MultiConstellationDownlinkManager()
+    sagin_consensus = IntermittentGroundConsensusEngine()
+    sagin_ledger = SatelliteMerkleReceiptLedger()
+    sagin_anchor_exporter = SAGINAnchorExporter()
+
+    # Pre-populate sample ephemeris and contact plan for demonstration / testing
+    sat_sample = OrbitalEphemeris("sat-starlink-leo-01", "Starlink-Gen2", 550.0, 53.0)
+    sagin_cgr.register_ephemeris(sat_sample)
+    now_ts = time.time()
+    sagin_cgr.add_contact(ContactPlanEntry("contact-01", "dtn://gateway-orbital-0", "dtn://gs-svalbard-01", now_ts, now_ts + 3600, 50000.0))
+
+    mcp._sagin_cgr = sagin_cgr  # type: ignore[attr-defined]
+    mcp._sagin_custody = sagin_custody  # type: ignore[attr-defined]
+    mcp._sagin_downlink_mgr = sagin_downlink_mgr  # type: ignore[attr-defined]
+    mcp._sagin_consensus = sagin_consensus  # type: ignore[attr-defined]
+    mcp._sagin_ledger = sagin_ledger  # type: ignore[attr-defined]
+    mcp._sagin_anchor_exporter = sagin_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/sagin/ephemeris/contact_window", methods=["POST"])
+    async def sagin_ephemeris_window_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        constellation = body.get("constellation", "Starlink-Gen2")
+        alt = float(body.get("altitude_km", 550.0))
+        inc = float(body.get("inclination_deg", 53.0))
+        lat = float(body.get("station_latitude", 78.22))
+        lon = float(body.get("station_longitude", 15.65))
+
+        ephem = OrbitalEphemeris(satellite_id=sat_id, constellation=constellation, altitude_km=alt, inclination_deg=inc)
+        window = ephem.calculate_contact_window(lat, lon)
+        return JSONResponse({"ok": True, "contact_window": window})
+
+    @mcp.custom_route("/v1/sagin/doppler/shift", methods=["POST"])
+    async def sagin_doppler_shift_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        carrier_ghz = float(body.get("carrier_frequency_ghz", 28.5))
+        rel_vel = float(body.get("relative_velocity_km_s", 7.2))
+        res = DopplerTelemetryTracker.compute_doppler_shift(carrier_ghz, rel_vel)
+        return JSONResponse({"ok": True, "doppler": res})
+
+    @mcp.custom_route("/v1/sagin/bundle/route", methods=["POST"])
+    async def sagin_bundle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://gateway-orbital-0")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "TELEMETRY_PAYLOAD")
+        prio_str = body.get("priority", "normal")
+
+        try:
+            prio = BundlePriority(prio_str.lower())
+        except ValueError:
+            prio = BundlePriority.NORMAL
+
+        bundle = DelayTolerantBundle(
+            bundle_id=bundle_id,
+            source_eid=source_eid,
+            destination_eid=dest_eid,
+            payload_raw=payload,
+            priority=prio,
+        )
+        route_result = sagin_cgr.route_bundle(bundle)
+        return JSONResponse({"ok": True, "route_result": route_result, "bundle": bundle.to_dict()})
+
+    @mcp.custom_route("/v1/sagin/custody/accept", methods=["POST"])
+    async def sagin_custody_accept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://sat-relay-1")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "ORBITAL_IMAGERY_STREAM")
+
+        bundle = DelayTolerantBundle(bundle_id=bundle_id, source_eid=source_eid, destination_eid=dest_eid, payload_raw=payload)
+        rcpt = sagin_custody.accept_custody(bundle)
+        sagin_ledger.append_event("CUSTODY_ACCEPTED", source_eid, sagin_custody.custodian_eid, rcpt)
+        return JSONResponse({"ok": True, "custody_receipt": rcpt})
+
+    @mcp.custom_route("/v1/sagin/downlink/session", methods=["POST"])
+    async def sagin_downlink_session_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        station_id = body.get("station_id", "gs-svalbard-01")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        ephem = sagin_cgr.ephemeris_registry.get(sat_id) or OrbitalEphemeris(sat_id, "Starlink-Gen2", 550.0, 53.0)
+        session = sagin_downlink_mgr.initiate_downlink_session(station_id, ephem)
+        return JSONResponse({"ok": True, "downlink_session": session})
+
+    @mcp.custom_route("/v1/sagin/consensus/propose", methods=["POST"])
+    async def sagin_consensus_propose_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", f"batch-{secrets.token_hex(4)}")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        state_root = body.get("state_root", secrets.token_hex(32))
+        digests = body.get("downlink_digests", [secrets.token_hex(32)])
+        station_id = body.get("proposer_station", "gs-svalbard-01")
+
+        batch = sagin_consensus.propose_orbital_batch(batch_id, sat_id, state_root, digests, station_id)
+        return JSONResponse({"ok": True, "batch": batch})
+
+    @mcp.custom_route("/v1/sagin/consensus/ballot", methods=["POST"])
+    async def sagin_consensus_ballot_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", "")
+        station_id = body.get("station_id", "gs-singapore-01")
+        vote = body.get("vote", "APPROVE")
+        res = sagin_consensus.submit_ballot(batch_id, station_id, vote)
+        if res.get("is_committed"):
+            sagin_ledger.append_event("CONSENSUS_COMMITTED", "swarm-constellation", station_id, res)
+        return JSONResponse({"ok": True, "ballot_result": res})
+
+    @mcp.custom_route("/v1/sagin/anchor/export", methods=["POST"])
+    async def sagin_anchor_export_route(_request: Request) -> Response:
+        commitment = sagin_anchor_exporter.export_commitment(sagin_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/sagin/drill/simulate", methods=["POST"])
+    async def sagin_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SAGINOrbitalVerificationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7497,6 +7637,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "depin_orchestrator": getattr(mcp, "_depin_orchestrator", None),
         "depin_ledger": getattr(mcp, "_depin_ledger", None),
         "depin_anchor_exporter": getattr(mcp, "_depin_anchor_exporter", None),
+        "sagin_cgr": getattr(mcp, "_sagin_cgr", None),
+        "sagin_custody": getattr(mcp, "_sagin_custody", None),
+        "sagin_downlink_mgr": getattr(mcp, "_sagin_downlink_mgr", None),
+        "sagin_consensus": getattr(mcp, "_sagin_consensus", None),
+        "sagin_ledger": getattr(mcp, "_sagin_ledger", None),
+        "sagin_anchor_exporter": getattr(mcp, "_sagin_anchor_exporter", None),
     }
     return app, settings
 

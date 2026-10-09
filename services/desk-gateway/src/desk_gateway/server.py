@@ -3497,6 +3497,30 @@ def create_mcp(
     governance_sm = GovernanceStateMachine()
     setattr(mcp, "_governance_sm", governance_sm)
 
+    # Milestone v3.3 (Phase 33): Byzantine Consensus Voting & Verifiable On-Chain Attestation
+    from desk_gateway.byzantine_consensus import (
+        ByzantineConsensusEngine,
+        ConsensusPhase,
+        ConsensusDecision,
+        ConsensusMessage,
+        GovernanceReceiptMerkleTree,
+        GovernanceMerkleReceipt,
+        LedgerAnchorExporter,
+        OnChainAnchor,
+        ByzantineAttackSimulator,
+    )
+    byzantine_engine = ByzantineConsensusEngine(
+        desks=["desk-alpha", "desk-beta", "desk-gamma", "desk-delta"],
+        local_desk_id=settings.public_host or "desk-alpha",
+    )
+    receipt_merkle_tree = GovernanceReceiptMerkleTree()
+    ledger_exporter = LedgerAnchorExporter()
+    byzantine_simulator = ByzantineAttackSimulator(byzantine_engine)
+    setattr(mcp, "_byzantine_engine", byzantine_engine)
+    setattr(mcp, "_receipt_merkle_tree", receipt_merkle_tree)
+    setattr(mcp, "_ledger_exporter", ledger_exporter)
+    setattr(mcp, "_byzantine_simulator", byzantine_simulator)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4511,6 +4535,186 @@ def create_mcp(
         except (KeyError, ValueError, PermissionError) as exc:
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
+    # Milestone v3.3 (Phase 33): Byzantine Consensus REST Endpoints
+    @mcp.custom_route("/v1/consensus/round/start", methods=["POST"])
+    async def consensus_round_start_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id")
+        proposal_id = body.get("proposal_id")
+        proposal_payload = body.get("proposal_payload", {})
+        leader_desk = body.get("leader_desk")
+        if not round_id or not proposal_id:
+            return JSONResponse({"ok": False, "error": "round_id and proposal_id are required"}, status_code=400)
+        try:
+            msg = byzantine_engine.start_round(
+                round_id=round_id,
+                proposal_id=proposal_id,
+                proposal_payload=proposal_payload,
+                leader_desk=leader_desk,
+            )
+            return JSONResponse({"ok": True, "message": msg.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/round/prepare", methods=["POST"])
+    async def consensus_round_prepare_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        proposal_digest = body.get("proposal_digest", "")
+        decision_str = body.get("decision", "APPROVE")
+        signature = body.get("signature")
+        try:
+            decision = ConsensusDecision(decision_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid decision: {decision_str}"}, status_code=400)
+
+        ok, reason, commit_msg = byzantine_engine.process_prepare(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            proposal_digest=proposal_digest,
+            decision=decision,
+            signature=signature,
+        )
+        if not ok:
+            return JSONResponse({"ok": False, "error": reason}, status_code=400)
+        return JSONResponse({
+            "ok": True,
+            "message": reason,
+            "commit_msg": commit_msg.to_dict() if commit_msg else None,
+        })
+
+    @mcp.custom_route("/v1/consensus/round/commit", methods=["POST"])
+    async def consensus_round_commit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        proposal_digest = body.get("proposal_digest", "")
+        decision_str = body.get("decision", "APPROVE")
+        signature = body.get("signature")
+        try:
+            decision = ConsensusDecision(decision_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid decision: {decision_str}"}, status_code=400)
+
+        ok, reason, finalized = byzantine_engine.process_commit(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            proposal_digest=proposal_digest,
+            decision=decision,
+            signature=signature,
+        )
+        if not ok:
+            return JSONResponse({"ok": False, "error": reason}, status_code=400)
+        return JSONResponse({
+            "ok": True,
+            "message": reason,
+            "finalized": finalized,
+        })
+
+    @mcp.custom_route("/v1/consensus/view_change", methods=["POST"])
+    async def consensus_view_change_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        reason = body.get("reason", "Leader unresponsive")
+        ok, msg, current_view = byzantine_engine.request_view_change(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            reason=reason,
+        )
+        return JSONResponse({
+            "ok": ok,
+            "message": msg,
+            "current_view": current_view,
+            "current_leader": byzantine_engine.current_leader,
+        })
+
+    @mcp.custom_route("/v1/consensus/round/{round_id}", methods=["GET"])
+    async def consensus_round_summary_route(request: Request) -> Response:
+        round_id = request.path_params.get("round_id", "")
+        try:
+            summary = byzantine_engine.get_round_summary(round_id)
+            return JSONResponse({"ok": True, "round": summary})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/consensus/receipt/build", methods=["POST"])
+    async def consensus_receipt_build_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        proposal_id = body.get("proposal_id", "")
+        proposal_digest = body.get("proposal_digest", "")
+        state_transitions = body.get("state_transitions", [])
+        ballot_tallies = body.get("ballot_tallies", {})
+        execution_outcome = body.get("execution_outcome", {})
+        signers = body.get("signers", ["desk-alpha"])
+
+        receipt = receipt_merkle_tree.build_receipt(
+            round_id=round_id,
+            proposal_id=proposal_id,
+            proposal_digest=proposal_digest,
+            state_transitions=state_transitions,
+            ballot_tallies=ballot_tallies,
+            execution_outcome=execution_outcome,
+            signers=signers,
+        )
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/consensus/receipt/verify", methods=["POST"])
+    async def consensus_receipt_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_dict = body.get("receipt", {})
+        try:
+            receipt = GovernanceMerkleReceipt(
+                receipt_id=receipt_dict["receipt_id"],
+                round_id=receipt_dict["round_id"],
+                proposal_id=receipt_dict["proposal_id"],
+                proposal_digest=receipt_dict["proposal_digest"],
+                merkle_root=receipt_dict["merkle_root"],
+                transition_hash=receipt_dict["transition_hash"],
+                tally_hash=receipt_dict["tally_hash"],
+                execution_hash=receipt_dict["execution_hash"],
+                signers=receipt_dict["signers"],
+                aggregate_signature=receipt_dict["aggregate_signature"],
+                timestamp=receipt_dict.get("timestamp", time.time()),
+            )
+            valid = receipt_merkle_tree.verify_receipt(receipt)
+            return JSONResponse({"ok": True, "valid": valid, "receipt_id": receipt.receipt_id})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Invalid receipt format: {exc}"}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/anchor/export", methods=["POST"])
+    async def consensus_anchor_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_dict = body.get("receipt", {})
+        target_ledger = body.get("target_ledger", "solana_devnet")
+        try:
+            receipt = GovernanceMerkleReceipt(
+                receipt_id=receipt_dict["receipt_id"],
+                round_id=receipt_dict["round_id"],
+                proposal_id=receipt_dict["proposal_id"],
+                proposal_digest=receipt_dict["proposal_digest"],
+                merkle_root=receipt_dict["merkle_root"],
+                transition_hash=receipt_dict["transition_hash"],
+                tally_hash=receipt_dict["tally_hash"],
+                execution_hash=receipt_dict["execution_hash"],
+                signers=receipt_dict["signers"],
+                aggregate_signature=receipt_dict["aggregate_signature"],
+                timestamp=receipt_dict.get("timestamp", time.time()),
+            )
+            anchor = ledger_exporter.anchor_receipt(receipt, target_ledger=target_ledger)
+            return JSONResponse({"ok": True, "anchor": anchor.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Failed to anchor: {exc}"}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/drill/simulate", methods=["POST"])
+    async def consensus_drill_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload = body.get("payload", {"action": "emergency_param_update", "val": 42})
+        drill_results = byzantine_simulator.run_full_byzantine_resilience_suite(payload)
+        return JSONResponse({"ok": True, "drill": drill_results})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4752,6 +4956,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "memory_graph_engine": getattr(mcp, "_memory_graph_engine", None),
         "context_compressor": getattr(mcp, "_context_compressor", None),
         "governance_sm": getattr(mcp, "_governance_sm", None),
+        "byzantine_engine": getattr(mcp, "_byzantine_engine", None),
+        "receipt_merkle_tree": getattr(mcp, "_receipt_merkle_tree", None),
+        "ledger_exporter": getattr(mcp, "_ledger_exporter", None),
+        "byzantine_simulator": getattr(mcp, "_byzantine_simulator", None),
     }
     return app, settings
 

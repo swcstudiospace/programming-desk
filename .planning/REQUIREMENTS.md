@@ -12,8 +12,8 @@ This document defines the requirements for Milestone v3.3 of Programming Desk.
 
 ## 2. Byzantine Consensus Voting & Verifiable On-Chain Attestation (Phase 33)
 
-- [ ] **REQ-GOV-006**: Federated Byzantine fault tolerant consensus rounds with three-phase commit (`PRE-PREPARE`, `PREPARE`, `COMMIT`).
-- [ ] **REQ-GOV-007**: View-change protocol and leader rotation handling Byzantine or unresponsive coordinator desks.
-- [ ] **REQ-GOV-008**: Cryptographic Merkle governance receipts linking proposal state transitions, ballot tallies, and execution outcomes.
-- [ ] **REQ-GOV-009**: On-chain and external WORM ledger audit export anchoring consensus receipts to distributed ledgers.
-- [ ] **REQ-GOV-010**: End-to-end multi-desk governance verification harness and Byzantine attack drill simulator.
+- [x] **REQ-GOV-006**: Federated Byzantine fault tolerant consensus rounds with three-phase commit (`PRE-PREPARE`, `PREPARE`, `COMMIT`).
+- [x] **REQ-GOV-007**: View-change protocol and leader rotation handling Byzantine or unresponsive coordinator desks.
+- [x] **REQ-GOV-008**: Cryptographic Merkle governance receipts linking proposal state transitions, ballot tallies, and execution outcomes.
+- [x] **REQ-GOV-009**: On-chain and external WORM ledger audit export anchoring consensus receipts to distributed ledgers.
+- [x] **REQ-GOV-010**: End-to-end multi-desk governance verification harness and Byzantine attack drill simulator.

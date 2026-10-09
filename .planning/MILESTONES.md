@@ -51,3 +51,17 @@
 - Dynamic upstream health polling, multi-desk failover diverting, Prometheus SLO metrics export, automated alert threshold dispatch, and Solana devnet anchor verification.
 
 ---
+
+## v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting (Shipped: 2026-10-10)
+
+**Phases completed:** 2 phases (Phases 32-33), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Proposal lifecycle engine with deterministic state machine (`DRAFT`, `ACTIVE`, `VOTING`, `APPROVED`, `REJECTED`, `QUEUED`, `EXECUTED`, `CANCELLED`, `VETOED`), weighted multi-seat quorum evaluation supporting threshold governance, quadratic voting (`sqrt(raw_votes) * reputation`), cryptographic HMAC-SHA256 ballot signing, timelock execution buffers, and emergency veto abort triggers.
+- Federated Byzantine fault-tolerant consensus rounds with three-phase commit (`PRE-PREPARE`, `PREPARE`, `COMMIT`), view-change protocol and leader rotation handling Byzantine or unresponsive coordinator desks.
+- Cryptographic Merkle governance receipts linking proposal state transitions, ballot tallies, and execution outcomes with non-repudiable aggregate signatures.
+- External WORM audit ledger export and Solana devnet anchoring for immutable governance history.
+- End-to-end multi-desk governance verification harness and Byzantine attack drill simulator verifying Sybil attack blocking, digest equivocation prevention, and leader rotation.
+
+---
+

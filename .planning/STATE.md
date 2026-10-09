@@ -1,20 +1,29 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3.4
-milestone_name: Autonomous Swarm Self-Healing & Active Immune Defense
-status: complete
-stopped_at: Completed Milestone v3.4 (Phases 34 and 35).
-last_updated: "2026-10-10T22:30:00.000Z"
+milestone: v3.5
+milestone_name: Autonomous Swarm Self-Evolution & Capability Synthesis
+status: in_progress
+stopped_at: Starting Milestone v3.5 (Phase 36).
+last_updated: "2026-10-10T23:00:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 35 implementation and test validation.
+last_activity_desc: Initialized Milestone v3.5 and created feature branch.
+---
+gsd_state_version: "1.0"
+milestone: v3.5
+milestone_name: Autonomous Swarm Self-Evolution & Capability Synthesis
+status: complete
+stopped_at: Completed Milestone v3.5 (Phases 36 and 37).
+last_updated: "2026-10-10T23:55:00.000Z"
+last_activity: 2026-10-10
+last_activity_desc: Completed Phase 37 implementation and test validation.
 progress:
-  total_phases: 35
-  completed_phases: 35
-  total_plans: 79
-  completed_plans: 79
+  total_phases: 37
+  completed_phases: 37
+  total_plans: 81
+  completed_plans: 81
   percent: 100.0
-current_phase: 35
-current_phase_name: Self-Healing Reconstitution & Immune Memory Attestation
+current_phase: 37
+current_phase_name: Autonomous Prompt Optimization & Self-Refining Instruction Loops
 ---
 
 # Project State
@@ -24,24 +33,24 @@ current_phase_name: Self-Healing Reconstitution & Immune Memory Attestation
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense
-**Milestone:** v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense (Completed)
+**Current focus:** Milestone v3.5 — Autonomous Swarm Self-Evolution & Capability Synthesis
+**Milestone:** v3.5 — Autonomous Swarm Self-Evolution & Capability Synthesis (Completed)
 
 ## Current Position
 
-Phase: Phase 35 (Self-Healing Reconstitution & Immune Memory Attestation) - Complete.
-Milestone: Milestone v3.4 (Phases 34 & 35) - Complete.
+Phase: Phase 37 (Autonomous Prompt Optimization & Self-Refining Instruction Loops) - Complete.
+Milestone: Milestone v3.5 (Phases 36 & 37) - Complete.
 Status: Complete.
-Last activity: 2026-10-10 — Completed Phase 35 (`REQ-HEAL-006` through `REQ-HEAL-010`).
+Last activity: 2026-10-10 — Completed Phase 37 (`REQ-EVO-006` through `REQ-EVO-010`).
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v3.4 introduces Autonomous Swarm Self-Healing & Active Immune Defense across Phase 34 and Phase 35.
-- Plan 34-01 implements `SwarmImmuneEngine`, `BehavioralProfile`, `ShadowExecutionSandbox`, entropy profiling, automated state transitions, capability pruning, and HMAC quarantine receipts.
-- Plan 35-01 implements `SwarmReconstitutionEngine`, `ImmuneMemoryLedger` (SHA-256 block chain & Merkle root), `AntibodyDistributionMesh` (HMAC package exchange & pattern threat filters), `ProgressiveRehabilitationProtocol` (synthetic benchmarks & graduation), and `ChaosAnomalyHarness`.
+- Milestone v3.5 introduces Autonomous Swarm Self-Evolution & Capability Synthesis across Phase 36 and Phase 37.
+- Plan 36-01 implements `SkillSynthesisEngine`, `ASTSecurityValidator`, `SyntheticSandboxHarness`, `ToolLifecycleManager`, and custom gateway endpoints for dynamic tool deployment and invocation.
+- Plan 37-01 implements `PromptRolloutOrchestrator`, `PromptTelemetryEvaluator`, `EvolutionaryPromptEngine`, `CanaryBenchmarkHarness`, cryptographic SHA-256 version lineage tracking, and gateway endpoints for prompt mutation, canary evaluation, atomic promotion, and instant rollbacks.
 
 ### Pending Todos
 
-- None. Milestone v3.4 fully shipped, tagged (`v3.4.0`), and merged to `main`.
+- None. Milestone v3.5 fully completed.

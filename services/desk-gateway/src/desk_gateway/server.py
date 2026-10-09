@@ -3541,6 +3541,31 @@ def create_mcp(
     setattr(mcp, "_swarm_reconstitution", swarm_reconstitution)
     setattr(mcp, "_chaos_immune_harness", chaos_immune_harness)
 
+    # Milestone v3.5 (Phase 36 & 37): Autonomous Swarm Self-Evolution & Capability Synthesis
+    from desk_gateway.skill_synthesis import (
+        SkillSynthesisEngine,
+        SkillSpecification,
+        ToolParameterSchema,
+        SyntheticTestCase,
+        ToolLifecycleState,
+        SecurityViolationError,
+        SandboxExecutionError,
+    )
+    from desk_gateway.prompt_optimizer import (
+        PromptRolloutOrchestrator,
+        PromptTelemetryEvaluator,
+        EvolutionaryPromptEngine,
+        CanaryBenchmarkHarness,
+        RolloutState,
+        FitnessScore,
+    )
+    import dataclasses
+    secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
+    skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
+    prompt_rollout_orchestrator = PromptRolloutOrchestrator(signing_key=secret_key)
+    setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
+    setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
+
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3656,6 +3681,178 @@ def create_mcp(
         seat_id = body.get("seat_id", "chaos-seat")
         res = chaos_immune_harness.run_chaos_resilience_drill(seat_id=seat_id)
         return JSONResponse({"ok": True, "drill": res})
+
+    # Milestone v3.5: Dynamic Skill & Tool Synthesis Routes (Phase 36)
+    @mcp.custom_route("/v1/evolution/skills/deploy", methods=["POST"])
+    async def evolution_skill_deploy_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        version = body.get("version", "1.0.0")
+        description = body.get("description", "")
+        return_type = body.get("return_type", "Any")
+        author_seat_id = body.get("author_seat_id", "systems")
+        python_source = body.get("python_source", "")
+        raw_params = body.get("parameters", [])
+        raw_tests = body.get("test_cases", [])
+        permissions = set(body.get("required_permissions", []))
+
+        if not tool_name or not python_source:
+            return JSONResponse({"ok": False, "error": "tool_name and python_source are required"}, status_code=400)
+
+        params = [
+            ToolParameterSchema(
+                name=p.get("name", ""),
+                type_name=p.get("type_name", "str"),
+                description=p.get("description", ""),
+                required=p.get("required", True),
+                default=p.get("default"),
+            )
+            for p in raw_params
+        ]
+
+        test_cases = [
+            SyntheticTestCase(
+                input_args=t.get("input_args", {}),
+                expected_output=t.get("expected_output"),
+                description=t.get("description", ""),
+            )
+            for t in raw_tests
+        ]
+
+        spec = SkillSpecification(
+            tool_name=tool_name,
+            version=version,
+            description=description,
+            parameters=params,
+            return_type=return_type,
+            required_permissions=permissions,
+            author_seat_id=author_seat_id,
+            python_source=python_source,
+            test_cases=test_cases,
+        )
+
+        try:
+            receipt = skill_synthesis_engine.verify_and_deploy_skill(spec)
+            return JSONResponse({
+                "ok": True,
+                "receipt": {
+                    "tool_name": receipt.tool_name,
+                    "version": receipt.version,
+                    "author_seat_id": receipt.author_seat_id,
+                    "code_hash": receipt.code_hash,
+                    "attestation_signature": receipt.attestation_signature,
+                    "timestamp": receipt.timestamp,
+                    "lifecycle_state": receipt.lifecycle_state.value,
+                }
+            })
+        except (SecurityViolationError, SandboxExecutionError, Exception) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/evolution/skills/invoke", methods=["POST"])
+    async def evolution_skill_invoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        arguments = body.get("arguments", {})
+        if not tool_name:
+            return JSONResponse({"ok": False, "error": "tool_name is required"}, status_code=400)
+
+        try:
+            result = skill_synthesis_engine.invoke_synthetic_tool(tool_name, **arguments)
+            return JSONResponse({"ok": True, "result": result})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @mcp.custom_route("/v1/evolution/skills/list", methods=["GET"])
+    async def evolution_skills_list_route(request: Request) -> Response:
+        tools = skill_synthesis_engine.list_active_tools()
+        return JSONResponse({"ok": True, "tools": tools})
+
+    @mcp.custom_route("/v1/evolution/skills/lifecycle", methods=["POST"])
+    async def evolution_skills_lifecycle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        action = body.get("action", "deprecate")  # "deprecate" or "retire"
+        if not tool_name:
+            return JSONResponse({"ok": False, "error": "tool_name is required"}, status_code=400)
+        try:
+            if action == "retire":
+                skill_synthesis_engine.retire_tool(tool_name)
+            else:
+                skill_synthesis_engine.deprecate_tool(tool_name)
+            metrics = skill_synthesis_engine.lifecycle.get_metrics(tool_name)
+            return JSONResponse({"ok": True, "tool_name": tool_name, "metrics": metrics})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # Autonomous Prompt Optimization Routes (Phase 37)
+    @mcp.custom_route("/v1/evolution/prompts/baseline", methods=["POST"])
+    async def evolution_prompt_baseline_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        prompt_text = body.get("prompt_text")
+        if not seat_id or not prompt_text:
+            return JSONResponse({"ok": False, "error": "seat_id and prompt_text are required"}, status_code=400)
+        variant = prompt_rollout_orchestrator.register_baseline_prompt(seat_id, prompt_text)
+        return JSONResponse({"ok": True, "variant": variant.to_dict()})
+
+    @mcp.custom_route("/v1/evolution/prompts/mutate", methods=["POST"])
+    async def evolution_prompt_mutate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        strategy = body.get("strategy")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        try:
+            candidate = prompt_rollout_orchestrator.generate_candidate_variant(seat_id, strategy=strategy)
+            return JSONResponse({"ok": True, "candidate": candidate.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/canary", methods=["POST"])
+    async def evolution_prompt_canary_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        revision_id = body.get("revision_id")
+        if not revision_id:
+            return JSONResponse({"ok": False, "error": "revision_id is required"}, status_code=400)
+        try:
+            fitness = prompt_rollout_orchestrator.run_canary_evaluation(revision_id)
+            variant = prompt_rollout_orchestrator.get_variant(revision_id)
+            return JSONResponse({"ok": True, "variant": variant.to_dict() if variant else None, "fitness": dataclasses.asdict(fitness)})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/promote", methods=["POST"])
+    async def evolution_prompt_promote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        revision_id = body.get("revision_id")
+        if not revision_id:
+            return JSONResponse({"ok": False, "error": "revision_id is required"}, status_code=400)
+        try:
+            promoted = prompt_rollout_orchestrator.promote_candidate(revision_id)
+            variant = prompt_rollout_orchestrator.get_variant(revision_id)
+            return JSONResponse({"ok": True, "promoted": promoted, "variant": variant.to_dict() if variant else None})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/rollback", methods=["POST"])
+    async def evolution_prompt_rollback_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        reverted = prompt_rollout_orchestrator.rollback_to_previous(seat_id)
+        if reverted:
+            return JSONResponse({"ok": True, "reverted_to": reverted.to_dict()})
+        return JSONResponse({"ok": False, "error": "No prior revision available to rollback to"}, status_code=400)
+
+    @mcp.custom_route("/v1/evolution/prompts/lineage/{seat_id}", methods=["GET"])
+    async def evolution_prompt_lineage_route(request: Request) -> Response:
+        seat_id = request.path_params.get("seat_id", "")
+        lineage = prompt_rollout_orchestrator.get_lineage(seat_id)
+        active = prompt_rollout_orchestrator.get_active_prompt(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "active": active.to_dict() if active else None, "lineage": lineage})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -5099,6 +5296,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "swarm_immune": getattr(mcp, "_swarm_immune", None),
         "swarm_reconstitution": getattr(mcp, "_swarm_reconstitution", None),
         "chaos_immune_harness": getattr(mcp, "_chaos_immune_harness", None),
+        "skill_synthesis_engine": getattr(mcp, "_skill_synthesis_engine", None),
+        "prompt_rollout_orchestrator": getattr(mcp, "_prompt_rollout_orchestrator", None),
     }
     return app, settings
 

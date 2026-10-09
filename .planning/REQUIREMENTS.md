@@ -1,19 +1,19 @@
-# Requirements: Milestone v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense
+# Requirements: Milestone v3.5 — Autonomous Swarm Self-Evolution & Capability Synthesis
 
-This document defines the requirements for Milestone v3.4 of Programming Desk.
+This document defines the requirements for Milestone v3.5 of Programming Desk.
 
-## 1. Anomaly Detection & Autonomous Seat Quarantine (Phase 34)
+## 1. Dynamic Skill & Tool Synthesis (Phase 36)
 
-- [x] **REQ-HEAL-001**: Real-time behavioral anomaly detection engine monitoring tool call latency, payload entropy, and error rate spikes against dynamic baseline profiles.
-- [x] **REQ-HEAL-002**: Automated seat quarantine protocol isolating rogue, compromised, or misbehaving seats with deterministic containment states (`HEALTHY` -> `SUSPICIOUS` -> `QUARANTINED` -> `DRAINED`).
-- [x] **REQ-HEAL-003**: Synthetic shadow execution sandbox isolating suspicious tool invocations to speculative scratchpads before committing desk mutations.
-- [x] **REQ-HEAL-004**: Dynamic capability pruning engine revoking sensitive permissions and execution privileges from degraded seats.
-- [x] **REQ-HEAL-005**: Cryptographic quarantine attestation and notification receipts broadcast across federated peer desks with HMAC-SHA256 signatures.
+- [x] **REQ-EVO-001**: Autonomous skill synthesis engine dynamically generating structured tool specifications, schema contracts, and invocation handlers from high-level task intent or capability gaps.
+- [x] **REQ-EVO-002**: Automated AST linting, security policy validation, and static sandboxing vetting synthesized tool code against prohibited imports, unsafe system calls, and network leaks.
+- [x] **REQ-EVO-003**: Isolated ephemeral test harness executing synthetic test cases and fuzz assertions against newly generated tools before promotion.
+- [x] **REQ-EVO-004**: Dynamic tool mesh registry promotion and hot-reloading publishing attested synthetic tools into the active seat capability catalog with cryptographic HMAC attestation.
+- [x] **REQ-EVO-005**: Deprecation and capability lifecycle manager pruning obsolete, degraded, or superseded synthetic tools based on usage telemetry and error trends.
 
-## 2. Self-Healing Reconstitution & Immune Memory Attestation (Phase 35)
+## 2. Autonomous Prompt Optimization & Self-Refining Instruction Loops (Phase 37)
 
-- [x] **REQ-HEAL-006**: Autonomous seat reconstitution engine regenerating clean agent runtime contexts from attested checkpoint baselines.
-- [x] **REQ-HEAL-007**: Swarm immune memory ledger recording behavioral attack signatures and quarantine heuristics into a tamper-evident audit chain.
-- [x] **REQ-HEAL-008**: Proactive antibody distribution sharing verified attack heuristics and mitigation policies across federated desks.
-- [x] **REQ-HEAL-009**: Progressive post-quarantine rehabilitation protocol validating reconstituted seats via synthetic benchmark drills.
-- [x] **REQ-HEAL-010**: End-to-end swarm immune defense verification harness and chaos anomaly injection test suite.
+- [x] **REQ-EVO-006**: Continuous telemetry-driven prompt evaluation engine scoring seat prompt execution fidelity, tool selection accuracy, and token efficiency against task outcomes.
+- [x] **REQ-EVO-007**: Evolutionary prompt mutation and refinement loop producing candidate instruction variants using genetic exploration and gradient-free prompt perturbations.
+- [x] **REQ-EVO-008**: Deterministic A/B canary shadow evaluation comparing incumbent vs candidate prompt variants across synthetic golden evaluation datasets without risking live desk operations.
+- [x] **REQ-EVO-009**: Cryptographically attested prompt rollout orchestrator atomically promoting validated prompt revisions with rollbacks and SHA-256 version lineage tracking.
+- [x] **REQ-EVO-010**: End-to-end self-evolution verification harness and mutation regression benchmark validating sustained swarm improvement and preventing prompt drift.

@@ -3405,6 +3405,11 @@ def create_mcp(
     delegation_mesh = SwarmDelegationMesh()
     setattr(mcp, "_delegation_mesh", delegation_mesh)
 
+    # Milestone v2.9 (Phase 24): Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+    from desk_gateway.disaster_recovery import SubstrateStateMirrorEngine
+    dr_engine = SubstrateStateMirrorEngine(primary_id=settings.public_host)
+    setattr(mcp, "_dr_engine", dr_engine)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3582,6 +3587,66 @@ def create_mcp(
             return JSONResponse({"ok": True, **proof})
         except ValueError as exc:
             return JSONResponse({"error": str(exc)}, status_code=404)
+
+    # Disaster Recovery & State Mirroring (Phase 24)
+    @mcp.custom_route("/v1/dr/mirror/block", methods=["POST"])
+    async def dr_mirror_block_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload = body.get("payload", {})
+        block = dr_engine.append_state_delta(payload)
+        return JSONResponse({
+            "ok": True,
+            "block_index": block.block_index,
+            "block_hash": block.block_hash,
+            "prev_hash": block.prev_hash,
+            "timestamp": block.timestamp,
+            "is_throttled": dr_engine.is_throttled,
+        })
+
+    @mcp.custom_route("/v1/dr/mirror/status", methods=["GET"])
+    async def dr_mirror_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **dr_engine.get_mirror_status()})
+
+    @mcp.custom_route("/v1/dr/replica/register", methods=["POST"])
+    async def dr_replica_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        replica_id = body.get("replica_id", "warm-standby-1")
+        region = body.get("region", "us-east")
+        replica = dr_engine.register_replica(replica_id=replica_id, region=region)
+        return JSONResponse({
+            "ok": True,
+            "replica_id": replica.replica_id,
+            "region": replica.region,
+            "state": replica.state.value,
+        })
+
+    @mcp.custom_route("/v1/dr/replica/sync", methods=["POST"])
+    async def dr_replica_sync_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        replica_id = body.get("replica_id", "")
+        up_to_index = body.get("up_to_index")
+        try:
+            synced = dr_engine.sync_replica(
+                replica_id=replica_id,
+                up_to_index=int(up_to_index) if up_to_index is not None else None,
+            )
+            return JSONResponse({
+                "ok": True,
+                "replica_id": replica_id,
+                "synced_blocks_count": len(synced),
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/dr/cutover", methods=["POST"])
+    async def dr_cutover_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        target_replica_id = body.get("target_replica_id", "")
+        try:
+            result = dr_engine.execute_atomic_cutover(target_replica_id)
+            return JSONResponse(result)
+        except (KeyError, RuntimeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
 
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
@@ -3810,6 +3875,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "audit_logger": getattr(mcp, "_audit_logger", None),
         "swarm_balancer": getattr(mcp, "_swarm_balancer", None),
         "delegation_mesh": getattr(mcp, "_delegation_mesh", None),
+        "dr_engine": getattr(mcp, "_dr_engine", None),
     }
     return app, settings
 

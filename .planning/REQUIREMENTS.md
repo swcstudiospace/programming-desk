@@ -1,19 +1,19 @@
-# Requirements: Milestone v2.8 — Autonomous Swarm Self-Balancing & Work Distribution Mesh
+# Requirements: Milestone v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication
 
-This document defines the requirements for Milestone v2.8 of Programming Desk.
+This document defines the requirements for Milestone v2.9 of Programming Desk.
 
-## 1. Dynamic Seat Load Balancing & Swarm Backpressure Management (Phase 22)
+## 1. Cross-Substrate Continuous State Mirroring & Fast RPO Sync (Phase 24)
 
-- [x] **REQ-SWARM-001**: Real-time seat concurrency and workload telemetry tracking across active seats in the programming desk.
-- [x] **REQ-SWARM-002**: Dynamic task re-queuing and backpressure spillover handler redirecting task assignments when target seat exceeds concurrency thresholds.
-- [x] **REQ-SWARM-003**: Priority preemption engine ensuring critical-path leadership and security tasks bypass standard queuing delays.
-- [x] **REQ-SWARM-004**: Latency-aware and capacity-weighted seat selection across local and federated peer desks.
-- [x] **REQ-SWARM-005**: Automated worker health circuit breaker triggering fail-fast fallback routing upon repeated seat degradation.
+- [x] **REQ-DR-001**: Continuous asynchronous state mirroring engine across primary and secondary data substrates.
+- [x] **REQ-DR-002**: Delta snapshotting with cryptographic block checksums and incremental catch-up replication.
+- [x] **REQ-DR-003**: Replication lag monitor with dynamic throttle adaptation under WAN congestion.
+- [x] **REQ-DR-004**: Atomic cross-substrate state cutover harness ensuring zero data loss (RPO = 0).
+- [x] **REQ-DR-005**: Standby health polling and automated warm-replica promotion readiness verification.
 
-## 2. Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts (Phase 23)
+## 2. Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery (Phase 25)
 
-- [x] **REQ-SWARM-006**: Recursive subagent task decomposition and delegation protocol supporting nested parent-child task DAGs.
-- [x] **REQ-SWARM-007**: Cryptographic task handoff and acceptance receipts with timestamped nonces and task fingerprinting.
-- [x] **REQ-SWARM-008**: Dual-party signature verification for cross-seat delegation acknowledging receipt before execution state transitions.
-- [x] **REQ-SWARM-009**: Byzantine dispute arbitration and timeout reclamation engine handling unresponsive or conflicting subagent claims.
-- [x] **REQ-SWARM-010**: End-to-end swarm execution audit receipt aggregation validating hierarchical delegation integrity and non-repudiation.
+- [ ] **REQ-DR-006**: Distributed fencing token allocator preventing split-brain writes during failover.
+- [ ] **REQ-DR-007**: Automatic quorum heartbeat evaluator isolating partitioned primary clusters.
+- [ ] **REQ-DR-008**: Deterministic state conflict reconciler using vector clock ordering.
+- [ ] **REQ-DR-009**: Fast failover recovery orchestrator achieving sub-second recovery time objectives (RTO < 1s).
+- [ ] **REQ-DR-010**: End-to-end disaster recovery drill verifier generating non-repudiable audit receipts.

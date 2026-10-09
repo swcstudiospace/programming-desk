@@ -1,21 +1,20 @@
-# Requirements: Milestone v4.5 — Autonomous Multi-Agent Neuro-Symbolic Reasoning & Causal Inference Mesh
+# Requirements: Milestone v4.6 — Autonomous Self-Reflective Metacognition & Continuous Epistemic Verification Mesh
 
-This document defines the requirements for Milestone v4.5 of Programming Desk.
+This document defines the requirements for Milestone v4.6 of Programming Desk.
 
-## 1. Neuro-Symbolic Logic Graph & First-Order Predicate Synthesis (Phase 56)
+## 1. Autonomous Epistemic Calibration & Self-Reflective Metacognition (Phase 58)
 
-- [x] **REQ-NS-001**: First-Order Predicate & Horn Clause Rule Engine (`FirstOrderLogicEngine`, `SymbolicRule`, `Predicate`) supporting forward-chaining deduction, backward-chaining queries, and automated resolution refutation over grounded facts.
-- [x] **REQ-NS-002**: Neuro-Symbolic Knowledge Graph (`NeuroSymbolicGraph`, `ConceptNode`, `RelationEdge`) binding vector embeddings with discrete logical entities, supporting fuzzy truth valuations in \([0.0, 1.0]\) and semantic similarity retrieval.
-- [x] **REQ-NS-003**: Swarm Logical Invariant Checker (`LogicalInvariantChecker`) verifying execution invariants and safety policies against proposed tool invocations and state mutations, aborting invalid state transitions.
-- [x] **REQ-NS-004**: Neural-to-Symbolic Rule Extractor (`RuleExtractionEngine`) translating observed agent execution traces and neural completions into formalized first-order Horn rules with confidence scores.
-- [x] **REQ-NS-005**: Neuro-Symbolic REST API endpoints under `/v1/neuro-symbolic/*` exposing rule registration, deduction forward-chaining, concept graph indexing, and invariant evaluation.
+- [x] **REQ-MC-001**: Epistemic Confidence Calibrator (`EpistemicCalibrator`, `CalibratedConfidence`, `ConfidenceBucket`) evaluating raw agent confidence against historical accuracy, computing Brier score and Expected Calibration Error (ECE), and outputting temperature-calibrated posterior probabilities.
+- [x] **REQ-MC-002**: Metacognitive Introspection Engine (`MetacognitiveIntrospector`, `SelfReflectionTrace`, `CognitiveBiasReport`) inspecting agent reasoning chains for circular deduction, confirmation bias, premature convergence, and cognitive drift across multi-step plans.
+- [x] **REQ-MC-003**: Autonomous Epistemic Belief Network (`EpistemicBeliefNetwork`, `BeliefNode`, `BeliefUpdate`) maintaining dynamic Bayesian belief distributions over hypotheses with explicit aleatoric and epistemic uncertainty quantification.
+- [x] **REQ-MC-004**: Introspective Strategy Optimizer (`IntrospectiveStrategyOptimizer`) dynamically selecting deliberate thinking modes (System 1 fast heuristic vs System 2 deep tree search/verification) based on epistemic entropy and risk tolerance.
+- [x] **REQ-MC-005**: Metacognition REST API endpoints under `/v1/metacognition/*` exposing confidence calibration, reasoning introspection, belief querying, and deliberative strategy optimization.
 
-## 2. Causal DAG Discovery, Do-Calculus Interventions & Counterfactual Mesh (Phase 57)
+## 2. Continuous Epistemic Verification, Counter-Evidence Synthesis & Epistemic Audit Mesh (Phase 59)
 
-- [x] **REQ-NS-006**: Causal Directed Acyclic Graph (DAG) Representation (`CausalDAG`, `CausalVariable`, `CausalEdge`) with topological cycle rejection and d-separation path conditional independence analysis.
-- [x] **REQ-NS-007**: Constraint-Based Causal Discovery Engine (`ConstraintCausalDiscovery`) inferring causal skeletons and edge orientations from observational data matrix traces using conditional independence tests.
-- [x] **REQ-NS-008**: Pearl's Do-Calculus Interventional Engine (`DoCalculusEngine`) simulating causal interventions \(P(Y | do(X = x))\) via graph mutilation, backdoor adjustment set identification, and interventional expectation computation.
-- [x] **REQ-NS-009**: Counterfactual Reasoning Simulator (`CounterfactualSimulator`) implementing structural causal model (SCM) abduction, action, and prediction for hypothetical counterfactual queries ("What if action A was taken instead of B?").
-- [x] **REQ-NS-010**: Causal Anchor & Proof Exporter (`CausalAnchorExporter`) producing HMAC-SHA256 causal receipts, constructing Merkle proof roots, and exporting anchors to Solana devnet targets.
-- [x] **REQ-NS-011**: End-to-End Neuro-Symbolic & Causal Mesh Drill Simulator (`NeuroSymbolicCausalDrillSimulator`) verifying Horn deduction, invariant enforcement, d-separation, do-calculus adjustment, counterfactual simulation, and Solana devnet anchoring.
-- [x] **REQ-NS-012**: Causal REST API endpoints under `/v1/causal/*` and `/v1/neuro-symbolic/drill/simulate` exposing DAG compilation, causal discovery, interventional evaluation, counterfactual queries, and drill executions.
+- [x] **REQ-MC-006**: Automated Counter-Evidence Synthesizer (`CounterEvidenceSynthesizer`, `SocraticChallenge`) generating adversarial counter-hypotheses, devil's advocate challenges, and edge-case falsification probes against dominant beliefs.
+- [x] **REQ-MC-007**: Epistemic Consistency Verifier (`EpistemicConsistencyVerifier`) validating cross-desk belief coherence, detecting epistemic divergence between federated seats, and calculating Jensen-Shannon epistemic divergence metrics.
+- [x] **REQ-MC-008**: Cryptographic Epistemic Proof Receipt Ledger (`EpistemicReceiptLedger`, `EpistemicProofReceipt`) recording immutable belief state transitions, calibration verifications, and refutation logs with HMAC-SHA256 signatures.
+- [x] **REQ-MC-009**: External Epistemic Anchor & Solana Devnet Exporter (`EpistemicAnchorExporter`) publishing Merkle roots of verified epistemic receipts and belief commitments to Solana devnet targets.
+- [x] **REQ-MC-010**: End-to-End Metacognitive & Epistemic Verification Drill Simulator (`MetacognitiveEpistemicDrillSimulator`) verifying confidence calibration, cognitive bias detection, Socratic counter-evidence refutation, cross-desk epistemic coherence, and Solana devnet anchoring.
+- [x] **REQ-MC-011**: Epistemic REST API endpoints under `/v1/epistemic/*` and `/v1/metacognition/drill/simulate` exposing counter-evidence synthesis, coherence verification, receipt ledger queries, and drill executions.

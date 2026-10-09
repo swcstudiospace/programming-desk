@@ -3453,8 +3453,15 @@ def create_mcp(
 
     # Milestone v3.1 (Phase 28): Dynamic MCP Tool Mesh Registry & Capability Scopes
     from desk_gateway.mcp_mesh import DynamicMCPToolMeshRegistry, SeatPermissionScope
+    from desk_gateway.mcp_remote_invoker import (
+        MCPRemoteExecutionSupervisor,
+        ExecutionReceipt,
+        InvocationStatus,
+    )
     mcp_mesh_registry = DynamicMCPToolMeshRegistry()
     setattr(mcp, "_mcp_mesh_registry", mcp_mesh_registry)
+    remote_execution_supervisor = MCPRemoteExecutionSupervisor(registry=mcp_mesh_registry)
+    setattr(mcp, "_remote_execution_supervisor", remote_execution_supervisor)
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -4035,6 +4042,63 @@ def create_mcp(
     async def mcp_mesh_status_route(request: Request) -> Response:
         return JSONResponse({"ok": True, **mcp_mesh_registry.get_mesh_status()})
 
+    # Cross-Desk Remote Tool Invocation & Attested Execution Receipts (Phase 29)
+    @mcp.custom_route("/v1/mcp-mesh/invoke", methods=["POST"])
+    async def mcp_mesh_invoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name", "")
+        arguments = body.get("arguments", {})
+        source_seat = body.get("source_seat", "lead")
+        timeout_seconds = body.get("timeout_seconds")
+        timeout = float(timeout_seconds) if timeout_seconds is not None else None
+
+        try:
+            success, output, receipt = await remote_execution_supervisor.invoke_remote_tool(
+                tool_name=tool_name,
+                arguments=arguments,
+                source_seat=source_seat,
+                timeout_seconds=timeout,
+            )
+            return JSONResponse({
+                "ok": success,
+                "output": output,
+                "receipt": receipt.to_dict(),
+            })
+        except (PermissionError, ValueError, RuntimeError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @mcp.custom_route("/v1/mcp-mesh/receipts/{invocation_id}", methods=["GET"])
+    async def mcp_mesh_get_receipt_route(request: Request) -> Response:
+        inv_id = request.path_params.get("invocation_id", "")
+        receipt = remote_execution_supervisor.receipts.get(inv_id)
+        if not receipt:
+            return JSONResponse({"error": f"Receipt '{inv_id}' not found"}, status_code=404)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/mcp-mesh/receipts/verify", methods=["POST"])
+    async def mcp_mesh_verify_receipt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_data = body.get("receipt", {})
+        try:
+            receipt = ExecutionReceipt(
+                invocation_id=receipt_data["invocation_id"],
+                tool_name=receipt_data["tool_name"],
+                source_seat=receipt_data["source_seat"],
+                target_server_id=receipt_data["target_server_id"],
+                status=InvocationStatus(receipt_data["status"]),
+                input_hash=receipt_data["input_hash"],
+                output_hash=receipt_data["output_hash"],
+                duration_ms=float(receipt_data["duration_ms"]),
+                timestamp=float(receipt_data["timestamp"]),
+                signature=receipt_data["signature"],
+            )
+            valid = remote_execution_supervisor.verify_execution_receipt(receipt)
+            return JSONResponse({"ok": True, "valid": valid, "invocation_id": receipt.invocation_id})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Invalid receipt format: {exc}"}, status_code=400)
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4272,6 +4336,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "audit_exporter": getattr(mcp, "_audit_exporter", None),
         "compliance_verifier": getattr(mcp, "_compliance_verifier", None),
         "mcp_mesh_registry": getattr(mcp, "_mcp_mesh_registry", None),
+        "remote_execution_supervisor": getattr(mcp, "_remote_execution_supervisor", None),
     }
     return app, settings
 

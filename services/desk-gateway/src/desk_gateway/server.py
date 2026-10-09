@@ -7499,6 +7499,21 @@ def create_mcp(
         QuantumTomographySolanaAnchorExporter,
         QuantumTomographyVerificationDrill,
     )
+    from desk_gateway.quantum_optomechanics_mesh import (
+        CoherentOptomechanicsEngine,
+        OptomechanicalCavityParams,
+        OptomechanicalState,
+        PhononicCavityRoutingEngine,
+        PhononicRoutingResult,
+        QuantumOptomechanicsMesh,
+        SidebandDetuningMode,
+    )
+    from desk_gateway.quantum_optomechanics_anchoring import (
+        QuantumOptomechanicsMerkleLedger,
+        QuantumOptomechanicsReceipt,
+        QuantumOptomechanicsSolanaAnchorExporter,
+        QuantumOptomechanicsVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -8317,6 +8332,99 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/tomography/drill/simulate", methods=["POST"])
     async def quantum_tomography_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumTomographyVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qoptomech_mesh = QuantumOptomechanicsMesh()
+    qoptomech_ledger = QuantumOptomechanicsMerkleLedger()
+    qoptomech_exporter = QuantumOptomechanicsSolanaAnchorExporter()
+    mcp._qoptomech_mesh = qoptomech_mesh  # type: ignore[attr-defined]
+    mcp._qoptomech_ledger = qoptomech_ledger  # type: ignore[attr-defined]
+    mcp._qoptomech_exporter = qoptomech_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/optomechanics/cooling/simulate", methods=["POST"])
+    async def quantum_optomechanics_cooling_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        cavity_id = body.get("cavity_id", "node-alpha")
+        laser_power_uw = float(body.get("laser_power_uw", 60.0))
+
+        state = qoptomech_mesh.simulate_cavity_cooling(cavity_id=cavity_id, laser_power_uw=laser_power_uw)
+        rcpt = QuantumOptomechanicsReceipt(
+            receipt_id=f"rcpt-optomech-cool-{int(time.time()*1000)}",
+            operation_type="SIDEBAND_COOLING",
+            cavity_or_route_id=cavity_id,
+            cooperativity=state.cooperativity,
+            effective_phonon_n=state.effective_phonon_occupation,
+            fidelity_or_efficiency=state.state_transfer_fidelity,
+            status="GROUND_STATE_COOLED" if state.ground_state_cooled else "THERMAL_OCCUPIED",
+            parameters_digest=hashlib.sha256(f"{cavity_id}:{laser_power_uw}:{state.linearized_coupling_g_khz}".encode()).hexdigest(),
+        )
+        qoptomech_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "state": state.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qoptomech_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/optomechanics/route/execute", methods=["POST"])
+    async def quantum_optomechanics_route_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        src = body.get("source_node", "node-alpha")
+        dst = body.get("destination_node", "node-delta")
+
+        try:
+            route_res = qoptomech_mesh.route_quantum_packet(source_node=src, destination_node=dst)
+            rcpt = QuantumOptomechanicsReceipt(
+                receipt_id=f"rcpt-optomech-route-{int(time.time()*1000)}",
+                operation_type="PHONONIC_ROUTING",
+                cavity_or_route_id=route_res.route_id,
+                cooperativity=50.0,
+                effective_phonon_n=0.05,
+                fidelity_or_efficiency=route_res.end_to_end_fidelity,
+                status="ROUTED_OPTIMAL" if route_res.quantum_state_preserved else "DEGRADED_FIDELITY",
+                parameters_digest=hashlib.sha256(f"{src}:{dst}:{route_res.total_loss_db}".encode()).hexdigest(),
+            )
+            qoptomech_ledger.append_receipt(rcpt)
+
+            return JSONResponse({
+                "ok": True,
+                "routing": route_res.to_dict(),
+                "receipt": rcpt.to_dict(),
+                "merkle_root": qoptomech_ledger.get_merkle_root(),
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/optomechanics/anchor/export", methods=["POST"])
+    async def quantum_optomechanics_anchor_export_route(_request: Request) -> Response:
+        root = qoptomech_ledger.get_merkle_root()
+        latest_rcpt = qoptomech_ledger.receipts[-1] if qoptomech_ledger.receipts else QuantumOptomechanicsReceipt(
+            receipt_id="genesis-optomech",
+            operation_type="SIDEBAND_COOLING",
+            cavity_or_route_id="node-alpha",
+            cooperativity=100.0,
+            effective_phonon_n=0.01,
+            fidelity_or_efficiency=0.95,
+            status="GROUND_STATE_COOLED",
+            parameters_digest="0" * 64,
+        )
+        proof = qoptomech_ledger.get_proof(len(qoptomech_ledger.receipts) - 1) if qoptomech_ledger.receipts else []
+        payload = QuantumOptomechanicsSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": QuantumOptomechanicsSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/optomechanics/drill/simulate", methods=["POST"])
+    async def quantum_optomechanics_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumOptomechanicsVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -10274,6 +10382,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qtomography_mesh": getattr(mcp, "_qtomography_mesh", None),
         "qtomography_ledger": getattr(mcp, "_qtomography_ledger", None),
         "qtomography_exporter": getattr(mcp, "_qtomography_exporter", None),
+        "qoptomech_mesh": getattr(mcp, "_qoptomech_mesh", None),
+        "qoptomech_ledger": getattr(mcp, "_qoptomech_ledger", None),
+        "qoptomech_exporter": getattr(mcp, "_qoptomech_exporter", None),
     }
     return app, settings
 

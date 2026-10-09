@@ -93,10 +93,11 @@
     }
   ],
   "unverified": [
-    "approved_by is absent until bot-00-programming-lead or a human stamps this receipt; local check_receipt.py --strict fails only on that missing field",
+    "Ming authorized this receipt in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy",
+    "CI gates, Gitleaks, and Semgrep stay red while gates.yml fetches main at depth 1. That workflow fix is pull requests 140 and 139 and is not part of this change",
     "desk_receipt_check did not read this file: it reported the path is not on origin/bot-06-quality-security/desk-v2-assembled-prompts",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite exits with FileNotFoundError because the uv binary is not installed on this VM; that test was not changed",
-    "Greptile review of commit bf51f40 scored 4/5 and left comment 4224985489. Commit a0e114d points that test at a child the test owns. The follow-up review is not terminal yet; a FAILED, SKIPPED, or unavailable review blocks a merge claim",
+    "Greptile review of commit 5054887 scored 5/5 and added no comments. Earlier threads are resolved. The five-round cap is closed; no further Greptile fixes were pushed",
     "The reload and deploy scripts were not executed on the shared VPS, and no unit was restarted there",
     "Moving production desk-gateway off the shared checkout onto the deploy-staging.sh release directory waits for Ming's separate approval",
     "Swarm session is advisory: SWARM_ED25519_KEY is unset, so orch_plan does not record an approval"
@@ -110,5 +111,6 @@
   ],
   "contract_changes": [],
   "rollback_plan": null,
-  "approvals": []
+  "approvals": [],
+  "approved_by": "human:SomeRandmGuyy"
 }

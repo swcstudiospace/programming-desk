@@ -6802,6 +6802,109 @@ def create_mcp(
         drill_results = QuantumInternetDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.5 (Phases 76 & 77): Distributed Quantum Consensus & Arbitration Mesh
+    from desk_gateway.quantum_consensus_mesh import (
+        QuantumByzantineAgreementEngine,
+        QuantumCoinFlipper,
+        QuantumConsensusRound,
+    )
+    from desk_gateway.quantum_consensus_anchoring import (
+        EntanglementArbitrationEngine,
+        QuantumConsensusAnchorExporter,
+        QuantumConsensusDrillSimulator,
+        QuantumConsensusLedger,
+    )
+
+    qconsensus_flipper = QuantumCoinFlipper()
+    qconsensus_engine = QuantumByzantineAgreementEngine(qconsensus_flipper)
+    qconsensus_arbitrator = EntanglementArbitrationEngine(qconsensus_flipper)
+    qconsensus_ledger = QuantumConsensusLedger()
+    qconsensus_exporter = QuantumConsensusAnchorExporter()
+
+    mcp._qconsensus_flipper = qconsensus_flipper  # type: ignore[attr-defined]
+    mcp._qconsensus_engine = qconsensus_engine  # type: ignore[attr-defined]
+    mcp._qconsensus_arbitrator = qconsensus_arbitrator  # type: ignore[attr-defined]
+    mcp._qconsensus_ledger = qconsensus_ledger  # type: ignore[attr-defined]
+    mcp._qconsensus_exporter = qconsensus_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/consensus/coin/flip", methods=["POST"])
+    async def quantum_consensus_coin_flip_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", f"coin-{secrets.token_hex(4)}")
+        nodes = body.get("nodes", ["desk-alpha", "desk-beta", "desk-gamma"])
+        try:
+            coin = qconsensus_flipper.flip_quantum_coin(round_id, nodes)
+            return JSONResponse({"ok": True, "coin": coin.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/round/start", methods=["POST"])
+    async def quantum_consensus_round_start_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        nodes = body.get("nodes", ["desk-alpha", "desk-beta", "desk-gamma", "desk-delta"])
+        try:
+            rnd = qconsensus_engine.start_round(nodes)
+            return JSONResponse({"ok": True, "round": rnd.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/proposal/submit", methods=["POST"])
+    async def quantum_consensus_proposal_submit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        node = body.get("node", "")
+        proposal = body.get("proposal", "")
+        try:
+            qconsensus_engine.submit_proposal(round_id, node, proposal)
+            return JSONResponse({"ok": True, "round_id": round_id, "node": node, "proposal": proposal})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/agreement/execute", methods=["POST"])
+    async def quantum_consensus_agreement_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        try:
+            resolved_rnd = qconsensus_engine.execute_agreement_step(round_id)
+            rcpt = qconsensus_ledger.append_event(
+                round_id,
+                resolved_rnd.decision,
+                resolved_rnd.nodes,
+                resolved_rnd.quantum_coin.coin_value if resolved_rnd.quantum_coin else 0,
+                resolved_rnd.to_dict(),
+            )
+            return JSONResponse({"ok": True, "round": resolved_rnd.to_dict(), "receipt": rcpt.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/arbitrate", methods=["POST"])
+    async def quantum_consensus_arbitrate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        conflicting_seats = body.get("conflicting_seats", ["desk-alpha", "desk-beta"])
+        resource_id = body.get("resource_id", "default-resource")
+        try:
+            arb = qconsensus_arbitrator.arbitrate_seats(conflicting_seats, resource_id)
+            rcpt = qconsensus_ledger.append_event(
+                arb["arbitration_id"],
+                arb["awarded_seat"],
+                conflicting_seats,
+                arb["quantum_coin"]["coin_value"] if "quantum_coin" in arb else 0,
+                arb,
+            )
+            return JSONResponse({"ok": True, "arbitration": arb, "receipt": rcpt.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/anchor/export", methods=["POST"])
+    async def quantum_consensus_anchor_export_route(_request: Request) -> Response:
+        commitment = qconsensus_exporter.export_commitment(qconsensus_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/consensus/drill/simulate", methods=["POST"])
+    async def quantum_consensus_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumConsensusDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8357,6 +8460,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qnet_ledger": getattr(mcp, "_qnet_ledger", None),
         "qnet_exporter": getattr(mcp, "_qnet_exporter", None),
         "qnet_slices": getattr(mcp, "_qnet_slices", None),
+        "qconsensus_flipper": getattr(mcp, "_qconsensus_flipper", None),
+        "qconsensus_engine": getattr(mcp, "_qconsensus_engine", None),
+        "qconsensus_arbitrator": getattr(mcp, "_qconsensus_arbitrator", None),
+        "qconsensus_ledger": getattr(mcp, "_qconsensus_ledger", None),
+        "qconsensus_exporter": getattr(mcp, "_qconsensus_exporter", None),
     }
     return app, settings
 

@@ -99,6 +99,14 @@ def _read_log(stub_dir: Path, log_name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _logged_args(log: str) -> list[str]:
+    """Arguments a recorder stored, split on whitespace so one PID is one token."""
+    tokens: list[str] = []
+    for line in log.splitlines():
+        tokens.extend(line.split())
+    return tokens
+
+
 def _unused_pid() -> int:
     """An allocated-range PID that is not a live process.
 
@@ -281,7 +289,7 @@ def test_reload_does_not_signal_decoy_desk_gateway(tmp_path, decoy_gateway):
         f"decoy pid {decoy_gateway.pid} was signalled\nstdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     )
     kill_log = _read_log(stub_dir, "kill.log")
-    assert str(decoy_gateway.pid) not in kill_log, kill_log
+    assert str(decoy_gateway.pid) not in _logged_args(kill_log), kill_log
     assert _read_log(stub_dir, "nginx.log") == ""
     assert proc.returncode == 0, proc.stderr
 
@@ -315,7 +323,7 @@ def test_reload_nginx_gateway_execution(tmp_path, decoy_gateway, dry_run):
 
     assert proc.returncode == 0, proc.stderr
     assert decoy_gateway.poll() is None
-    assert str(decoy_gateway.pid) not in _read_log(stub_dir, "kill.log")
+    assert str(decoy_gateway.pid) not in _logged_args(_read_log(stub_dir, "kill.log"))
     assert "Zero-downtime hot reload completed successfully" in proc.stdout
 
     if dry_run:
@@ -349,7 +357,7 @@ def test_reload_fails_closed_without_unit_or_pid_file(tmp_path, decoy_gateway):
     assert "DESK_GATEWAY_PID_FILE" in proc.stderr
     assert "pattern" in proc.stderr
     assert decoy_gateway.poll() is None
-    assert str(decoy_gateway.pid) not in _read_log(stub_dir, "kill.log")
+    assert str(decoy_gateway.pid) not in _logged_args(_read_log(stub_dir, "kill.log"))
     assert _read_log(stub_dir, "nginx.log") == ""
 
 
@@ -369,7 +377,7 @@ def test_reload_signals_only_explicit_pid_file(tmp_path, decoy_gateway):
     assert proc.returncode == 0, proc.stderr
     kill_log = _read_log(stub_dir, "kill.log")
     assert f"-HUP {target}" in kill_log
-    assert str(decoy_gateway.pid) not in kill_log
+    assert str(decoy_gateway.pid) not in _logged_args(kill_log)
     assert decoy_gateway.poll() is None
     assert _read_log(stub_dir, "pgrep.log") == ""
 
@@ -537,7 +545,7 @@ def test_reload_accepts_pid_file_without_trailing_newline(tmp_path, decoy_gatewa
 
     assert proc.returncode == 0, proc.stderr
     assert f"-HUP {target}" in _read_log(stub_dir, "kill.log")
-    assert str(decoy_gateway.pid) not in _read_log(stub_dir, "kill.log")
+    assert str(decoy_gateway.pid) not in _logged_args(_read_log(stub_dir, "kill.log"))
     assert decoy_gateway.poll() is None
 
 
@@ -799,6 +807,65 @@ def test_guard_rejects_relative_executable_with_cwd(tmp_path, monkeypatch):
             ["systemctl", "restart", "desk-gateway.service"],
             executable="./systemctl",
             cwd=str(dot_dir),
+            check=False,
+        )
+    assert not marker.exists()
+
+
+def test_logged_args_match_whole_pid_tokens():
+    """A shorter PID is not a match inside a longer PID argument."""
+    log = "-HUP 4194303\n"
+    assert "43" not in _logged_args(log)
+    assert "4194303" in _logged_args(log)
+
+
+def test_guard_rejects_relative_argv_with_cwd(tmp_path, monkeypatch):
+    """argv0 with a directory component is executed from cwd."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_dir = tmp_path / "usr"
+    host_bin = host_dir / "bin" / "systemctl"
+    host_bin.parent.mkdir(parents=True)
+    marker = tmp_path / "ran"
+    _write_executable(host_bin, f"#!/bin/sh\nprintf ran > '{marker}'\nexit 99\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="systemctl"):
+        subprocess.run(
+            ["bin/systemctl", "restart", "desk-gateway.service"],
+            cwd=str(host_dir),
+            check=False,
+        )
+    assert not marker.exists()
+
+
+def test_guard_rejects_relative_systemctl_bin_with_cwd(tmp_path, monkeypatch):
+    """A relative SYSTEMCTL_BIN is resolved in the child cwd."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_dir = tmp_path / "usr"
+    host_bin = host_dir / "bin" / "systemctl"
+    host_bin.parent.mkdir(parents=True)
+    marker = tmp_path / "ran"
+    _write_executable(host_bin, f"#!/bin/sh\nprintf ran > '{marker}'\nexit 99\n")
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    _write_executable(stub / "systemctl", "#!/bin/sh\nexit 0\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="SYSTEMCTL_BIN"):
+        subprocess.run(
+            [str(RELOAD_SCRIPT)],
+            cwd=str(host_dir),
+            env={"PATH": str(stub), "SYSTEMCTL_BIN": "bin/systemctl"},
             check=False,
         )
     assert not marker.exists()

@@ -169,6 +169,7 @@ def reachable_host_service_bins(
 def selected_service_bins(
     env: dict | None,
     host: dict | None = None,
+    cwd: object = None,
 ) -> list[str]:
     """SYSTEMCTL_BIN / NGINX_BIN values that resolve to the host binary."""
     host_bins = HOST_SERVICE_BINS if host is None else host
@@ -182,6 +183,10 @@ def selected_service_bins(
             continue
         if os.path.isabs(chosen):
             candidate = chosen
+        elif os.path.dirname(chosen):
+            # A path with a directory component is relative to the child cwd.
+            base = _command_text(cwd) if cwd is not None else None
+            candidate = os.path.join(base, chosen) if base else chosen
         else:
             candidate = shutil.which(chosen, path=path) or ""
         if candidate and os.path.realpath(candidate) in reals:
@@ -214,18 +219,28 @@ def executable_reaches_host_service(
 def argv_reaches_host_service(
     args: object,
     host: dict | None = None,
+    cwd: object = None,
 ) -> list[str]:
-    """Absolute argv0 that is the host systemctl or nginx binary.
+    """argv0 that is the host systemctl or nginx binary.
 
-    subprocess accepts str, bytes, and pathlib.Path. All three are checked.
+    subprocess accepts str, bytes, and pathlib.Path. An absolute path is
+    used as given. A relative path with a directory component is resolved
+    in the child cwd, because Popen uses argv0 when executable= is omitted.
     """
     host_bins = HOST_SERVICE_BINS if host is None else host
     if not isinstance(args, (list, tuple)) or not args:
         return []
     exe = _command_text(args[0])
-    if exe is None or not os.path.isabs(exe):
+    if exe is None:
         return []
-    real = os.path.realpath(exe)
+    if os.path.isabs(exe):
+        candidate = exe
+    elif os.path.dirname(exe):
+        base = _command_text(cwd) if cwd is not None else None
+        candidate = os.path.join(base, exe) if base else exe
+    else:
+        return []
+    real = os.path.realpath(candidate)
     hits: list[str] = []
     for name in _SERVICE_BIN_ENV.values():
         if real in _host_realpaths(host_bins.get(name)):
@@ -242,8 +257,8 @@ def reject_host_service_bins(
 ) -> None:
     hits = (
         reachable_host_service_bins(env, host)
-        + selected_service_bins(env, host)
-        + argv_reaches_host_service(args, host)
+        + selected_service_bins(env, host, cwd)
+        + argv_reaches_host_service(args, host, cwd)
         + executable_reaches_host_service(args, executable, env, host, cwd)
     )
     if hits:

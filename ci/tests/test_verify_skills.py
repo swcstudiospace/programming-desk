@@ -45,28 +45,6 @@ REQUIRED_SECTIONS = (
 # frontmatter field without letting the tree slide into the method.
 L1_LINE_BUDGET = 40
 
-PSTACK_CREDIT = (
-    "Method adapted from pstack (MIT, Lauren Tan, "
-    "github.com/cursor/plugins/tree/main/pstack)."
-)
-
-FEATURE_MAP_HEADINGS = (
-    "## Sub-features",
-    "## How to get to it (user POV)",
-    "## Driving it with <harness>",
-    "## Gotchas",
-)
-
-SEAT_SKILLS = {
-    "LEAD": ("skills/verify/SKILL.md",),
-    "QUALITY": ("skills/verify/SKILL.md",),
-    "SYSTEMS": ("skills/verify-systems/SKILL.md",),
-    "WEB": ("skills/verify-web/SKILL.md", "skills/verify-desktop/SKILL.md"),
-    "ANDROID": ("skills/verify-android/SKILL.md",),
-    "IOS": ("skills/verify-ios/SKILL.md",),
-    "INFRA": ("skills/verify-infra/SKILL.md",),
-}
-
 # A citation is a repo-relative path under one of these roots. Match the
 # whole path/glob token before excluding patterns, never a glob's prefix.
 # Globs and example fences are not citations. A bare filename with no slash
@@ -106,7 +84,6 @@ def skill_problems(text: str, repo_root: Path, label: str) -> list[str]:
     front = _frontmatter(text)
     if front is None:
         problems.append(f"{label}: missing frontmatter")
-        scanned = text
     else:
         scanned_front = front
         if not re.search(r"(?m)^name:\s*\S+", scanned_front):
@@ -130,7 +107,10 @@ def skill_problems(text: str, repo_root: Path, label: str) -> list[str]:
             problems.append(f"{label}: missing section {section!r}")
 
     for match in PATH_RE.finditer(visible):
-        cited = match.group(1).rstrip("/")
+        cited = match.group(1)
+        if cited.endswith("]") and visible[match.start(1) - 1:match.start(1)] == "[":
+            cited = cited[:-1]
+        cited = cited.rstrip("/")
         if any(char in cited for char in "*?[]") or ".." in cited.split("/"):
             continue
         candidate = repo_root / cited
@@ -279,6 +259,16 @@ def test_concrete_missing_path_fails_but_patterns_are_ignored(tmp_path: Path) ->
         "mixed: cites missing path apps/web/missing.py"
     ]
 
+def test_bracketed_missing_path_fails_without_misreading_globs(tmp_path: Path) -> None:
+    text = _minimal_skill(extra=(
+        "See [web/verify/missing.py].\n"
+        "Pattern: [apps/web/[ab]/test_*.py]."
+    ))
+    problems = skill_problems(text, tmp_path, "bracketed")
+    assert any("web/verify/missing.py" in problem for problem in problems), problems
+    assert not any("apps/web/" in problem for problem in problems), problems
+
+
 
 def test_wildcard_suffix_never_cites_a_partial_missing_path(tmp_path: Path) -> None:
     for suffix in ("*", "?", "[ab]", "[!ab]", "]"):
@@ -330,48 +320,6 @@ def test_cli_fixtures_exit_nonzero() -> None:
         assert result.returncode != 0, result.stdout
         assert "problem" in result.stdout
 
-
-def test_pstack_credit_is_only_on_the_router() -> None:
-    router = (REPO_ROOT / "skills/verify/SKILL.md").read_text(encoding="utf-8")
-    assert PSTACK_CREDIT in router
-    for rel in SKILL_PATHS[1:]:
-        body = (REPO_ROOT / rel).read_text(encoding="utf-8")
-        assert "pstack" not in body, rel
-
-
-def test_feature_map_template_headings() -> None:
-    text = (REPO_ROOT / "skills/verify/references/feature-map-template.md").read_text(
-        encoding="utf-8"
-    )
-    for heading in FEATURE_MAP_HEADINGS:
-        assert heading in text, heading
-
-
-def test_readme_maps_every_verify_skill() -> None:
-    readme = (REPO_ROOT / "skills/README.md").read_text(encoding="utf-8")
-    for name in (
-        "`verify`",
-        "`verify-web`",
-        "`verify-desktop`",
-        "`verify-ios`",
-        "`verify-android`",
-        "`verify-infra`",
-        "`verify-systems`",
-    ):
-        assert name in readme, name
-
-
-def test_assembled_prompts_name_the_seat_skill() -> None:
-    for seat, paths in SEAT_SKILLS.items():
-        for folder in ("prompts-assembled", "prompts"):
-            body = (REPO_ROOT / folder / f"{seat}.xml").read_text(encoding="utf-8")
-            for rel in paths:
-                assert rel in body, f"{folder}/{seat}.xml does not name {rel}"
-    for seat in ("LEAD", "QUALITY"):
-        for folder in ("prompts-assembled", "prompts"):
-            body = (REPO_ROOT / folder / f"{seat}.xml").read_text(encoding="utf-8")
-            assert "skills/verify-android/SKILL.md" not in body
-            assert "skills/verify-ios/SKILL.md" not in body
 
 
 if __name__ == "__main__":

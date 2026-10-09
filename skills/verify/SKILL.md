@@ -156,3 +156,5 @@ The structural check for this family is
 `python3 -m pytest ci/tests/test_verify_skills.py -v`. It fails when a skill
 is missing a required section or cites a repo path that does not exist
 outside a fenced block marked `example`.
+Markdown brackets around a concrete citation do not exempt it from existence
+checks. Actual glob patterns and parent-relative examples remain excluded.

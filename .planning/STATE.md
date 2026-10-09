@@ -44,5 +44,4 @@ Last activity: 2026-10-10 — Completed Phase 35 (`REQ-HEAL-006` through `REQ-HE
 
 ### Pending Todos
 
-- Verify quality gates (G-1 through G-7).
-- Commit, open PR, squash merge, tag `v3.4.0`, and push to GitHub.
+- None. Milestone v3.4 fully shipped, tagged (`v3.4.0`), and merged to `main`.

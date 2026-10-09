@@ -6248,6 +6248,152 @@ def create_mcp(
         drill_results = QuantumTopologicalDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.1 (Phases 68 & 69): Inter-Cluster Quantum Teleportation, QKD & Entangled Swarm Mesh
+    from desk_gateway.quantum_teleportation import (
+        BellPairPool,
+        BellStateType,
+        EntanglementPurifier,
+        EntanglementSwapper,
+        QuantumRepeaterMesh,
+        QuantumTeleportationProtocol,
+    )
+    from desk_gateway.quantum_qkd_mesh import (
+        EavesdropDetector,
+        QKDProtocolEngine,
+        QuantumTeleportationAnchorExporter,
+        QuantumTeleportationDrillSimulator,
+        QuantumTeleportationReceiptLedger,
+    )
+
+    qteleport_pool = BellPairPool()
+    qteleport_mesh = QuantumRepeaterMesh(qteleport_pool)
+    qteleport_proto = QuantumTeleportationProtocol(qteleport_mesh)
+    qkd_engine = QKDProtocolEngine(qteleport_mesh)
+    qteleport_ledger = QuantumTeleportationReceiptLedger()
+    qteleport_exporter = QuantumTeleportationAnchorExporter()
+
+    mcp._qteleport_pool = qteleport_pool  # type: ignore[attr-defined]
+    mcp._qteleport_mesh = qteleport_mesh  # type: ignore[attr-defined]
+    mcp._qteleport_proto = qteleport_proto  # type: ignore[attr-defined]
+    mcp._qkd_engine = qkd_engine  # type: ignore[attr-defined]
+    mcp._qteleport_ledger = qteleport_ledger  # type: ignore[attr-defined]
+    mcp._qteleport_exporter = qteleport_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/teleportation/bell-pair/create", methods=["POST"])
+    async def quantum_bell_pair_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        node_b = body.get("node_b", "desk-beta")
+        stype_raw = body.get("state_type", "PHI_PLUS")
+        try:
+            stype = BellStateType(stype_raw)
+        except ValueError:
+            stype = BellStateType.PHI_PLUS
+        fidelity = float(body.get("initial_fidelity", 0.99))
+        pair = qteleport_pool.create_pair(node_a, node_b, stype, fidelity)
+        return JSONResponse({"ok": True, "bell_pair": pair.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/purify", methods=["POST"])
+    async def quantum_teleportation_purify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pair_id_1 = body.get("pair_id_1", "")
+        pair_id_2 = body.get("pair_id_2", "")
+        p1 = qteleport_pool.get_pair(pair_id_1)
+        p2 = qteleport_pool.get_pair(pair_id_2)
+        if not p1 or not p2:
+            return JSONResponse({"ok": False, "error": "Bell pairs not found"}, status_code=404)
+        ok, purified, p_succ = EntanglementPurifier.purify(p1, p2)
+        if ok and purified:
+            qteleport_pool.pairs[purified.pair_id] = purified
+            return JSONResponse({"ok": True, "purified_pair": purified.to_dict(), "p_succ": p_succ})
+        return JSONResponse({"ok": False, "error": "Purification distillation failed"}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/repeater/route", methods=["POST"])
+    async def quantum_repeater_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_path = body.get("node_path", ["desk-alpha", "repeater-1", "desk-beta"])
+        base_fidelity = float(body.get("base_fidelity", 0.98))
+        purify = bool(body.get("purify", True))
+        ok, pair, logs = qteleport_mesh.establish_multi_hop_entanglement(node_path, base_fidelity, purify)
+        return JSONResponse({
+            "ok": ok,
+            "bell_pair": pair.to_dict() if pair else None,
+            "logs": logs,
+        })
+
+    @mcp.custom_route("/v1/quantum/teleportation/teleport", methods=["POST"])
+    async def quantum_teleportation_teleport_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source_node = body.get("source_node", "desk-alpha")
+        target_node = body.get("target_node", "desk-beta")
+        alpha_val = body.get("alpha", {"real": 1.0, "imag": 0.0})
+        beta_val = body.get("beta", {"real": 0.0, "imag": 0.0})
+        alpha = complex(float(alpha_val.get("real", 1.0)), float(alpha_val.get("imag", 0.0)))
+        beta = complex(float(beta_val.get("real", 0.0)), float(beta_val.get("imag", 0.0)))
+        intermediate_hops = body.get("intermediate_hops")
+
+        res = qteleport_proto.teleport_qubit(
+            source_node=source_node,
+            target_node=target_node,
+            alpha=alpha,
+            beta=beta,
+            intermediate_hops=intermediate_hops,
+        )
+        rcpt = qteleport_ledger.append_event(
+            "QUANTUM_TELEPORTATION",
+            [source_node, target_node],
+            res.session_id,
+            res.fidelity,
+            res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/bb84", methods=["POST"])
+    async def quantum_qkd_bb84_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        bit_length = int(body.get("bit_length", 128))
+        intercept_ratio = float(body.get("intercept_ratio", 0.0))
+
+        session = qkd_engine.run_bb84_exchange(sender, receiver, bit_length, intercept_ratio)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_BB84_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/e91", methods=["POST"])
+    async def quantum_qkd_e91_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        pair_count = int(body.get("pair_count", 100))
+        noise_level = float(body.get("noise_level", 0.01))
+
+        session = qkd_engine.run_e91_exchange(sender, receiver, pair_count, noise_level)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_E91_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/anchor/export", methods=["POST"])
+    async def quantum_teleportation_anchor_export_route(_request: Request) -> Response:
+        commitment = qteleport_exporter.export_commitment(qteleport_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/teleportation/drill/simulate", methods=["POST"])
+    async def quantum_teleportation_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTeleportationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7782,6 +7928,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "quantum_decoherence": getattr(mcp, "_quantum_decoherence", None),
         "quantum_ledger": getattr(mcp, "_quantum_ledger", None),
         "quantum_anchor_exporter": getattr(mcp, "_quantum_anchor_exporter", None),
+        "qteleport_pool": getattr(mcp, "_qteleport_pool", None),
+        "qteleport_mesh": getattr(mcp, "_qteleport_mesh", None),
+        "qteleport_proto": getattr(mcp, "_qteleport_proto", None),
+        "qkd_engine": getattr(mcp, "_qkd_engine", None),
+        "qteleport_ledger": getattr(mcp, "_qteleport_ledger", None),
+        "qteleport_exporter": getattr(mcp, "_qteleport_exporter", None),
     }
     return app, settings
 

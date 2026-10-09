@@ -1,22 +1,20 @@
-# Requirements: Milestone v5.0 — Autonomous Multi-Agent Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
+# Requirements: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
 
-This document defines the requirements for Milestone v5.0 of Programming Desk.
+This document defines the requirements for Milestone v5.1 of Programming Desk.
 
-## 1. Quantum-Classical Hybrid Algorithmic Orchestration & VQE/QAOA Swarm Co-Processing (Phase 66)
+## 1. Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing (Phase 68)
 
-- [x] **REQ-QUANTUM-001**: Quantum Circuit & State Vector Representation (`QuantumCircuitState`, `QuantumGateType`, `QuantumGate`) supporting arbitrary n-qubit unitary operations (Hadamard, Pauli-X/Y/Z, CNOT, Phase, Rotation-Z) and state vector evolution with normalization.
-- [x] **REQ-QUANTUM-002**: Swarm Variational Quantum Eigensolver (`VQEProcessor`, `HamiltonianOperator`, `AnsatzCircuit`) executing parameter optimization loops for ground state energy estimation.
-- [x] **REQ-QUANTUM-003**: Quantum Approximate Optimization Algorithm (`QAOAOptimizer`) executing cost and mixer Hamiltonian layering for combinatorial scheduling and partition optimization across desk nodes.
-- [x] **REQ-QUANTUM-004**: Noise & Decoherence Simulator (`QuantumDecoherenceSimulator`, `NoiseModel`) modeling depolarizing channel noise, amplitude damping, phase damping, and gate infidelity.
-- [x] **REQ-QUANTUM-005**: Quantum-Classical Hybrid Workload Scheduler (`QuantumWorkloadScheduler`) dynamically routing hybrid computational steps between classical CPU/GPU nodes and simulated Quantum Processing Units (QPUs).
-- [x] **REQ-QUANTUM-006**: Quantum Phase 66 REST API endpoints under `/v1/quantum/circuit/*`, `/v1/quantum/vqe/*`, `/v1/quantum/qaoa/*`, and `/v1/quantum/schedule/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+- [x] **REQ-QTELEPORT-001**: Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `QuantumStateVector`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
+- [x] **REQ-QTELEPORT-002**: Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
+- [x] **REQ-QTELEPORT-003**: Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationSession`, `ClassicalCorrection`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
+- [x] **REQ-QTELEPORT-004**: Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`, `PurificationProtocol`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
+- [x] **REQ-QTELEPORT-005**: Quantum Phase 68 REST API endpoints under `/v1/quantum/teleportation/*` and `/v1/quantum/repeater/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## 2. Topological Qubit Surface Code Error Correction, Syndrome Extraction & Solana Devnet Quantum State Anchoring (Phase 67)
+## 2. Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring (Phase 69)
 
-- [x] **REQ-QUANTUM-007**: Topological Qubit & Rotated Surface Code Lattice (`SurfaceCodeLattice`, `QubitNode`, `QubitType`) modeling data qubits and measure qubits on a 2D planar square lattice with code distance \(d\).
-- [x] **REQ-QUANTUM-008**: Quantum Error Syndrome Extractor (`SyndromeExtractor`, `StabilizerMeasurement`) measuring \(X\)-type (star) and \(Z\)-type (plaquette) stabilizers detecting bit-flip and phase-flip error chains.
-- [x] **REQ-QUANTUM-009**: Minimum-Weight Perfect Matching (MWPM) Syndrome Decoder (`MWPMDecoder`, `CorrectionOperator`) matching error defect pairs and applying Pauli corrections to preserve logical qubit fidelity.
-- [x] **REQ-QUANTUM-010**: Cryptographic Quantum State & Syndrome Receipt Ledger (`QuantumStateReceiptLedger`, `QuantumStateReceipt`) maintaining an append-only binary Merkle tree of verified syndrome extractions and logical state transitions.
-- [x] **REQ-QUANTUM-011**: External Solana Devnet Quantum State Exporter (`QuantumAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
-- [x] **REQ-QUANTUM-012**: Quantum-Classical & Topological Verification Drill Simulator (`QuantumTopologicalDrillSimulator`) verifying circuit simulation, VQE convergence, QAOA partitioning, surface code syndrome extraction, MWPM error recovery, and Solana anchoring.
-- [x] **REQ-QUANTUM-013**: Quantum Phase 67 REST API endpoints under `/v1/quantum/surface-code/*`, `/v1/quantum/syndrome/*`, `/v1/quantum/anchor/*`, and `/v1/quantum/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+- [x] **REQ-QTELEPORT-006**: BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
+- [x] **REQ-QTELEPORT-007**: Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`, `QuantumChannelInterception`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
+- [x] **REQ-QTELEPORT-008**: Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
+- [x] **REQ-QTELEPORT-009**: External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] **REQ-QTELEPORT-010**: End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
+- [x] **REQ-QTELEPORT-011**: Quantum Phase 69 REST API endpoints under `/v1/quantum/qkd/*`, `/v1/quantum/teleportation/ledger/*`, `/v1/quantum/teleportation/anchor/*`, and `/v1/quantum/teleportation/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

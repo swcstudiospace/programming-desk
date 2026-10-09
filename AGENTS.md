@@ -110,8 +110,7 @@ receipt. Any other G-2 failure is yours to fix before pushing.
 `.cursor/agents/` is the Cursor export of agent-swarm (`a01-orchestrator`
 through `a15-docs`), copied by `scripts/_install_cursor.py` from
 [swcstudiospace/agent-swarm](https://github.com/swcstudiospace/agent-swarm)
-commit `92b964c72cf18c9af09120f9c980ec85a70a198b` (branch
-`grokbot/cursor-agents-export`). This repo does not vendor that runtime.
+commit `e7acd5c525b3b31569141b8364c837486a741358` (`main`). This repo does not vendor that runtime.
 [`.cursor/environment.json`](.cursor/environment.json) keeps the gate install
 and clones that commit to `$HOME/.local/share/agent-swarm`, then exports
 `SWARM_ROOT` to that absolute path. The same path is written for later login
@@ -126,6 +125,7 @@ Do not treat this repo's `scripts/` as swarm tools.
 
 The session is advisory. `SWARM_ED25519_KEY` and `SWARM_REQUIRE_KEY` are
 unset, so a gate script records nothing and nothing here counts as APPROVED.
-The merge gate is Greptile via Desk Quality. Substrate wiring is off. Do not
-start an unattended headless runner. The rule file is
+A missing signing key is the expected keyless state and is not an E-DEP
+failure. The merge gate is Greptile via Desk Quality. Substrate wiring is
+off. Do not start an unattended headless runner. The rule file is
 [`.cursor/rules/agent-swarm.mdc`](.cursor/rules/agent-swarm.mdc).

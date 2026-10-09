@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "verification",
+  "task_id": "p8-01-subagent-verification-suite",
+  "branch": "bot-06-quality-security/phase-08-subagent-verification",
+  "bot": "bot-06-quality-security",
+  "started_at": "2026-10-08T16:00:00Z",
+  "completed_at": "2026-10-08T16:15:00Z",
+  "head_commit": "a3460c3c3a44d85e783a0429402e3b2e564d6eb2",
+  "approved_by": "SomeRandmGuyy",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest ci/tests/test_cursor_agents.py -v",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "61 passed in 0.09s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -v",
+      "exit_code": 0,
+      "duration_s": 14.3,
+      "output_tail": "291 passed in 14.32s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "All 15 Cursor subagents in .cursor/agents/ verified for frontmatter, structural tags, allowed tools, and token bounds",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Full test suite passes with 291/291 tests clean",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Gate G-7 desk integrity check passes cleanly across all rosters, packs, and prompt files",
+      "evidence_command_index": 2
+    }
+  ],
+  "unverified": [
+    "Live subagent execution inside active Cursor desktop client session with external LLM token expenditure"
+  ],
+  "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked",
+  "verifier_version": "1.0.0"
+}

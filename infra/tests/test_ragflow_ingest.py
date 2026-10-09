@@ -1,0 +1,881 @@
+"""Fake-server tests for incremental RAGFlow ingest."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.util
+import json
+import subprocess
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import parse_qs, urlparse
+
+import pytest
+import yaml
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+INGEST_PATH = REPO_ROOT / "infra" / "ragflow" / "ingest.py"
+WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ragflow-ingest.yml"
+CALLERS = REPO_ROOT / "infra" / "ragflow" / "callers"
+
+
+def _multipart_filename(raw: bytes) -> str:
+    marker = b'filename="'
+    start = raw.find(marker)
+    if start < 0:
+        return ""
+    index = start + len(marker)
+    out = bytearray()
+    while index < len(raw):
+        if raw[index] == 0x5C and index + 1 < len(raw):
+            out.append(raw[index + 1])
+            index += 2
+            continue
+        if raw[index] == 0x22:
+            break
+        out.append(raw[index])
+        index += 1
+    return out.decode("utf-8", "replace")
+
+
+def load_ingest():
+    spec = importlib.util.spec_from_file_location("ragflow_ingest", INGEST_PATH)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["ragflow_ingest"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+ingest = load_ingest()
+
+
+class _State:
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.events: list[tuple[str, str, dict]] = []
+        self.datasets: dict[str, str] = {}
+        self.docs: dict[str, list[dict]] = {}
+        self.next_id = 1
+
+
+def _server(state: _State):
+    class Handler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, fmt, *args):
+            return
+
+        def _body(self) -> bytes:
+            length = int(self.headers.get("Content-Length") or 0)
+            return self.rfile.read(length) if length else b""
+
+        def _json(self) -> dict:
+            raw = self._body()
+            return json.loads(raw.decode() or "{}")
+
+        def _send(self, payload: dict, status: int = 200) -> None:
+            raw = json.dumps(payload).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def _record(self, method: str, path: str, detail: dict) -> None:
+            with state.lock:
+                state.events.append((method, path, detail))
+
+        def do_GET(self) -> None:
+            parsed = urlparse(self.path)
+            query = parse_qs(parsed.query)
+            parts = [part for part in parsed.path.split("/") if part]
+            if parts == ["api", "v1", "datasets"]:
+                name = (query.get("name") or [""])[0]
+                rows = [
+                    {"id": dataset_id, "name": dataset_name}
+                    for dataset_name, dataset_id in state.datasets.items()
+                    if not name or dataset_name == name
+                ]
+                self._record("GET", parsed.path, {"name": name})
+                self._send({"code": 0, "data": rows})
+                return
+            if len(parts) == 5 and parts[:3] == ["api", "v1", "datasets"] and parts[4] == "documents":
+                dataset_id = parts[3]
+                keywords = (query.get("keywords") or [""])[0]
+                docs = [
+                    doc for doc in state.docs.get(dataset_id, [])
+                    if not keywords or keywords in str(doc.get("name"))
+                ]
+                self._record("GET", parsed.path, {"keywords": keywords})
+                self._send({"code": 0, "data": {"docs": docs, "total": len(docs)}})
+                return
+            self._send({"code": 404, "message": "missing"}, status=404)
+
+        def do_POST(self) -> None:
+            parsed = urlparse(self.path)
+            parts = [part for part in parsed.path.split("/") if part]
+            raw = self._body()
+            if parts == ["api", "v1", "datasets"]:
+                name = json.loads(raw.decode())["name"]
+                dataset_id = f"ds-{name}"
+                state.datasets[name] = dataset_id
+                state.docs.setdefault(dataset_id, [])
+                self._record("POST", parsed.path, {"name": name})
+                self._send({"code": 0, "data": {"id": dataset_id, "name": name}})
+                return
+            if len(parts) == 5 and parts[4] == "documents":
+                dataset_id = parts[3]
+                state.next_id += 1
+                document_id = f"doc-{state.next_id}"
+                filename = _multipart_filename(raw)
+                state.docs.setdefault(dataset_id, []).append(
+                    {
+                        "id": document_id,
+                        "name": filename,
+                        "meta_fields": {},
+                        "run": "UNSTART",
+                        "_bytes": len(raw),
+                    }
+                )
+                self._record("POST", parsed.path, {"id": document_id, "name": filename, "nbytes": len(raw)})
+                self._send({"code": 0, "data": [{"id": document_id, "name": filename}]})
+                return
+            if len(parts) == 5 and parts[4] == "chunks":
+                body = json.loads(raw.decode())
+                ids = set(body.get("document_ids") or [])
+                dataset_id = parts[3]
+                for doc in state.docs.get(dataset_id, []):
+                    if doc["id"] in ids:
+                        doc["run"] = "DONE"
+                self._record("POST", parsed.path, {"document_ids": body.get("document_ids")})
+                self._send({"code": 0, "data": {}})
+                return
+            self._send({"code": 404, "message": "missing"}, status=404)
+
+        def do_PUT(self) -> None:
+            parsed = urlparse(self.path)
+            parts = [part for part in parsed.path.split("/") if part]
+            body = self._json()
+            dataset_id, document_id = parts[3], parts[5]
+            for doc in state.docs.get(dataset_id, []):
+                if doc["id"] == document_id:
+                    if "name" in body:
+                        doc["name"] = body.get("name")
+                    doc["meta_fields"] = body.get("meta_fields") or {}
+            self._record("PUT", parsed.path, {"id": document_id, "meta": body.get("meta_fields")})
+            self._send({"code": 0, "data": True})
+
+        def do_DELETE(self) -> None:
+            parsed = urlparse(self.path)
+            parts = [part for part in parsed.path.split("/") if part]
+            body = self._json()
+            dataset_id = parts[3]
+            ids = set(body.get("ids") or [])
+            state.docs[dataset_id] = [
+                doc for doc in state.docs.get(dataset_id, []) if doc["id"] not in ids
+            ]
+            self._record("DELETE", parsed.path, {"ids": sorted(ids)})
+            self._send({"code": 0, "data": True})
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    return httpd
+
+
+def _git(repo: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args], check=True, capture_output=True, text=True,
+    )
+    return result.stdout.strip()
+
+
+def _repo(path: Path) -> Path:
+    path.mkdir()
+    _git(path, "init", "-b", "main")
+    _git(path, "config", "user.email", "ingest@example.com")
+    _git(path, "config", "user.name", "ingest")
+    return path
+
+
+def _commit(path: Path, relative: str, content: bytes, message: str) -> str:
+    target = path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(content)
+    _git(path, "add", "--", relative)
+    _git(path, "commit", "-m", message)
+    return _git(path, "rev-parse", "HEAD")
+
+
+def _run(monkeypatch, root: Path, *args: str, url: str = "", key: str = "", event: str = ""):
+    if url:
+        monkeypatch.setenv("RAGFLOW_URL", url)
+    else:
+        monkeypatch.delenv("RAGFLOW_URL", raising=False)
+    if key:
+        monkeypatch.setenv("RAGFLOW_API_KEY", key)
+    else:
+        monkeypatch.delenv("RAGFLOW_API_KEY", raising=False)
+    if event:
+        monkeypatch.setenv("GITHUB_EVENT_NAME", event)
+    else:
+        monkeypatch.delenv("GITHUB_EVENT_NAME", raising=False)
+    code = ingest.run(
+        ["--repo", "programming-desk", "--root", str(root), *args],
+    )
+    return code
+
+
+def test_name_status_keeps_add_modify_rename_and_delete():
+    text = "A\tdocs/a.md\nM\tdocs/b.md\nD\told.md\nR100\tdocs/from.md\tdocs/to.md\nC090\tdocs/src.md\tdocs/copy.md\n"
+    assert ingest.parse_name_status(text) == [
+        ("A", "docs/a.md"),
+        ("M", "docs/b.md"),
+        ("D", "old.md"),
+        ("D", "docs/from.md"),
+        ("A", "docs/to.md"),
+        ("A", "docs/copy.md"),
+    ]
+    blob = b"A\0docs/a.md\0R090\0docs/from.md\0docs/to.md\0D\0old.md\0"
+    assert ingest.parse_name_status_z(blob) == [
+        ("A", "docs/a.md"),
+        ("D", "docs/from.md"),
+        ("A", "docs/to.md"),
+        ("D", "old.md"),
+    ]
+
+
+def test_document_names_and_dataset_mapping():
+    assert ingest.document_name("programming-desk", "skills/ragflow-docs/SKILL.md") == (
+        "programming-desk__skills__ragflow-docs__SKILL.md"
+    )
+    assert ingest.document_name("programming-desk", "ownership.yaml") == "programming-desk__ownership.yaml.txt"
+    assert ingest.datasets_for("programming-desk", "skills/ragflow-docs/SKILL.md") == [
+        "programming-desk", "agent-skills",
+    ]
+    assert ingest.datasets_for("programming-desk", "AGENTS.md") == ["programming-desk", "agent-skills"]
+    assert ingest.datasets_for("programming-desk", ".cursor/agents/a01.md") == [
+        "programming-desk", "agent-skills",
+    ]
+    assert ingest.datasets_for("programming-desk", "README.md") == ["programming-desk"]
+    assert ingest.datasets_for("programming-desk", "docs/guide.md") == ["programming-desk"]
+    assert ingest.datasets_for("agent-substrate", "README.md") == ["agent-substrate"]
+    assert ingest.datasets_for("claude-ultrathink", "README.md") == ["claude-ultrathink", "product-docs"]
+    assert ingest.datasets_for("claude-ultrathink", "docs/guide.md") == ["claude-ultrathink", "product-docs"]
+    assert ingest.datasets_for("agent-swarm", "docs/guide.md") == ["agent-swarm", "product-docs"]
+    assert ingest.datasets_for("kanbanos", "README.md") == ["kanbanos", "product-docs"]
+    assert ingest.datasets_for("clippyos", "docs/guide.md") == ["clippyos", "product-docs"]
+    sample = ingest.blob_url("swcstudiospace/programming-desk", "abc123abc123ffff", "docs/guide.md")
+    assert sample == "https://github.com/swcstudiospace/programming-desk/blob/abc123abc123/docs/guide.md"
+    assert ingest.selected_path("programming-desk", "ownership.yaml") is True
+    assert ingest.selected_path("programming-desk", "infra/ragflow/ingest.py") is False
+    assert ingest.selected_path("agent-substrate", ".env.example") is True
+    assert ingest.selected_path("programming-desk", ".env") is False
+    assert len(ingest.content_token(b"hello")) == 16
+
+
+def test_secret_name_size_and_credential_skips_do_not_print_contents(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    pem = b"-----BEGIN " + b"PRIVATE KEY-----\n" + b"MII" + (b"x" * 40) + b"\n"
+    _commit(repo, "notes/leak.md", b"# notes\n" + pem, "leak")
+    _commit(repo, ".env", b"TOKEN=value\n", "env")
+    _commit(repo, "docs/huge.md", b"a" * (ingest.MAX_BYTES + 1), "huge")
+    _commit(repo, "docs/ok.md", b"# ok\n", "ok")
+    code = _run(monkeypatch, repo, "--before", "0" * 40, "--after", _git(repo, "rev-parse", "HEAD"), "--dry-run")
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "plan skip-credential path=notes/leak.md" in captured.out
+    assert "plan skip-secret path=.env" in captured.out
+    assert f"plan skip-size path=docs/huge.md bytes={ingest.MAX_BYTES + 1}" in captured.out
+    assert "plan upsert dataset=programming-desk document=programming-desk__docs__ok.md path=docs/ok.md" in captured.out
+    assert b"PRIVATE KEY" not in captured.out.encode()
+    assert "TOKEN=value" not in captured.out
+    assert pem.decode() not in captured.out
+
+
+def test_missing_secrets_exit_zero_without_calling(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    _commit(repo, "docs/ok.md", b"# ok\n", "ok")
+    state = _State()
+    httpd = _server(state)
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", "HEAD",
+        )
+    finally:
+        httpd.shutdown()
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest" in captured.out
+    assert state.events == []
+
+
+def test_pull_request_never_ingests(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    _commit(repo, "docs/ok.md", b"# ok\n", "ok")
+    state = _State()
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", "HEAD",
+            url=f"http://127.0.0.1:{port}", key="test-key", event="pull_request",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert "pull_request events do not ingest" in capsys.readouterr().out
+    assert state.events == []
+
+
+def test_dry_run_prints_plan_and_does_not_call(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    _commit(repo, "docs/ok.md", b"# ok\n", "ok")
+    state = _State()
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", "HEAD", "--dry-run",
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert "plan upsert" in capsys.readouterr().out
+    assert state.events == []
+
+
+def test_upsert_replaces_only_after_upload_then_parses(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    body = b"# changed\n"
+    head = _commit(repo, "docs/ok.md", body, "ok")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "old-1",
+        "name": name,
+        "meta_fields": {
+            "repo": "programming-desk",
+            "path": "docs/ok.md",
+            "content_sha256": "stale",
+        },
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    methods = [(event[0], event[1], event[2]) for event in state.events]
+    upload_at = next(index for index, event in enumerate(methods) if event[0] == "POST" and event[1].endswith("/documents"))
+    delete_at = next(index for index, event in enumerate(methods) if event[0] == "DELETE")
+    put_at = next(index for index, event in enumerate(methods) if event[0] == "PUT")
+    parse_at = next(index for index, event in enumerate(methods) if event[1].endswith("/chunks"))
+    assert upload_at < delete_at
+    assert put_at < delete_at
+    assert methods[delete_at][2]["ids"] == ["old-1"]
+    assert parse_at > upload_at
+    new_docs = state.docs["ds-programming-desk"]
+    assert len(new_docs) == 1
+    meta = new_docs[0]["meta_fields"]
+    assert meta["content_sha256"] == hashlib.sha256(body).hexdigest()[:16]
+    assert meta["path"] == "docs/ok.md"
+    assert meta["repo"] == "swcstudiospace/programming-desk"
+    assert meta["commit"] == head[:12]
+    assert meta["branch"] == "main"
+    assert meta["url"] == f"https://github.com/swcstudiospace/programming-desk/blob/{head[:12]}/docs/ok.md"
+    assert "old-1" not in methods[parse_at][2]["document_ids"]
+    assert new_docs[0]["id"] in methods[parse_at][2]["document_ids"]
+
+
+def test_matching_sha_skips_upload(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    body = b"# same\n"
+    head = _commit(repo, "docs/ok.md", body, "ok")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "keep",
+        "name": name,
+        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest()[:16], "path": "docs/ok.md", "repo": "swcstudiospace/programming-desk"},
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert not any(event[0] in {"POST", "PUT", "DELETE"} for event in state.events)
+    assert state.docs["ds-programming-desk"][0]["id"] == "keep"
+
+
+def test_deleted_path_removes_the_document(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    first = _commit(repo, "docs/gone.md", b"# gone\n", "add")
+    target = repo / "docs" / "gone.md"
+    target.unlink()
+    _git(repo, "add", "--", "docs/gone.md")
+    _git(repo, "commit", "-m", "remove")
+    head = _git(repo, "rev-parse", "HEAD")
+    name = ingest.document_name("programming-desk", "docs/gone.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "gone-1",
+        "name": name,
+        "meta_fields": {"path": "docs/gone.md", "repo": "programming-desk"},
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", first, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    deletes = [event for event in state.events if event[0] == "DELETE"]
+    assert deletes and deletes[0][2]["ids"] == ["gone-1"]
+    assert state.docs["ds-programming-desk"] == []
+
+
+def test_skill_file_maps_to_agent_skills_dataset(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    head = _commit(repo, "skills/demo/SKILL.md", b"# skill\n", "skill")
+    state = _State()
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert "programming-desk" in state.datasets
+    assert "agent-skills" in state.datasets
+    assert state.docs["ds-programming-desk"]
+    assert state.docs["ds-agent-skills"]
+
+
+def test_ref_name_diffs_instead_of_listing_the_tree(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    first = _commit(repo, "docs/one.md", b"# one\n", "one")
+    _git(repo, "branch", "base", first)
+    _commit(repo, "docs/two.md", b"# two\n", "two")
+    code = _run(monkeypatch, repo, "--before", "base", "--after", "HEAD", "--dry-run")
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "path=docs/two.md" in captured.out
+    assert "path=docs/one.md" not in captured.out
+
+
+def test_all_zero_before_lists_the_tree(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    _commit(repo, "docs/one.md", b"# one\n", "one")
+    _commit(repo, "docs/two.md", b"# two\n", "two")
+    code = _run(monkeypatch, repo, "--before", "0" * 40, "--after", "HEAD", "--dry-run")
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "path=docs/one.md" in captured.out
+    assert "path=docs/two.md" in captured.out
+
+
+def _triggers(document: dict) -> dict:
+    # PyYAML 1.1 reads the bare key `on` as boolean true.
+    triggers = document.get("on", document.get(True))
+    assert isinstance(triggers, dict)
+    return triggers
+
+
+def test_workflow_and_callers_parse_and_stay_off_pull_requests():
+    workflow = yaml.safe_load(WORKFLOW.read_text())
+    triggers = _triggers(workflow)
+    assert "pull_request" not in triggers
+    assert triggers["push"]["branches"] == ["main"]
+    assert "workflow_call" in triggers
+    secrets = triggers["workflow_call"]["secrets"]
+    assert set(secrets) == {"RAGFLOW_URL", "RAGFLOW_API_KEY"}
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["ingest"]
+    assert job["if"] == "github.event_name != 'pull_request'"
+    assert job["runs-on"] == "ubuntu-latest"
+    assert job["permissions"] == {"contents": "read", "actions": "read"}
+    rendered = WORKFLOW.read_text()
+    assert "echo \"$RAGFLOW_API_KEY\"" not in rendered
+    assert "echo \"$RAGFLOW_URL\"" not in rendered
+    assert "github.workflow_sha" not in rendered
+    assert "actions/checkout@v4" not in rendered
+    assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in rendered
+    assert "merge-base --is-ancestor" in rendered
+    assert "0000000000000000000000000000000000000000" not in rendered
+    assert "before commit is unavailable; failing so deletions are not dropped" in rendered
+    assert rendered.index("RAGFLOW_API_KEY is empty") < rendered.index("gh api")
+    assert "infra/ragflow/ingest.py" in rendered
+    for caller in sorted(CALLERS.glob("*.yml")):
+        doc = yaml.safe_load(caller.read_text())
+        assert "pull_request" not in _triggers(doc)
+        uses = doc["jobs"]["ingest"]["uses"]
+        assert uses == "swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main"
+        assert doc["jobs"]["ingest"]["secrets"] == "inherit"
+        assert doc["jobs"]["ingest"]["permissions"] == {"contents": "read", "actions": "read"}
+        assert doc["permissions"] == {"contents": "read"}
+
+
+def test_missing_secrets_skip_before_an_unavailable_commit(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    _commit(repo, "docs/ok.md", b"# ok\n", "ok")
+    missing = "ab" * 20
+    code = _run(monkeypatch, repo, "--before", missing, "--after", "HEAD")
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest" in captured.out
+    dry = _run(monkeypatch, repo, "--before", missing, "--after", "HEAD", "--dry-run")
+    assert dry == 1
+
+
+def test_empty_file_deletes_the_indexed_document(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    first = _commit(repo, "docs/ok.md", b"# ok\n", "add")
+    _commit(repo, "docs/ok.md", b"", "empty")
+    head = _git(repo, "rev-parse", "HEAD")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{"id": "old-empty", "name": name, "meta_fields": {}, "run": "3"}]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", first, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert not any(event[0] == "POST" and event[1].endswith("/documents") for event in state.events)
+    deletes = [event for event in state.events if event[0] == "DELETE"]
+    assert deletes and deletes[0][2]["ids"] == ["old-empty"]
+
+
+def test_quoted_name_round_trips_then_skips_and_deletes(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    relative = 'docs/"guide".md'
+    body = b"# quoted\n"
+    head = _commit(repo, relative, body, "add")
+    name = ingest.document_name("programming-desk", relative)
+    assert '"' in name
+    assert ingest.quoted_filename(name) != name.replace('"', "")
+    state = _State()
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        first = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+        stored = state.docs["ds-programming-desk"]
+        assert first == 0
+        assert stored[0]["name"] == name
+        assert stored[0]["run"] == "DONE"
+        uploads = [event for event in state.events if event[0] == "POST" and event[1].endswith("/documents")]
+        state.events.clear()
+        second = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+        assert second == 0
+        assert not any(event[0] == "POST" and str(event[1]).endswith("/documents") for event in state.events)
+        assert uploads
+        target = repo / "docs" / '"guide".md'
+        target.unlink()
+        _git(repo, "add", "--", relative)
+        _git(repo, "commit", "-m", "remove")
+        removed = _git(repo, "rev-parse", "HEAD")
+        state.events.clear()
+        third = _run(
+            monkeypatch, repo, "--before", head, "--after", removed,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert third == 0
+    assert state.docs["ds-programming-desk"] == []
+
+
+def test_unparsed_match_is_parsed_again(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    body = b"# same\n"
+    head = _commit(repo, "docs/ok.md", body, "ok")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "stuck",
+        "name": name,
+        "run": "0",
+        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest()[:16], "path": "docs/ok.md"},
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert not any(event[0] == "POST" and event[1].endswith("/documents") for event in state.events)
+    parses = [event for event in state.events if str(event[1]).endswith("/chunks")]
+    assert parses and parses[0][2]["document_ids"] == ["stuck"]
+    assert state.docs["ds-programming-desk"][0]["run"] == "DONE"
+
+
+def test_later_upload_failure_still_parses_the_earlier_document():
+    class _Client:
+        def __init__(self) -> None:
+            self.uploads = 0
+            self.parsed: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return []
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            self.uploads += 1
+            if self.uploads == 2:
+                raise ingest.IngestError("upload failed")
+            return "doc-1"
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.parsed.extend(document_ids)
+
+    client = _Client()
+    actions = [
+        ingest.Action(
+            "upsert", "docs/a.md", "programming-desk", "programming-desk__docs__a.md",
+            "a" * 16, 1, "c" * 12, "main", "swcstudiospace/programming-desk",
+            "https://example.invalid/a", b"a",
+        ),
+        ingest.Action(
+            "upsert", "docs/b.md", "programming-desk", "programming-desk__docs__b.md",
+            "b" * 16, 1, "c" * 12, "main", "swcstudiospace/programming-desk",
+            "https://example.invalid/b", b"b",
+        ),
+    ]
+    with pytest.raises(ingest.IngestError):
+        ingest.execute(actions, client, batch_size=50)
+    assert client.parsed == ["doc-1"]
+
+
+def test_quote_stripped_name_does_not_delete_a_different_path():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "quoted",
+                    "name": 'programming-desk__docs__"guide".md',
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+                {
+                    "id": "plain",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": "docs/guide.md"},
+                },
+                {
+                    "id": "legacy",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", 'docs/"guide".md', "programming-desk",
+                'programming-desk__docs__"guide".md',
+            )
+        ],
+        client,
+    )
+    assert set(client.deleted) == {"quoted", "legacy"}
+
+
+def test_plain_path_delete_keeps_the_quoted_sibling_legacy_document():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "plain",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": "docs/guide.md"},
+                },
+                {
+                    "id": "legacy",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", "docs/guide.md", "programming-desk",
+                "programming-desk__docs__guide.md",
+            )
+        ],
+        client,
+    )
+    assert client.deleted == ["plain"]
+
+
+def test_same_path_in_another_repo_is_not_deleted():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds-product-docs"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "short",
+                    "name": "ultrathink__README.md",
+                    "meta_fields": {"path": "README.md"},
+                },
+                {
+                    "id": "long",
+                    "name": "claude-ultrathink__README.md",
+                    "meta_fields": {"path": "README.md"},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", "README.md", "product-docs", "ultrathink__README.md",
+            )
+        ],
+        client,
+    )
+    assert client.deleted == ["short"]
+
+
+def test_named_run_states_are_not_parsed_again(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    body = b"# same\n"
+    head = _commit(repo, "docs/ok.md", body, "ok")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "done",
+        "name": name,
+        "run": "DONE",
+        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest()[:16], "path": "docs/ok.md"},
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+        assert code == 0
+        assert not any(str(event[1]).endswith("/chunks") for event in state.events)
+        state.docs["ds-programming-desk"][0]["run"] = "RUNNING"
+        state.events.clear()
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert not any(str(event[1]).endswith("/chunks") for event in state.events)
+
+
+def test_seeder_globs_keep_receipts_json_and_drop_other_trees():
+    # The seeder's programming-desk extra globs include .receipts/**/*.json.
+    # A credential-shaped receipt is still dropped by the content scan, and
+    # trees the seeder does not name stay out.
+    assert ingest.selected_path("programming-desk", ".receipts/bot-05-infrastructure/task.json") is True
+    assert ingest.selected_path("programming-desk", "transcripts/session.json") is False
+    assert ingest.selected_path("programming-desk", "node_modules/pkg/README.md") is False
+    assert ingest.selected_path("programming-desk", "docs/guide.md") is True

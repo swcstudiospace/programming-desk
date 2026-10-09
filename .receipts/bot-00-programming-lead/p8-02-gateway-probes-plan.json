@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "verification",
+  "task_id": "p8-02-gateway-probes-plan",
+  "branch": "bot-00-programming-lead/phase-08-plan-02-summary",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-08T16:35:00Z",
+  "completed_at": "2026-10-08T16:45:00Z",
+  "head_commit": "51f339edaab66d25ba5adcfd764e4b1fea3887db",
+  "approved_by": "SomeRandmGuyy",
+  "commands": [
+    {
+      "cmd": "uv run pytest tests/test_server.py -k \"healthz or readyz or metrics or concurrent\" -v",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "2 passed, 70 deselected in 0.38s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Documented Phase 8 Plan 02 plan, summary, and roadmap progress for REQ-DRILL-002",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Gate G-7 desk integrity check passes cleanly across all rosters, packs, and prompt files",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [
+    "External production scraping validation with third-party Prometheus monitoring instance"
+  ],
+  "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked",
+  "verifier_version": "1.0.0"
+}

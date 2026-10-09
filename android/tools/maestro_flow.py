@@ -54,14 +54,17 @@ def output_path(root: Path, name: str) -> Path:
 
 
 def junit_has_failure(path: Path) -> tuple[bool, str]:
-    """True when the report counts a failure or an error, or is not readable XML."""
+    """True for failures/errors, unreadable JUnit, or no executed test cases."""
     try:
         root = ET.parse(path).getroot()
     except (ET.ParseError, OSError) as exc:
         return True, f"junit report is not readable XML: {exc}"
+    if root.tag.rsplit("}", 1)[-1] not in {"testsuite", "testsuites"}:
+        return True, "junit report has no test suite"
     failures = 0
     errors = 0
     saw_failure_element = False
+    saw_executed_case = False
     for el in root.iter():
         tag = el.tag.rsplit("}", 1)[-1]
         if tag in {"testsuite", "testsuites"}:
@@ -70,12 +73,20 @@ def junit_has_failure(path: Path) -> tuple[bool, str]:
                 errors = max(errors, int(el.attrib.get("errors") or 0))
             except ValueError:
                 return True, "junit report has a non-integer failures or errors count"
+            if tag == "testsuite":
+                for case in el:
+                    if case.tag.rsplit("}", 1)[-1] == "testcase" and not any(
+                        child.tag.rsplit("}", 1)[-1] == "skipped" for child in case.iter()
+                    ):
+                        saw_executed_case = True
         elif tag in {"failure", "error"}:
             saw_failure_element = True
     if failures or errors:
         return True, f"junit reports failures={failures} errors={errors}"
     if saw_failure_element:
         return True, "junit report contains a failure or error element"
+    if not saw_executed_case:
+        return True, "junit report has no executed test cases"
     return False, "junit reports failures=0 errors=0"
 
 
@@ -131,13 +142,14 @@ def run(*, serial: str, flow: str, out: str | Path) -> tuple[int, str]:
     """Run maestro and return (exit_code, message).
 
     Exit 3 when maestro or adb is missing, or the serial is not a connected
-    device. Exit 1 when the JUnit report contains a failure or an error.
+    device. Exit 1 when the JUnit report contains a failure or an error, or no
+    executed test cases.
     Exit 2 when the caller's paths or serial are unusable. Reports and the
     debug directory are created only as children of --out.
     """
     if not _serial_ok(serial):
         return 2, f"error: invalid serial {serial!r}"
-    flow_path = Path(flow)
+    flow_path = Path(flow).resolve()
     if not flow_path.exists() or not (flow_path.is_file() or flow_path.is_dir()):
         return 2, f"error: flow not found: {flow}"
     try:
@@ -155,14 +167,21 @@ def run(*, serial: str, flow: str, out: str | Path) -> tuple[int, str]:
     maestro = shutil.which("maestro")
     if not maestro:
         return SKIP_EXIT, "skipped: missing binary: maestro"
-    if junit_path.exists():
-        if junit_path.is_symlink() or not junit_path.is_file():
-            return 2, f"error: refusing to replace {junit_path}"
-        junit_path.unlink()
+    maestro = str(Path(maestro).resolve())
     try:
-        debug_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        return 2, f"error: --out debug directory is not usable: {exc}"
+        if junit_path.exists():
+            if junit_path.is_symlink() or not junit_path.is_file():
+                raise UsageError(f"refusing to replace {junit_path}")
+            try:
+                junit_path.unlink()
+            except OSError as exc:
+                raise UsageError(f"cannot remove previous JUnit report: {exc}") from exc
+        try:
+            debug_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise UsageError(f"--out debug directory is not usable: {exc}") from exc
+    except UsageError as exc:
+        return 2, f"error: {exc}"
     argv = maestro_argv(maestro, serial, str(flow_path), junit_path, debug_dir)
     try:
         proc = subprocess.run(

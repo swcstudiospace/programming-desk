@@ -6,6 +6,7 @@ import io
 import json
 import os
 import stat
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -45,13 +46,16 @@ if len(args) >= 2 and args[0] == "shell" and args[1] == "screenrecord":
         sys.exit(2)
     sys.exit(int(os.environ.get("ADB_SCREENRECORD_EXIT", "0")))
 if args[:1] == ["pull"] and len(args) >= 3:
-    with open(args[2], "wb") as fh:
-        fh.write(b"fake-screenrecord")
+    mode = os.environ.get("ADB_PULL_MODE", "write")
+    if mode != "missing":
+        with open(args[2], "wb") as fh:
+            if mode != "empty":
+                fh.write(b"fake-screenrecord")
     sys.exit(int(os.environ.get("ADB_PULL_EXIT", "0")))
 if args[:2] == ["shell", "rm"] and len(args) == 3:
     remote = args[2]
     if remote.startswith("/sdcard/desk-screenrecord-") and remote.endswith(".mp4"):
-        sys.exit(0)
+        sys.exit(int(os.environ.get("ADB_RM_EXIT", "0")))
     sys.stderr.write("unexpected rm\\n")
     sys.exit(2)
 sys.stderr.write("unexpected adb args: %s\\n" % args)
@@ -66,6 +70,9 @@ if log:
         fh.write("\\n".join(sys.argv) + "\\n---\\n")
 if "--output" not in sys.argv or "--debug-output" not in sys.argv:
     sys.stderr.write("missing output flags\\n")
+    sys.exit(2)
+if not os.path.exists(sys.argv[-1]):
+    sys.stderr.write("flow not found from Maestro cwd\\n")
     sys.exit(2)
 out = sys.argv[sys.argv.index("--output") + 1]
 debug = sys.argv[sys.argv.index("--debug-output") + 1]
@@ -84,7 +91,7 @@ body = (
     '</testsuite>\\n'
 ) % (failures, inner)
 with open(out, "w", encoding="utf-8") as fh:
-    fh.write(body)
+    fh.write(os.environ.get("MAESTRO_FAKE_XML", body))
 sys.exit(0 if mode != "crash" else 2)
 """
 
@@ -249,6 +256,88 @@ class MaestroFlowTests(IsolatedCase):
         self.assertTrue(message.startswith("wrote "))
         self.assertTrue(str(self.out.resolve()) in message or str(self.out) in message)
 
+    def test_relative_path_and_flow_are_resolved_before_output_cwd(self) -> None:
+        log = self.root / "maestro-argv.txt"
+        previous_cwd = Path.cwd()
+        try:
+            os.chdir(self.root)
+            with mock.patch.dict(
+                os.environ,
+                self.path_env({
+                    "PATH": "bin",
+                    "MAESTRO_FAKE_RESULT": "pass",
+                    "MAESTRO_ARGV_LOG": str(log),
+                }),
+            ):
+                with mock.patch("sys.stdout", new_callable=io.StringIO):
+                    code = main([
+                        "maestro_flow", "--serial", SERIAL,
+                        "--flow", "login.yaml", "--out", "out",
+                    ])
+        finally:
+            os.chdir(previous_cwd)
+        self.assertEqual(code, 0)
+        argv = log.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(Path(argv[0]), self.bin / "maestro")
+        self.assertEqual(Path(argv[-2]), self.flow)
+        self.assertTrue((self.out / "maestro-junit.xml").is_file())
+
+    def test_reports_without_executed_cases_fail_from_cli(self) -> None:
+        reports = (
+            '<testsuite tests="0"/>',
+            '<testsuites tests="0"/>',
+            '<testsuite><testcase><skipped/></testcase></testsuite>',
+            '<testsuites><testsuite><testcase><skipped/></testcase></testsuite></testsuites>',
+            '<config/>',
+        )
+        for report in reports:
+            with self.subTest(report=report):
+                with mock.patch.dict(os.environ, self.path_env({"MAESTRO_FAKE_XML": report})):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO):
+                        code = main([
+                            "maestro_flow", "--serial", SERIAL,
+                            "--flow", str(self.flow), "--out", str(self.out),
+                        ])
+                self.assertEqual(code, 1)
+
+    def test_mixed_skipped_and_executed_cases_pass(self) -> None:
+        report = (
+            '<testsuites><testsuite><testcase><skipped/></testcase>'
+            '<testcase name="executed"/></testsuite></testsuites>'
+        )
+        with mock.patch.dict(os.environ, self.path_env({"MAESTRO_FAKE_XML": report})):
+            code, _ = maestro_flow.run(serial=SERIAL, flow=str(self.flow), out=self.out)
+        self.assertEqual(code, 0)
+
+    def test_failure_and_error_elements_still_fail_without_counts(self) -> None:
+        for tag in ("failure", "error"):
+            with self.subTest(tag=tag):
+                report = f'<testsuite><testcase><{tag}/></testcase></testsuite>'
+                with mock.patch.dict(os.environ, self.path_env({"MAESTRO_FAKE_XML": report})):
+                    code, _ = maestro_flow.run(serial=SERIAL, flow=str(self.flow), out=self.out)
+                self.assertEqual(code, 1)
+
+    def test_unremovable_previous_report_is_a_cli_usage_error(self) -> None:
+        self.out.mkdir()
+        report = self.out / "maestro-junit.xml"
+        report.write_text("previous report", encoding="utf-8")
+        original_unlink = Path.unlink
+
+        def deny_report_unlink(path, *args, **kwargs):
+            if path == report:
+                raise PermissionError("report cannot be removed")
+            return original_unlink(path, *args, **kwargs)
+
+        with mock.patch.dict(os.environ, self.path_env()):
+            with mock.patch.object(Path, "unlink", autospec=True, side_effect=deny_report_unlink):
+                with mock.patch("sys.stdout", new_callable=io.StringIO):
+                    code = main([
+                        "maestro_flow", "--serial", SERIAL,
+                        "--flow", str(self.flow), "--out", str(self.out),
+                    ])
+        self.assertEqual(code, 2)
+        self.assertEqual(report.read_text(encoding="utf-8"), "previous report")
+
     def test_missing_maestro_exits_3(self) -> None:
         (self.bin / "maestro").unlink()
         with mock.patch.dict(os.environ, self.path_env()):
@@ -313,7 +402,11 @@ class ScreenRecordTests(IsolatedCase):
         log = self.argv_log.read_text(encoding="utf-8")
         self.assertIn("screenrecord --time-limit 180 /sdcard/desk-screenrecord-", log)
         self.assertIn(f"pull /sdcard/desk-screenrecord-", log)
-        self.assertIn(str(local), log)
+        pull_line = next(line for line in log.splitlines() if " pull " in line)
+        destination = Path(pull_line.split()[-1])
+        self.assertEqual(destination.parent, self.out)
+        self.assertNotEqual(destination, local)
+        self.assertFalse(destination.exists())
         self.assertIn(" shell rm /sdcard/desk-screenrecord-", log)
         self.assertNotIn("rm -", log)
 
@@ -356,6 +449,124 @@ class ScreenRecordTests(IsolatedCase):
         self.assertEqual(code, 3)
         self.assertIn("skipped:", message)
         self.assertIn("device not connected", message)
+
+    def test_failed_or_empty_pull_preserves_previous_recording(self) -> None:
+        self.out.mkdir()
+        local = self.out / "screenrecord.mp4"
+        cases = (
+            {"ADB_PULL_EXIT": "1"},
+            {"ADB_PULL_MODE": "missing"},
+            {"ADB_PULL_MODE": "empty"},
+        )
+        for extra in cases:
+            with self.subTest(extra=extra):
+                local.write_bytes(b"previous recording")
+                with mock.patch.dict(os.environ, self.path_env(extra)):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO):
+                        code = main([
+                            "screenrecord", "--serial", SERIAL,
+                            "--out", str(self.out), "--seconds", "5",
+                        ])
+                self.assertEqual(code, 1)
+                self.assertEqual(local.read_bytes(), b"previous recording")
+                self.assertEqual(list(self.out.iterdir()), [local])
+
+    def test_successful_pull_atomically_replaces_previous_recording(self) -> None:
+        self.out.mkdir()
+        local = self.out / "screenrecord.mp4"
+        local.write_bytes(b"previous recording")
+        original_run = subprocess.run
+
+        def observe_pull(argv, **kwargs):
+            if "pull" in argv:
+                self.assertEqual(local.read_bytes(), b"previous recording")
+                self.assertNotEqual(Path(argv[-1]), local)
+                result = original_run(argv, **kwargs)
+                self.assertEqual(local.read_bytes(), b"previous recording")
+                return result
+            return original_run(argv, **kwargs)
+
+        with mock.patch.dict(os.environ, self.path_env()):
+            with mock.patch.object(subprocess, "run", side_effect=observe_pull):
+                code, _ = screenrecord.run(serial=SERIAL, out=self.out, seconds=5)
+        self.assertEqual(code, 0)
+        self.assertEqual(local.read_bytes(), b"fake-screenrecord")
+        self.assertEqual(list(self.out.iterdir()), [local])
+
+    def test_recording_and_pull_interruptions_clean_remote_and_preserve_output(self) -> None:
+        self.out.mkdir()
+        local = self.out / "screenrecord.mp4"
+        original_run = subprocess.run
+        for stage in ("screenrecord", "pull"):
+            with self.subTest(stage=stage):
+                local.write_bytes(b"previous recording")
+                calls = []
+
+                def interrupt(argv, **kwargs):
+                    calls.append(argv)
+                    if stage in argv:
+                        if stage == "pull":
+                            Path(argv[-1]).write_bytes(b"partial recording")
+                        raise KeyboardInterrupt
+                    return original_run(argv, **kwargs)
+
+                with mock.patch.dict(os.environ, self.path_env()):
+                    with mock.patch.object(subprocess, "run", side_effect=interrupt):
+                        with mock.patch("sys.stdout", new_callable=io.StringIO):
+                            code = main([
+                                "screenrecord", "--serial", SERIAL,
+                                "--out", str(self.out), "--seconds", "5",
+                            ])
+                self.assertEqual(code, 130)
+                self.assertEqual(local.read_bytes(), b"previous recording")
+                self.assertEqual(list(self.out.iterdir()), [local])
+                record = next(argv for argv in calls if "screenrecord" in argv)
+                cleanup = next(argv for argv in calls if "rm" in argv)
+                self.assertEqual(cleanup[1:], ["-s", SERIAL, "shell", "rm", record[-1]])
+
+    def test_cleanup_failure_is_reported_even_after_pull_failure(self) -> None:
+        with mock.patch.dict(
+            os.environ, self.path_env({"ADB_PULL_EXIT": "1", "ADB_RM_EXIT": "1"})
+        ):
+            code, message = screenrecord.run(serial=SERIAL, out=self.out, seconds=5)
+        self.assertEqual(code, 1)
+        self.assertIn("device file may remain", message)
+
+    def test_cleanup_interruption_does_not_report_success(self) -> None:
+        original_run = subprocess.run
+        calls = []
+
+        def interrupt_cleanup(argv, **kwargs):
+            calls.append(argv)
+            if "rm" in argv:
+                raise KeyboardInterrupt
+            return original_run(argv, **kwargs)
+
+        with mock.patch.dict(os.environ, self.path_env()):
+            with mock.patch.object(subprocess, "run", side_effect=interrupt_cleanup):
+                code, message = screenrecord.run(serial=SERIAL, out=self.out, seconds=5)
+        self.assertEqual(code, 130)
+        self.assertIn("device file may remain", message)
+        self.assertEqual((self.out / "screenrecord.mp4").read_bytes(), b"fake-screenrecord")
+        self.assertEqual(sum("rm" in argv for argv in calls), 1)
+
+    def test_temporary_cleanup_failure_is_a_cli_usage_error(self) -> None:
+        original_unlink = Path.unlink
+
+        def deny_temporary_unlink(path, *args, **kwargs):
+            if path.name.startswith(".screenrecord-"):
+                raise PermissionError("temporary file cannot be removed")
+            return original_unlink(path, *args, **kwargs)
+
+        with mock.patch.dict(os.environ, self.path_env({"ADB_PULL_EXIT": "1"})):
+            with mock.patch.object(Path, "unlink", autospec=True, side_effect=deny_temporary_unlink):
+                with mock.patch("sys.stdout", new_callable=io.StringIO):
+                    code = main([
+                        "screenrecord", "--serial", SERIAL,
+                        "--out", str(self.out), "--seconds", "5",
+                    ])
+        self.assertEqual(code, 2)
+        self.assertIn(" shell rm /sdcard/desk-screenrecord-", self.argv_log.read_text(encoding="utf-8"))
 
 
 class ExistingSkipExitTests(unittest.TestCase):

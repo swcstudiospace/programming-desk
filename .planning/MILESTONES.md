@@ -1,5 +1,23 @@
 # Milestones
 
+## v4.2 Autonomous Cross-Chain Bridge & Decentralized Oracle Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 50-51), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Cross-Chain State Relay Engine (`CrossChainRelayEngine`) synchronizing block headers, event logs, and state proofs across heterogeneous target chains (EVM, Solana, Substrate).
+- Merkle-Patricia & Binary State Trie Verifier (`StateTrieVerifier`) validating cryptographic inclusion proofs, account storage roots, and event logs without trusted intermediaries.
+- Cross-Chain Message Passing Protocol (`CrossChainMessenger` & `CrossChainMessage`) orchestrating cross-chain call dispatches, replay prevention counters, and multi-signature gateway authorizations.
+- Relayer Incentive & Slashing Registry (`RelayerStakingRegistry`) maintaining relayer bonding stakes, reward disbursements, and slashing penalties for invalid proof submissions or parent hash discontinuity.
+- Cross-Chain Relay REST API endpoints under `/v1/bridge/*` exposing header relays, state proof verifications, message dispatches, and relayer status.
+- Decentralized Multi-Source Oracle Aggregator (`OracleAggregator`) ingesting price feeds, external API telemetry, and cross-desk metrics from diverse data providers.
+- Cryptographic Medianizer & Outlier Filter (`MedianizerFilter`) filtering malicious or deviant outliers using statistical median estimation and deviation threshold fencing.
+- Threshold Signature Oracle Attestation (`ThresholdOracleAttestor`) generating multi-seat aggregate signatures over finalized oracle values.
+- External Oracle Feed Exporter (`OracleAnchorExporter`) committing verified oracle digests to Solana devnet and downstream smart contract subscribers.
+- End-to-End Cross-Chain & Oracle Attack Simulator (`CrossChainOracleDrillSimulator`) verifying resistance against malicious relayer header forgeries, oracle feed manipulation, and replay attacks.
+
+---
+
 ## v4.1 Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases (Phases 48-49), 2 plans, 0 tasks

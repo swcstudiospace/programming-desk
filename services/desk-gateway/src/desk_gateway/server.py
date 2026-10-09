@@ -3647,6 +3647,22 @@ def create_mcp(
         SettlementAnchorExporter,
         TokenomicsDrillSimulator,
     )
+    from desk_gateway.cross_chain_relay import (
+        CrossChainRelayEngine,
+        StateTrieVerifier,
+        RelayerStakingRegistry,
+        BlockHeader,
+        ChainType,
+        CrossChainMessage,
+    )
+    from desk_gateway.cross_chain_oracle import (
+        OracleAggregator,
+        MedianizerFilter,
+        ThresholdOracleAttestor,
+        OracleAnchorExporter,
+        CrossChainOracleDrillSimulator,
+        OracleReport,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3717,6 +3733,12 @@ def create_mcp(
     cross_desk_clearinghouse = CrossDeskClearinghouse(ledger=compute_credit_ledger)
     settlement_anchor_exporter = SettlementAnchorExporter()
 
+    # Milestone v4.2 components
+    relayer_staking_registry = RelayerStakingRegistry()
+    cross_chain_relay_engine = CrossChainRelayEngine(staking_registry=relayer_staking_registry)
+    oracle_aggregator = OracleAggregator()
+    oracle_anchor_exporter = OracleAnchorExporter()
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3752,6 +3774,10 @@ def create_mcp(
     setattr(mcp, "_payment_channel_manager", payment_channel_manager)
     setattr(mcp, "_cross_desk_clearinghouse", cross_desk_clearinghouse)
     setattr(mcp, "_settlement_anchor_exporter", settlement_anchor_exporter)
+    setattr(mcp, "_relayer_staking_registry", relayer_staking_registry)
+    setattr(mcp, "_cross_chain_relay_engine", cross_chain_relay_engine)
+    setattr(mcp, "_oracle_aggregator", oracle_aggregator)
+    setattr(mcp, "_oracle_anchor_exporter", oracle_anchor_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4702,6 +4728,107 @@ def create_mcp(
     @mcp.custom_route("/v1/dao/tokenomics/drill/simulate", methods=["POST"])
     async def dao_tokenomics_drill_simulate_route(_request: Request) -> Response:
         drill_results = TokenomicsDrillSimulator.run_tokenomics_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.2 (Phases 50 & 51): Autonomous Cross-Chain Bridge & Decentralized Oracle Mesh
+    @mcp.custom_route("/v1/bridge/relay/header", methods=["POST"])
+    async def bridge_relay_header_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        chain_str = body.get("chain_type", "EVM")
+        try:
+            chain = ChainType(chain_str.upper())
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid chain_type: {chain_str}"}, status_code=400)
+
+        relayer_id = body.get("relayer_id", "relayer-primary")
+        header = BlockHeader(
+            chain=chain,
+            height=int(body.get("height", body.get("block_number", 0))),
+            block_hash=body.get("block_hash", ""),
+            parent_hash=body.get("parent_hash", ""),
+            state_root=body.get("state_root", ""),
+            receipts_root=body.get("receipts_root", "0x0"),
+            timestamp=float(body.get("timestamp", time.time())),
+        )
+        try:
+            stored = cross_chain_relay_engine.relay_header(relayer_id=relayer_id, header=header)
+            return JSONResponse({"ok": True, "header": stored.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/bridge/message/dispatch", methods=["POST"])
+    async def bridge_message_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        src_str = body.get("source_chain", "EVM")
+        tgt_str = body.get("target_chain", "SOLANA")
+        try:
+            src_chain = ChainType(src_str.upper())
+            tgt_chain = ChainType(tgt_str.upper())
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Invalid chain type specified"}, status_code=400)
+
+        relayer_id = body.get("relayer_id", "relayer-primary")
+        msg = CrossChainMessage(
+            message_id=body.get("message_id", f"msg-{secrets.token_hex(4)}"),
+            source_chain=src_chain,
+            target_chain=tgt_chain,
+            sender_address=body.get("sender_address", body.get("sender", "0xSender")),
+            recipient_address=body.get("recipient_address", body.get("recipient", "RecipientAccount")),
+            payload=body.get("payload", {}),
+            nonce=int(body.get("nonce", 1)),
+            proof=body.get("proof", "proof-dummy"),
+            signature=body.get("signature", ""),
+            timestamp=float(body.get("timestamp", time.time())),
+        )
+        proof_nodes = body.get("proof_nodes", [])
+        try:
+            res = cross_chain_relay_engine.dispatch_message(relayer_id=relayer_id, message=msg, proof_nodes=proof_nodes)
+            return JSONResponse({"ok": True, "dispatch": res})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/reports/ingest", methods=["POST"])
+    async def oracle_reports_ingest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        feed_name = body.get("feed_name", "SOL/USD")
+        source_id = body.get("source_id", body.get("reporter_seat", "lead"))
+        value = float(body.get("value", 0.0))
+        report = OracleReport(
+            source_id=source_id,
+            feed_name=feed_name,
+            value=value,
+            timestamp=float(body.get("timestamp", time.time())),
+            signature=body.get("signature", "sig"),
+        )
+        try:
+            oracle_aggregator.ingest_report(report)
+            return JSONResponse({"ok": True, "report": report.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/feeds/{feed_name}/finalize", methods=["POST"])
+    async def oracle_feed_finalize_route(request: Request) -> Response:
+        feed_name = request.path_params.get("feed_name", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        min_reports = int(body.get("min_reports", 3))
+        try:
+            feed = oracle_aggregator.finalize_feed(feed_name, min_reports=min_reports)
+            anchor = oracle_anchor_exporter.export_oracle_anchor(feed)
+            return JSONResponse({"ok": True, "feed": feed.to_dict(), "anchor": anchor})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/feeds/{feed_name}", methods=["GET"])
+    async def oracle_feed_get_route(request: Request) -> Response:
+        feed_name = request.path_params.get("feed_name", "")
+        feed = oracle_aggregator.finalized_feeds.get(feed_name)
+        if not feed:
+            return JSONResponse({"ok": False, "error": f"Feed not found: {feed_name}"}, status_code=404)
+        return JSONResponse({"ok": True, "feed": feed.to_dict()})
+
+    @mcp.custom_route("/v1/bridge/drill/simulate", methods=["POST"])
+    async def bridge_drill_simulate_route(_request: Request) -> Response:
+        drill_results = CrossChainOracleDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -6181,6 +6308,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "payment_channel_manager": getattr(mcp, "_payment_channel_manager", None),
         "cross_desk_clearinghouse": getattr(mcp, "_cross_desk_clearinghouse", None),
         "settlement_anchor_exporter": getattr(mcp, "_settlement_anchor_exporter", None),
+        "relayer_staking_registry": getattr(mcp, "_relayer_staking_registry", None),
+        "cross_chain_relay_engine": getattr(mcp, "_cross_chain_relay_engine", None),
+        "oracle_aggregator": getattr(mcp, "_oracle_aggregator", None),
+        "oracle_anchor_exporter": getattr(mcp, "_oracle_anchor_exporter", None),
     }
     return app, settings
 

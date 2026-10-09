@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v4.2 Autonomous Cross-Chain Bridge & Decentralized Oracle Mesh** — Phases 50-51 (shipped 2026-10-12) — [Archive](milestones/v4.2-ROADMAP.md)
 - ✅ **v4.1 Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh** — Phases 48-49 (shipped 2026-10-11) — [Archive](milestones/v4.1-ROADMAP.md)
 - ✅ **v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh** — Phases 46-47 (shipped 2026-10-11) — [Archive](milestones/v4.0-ROADMAP.md)
 - ✅ **v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh** — Phases 44-45 (shipped 2026-10-11) — [Archive](milestones/v3.9-ROADMAP.md)
@@ -27,14 +28,16 @@
 
 ## Phases
 
-### Active Milestone: v4.1 Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh
-
-- [x] **Phase 48: Decentralized Swarm DAO Governance & Quadratic Quorum Engine** (1/1 plans completed)
-  - Plan 48-01: Swarm DAO engine, stake-weighted reputation registry, policy timelock executor, and REST endpoints.
-- [x] **Phase 49: Algorithmic Compute Tokenomics & Cross-Desk Settlement Mesh** (1/1 plans completed)
-  - Plan 49-01: Compute credit ledger, cross-desk clearinghouse, payment channel manager, external anchor exporter, and drill simulator.
-
 ### Completed Milestones
+
+<details>
+<summary>✅ v4.2 Autonomous Cross-Chain Bridge & Decentralized Oracle Mesh (Phases 50-51) — SHIPPED 2026-10-12</summary>
+
+- [x] Phase 50: Cross-Chain State Relay & Cryptographic Proof Verification (1/1 plan)
+- [x] Phase 51: Decentralized Oracle Consensus & Verifiable Multi-Source Feeds (1/1 plan)
+
+See [milestones/v4.2-ROADMAP.md](milestones/v4.2-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v4.1 Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh (Phases 48-49) — SHIPPED 2026-10-11</summary>

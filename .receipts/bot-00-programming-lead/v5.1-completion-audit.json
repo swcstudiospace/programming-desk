@@ -41,7 +41,7 @@
       "observed_at": "2026-10-09T20:32:46.826Z",
       "exit_code": 0,
       "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
-      "output_tail": "{\"packageName\":\"@opengsd/gsd-core\",\"version\":\"1.14.0\"}\n",
+      "stdout": "{\"packageName\":\"@opengsd/gsd-core\",\"version\":\"1.14.0\"}\n",
       "stderr": "",
       "stdout_sha256": "eb42e653eda9508697620b948897e09d6ce5afbfd69282d68caf068119ed7282"
     },
@@ -52,7 +52,7 @@
       "observed_at": "2026-10-09T20:32:47.021Z",
       "exit_code": 0,
       "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
-      "output_tail": "{\"commit_docs\":true,\"milestone_version\":\"v5.1\",\"milestone_name\":\"Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh\",\"phase_count\":2,\"completed_phases\":0,\"all_phases_complete\":false,\"project_root\":\"/tmp/desk-v51-audit\"}",
+      "stdout_projection": {"commit_docs":true,"milestone_version":"v5.1","milestone_name":"Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh","phase_count":2,"completed_phases":0,"all_phases_complete":false,"project_root":"/tmp/desk-v51-audit"},
       "stdout_filter": "Exact top-level fields retained: commit_docs, milestone_version, milestone_name, phase_count, completed_phases, all_phases_complete, project_root. Other init fields omitted; this is not full stdout.",
       "stderr": "gsd-tools: warning: /root/.gsd/defaults.json sets model_profile, commit_docs, parallelization, resolve_model_ids, runtime but a project config takes precedence here — those global keys are ignored for model resolution. (#3532)\n",
       "stdout_sha256": "67676a9fca2115d157b1950783b5e013586a7e2dbc167bdb2d43aadc395191d8"
@@ -64,7 +64,7 @@
       "observed_at": "2026-10-09T20:32:47.222Z",
       "exit_code": 0,
       "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
-      "output_tail": "{\"milestones\":[{\"version\":\"v5.1\"}],\"phases\":[{\"number\":\"68\",\"name\":\"Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing\",\"plan_count\":0,\"summary_count\":0,\"disk_status\":\"no_directory\",\"roadmap_complete\":false},{\"number\":\"69\",\"name\":\"Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring\",\"plan_count\":0,\"summary_count\":0,\"disk_status\":\"no_directory\",\"roadmap_complete\":false}],\"phase_count\":2,\"completed_phases\":0,\"total_plans\":0,\"total_summaries\":0,\"progress_percent\":null,\"progress_scope\":\"unscoped\",\"scope\":\"unscoped\"}",
+      "stdout_projection": {"milestones":[{"version":"v5.1"}],"phases":[{"number":"68","name":"Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing","plan_count":0,"summary_count":0,"disk_status":"no_directory","roadmap_complete":false},{"number":"69","name":"Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring","plan_count":0,"summary_count":0,"disk_status":"no_directory","roadmap_complete":false}],"phase_count":2,"completed_phases":0,"total_plans":0,"total_summaries":0,"progress_percent":null,"progress_scope":"unscoped","scope":"unscoped"},
       "stdout_filter": "Exact selected JSON fields retained: milestones[].version; phases[].number, name, plan_count, summary_count, disk_status, roadmap_complete; phase_count, completed_phases, total_plans, total_summaries, progress_percent, progress_scope, scope. Other roadmap fields omitted; this is not full stdout.",
       "stderr": "",
       "stdout_sha256": "7487ba5bd310060283090080a15fb79450fa577fc5e0308634acddbcf85279e3"
@@ -76,7 +76,7 @@
       "observed_at": "2026-10-09T20:32:47.416Z",
       "exit_code": 0,
       "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
-      "output_tail": "{\"point\":\"verify:post\",\"activeHooks\":[{\"capId\":\"nyquist\",\"kind\":\"step\",\"ref\":{\"skill\":\"validate-phase\"},\"produces\":[\"VALIDATION.md\"],\"consumes\":[\"SUMMARY.md\"],\"onError\":\"halt\"},{\"capId\":\"security\",\"kind\":\"step\",\"ref\":{\"skill\":\"secure-phase\"},\"produces\":[\"SECURITY.md\"],\"consumes\":[\"SUMMARY.md\"],\"onError\":\"halt\"},{\"capId\":\"ui\",\"kind\":\"step\",\"ref\":{\"skill\":\"ui-review\"},\"produces\":[\"UI-REVIEW.md\"],\"consumes\":[\"UI-SPEC.md\"],\"onError\":\"skip\"}]}",
+      "stdout_projection": {"point":"verify:post","activeHooks":[{"capId":"nyquist","kind":"step","ref":{"skill":"validate-phase"},"produces":["VALIDATION.md"],"consumes":["SUMMARY.md"],"onError":"halt"},{"capId":"security","kind":"step","ref":{"skill":"secure-phase"},"produces":["SECURITY.md"],"consumes":["SUMMARY.md"],"onError":"halt"},{"capId":"ui","kind":"step","ref":{"skill":"ui-review"},"produces":["UI-REVIEW.md"],"consumes":["UI-SPEC.md"],"onError":"skip"}]},
       "stdout_filter": "Exact point and activeHooks fields retained; each hook retains only capId, kind, ref, produces, consumes, onError. Conditional when configuration and rendered hook instructions omitted; this is not full stdout.",
       "stderr": "gsd-tools: warning: /root/.gsd/defaults.json sets model_profile, commit_docs, parallelization, resolve_model_ids, runtime but a project config takes precedence here — those global keys are ignored for model resolution. (#3532)\n",
       "stdout_sha256": "794551fff306ef10e454592cea26bb2e49780f6fb95a7879d37a06f1512992bf"
@@ -88,7 +88,7 @@
       "observed_at": "2026-10-09T20:33:30.713Z",
       "exit_code": 0,
       "observed_by": "FixAuditPlanningEvidence (delegated audit documentation worker)",
-      "output_tail": "/root/.gemini/antigravity/gsd-core/bin/gsd-tools.cjs\n",
+      "stdout": "/root/.gemini/antigravity/gsd-core/bin/gsd-tools.cjs\n",
       "stderr": "",
       "stdout_sha256": "5d9a66e7725ed8dbc1f47930e30a6733709760711ec277cb9922158450b580ba"
     }

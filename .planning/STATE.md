@@ -2,17 +2,17 @@
 gsd_state_version: "1.0"
 milestone: v3.1
 milestone_name: Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
-status: in_progress
-stopped_at: Completed Phase 28, advancing to Phase 29.
-last_updated: "2026-10-10T14:30:00.000Z"
+status: complete
+stopped_at: Completed Milestone v3.1 (Phases 28 and 29 complete).
+last_updated: "2026-10-10T15:00:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 28 (Dynamic MCP Tool Mesh Registry & Capability Scopes).
+last_activity_desc: Completed Phase 29 (Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts).
 progress:
   total_phases: 29
-  completed_phases: 28
+  completed_phases: 29
   total_plans: 73
-  completed_plans: 72
-  percent: 98.6
+  completed_plans: 73
+  percent: 100.0
 current_phase: 29
 current_phase_name: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts
 ---
@@ -25,14 +25,14 @@ See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 **Current focus:** Milestone v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
-**Milestone:** v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation (In Progress)
+**Milestone:** v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation (Complete)
 
 ## Current Position
 
-Phase: Phase 29 (Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts) - Ready to Plan.
-Milestone: Milestone v3.1 (Phases 28 & 29) - In Progress.
-Status: In Progress.
-Last activity: 2026-10-10 — Completed Phase 28 (`REQ-MCP-001` through `REQ-MCP-005`). Passing all tests and quality gates.
+Phase: Phase 29 (Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts) - Complete.
+Milestone: Milestone v3.1 (Phases 28 & 29) - Complete.
+Status: Complete.
+Last activity: 2026-10-10 — Completed Phase 29 (`REQ-MCP-006` through `REQ-MCP-010`). Passing all tests and quality gates.
 
 ## Accumulated Context
 

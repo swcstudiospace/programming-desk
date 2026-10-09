@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🟡 **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (in progress)
+- ✅ **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (shipped 2026-10-10) — [Archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (shipped 2026-10-10) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
@@ -21,8 +21,8 @@
 
 - [x] **Phase 28: Dynamic MCP Tool Mesh Registry & Capability Scopes**
   - [x] 28-01: Capability Discovery, Scope Permissions, Schema Translation, Rate Limiting & Circuit Breaker (`REQ-MCP-001`, `REQ-MCP-002`, `REQ-MCP-003`, `REQ-MCP-004`, `REQ-MCP-005`)
-- [ ] **Phase 29: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts**
-  - [ ] 29-01: Async RPC Transport, Attested Signing, Streaming Proxy, Timeout Supervision & Execution Receipts (`REQ-MCP-006`, `REQ-MCP-007`, `REQ-MCP-008`, `REQ-MCP-009`, `REQ-MCP-010`)
+- [x] **Phase 29: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts**
+  - [x] 29-01: Async RPC Transport, Attested Signing, Streaming Proxy, Timeout Supervision & Execution Receipts (`REQ-MCP-006`, `REQ-MCP-007`, `REQ-MCP-008`, `REQ-MCP-009`, `REQ-MCP-010`)
 
 ### Completed Milestones
 

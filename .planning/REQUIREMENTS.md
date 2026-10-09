@@ -12,8 +12,8 @@ This document defines the requirements for Milestone v3.1 of Programming Desk.
 
 ## 2. Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts (Phase 29)
 
-- [ ] **REQ-MCP-006**: Asynchronous RPC transport for cross-desk tool invocations over private WAN mesh.
-- [ ] **REQ-MCP-007**: Cryptographic request-response signing with seat identity attestation.
-- [ ] **REQ-MCP-008**: Streaming execution proxy supporting real-time progress and telemetry relay.
-- [ ] **REQ-MCP-009**: Distributed tool execution timeout supervision and zombie process reclamation.
-- [ ] **REQ-MCP-010**: Non-repudiable tool execution receipts with input/output content hashing and audit logging.
+- [x] **REQ-MCP-006**: Asynchronous RPC transport for cross-desk tool invocations over private WAN mesh.
+- [x] **REQ-MCP-007**: Cryptographic request-response signing with seat identity attestation.
+- [x] **REQ-MCP-008**: Streaming execution proxy supporting real-time progress and telemetry relay.
+- [x] **REQ-MCP-009**: Distributed tool execution timeout supervision and zombie process reclamation.
+- [x] **REQ-MCP-010**: Non-repudiable tool execution receipts with input/output content hashing and audit logging.

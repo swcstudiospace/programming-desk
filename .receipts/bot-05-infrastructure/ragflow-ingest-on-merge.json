@@ -3,14 +3,14 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/ragflow-ingest-on-merge",
   "started_at": "2026-10-09T14:54:00Z",
-  "completed_at": "2026-10-09T15:21:18Z",
+  "completed_at": "2026-10-09T15:53:53Z",
   "repo": "swcstudiospace/programming-desk",
   "summary": "Incremental RAGFlow ingest on push to main. Selection, names and meta_fields match the VPS seeder. The reusable workflow no-ops without RAGFLOW_URL or RAGFLOW_API_KEY. Caller templates pass organisation secrets with inherit. Draft PR only.",
   "commands": [
     {
       "cmd": "python3 -m pytest infra/tests/test_ragflow_ingest.py -q --tb=line",
       "exit_code": 0,
-      "observed": "14 passed in 4.07s"
+      "observed": "19 passed in 31.82s"
     },
     {
       "cmd": "python3 -m pytest ci/tests -q --tb=line",
@@ -50,7 +50,7 @@
   ],
   "claims": [
     {
-      "claim": "Fake RAGFlow server tests cover diff parsing, naming, secret skip, upsert, delete, missing secrets and dataset mapping for the four repos; 14 passed",
+      "claim": "Fake RAGFlow server tests cover diff parsing, naming, secret skip, upsert, delete, quoted-name round trip, empty-file deletion, parse resume, missing secrets and dataset mapping; 19 passed",
       "evidence_command_index": 0
     },
     {
@@ -77,7 +77,7 @@
   "unverified": [
     "Live RAGFlow was not called. RAGFLOW_URL and RAGFLOW_API_KEY were unset, and the VPS was not touched.",
     "Caller templates were not copied into agent-substrate, agent-swarm or claude-ultrathink.",
-    "GitHub-hosted Actions did not run this workflow here, so hosted-minute billing and public RAGFlow reachability from a runner are untested.",
+    "GitHub-hosted Actions did not run this workflow here, so hosted-minute billing, the last-successful-run lookup, and public RAGFlow reachability from a runner are untested.",
     "actionlint is not installed in this environment. The workflow and caller templates were checked by a YAML-load test in infra/tests/test_ragflow_ingest.py.",
     "approved_by is absent until LEAD or a human stamps this receipt. Greptile's merge-gate verdict is not in this receipt."
   ],

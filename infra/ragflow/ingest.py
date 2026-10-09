@@ -343,11 +343,10 @@ def build_plan(
         except IngestError:
             actions.append(Action("skip-missing", path))
             continue
-        if nbytes == 0:
-            actions.append(Action("skip-empty", path))
-            continue
-        if nbytes > MAX_BYTES:
-            actions.append(Action("skip-size", path, nbytes=nbytes))
+        if nbytes == 0 or nbytes > MAX_BYTES:
+            kind = "skip-empty" if nbytes == 0 else "skip-size"
+            actions.append(Action(kind, path, nbytes=nbytes))
+            actions.extend(_retire(repo, path, commit, branch, slug))
             continue
         try:
             content = _blob_bytes(root, rev, path)
@@ -356,6 +355,7 @@ def build_plan(
             continue
         if b"\x00" in content[:4096]:
             actions.append(Action("skip-binary", path, nbytes=nbytes))
+            actions.extend(_retire(repo, path, commit, branch, slug))
             continue
         if credential_shaped(content):
             actions.append(Action("skip-credential", path, nbytes=nbytes))
@@ -370,6 +370,15 @@ def build_plan(
                 )
             )
     return actions
+
+
+def _retire(repo: str, path: str, commit: str, branch: str, slug: str) -> list[Action]:
+    """Drop a previously indexed document when the path is no longer ingestible."""
+    name = document_name(repo, path)
+    return [
+        Action("delete", path, dataset, name, commit=commit, branch=branch, slug=slug)
+        for dataset in datasets_for(repo, path)
+    ]
 
 
 def format_plan(actions: Iterable[Action]) -> str:
@@ -496,7 +505,9 @@ class RagflowClient:
 
     def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
         boundary = "----ragflow" + uuid.uuid4().hex
-        safe_name = filename.replace('"', "").replace("\r", "").replace("\n", "")
+        # Quoted-string encoding keeps the seeder's document name, including
+        # quotes. Stripping those characters made the next lookup miss.
+        safe_name = quoted_filename(filename)
         preamble = (
             f"--{boundary}\r\n"
             f'Content-Disposition: form-data; name="file"; filename="{safe_name}"\r\n'
@@ -545,8 +556,40 @@ class RagflowClient:
         )
 
 
+def quoted_filename(name: str) -> str:
+    """Encode a document name as a multipart quoted-string. CR and LF cannot sit in a header."""
+    cleaned = name.replace("\r", "").replace("\n", "")
+    return cleaned.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _candidate_names(name: str) -> set[str]:
+    stripped = name.replace('"', "").replace("\r", "").replace("\n", "")
+    return {name, stripped}
+
+
+# RAGFlow `run`: 1 is parsing, 3 is done. 0, 2 and 4 still need a parse request.
+_PARSED_RUN = {"1", "3"}
+
+
+def _needs_parse(doc: dict) -> bool:
+    run = doc.get("run")
+    if run is None:
+        return False
+    return str(run) not in _PARSED_RUN
+
+
 def _matches(docs: list[dict], name: str) -> list[dict]:
-    return [doc for doc in docs if doc.get("name") == name]
+    names = _candidate_names(name)
+    return [doc for doc in docs if doc.get("name") in names]
+
+
+def _find_docs(client: RagflowClient, dataset_id: str, name: str) -> list[dict]:
+    found: dict[str, dict] = {}
+    for keyword in _candidate_names(name):
+        for doc in client.documents(dataset_id, keyword):
+            if doc.get("id"):
+                found[str(doc["id"])] = doc
+    return _matches(list(found.values()), name)
 
 
 def _meta(action: Action) -> dict:
@@ -576,34 +619,45 @@ def execute(actions: list[Action], client: RagflowClient, batch_size: int = PARS
 
     for action in deletes:
         dataset_id = client.dataset_id(action.dataset)
-        docs = _matches(client.documents(dataset_id, action.document), action.document)
+        docs = _find_docs(client, dataset_id, action.document)
         client.delete(dataset_id, [str(doc["id"]) for doc in docs if doc.get("id")])
 
-    # Canary of one upload, then groups of UPLOAD_BATCH. Old ids are deleted
-    # only after that file's upload and meta_fields call succeed.
-    for action in upserts:
-        dataset_id = client.dataset_id(action.dataset)
-        existing = _matches(client.documents(dataset_id, action.document), action.document)
-        if any(str((doc.get("meta_fields") or {}).get("content_sha256")) == action.sha256 for doc in existing):
+    # Uploads stay one file at a time so the previous version is deleted only
+    # after that file's upload and meta_fields call succeed. A later failure
+    # still parses the documents already stored.
+    try:
+        for action in upserts:
+            dataset_id = client.dataset_id(action.dataset)
+            existing = _find_docs(client, dataset_id, action.document)
+            matched = [
+                doc for doc in existing
+                if str((doc.get("meta_fields") or {}).get("content_sha256")) == action.sha256
+            ]
+            if matched:
+                for doc in matched:
+                    if doc.get("id") and _needs_parse(doc):
+                        pending.setdefault(action.dataset, []).append(str(doc["id"]))
+                flush(action.dataset)
+                print(
+                    f"plan skip-unchanged dataset={action.dataset} document={action.document}",
+                    flush=True,
+                )
+                continue
+            if action.content is None:
+                raise IngestError(f"missing content for {action.document}")
+            new_id = client.upload(dataset_id, action.document, action.content)
+            client.set_meta(dataset_id, new_id, _meta(action))
+            old_ids = [str(doc["id"]) for doc in existing if doc.get("id") and str(doc["id"]) != new_id]
+            client.delete(dataset_id, old_ids)
+            pending.setdefault(action.dataset, []).append(new_id)
+            flush(action.dataset)
             print(
-                f"plan skip-unchanged dataset={action.dataset} document={action.document}",
+                f"plan upsert dataset={action.dataset} document={action.document}",
                 flush=True,
             )
-            continue
-        if action.content is None:
-            raise IngestError(f"missing content for {action.document}")
-        new_id = client.upload(dataset_id, action.document, action.content)
-        client.set_meta(dataset_id, new_id, _meta(action))
-        old_ids = [str(doc["id"]) for doc in existing if doc.get("id") and str(doc["id"]) != new_id]
-        client.delete(dataset_id, old_ids)
-        pending.setdefault(action.dataset, []).append(new_id)
-        flush(action.dataset)
-        print(
-            f"plan upsert dataset={action.dataset} document={action.document}",
-            flush=True,
-        )
-    for dataset in list(pending):
-        flush(dataset, force=True)
+    finally:
+        for dataset in list(pending):
+            flush(dataset, force=True)
 
 
 def secrets_present(url: str, key: str) -> bool:
@@ -631,6 +685,13 @@ def run(argv: list[str] | None = None, *, client_factory=RagflowClient) -> int:
         print("ragflow-ingest: pull_request events do not ingest; skipping")
         return 0
 
+    if not args.dry_run:
+        url = os.environ.get("RAGFLOW_URL", "")
+        key = os.environ.get("RAGFLOW_API_KEY", "")
+        if not secrets_present(url, key):
+            print("ragflow-ingest: RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest")
+            return 0
+
     root = Path(args.root).resolve()
     slug = args.repo_slug.strip() or f"swcstudiospace/{args.repo}"
     branch = args.branch.strip() or os.environ.get("GITHUB_REF_NAME", "").strip()
@@ -656,9 +717,6 @@ def run(argv: list[str] | None = None, *, client_factory=RagflowClient) -> int:
 
     url = os.environ.get("RAGFLOW_URL", "")
     key = os.environ.get("RAGFLOW_API_KEY", "")
-    if not secrets_present(url, key):
-        print("ragflow-ingest: RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest")
-        return 0
 
     if not any(action.kind in {"upsert", "delete"} for action in actions):
         print("ragflow-ingest: no documents to ingest")

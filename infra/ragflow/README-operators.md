@@ -4,7 +4,9 @@ Operator notes for Ming. This file is not named `README.md` because that basenam
 
 ## What runs
 
-`.github/workflows/ragflow-ingest.yml` runs on a push to `main` of programming-desk. It checks out the commit, fetches the push's before SHA when that SHA is 40 hex characters, and runs `infra/ragflow/ingest.py`. A `pull_request` event is not a trigger, and the script exits 0 if `GITHUB_EVENT_NAME` is `pull_request`.
+`.github/workflows/ragflow-ingest.yml` runs on a push to `main` of programming-desk. Checkout is pinned to a commit of `actions/checkout`. The ingest script is taken from that push's commit when programming-desk itself runs, and from `main` of programming-desk when another repository calls the workflow. A `pull_request` event is not a trigger, and the script exits 0 if `GITHUB_EVENT_NAME` is `pull_request`.
+
+GitHub keeps only one pending run in the concurrency group. The job reads the last successful run of this workflow on the same branch and diffs from that commit when it is an ancestor of `HEAD`, so a replaced pending push is still included. The root permission stays `contents: read`. The ingest job also has `actions: read` for that lookup. When `RAGFLOW_URL` or `RAGFLOW_API_KEY` is empty, the job exits 0 before any fetch.
 
 `agent-substrate`, `agent-swarm` and `claude-ultrathink` do not get a workflow until the templates in `infra/ragflow/callers/` are copied into each repo as `.github/workflows/ragflow-ingest.yml`. Those templates call:
 

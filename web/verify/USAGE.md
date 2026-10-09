@@ -6,7 +6,7 @@ Smoke harness for a web URL. Playwright drives `BASE_URL`, axe flags serious and
 
 ## Install
 
-Node 22. From `web/verify`:
+Node **22.6.0 or newer** is required: 22.6.0 introduced the `--experimental-strip-types` flag used by the Node scripts. From `web/verify`:
 
 ```bash
 npm ci
@@ -35,27 +35,79 @@ Each check is its own Playwright test. A failure does not hide the others.
 
 Moderate and minor axe violations are logged and do not fail the run.
 
+The harness observes each page for `VERIFY_STARTUP_MS` milliseconds **after the document's load event** (default `1000`, integer range `0`–`10000`). Console and uncaught page errors during that bounded startup interval fail their respective checks. This is not continuous monitoring: later errors are outside the check. Use a larger interval for applications with slower startup, or `0` to observe only navigation/load events. Axe and screenshots run after the same interval.
+
+```bash
+VERIFY_STARTUP_MS=2000 BASE_URL=http://127.0.0.1:3000 ROUTES=/ npm run verify
+```
+
 ## Output
 
 `out/` (this package does not ship a `.gitignore`; see below):
 
-- `out/verify-result.json` — `{ "commands": [ { "cmd", "exit_code", "duration_s", "output_tail" } ] }`, one entry per check
-- `out/screenshots/<route>-desktop.png` and `<route>-mobile.png`
+- `out/verify-result.json` — `{ "run": { "exit_code", "duration_s" }, "commands": [ { "cmd", "exit_code", "duration_s", "output_tail" } ] }`. The first command records the actual Playwright invocation and its exit code; subsequent entries record individual checks. Report-generation/read failures add a nonzero evidence entry.
+- `out/screenshots/<project>/<route-slug>-<sha256-of-exact-route>-desktop.png` and `...-mobile.png`. Project directories separate browsers; full route hashes separate paths/query strings with the same readable slug. Names are stable across runs.
 - `out/test-results/` — Playwright trace retained on failure
 - `out/playwright-report.json` — raw JSON reporter file
 
 Do not commit `node_modules/` or `out/`.
 
-## Self-test (local fixtures only)
+All three run scripts launch Playwright and convert its **current** report even when Playwright fails. They remove the old raw report, result, screenshots, and `out/test-results/` traces before launch; configuration or browser-launch failures cannot reuse previous results or failure artifacts. `run.exit_code` is the actual Playwright exit code, including on a negative self-check. Normal `verify` and `selftest` exit nonzero for a failed invocation, failed/missing check, or unusable report. Retries remain disabled.
 
-The self-test scripts are fixed to `http://127.0.0.1:4173` and the pages under `fixtures/`. They do not take a URL. Do not point them at a preview or a production host. Example URLs elsewhere in this file have no credentials.
+Run from this package directory. Do not run concurrent invocations against the shared `out/` directory. Invoke `npm run verify`, not `npx playwright test && ...`: the latter bypasses cleanup/evidence generation. Additional Playwright test options may be passed after `--`; overriding the JSON reporter leaves no usable report and therefore fails verification. There is no standalone converter mode, because an old report cannot establish its invocation.
+
+Each `commands[].cmd` is shell-replayable from this directory. It preserves route, browser/project, fixture port, startup interval, and check selection, and safely quotes shell arguments. The original `BASE_URL` is deliberately **not** written into the command: export it when replaying. Use only credential-free routes and URLs; do not put tokens in query strings or CLI arguments.
+
+For example, after a self-test on port 4199, replay the first individual check (replaying replaces `out/` with that narrower run):
 
 ```bash
-npm run selftest:fail   # exits non-zero; names the console error and the axe violation
-npm run selftest        # exits 0 against fixtures/pass.html
+export BASE_URL=http://127.0.0.1:4199
+command=$(node -p 'require("./out/verify-result.json").commands[1].cmd')
+sh -c "$command"
 ```
 
-`fixtures/fail.html` logs `fixture-console-error: desk-verify-fail` and includes an image with no text alternative (`image-alt`, critical). `fixtures/pass.html` has a title, a language, and a named button.
+## Self-test (local fixtures only)
+
+The self-test scripts set their own loopback `BASE_URL` and fixed fixture route; caller-supplied `BASE_URL` and `ROUTES` are ignored. `VERIFY_FIXTURE_PORT` sets both the server port and target URL (default `4173`). Do not point self-tests at a preview or production host. Example URLs elsewhere in this file have no credentials.
+
+```bash
+npm run selftest:fail   # exits 0 ONLY when the expected negative failures are observed
+npm run selftest        # exits 0 against fixtures/pass.html
+VERIFY_FIXTURE_PORT=4199 npm run selftest
+VERIFY_FIXTURE_PORT=4199 npm run selftest:fail
+```
+
+`selftest:fail` is a harness self-check, not a normal failing verification. It requires exactly five checks in every selected browser: `console-error` must fail with exactly `fixture-console-error: desk-verify-fail`, axe must fail with exactly `image-alt impact=critical`, and HTTP status, page errors, and screenshots must pass. Missing checks, missing expected errors, additional violations, launch/configuration failures, or any unexpected failure make the self-check exit `1`. Its evidence still records the failing Playwright exit (`1`) and the failed checks; exit `0` means the detector worked, not that the fixture passed.
+
+`fixtures/fail.html` logs its console error 100 ms after startup and includes an image with no text alternative. Add `?delayed-page-error` to also throw an uncaught exception after 150 ms. `fixtures/pass.html` has a title, a language, and a named button.
+
+Fresh failure evidence and delayed error capture can be checked with:
+
+```bash
+npm run selftest
+# Expected exit 1: previous green evidence is replaced by console, page, and axe failures.
+VERIFY_FIXTURES=1 VERIFY_FIXTURE_PORT=4199 \
+BASE_URL=http://127.0.0.1:4199 ROUTES='/fail.html?delayed-page-error' \
+VERIFY_STARTUP_MS=1000 npm run verify
+# Expected exit 1 with fresh invocation-failure evidence, not the preceding report.
+VERIFY_BROWSERS=unknown-browser npm run selftest
+```
+
+The optional behavioral regression suite exercises real delayed errors and isolated child CLI runs: a passing run followed by configuration/browser-launch failures, exact negative self-checks, a missing console error, colliding route screenshot paths, and shell replay with a quoted route. It uses installed Chromium; child outputs are isolated in a temporary directory, removed afterward:
+
+```bash
+VERIFY_HARNESS_REGRESSIONS=1 npm run selftest
+```
+
+After installing Firefox, confirm separate project and route destinations with:
+
+```bash
+VERIFY_FIXTURES=1 VERIFY_FIXTURE_PORT=4199 \
+BASE_URL=http://127.0.0.1:4199 VERIFY_BROWSERS=chromium,firefox \
+ROUTES='/pass.html?a=b,/pass.html?a/b' npm run verify -- --grep screenshots
+```
+
+Both routes have the readable slug `pass.html_a_b`. Expect eight images: two route hashes × desktop/mobile × two project directories. An ensuing run clears the old screenshots.
 
 ## A local dev server
 
@@ -81,7 +133,7 @@ BASE_URL=https://preview.example.com ROUTES=/,/settings npm run verify
 
 `BASE_URL` must be an absolute `http` or `https` URL with no username or password. Do not put a token in the query string.
 
-Optional browsers (Chromium is the default, and the only browser the self-test installs):
+Optional browsers (Chromium is the default; install each browser before running it, including for self-tests):
 
 ```bash
 VERIFY_BROWSERS=chromium,firefox,webkit BASE_URL=http://127.0.0.1:3000 ROUTES=/ npm run verify
@@ -113,9 +165,12 @@ npx wdio desktop/wdio.tauri.conf.ts
 
 ## Electron app
 
-`desktop/electron.smoke.ts` calls Playwright's experimental `_electron.launch`. From a product repo, with the Electron main script or app directory:
+`desktop/electron.smoke.ts` calls Playwright's experimental `_electron.launch`. Copy the template into the **product repo** and install its exact imported dependency there; this harness's `node_modules/` is not used by a copied template. The product must also already provide its Electron app/runtime:
 
 ```bash
+npm install --save-dev --save-exact playwright@1.64.0
+
+# From the product repo, with its Electron main script or app directory:
 ELECTRON_APP_PATH=/path/to/app \
 node --experimental-strip-types desktop/electron.smoke.ts
 ```

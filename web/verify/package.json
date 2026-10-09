@@ -5,12 +5,12 @@
   "type": "module",
   "description": "Playwright and axe smoke harness. Drives BASE_URL, writes receipt-shaped JSON under out/.",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.6.0"
   },
   "scripts": {
-    "verify": "playwright test && node --experimental-strip-types scripts/to-receipt.ts",
-    "selftest": "VERIFY_FIXTURES=1 BASE_URL=http://127.0.0.1:4173 ROUTES=/pass.html playwright test && node --experimental-strip-types scripts/to-receipt.ts",
-    "selftest:fail": "VERIFY_FIXTURES=1 BASE_URL=http://127.0.0.1:4173 ROUTES=/fail.html playwright test; ec=$?; node --experimental-strip-types scripts/to-receipt.ts || exit $?; exit $ec",
+    "verify": "node --experimental-strip-types scripts/to-receipt.ts verify",
+    "selftest": "node --experimental-strip-types scripts/to-receipt.ts selftest",
+    "selftest:fail": "node --experimental-strip-types scripts/to-receipt.ts selftest:fail",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

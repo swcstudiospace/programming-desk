@@ -11,11 +11,14 @@
   <body>
     <main>
       <h1>Verify harness failing fixture</h1>
-      <p>This page logs a console error and includes an image with no text alternative.</p>
+      <p>This page logs a delayed console error and includes an image with no text alternative.</p>
       <img src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7" width="1" height="1">
     </main>
     <script>
-      console.error("fixture-console-error: desk-verify-fail");
+      setTimeout(() => console.error("fixture-console-error: desk-verify-fail"), 100);
+      if (new URLSearchParams(location.search).has("delayed-page-error")) {
+        setTimeout(() => { throw new Error("fixture-page-error: desk-verify-fail"); }, 150);
+      }
     </script>
   </body>
 </html>

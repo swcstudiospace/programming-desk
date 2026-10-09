@@ -1,0 +1,69 @@
+{
+  "task_id": "verify-web-desktop-harness-ut-muzt4gj6",
+  "bot": "bot-02-web-edge",
+  "branch": "bot-02-web-edge/verify-web-desktop-harness-ut-muzt4gj6",
+  "receipt_kind": "verification",
+  "evidence_provenance": "Post-fix commands and outcomes observed by the parent orchestrator in /tmp/pr88/web/verify. Evidence summaries describe observations rather than fabricated transcripts. All runtime targets were local fixtures, not product UI.",
+  "commands": [
+    {
+      "cmd": "npm run typecheck && VERIFY_HARNESS_REGRESSIONS=1 npm run selftest",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "duration_s": 49.84,
+      "output_tail": "7 passed (47.6s)\nverify-result checks=7 failed=0 run_exit=0",
+      "evidence_summary": "tsc --noEmit passed. Real Chromium fixture tests and isolated real CLI regressions passed: bounded delayed console/page errors, stale-green replacement, launch/configuration failures, exact negative selfcheck, failed-run trace cleanup before configuration errors, colliding route screenshots and shell replay with an apostrophe-containing route."
+    },
+    {
+      "cmd": "VERIFY_FIXTURE_PORT=4199 npm run selftest && VERIFY_FIXTURE_PORT=4199 npm run selftest:fail",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "output_tail": "selftest:fail: observed exactly the expected console-error and image-alt failures in every project",
+      "evidence_summary": "Custom fixture port reached the matching server. Negative selfcheck exited 0 only for the expected console-error and image-alt findings; evidence retained the failing underlying Playwright exit. Supplemental inspection observed run.exit_code=1 and exactly two failed individual checks. This run preceded the final trace-cleanup edit; the final regression in command 0 also exercises the expected-negative path."
+    },
+    {
+      "cmd": "VERIFY_FIXTURES=1 VERIFY_FIXTURE_PORT=4199 BASE_URL=http://127.0.0.1:4199 VERIFY_BROWSERS=chromium,firefox ROUTES='/pass.html?a=b,/pass.html?a/b' npm run verify -- --grep screenshots",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "output_tail": "4 passed (8.9s)\nverify-result checks=4 failed=0 run_exit=0",
+      "evidence_summary": "Supplemental direct output-directory inspection observed eight distinct screenshot files for two routes, two viewport variants and Chromium/Firefox project directories. A Firefox mobile fixture screenshot was opened and visually inspected before subsequent invocations cleared it. This screenshot run preceded the final trace-cleanup edit, which does not change screenshot naming."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The final TypeScript typecheck and seven-test real Chromium/CLI regression run passed, including removal of previous failure traces before configuration errors; no build or product UI behavior is claimed.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The custom-port positive and expected-negative fixture selfchecks succeeded, while negative evidence retained Playwright exit 1 and exactly two failed checks.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The Chromium/Firefox screenshot run passed four screenshot cases and generated eight distinct project/route/viewport paths for two colliding readable route slugs.",
+      "evidence_command_index": 2
+    }
+  ],
+  "unverified": [
+    "Only local fixture pages were exercised; no preview or production routes or product application UI was verified.",
+    "No Electron or Tauri desktop application was launched; desktop runtime behavior remains unverified.",
+    "WebKit/Safari was not exercised. Firefox evidence covers screenshot scenarios only, not the full regression suite.",
+    "Observation stops after the configured bounded startup interval; later page errors and unsupported concurrent shared-out runs are outside the contract.",
+    "Each invocation replaces local artifacts. Recorded summaries retain the observations; no stable uploaded screenshot or trace links were created.",
+    "Independent QUALITY approval is absent; approved_by is omitted and strict G-2 remains blocked.",
+    "Latest pushed-head CI and Greptile are not established by these local commands; the PR remains draft.",
+    "No deployment, merge, auto-merge, force-push or fabricated approval was performed."
+  ],
+  "files_changed": [
+    "web/verify/package.json",
+    "web/verify/package-lock.json",
+    "web/verify/scripts/to-receipt.ts",
+    "web/verify/tests/smoke.spec.ts",
+    "web/verify/fixtures/fail.html",
+    "web/verify/USAGE.md",
+    ".receipts/bot-02-web-edge/verify-web-desktop-harness-ut-muzt4gj6.json"
+  ],
+  "files_changed_scope": "Review corrections and this receipt; not every file from the original implementation commit.",
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

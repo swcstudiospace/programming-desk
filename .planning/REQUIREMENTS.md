@@ -1,19 +1,21 @@
-# Requirements: Milestone v4.4 — Autonomous Cross-Desk Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
+# Requirements: Milestone v4.5 — Autonomous Multi-Agent Neuro-Symbolic Reasoning & Causal Inference Mesh
 
-This document defines the requirements for Milestone v4.4 of Programming Desk.
+This document defines the requirements for Milestone v4.5 of Programming Desk.
 
-## 1. Zero-Knowledge Proof Synthesis & Circuit Verification (Phase 54)
+## 1. Neuro-Symbolic Logic Graph & First-Order Predicate Synthesis (Phase 56)
 
-- [x] **REQ-ZK-001**: Rank-1 Constraint System (R1CS) Arithmetic Circuit Compiler (`ZKCircuit`, `ZKConstraint`) mapping multi-wire mathematical constraints and witness valuation sets.
-- [x] **REQ-ZK-002**: Zero-Knowledge Proof Synthesis Engine (`ZKProofGenerator`) producing non-interactive cryptographic proof artifacts without witness disclosure.
-- [x] **REQ-ZK-003**: Zero-Knowledge Proof Verifier (`ZKProofVerifier`) verifying execution validity and constraint satisfaction against public inputs.
-- [x] **REQ-ZK-004**: Private Tool State Transition Prover (`ZKStateTransitionProver`) synthesizing cryptographic receipts for agent state mutations while keeping authorization secrets hidden.
-- [x] **REQ-ZK-005**: Zero-Knowledge REST API endpoints under `/v1/zk/*` exposing circuit synthesis, proof generation, proof verification, and state transition proving.
+- [x] **REQ-NS-001**: First-Order Predicate & Horn Clause Rule Engine (`FirstOrderLogicEngine`, `SymbolicRule`, `Predicate`) supporting forward-chaining deduction, backward-chaining queries, and automated resolution refutation over grounded facts.
+- [x] **REQ-NS-002**: Neuro-Symbolic Knowledge Graph (`NeuroSymbolicGraph`, `ConceptNode`, `RelationEdge`) binding vector embeddings with discrete logical entities, supporting fuzzy truth valuations in \([0.0, 1.0]\) and semantic similarity retrieval.
+- [x] **REQ-NS-003**: Swarm Logical Invariant Checker (`LogicalInvariantChecker`) verifying execution invariants and safety policies against proposed tool invocations and state mutations, aborting invalid state transitions.
+- [x] **REQ-NS-004**: Neural-to-Symbolic Rule Extractor (`RuleExtractionEngine`) translating observed agent execution traces and neural completions into formalized first-order Horn rules with confidence scores.
+- [x] **REQ-NS-005**: Neuro-Symbolic REST API endpoints under `/v1/neuro-symbolic/*` exposing rule registration, deduction forward-chaining, concept graph indexing, and invariant evaluation.
 
-## 2. Homomorphic State Encapsulation & Multi-Party Private Inference (Phase 55)
+## 2. Causal DAG Discovery, Do-Calculus Interventions & Counterfactual Mesh (Phase 57)
 
-- [x] **REQ-ZK-006**: Additively Homomorphic Encryption Simulator (`HomomorphicCipherEngine`) supporting ciphertext additions and scalar multiplications over modular prime fields.
-- [x] **REQ-ZK-007**: Shamir Threshold Secret Sharing Scheme (`ThresholdSecretSharing`) splitting private keys and authorization seeds into `(t, n)` shares with Lagrange interpolation reconstruction.
-- [x] **REQ-ZK-008**: Privacy-Preserving Multi-Party Compute (MPC) Inference Coordinator (`SecureMPCInferenceCoordinator`) evaluating distributed model predictions across federated seats without exposing local inputs.
-- [x] **REQ-ZK-009**: External Zero-Knowledge State Anchor Exporter (`PrivateZKAnchorExporter`) committing Merkle tree roots of verified ZK receipts and MPC states to Solana devnet.
-- [x] **REQ-ZK-010**: End-to-End ZK & Privacy Agent Swarm Drill Simulator (`ZKPrivacyAgentSwarmDrillSimulator`) verifying constraint satisfaction, witness tamper detection, homomorphic operations, TSS secret reconstruction, and Solana devnet anchoring.
+- [x] **REQ-NS-006**: Causal Directed Acyclic Graph (DAG) Representation (`CausalDAG`, `CausalVariable`, `CausalEdge`) with topological cycle rejection and d-separation path conditional independence analysis.
+- [x] **REQ-NS-007**: Constraint-Based Causal Discovery Engine (`ConstraintCausalDiscovery`) inferring causal skeletons and edge orientations from observational data matrix traces using conditional independence tests.
+- [x] **REQ-NS-008**: Pearl's Do-Calculus Interventional Engine (`DoCalculusEngine`) simulating causal interventions \(P(Y | do(X = x))\) via graph mutilation, backdoor adjustment set identification, and interventional expectation computation.
+- [x] **REQ-NS-009**: Counterfactual Reasoning Simulator (`CounterfactualSimulator`) implementing structural causal model (SCM) abduction, action, and prediction for hypothetical counterfactual queries ("What if action A was taken instead of B?").
+- [x] **REQ-NS-010**: Causal Anchor & Proof Exporter (`CausalAnchorExporter`) producing HMAC-SHA256 causal receipts, constructing Merkle proof roots, and exporting anchors to Solana devnet targets.
+- [x] **REQ-NS-011**: End-to-End Neuro-Symbolic & Causal Mesh Drill Simulator (`NeuroSymbolicCausalDrillSimulator`) verifying Horn deduction, invariant enforcement, d-separation, do-calculus adjustment, counterfactual simulation, and Solana devnet anchoring.
+- [x] **REQ-NS-012**: Causal REST API endpoints under `/v1/causal/*` and `/v1/neuro-symbolic/drill/simulate` exposing DAG compilation, causal discovery, interventional evaluation, counterfactual queries, and drill executions.

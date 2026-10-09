@@ -241,6 +241,11 @@ current_pack: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_
 _origin_request_timestamps: dict[str, list[float]] = {}
 _idempotency_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
+# Milestone v4.5 Registry
+_global_neuro_graphs: dict[str, Any] = {}
+_global_causal_dags: dict[str, Any] = {}
+
+
 INSTRUCTIONS = """\
 Programming Desk gateway. You are connected as one seat; tools/list is your contract
 (contracts/tool-rosters/<seat>.yaml). A tool that is not listed does not exist. Call desk_brief at
@@ -5322,6 +5327,235 @@ def create_mcp(
         drill_results = ZKPrivacyAgentSwarmDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.5: Autonomous Multi-Agent Neuro-Symbolic Reasoning & Causal Inference Mesh
+    from desk_gateway.neuro_symbolic import (
+        FirstOrderLogicEngine,
+        LogicalInvariantChecker,
+        NeuroSymbolicGraph,
+        Predicate,
+        RuleExtractionEngine,
+        SymbolicRule,
+    )
+    from desk_gateway.causal_mesh import (
+        CausalAnchorExporter,
+        CausalDAG,
+        CausalEdge,
+        CausalVariable,
+        ConstraintCausalDiscovery,
+        CounterfactualSimulator,
+        DoCalculusEngine,
+        NeuroSymbolicCausalDrillSimulator,
+    )
+
+    neuro_graph = NeuroSymbolicGraph(embedding_dimension=4)
+    logic_engine = neuro_graph.logic_engine
+    invariant_checker = LogicalInvariantChecker(logic_engine)
+    rule_extractor = RuleExtractionEngine()
+    causal_discovery = ConstraintCausalDiscovery()
+    causal_anchor_exporter = CausalAnchorExporter()
+
+    mcp._neuro_graph = neuro_graph  # type: ignore[attr-defined]
+    mcp._logic_engine = logic_engine  # type: ignore[attr-defined]
+    mcp._invariant_checker = invariant_checker  # type: ignore[attr-defined]
+    mcp._rule_extractor = rule_extractor  # type: ignore[attr-defined]
+    mcp._causal_discovery = causal_discovery  # type: ignore[attr-defined]
+    mcp._causal_anchor_exporter = causal_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/neuro-symbolic/facts", methods=["POST"])
+    async def neuro_symbolic_add_fact_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        name = body.get("name", "")
+        args = tuple(body.get("args", []))
+        truth_val = float(body.get("truth_val", 1.0))
+        if not name:
+            return JSONResponse({"ok": False, "error": "Predicate name is required"}, status_code=400)
+        pred = Predicate(name=name, args=args, truth_val=truth_val)
+        logic_engine.add_fact(pred)
+        return JSONResponse({"ok": True, "predicate": pred.key(), "truth_val": pred.truth_val})
+
+    @mcp.custom_route("/v1/neuro-symbolic/rules", methods=["POST"])
+    async def neuro_symbolic_add_rule_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        rule_id = body.get("rule_id", f"rule-{secrets.token_hex(4)}")
+        raw_antecedents = body.get("antecedents", [])
+        raw_consequent = body.get("consequent", {})
+        conf = float(body.get("confidence", 1.0))
+        desc = body.get("description", "")
+
+        antecedents = [
+            Predicate(name=a["name"], args=tuple(a.get("args", [])), truth_val=float(a.get("truth_val", 1.0)))
+            for a in raw_antecedents
+        ]
+        consequent = Predicate(
+            name=raw_consequent.get("name", "inferred"),
+            args=tuple(raw_consequent.get("args", [])),
+            truth_val=float(raw_consequent.get("truth_val", 1.0)),
+        )
+        rule = SymbolicRule(rule_id=rule_id, antecedents=antecedents, consequent=consequent, confidence=conf, description=desc)
+        logic_engine.add_rule(rule)
+        return JSONResponse({"ok": True, "rule": rule.to_dict()})
+
+    @mcp.custom_route("/v1/neuro-symbolic/deduce", methods=["POST"])
+    async def neuro_symbolic_deduce_route(_request: Request) -> Response:
+        inferred = logic_engine.evaluate_forward_chaining()
+        return JSONResponse({
+            "ok": True,
+            "inferred_count": len(inferred),
+            "inferred_facts": [p.key() for p in inferred],
+        })
+
+    @mcp.custom_route("/v1/neuro-symbolic/query", methods=["POST"])
+    async def neuro_symbolic_query_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        name = body.get("name", "")
+        args = tuple(body.get("args", []))
+        pred = Predicate(name=name, args=args)
+        bindings = logic_engine.query(pred)
+        return JSONResponse({"ok": True, "predicate": pred.key(), "matches_count": len(bindings), "bindings": bindings})
+
+    @mcp.custom_route("/v1/neuro-symbolic/concepts", methods=["POST"])
+    async def neuro_symbolic_concept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", f"node-{secrets.token_hex(4)}")
+        name = body.get("name", node_id)
+        category = body.get("category", "entity")
+        embedding = body.get("embedding", [0.0, 0.0, 0.0, 0.0])
+        attributes = body.get("attributes", {})
+        node = neuro_graph.add_concept(
+            node_id=node_id,
+            name=name,
+            category=category,
+            embedding=embedding,
+            attributes=attributes,
+        )
+        return JSONResponse({"ok": True, "node_id": node.node_id, "category": node.category})
+
+    @mcp.custom_route("/v1/neuro-symbolic/concepts/search", methods=["POST"])
+    async def neuro_symbolic_concept_search_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        query_emb = body.get("query_embedding", [0.0, 0.0, 0.0, 0.0])
+        top_k = int(body.get("top_k", 3))
+        results = neuro_graph.query_similarity(query_emb, top_k=top_k)
+        return JSONResponse({
+            "ok": True,
+            "results": [{"node_id": node.node_id, "name": node.name, "similarity": round(sim, 4)} for node, sim in results],
+        })
+
+    @mcp.custom_route("/v1/neuro-symbolic/invariants/check", methods=["POST"])
+    async def neuro_symbolic_invariant_check_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        action = body.get("action", "execute_operation")
+        raw_facts = body.get("candidate_facts", [])
+        candidate_facts = [
+            Predicate(name=f["name"], args=tuple(f.get("args", [])))
+            for f in raw_facts
+        ]
+        violations = invariant_checker.check_invariants(action, candidate_facts)
+        return JSONResponse({
+            "ok": len(violations) == 0,
+            "action": action,
+            "violations_count": len(violations),
+            "violations": [
+                {
+                    "invariant_name": v.invariant_name,
+                    "target_action": v.target_action,
+                    "violating_bindings": v.violating_bindings,
+                    "message": v.message,
+                }
+                for v in violations
+            ],
+        })
+
+    @mcp.custom_route("/v1/causal/dags/create", methods=["POST"])
+    async def causal_dag_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", f"dag-{secrets.token_hex(4)}")
+        variables = body.get("variables", [])
+        edges = body.get("edges", [])
+
+        dag = CausalDAG(dag_id=dag_id)
+        for v in variables:
+            dag.add_variable(CausalVariable(name=v.get("name", "v"), base_mean=float(v.get("base_mean", 0.0))))
+        for e in edges:
+            dag.add_edge(CausalEdge(source=e["source"], target=e["target"], weight=float(e.get("weight", 1.0))))
+
+        _global_causal_dags[dag_id] = dag
+        return JSONResponse({
+            "ok": True,
+            "dag_id": dag.dag_id,
+            "variables_count": len(dag.variables),
+            "edges_count": len(dag.edges),
+            "topological_order": dag.topological_sort(),
+        })
+
+    @mcp.custom_route("/v1/causal/discover", methods=["POST"])
+    async def causal_discover_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", f"discovered-{secrets.token_hex(4)}")
+        variables = body.get("variables", [])
+        samples = body.get("samples", [])
+
+        dag = causal_discovery.discover_skeleton_and_dag(
+            dag_id=dag_id,
+            variable_names=variables,
+            data_samples=samples,
+        )
+        _global_causal_dags[dag_id] = dag
+        return JSONResponse({
+            "ok": True,
+            "dag_id": dag.dag_id,
+            "edges": [{"source": e.source, "target": e.target, "weight": e.weight} for e in dag.edges],
+            "topological_order": dag.topological_sort(),
+        })
+
+    @mcp.custom_route("/v1/causal/intervene", methods=["POST"])
+    async def causal_intervene_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", "")
+        treatment = body.get("treatment", "")
+        val = float(body.get("intervention_value", 1.0))
+        outcome = body.get("outcome", "")
+        baseline = body.get("baseline_values")
+
+        dag = _global_causal_dags.get(dag_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": f"Causal DAG '{dag_id}' not found"}, status_code=404)
+
+        engine = DoCalculusEngine(dag)
+        res = engine.simulate_intervention(
+            treatment=treatment,
+            intervention_value=val,
+            outcome=outcome,
+            baseline_values=baseline,
+        )
+        return JSONResponse({"ok": True, **res})
+
+    @mcp.custom_route("/v1/causal/counterfactual", methods=["POST"])
+    async def causal_counterfactual_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", "")
+        evidence = body.get("factual_evidence", {})
+        intervention = body.get("counterfactual_intervention", {})
+        target_var = body.get("target_variable", "")
+
+        dag = _global_causal_dags.get(dag_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": f"Causal DAG '{dag_id}' not found"}, status_code=404)
+
+        sim = CounterfactualSimulator(dag)
+        res = sim.evaluate_counterfactual(
+            factual_evidence=evidence,
+            counterfactual_intervention=intervention,
+            target_variable=target_var,
+        )
+        return JSONResponse({"ok": True, **res})
+
+    @mcp.custom_route("/v1/neuro-symbolic/drill/simulate", methods=["POST"])
+    async def neuro_symbolic_drill_simulate_route(_request: Request) -> Response:
+        drill_results = NeuroSymbolicCausalDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -6818,6 +7052,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "tss_engine": getattr(mcp, "_tss_engine", None),
         "mpc_coordinator": getattr(mcp, "_mpc_coordinator", None),
         "zk_anchor_exporter": getattr(mcp, "_zk_anchor_exporter", None),
+        "neuro_graph": getattr(mcp, "_neuro_graph", None),
+        "logic_engine": getattr(mcp, "_logic_engine", None),
+        "invariant_checker": getattr(mcp, "_invariant_checker", None),
+        "rule_extractor": getattr(mcp, "_rule_extractor", None),
+        "causal_discovery": getattr(mcp, "_causal_discovery", None),
+        "causal_anchor_exporter": getattr(mcp, "_causal_anchor_exporter", None),
     }
     return app, settings
 

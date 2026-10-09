@@ -2,7 +2,7 @@
   "task_id": "g2-fast-docs-and-recall",
   "bot": "bot-01-systems-backend",
   "started_at": "2026-10-09T08:01:00Z",
-  "completed_at": "2026-10-09T08:22:59Z",
+  "completed_at": "2026-10-09T08:52:43Z",
   "commands": [
     {
       "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py --tb=line -s",
@@ -53,6 +53,18 @@
       "output_tail": "299 passed in 9.50s"
     },
     {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py::test_cached_names_do_not_wait_on_another_refresh tests/test_plane_budgets.py::test_unknown_dataset_after_lookup_window_still_refreshes tests/test_plane_budgets.py::test_oversized_docs_budgets_name_ragflow_before_the_tool_deadline tests/test_plane_budgets.py::test_hindsight_http_timeout_is_a_bank_timeout tests/test_plane_budgets.py::test_ephemeral_upstream_closes_on_success_and_cancellation tests/test_plane_budgets.py::test_open_breaker_lets_an_inflight_sibling_finish --tb=line",
+      "exit_code": 1,
+      "duration_s": 1.45,
+      "output_tail": "6 failed in 1.05s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DESK_REPO_DIR=/workspace DATA_DIR=/tmp/desk-gateway-data uv run pytest -q",
+      "exit_code": 0,
+      "duration_s": 34.38,
+      "output_tail": "667 passed in 33.84s"
+    },
+    {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/g2-fast-docs-and-recall.json --bot bot-01-systems-backend --strict",
       "exit_code": 1,
       "duration_s": 0.13,
@@ -94,8 +106,17 @@
       "evidence_command_index": 7
     },
     {
-      "claim": "Strict receipt check fails because approved_by is absent, which waits for an independent reviewer",
+      "claim": "Before the Greptile fixes, the six new budget tests fail: cache hits wait, a late unknown-dataset skips refresh, oversized budgets, HTTP timeout status, ephemeral close, and a breaker trip closing an in-flight sibling",
       "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "After those fixes, the desk-gateway pytest suite passes, including the six new tests and tests/test_memory_retain.py, when DESK_REPO_DIR and DATA_DIR point at this checkout",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "Strict receipt check fails because approved_by is absent, which waits for an independent reviewer",
+      "evidence_command_index": 10,
       "expects_failure": true
     }
   ],
@@ -111,6 +132,7 @@
   "files_changed": [
     "services/desk-gateway/src/desk_gateway/upstreams.py",
     "services/desk-gateway/src/desk_gateway/tools/core.py",
+    "services/desk-gateway/src/desk_gateway/tools/packs.py",
     "services/desk-gateway/src/desk_gateway/tools/__init__.py",
     "services/desk-gateway/src/desk_gateway/config.py",
     "services/desk-gateway/src/desk_gateway/server.py",

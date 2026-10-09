@@ -40,12 +40,15 @@ class RecordingHttp:
         self.retrieve_sleep = 0.0
         self.unknown_left = 0
         self.calls: list[tuple[str, str]] = []
+        self.list_started: asyncio.Event | None = None
 
     async def request(self, method: str, path: str, **kwargs: object) -> dict:
         short = path.split("?", 1)[0]
         self.calls.append((method.upper(), short))
         if short.startswith("/api/v1/datasets"):
             if self.lookup_sleep:
+                if self.list_started is not None:
+                    self.list_started.set()
                 await asyncio.sleep(self.lookup_sleep)
             return {"ok": True, "status": 200, "body": {"data": [dict(row) for row in self.rows]}}
         if short.startswith("/api/v1/retrieval"):
@@ -354,4 +357,179 @@ async def test_app_shutdown_closes_upstream_clients(monkeypatch: pytest.MonkeyPa
     _install_upstream_shutdown(app, _Services())
     async with app.router.lifespan_context(app):
         assert made[0].is_closed is False
+    assert made[0].is_closed is True
+
+
+async def test_cached_names_do_not_wait_on_another_refresh() -> None:
+    http = RecordingHttp()
+    settings = _settings(docs_lookup_budget_sec=2.0, docs_retrieval_budget_sec=2.0)
+    ctx = _ctx(ragflow=_rag(http, settings), settings=settings)
+    primed = await docs_search(ctx, {"query": "prime"})
+    assert primed["results"]
+    assert _lists(http) == 1
+
+    http.lookup_sleep = 0.6
+    http.list_started = asyncio.Event()
+
+    async def uncached() -> dict:
+        return await docs_search(ctx, {"query": "other", "repo": "some-other-repo"})
+
+    async def cached() -> tuple[float, dict]:
+        await http.list_started.wait()
+        started = time.monotonic()
+        reply = await docs_search(ctx, {"query": "cached"})
+        return time.monotonic() - started, reply
+
+    _uncached_reply, (elapsed, cached_reply) = await asyncio.gather(uncached(), cached())
+    _log("docs_cache_hit_during_refresh", elapsed)
+    assert cached_reply["results"]
+    assert elapsed < 0.25
+
+
+async def test_unknown_dataset_after_lookup_window_still_refreshes() -> None:
+    http = RecordingHttp()
+    http.retrieve_sleep = 0.35
+    http.unknown_left = 1
+    settings = _settings(docs_lookup_budget_sec=0.15, docs_retrieval_budget_sec=1.0)
+    ctx = _ctx(ragflow=_rag(http, settings), settings=settings)
+    reply = await docs_search(ctx, {"query": "alpha"})
+    assert reply["results"]
+    assert _lists(http) == 2
+    assert _retrieves(http) == 2
+    assert reply.get("error") != "deadline"
+
+
+async def test_oversized_docs_budgets_name_ragflow_before_the_tool_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("desk_gateway.tools.core.TOOL_DEADLINE_SEC", 1.0)
+    http = RecordingHttp()
+    http.lookup_sleep = 0.55
+    http.retrieve_sleep = 1.0
+    settings = _settings(docs_lookup_budget_sec=0.7, docs_retrieval_budget_sec=0.7)
+    ctx = _ctx(ragflow=_rag(http, settings), settings=settings)
+
+    async def bounded() -> dict:
+        try:
+            return await asyncio.wait_for(docs_search(ctx, {"query": "alpha"}), 1.0)
+        except TimeoutError:
+            return {"results": [], "error": "deadline"}
+
+    reply = await bounded()
+    assert reply["results"] == []
+    assert reply.get("error") != "deadline"
+    assert "ragflow" in str(reply.get("reason") or "").lower()
+
+
+async def test_hindsight_http_timeout_is_a_bank_timeout() -> None:
+    class _Hindsight:
+        def __init__(self) -> None:
+            self.http = SimpleNamespace(configured=True)
+
+        async def recall(self, bank: str, query: str, limit: int) -> dict:
+            if bank == "slow":
+                return {"error": "upstream_timeout", "reason": "hindsight did not answer within 10s"}
+            return {"ok": True, "status": 200, "body": {"results": []}}
+
+    hindsight = _Hindsight()
+    settings = _settings(recall_bank_timeout_sec=30.0)
+    seat = SimpleNamespace(short="systems", memory_own="slow", memory_shared=("fast",), bot_id="bot-01-systems-backend")
+    ctx = _ctx(ragflow=SimpleNamespace(http=SimpleNamespace(configured=False)), settings=settings, hindsight=hindsight, seat=seat)
+    reply = await memory_recall(ctx, {"query": "current work", "include_shared": True, "limit": 5})
+    by_bank = {row["bank"]: row for row in reply["results"]}
+    assert by_bank["slow"]["status"] == "timeout"
+    assert by_bank["slow"]["error"] == "upstream_timeout"
+    assert by_bank["fast"]["status"] == "ok"
+
+
+_REAL_ASYNC_CLIENT = httpx.AsyncClient
+
+
+def _patch_client(monkeypatch: pytest.MonkeyPatch, transport: httpx.AsyncBaseTransport) -> list[httpx.AsyncClient]:
+    made: list[httpx.AsyncClient] = []
+
+    def factory(*args: object, **kwargs: object) -> httpx.AsyncClient:
+        kwargs["transport"] = transport
+        client = _REAL_ASYNC_CLIENT(*args, **kwargs)  # type: ignore[arg-type]
+        made.append(client)
+        return client
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    return made
+
+
+async def test_ephemeral_upstream_closes_on_success_and_cancellation(monkeypatch: pytest.MonkeyPatch) -> None:
+    from desk_gateway.tools.packs import _api
+    from desk_gateway.upstreams import AppStoreConnect
+
+    made = _patch_client(monkeypatch, httpx.MockTransport(lambda request: httpx.Response(200, json={"ok": True})))
+    upstream = HttpUpstream("pack api", "http://pack.test", timeout=2.0, ephemeral=True)
+    first = await upstream.request("GET", "/health")
+    assert first["ok"] is True
+    assert made[0].is_closed
+    second = await upstream.request("GET", "/health")
+    assert second["ok"] is True
+    assert len(made) == 2
+    assert made[1].is_closed
+
+    class _Hang(httpx.AsyncBaseTransport):
+        def __init__(self) -> None:
+            self.started = asyncio.Event()
+
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            self.started.set()
+            await asyncio.Event().wait()
+            return httpx.Response(200, json={"ok": True})
+
+    hang = _Hang()
+    hung_clients = _patch_client(monkeypatch, hang)
+    hanging = HttpUpstream("pack api", "http://pack.test", timeout=5.0, ephemeral=True)
+    task = asyncio.create_task(hanging.request("GET", "/health"))
+    await hang.started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert hung_clients[0].is_closed
+
+    class _Ctx:
+        spec = SimpleNamespace(pack="demo")
+        services = SimpleNamespace(settings=SimpleNamespace(pack_api_bases={"demo": "http://pack.test"}))
+
+    assert _api(_Ctx())._ephemeral is True  # type: ignore[arg-type]
+    asc = AppStoreConnect(SimpleNamespace(asc_key_id="", asc_issuer_id="", asc_private_key_path=""))  # type: ignore[arg-type]
+    assert asc.client()._ephemeral is True
+
+
+async def test_open_breaker_lets_an_inflight_sibling_finish(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _Gate(httpx.AsyncBaseTransport):
+        def __init__(self) -> None:
+            self.slow_entered = asyncio.Event()
+            self.release_slow = asyncio.Event()
+            self.slow_finished = False
+
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/slow":
+                self.slow_entered.set()
+                await self.release_slow.wait()
+                self.slow_finished = True
+                return httpx.Response(200, json={"ok": True})
+            return httpx.Response(500, json={"error": "boom"})
+
+    gate = _Gate()
+    made = _patch_client(monkeypatch, gate)
+    upstream = HttpUpstream(
+        "hindsight",
+        "http://hindsight.test",
+        timeout=5.0,
+        failure_threshold=1,
+        recovery_timeout_sec=30.0,
+    )
+    slow_task = asyncio.create_task(upstream.request("GET", "/slow"))
+    await gate.slow_entered.wait()
+    failed = await upstream.request("GET", "/boom")
+    assert failed["status"] == 500
+    assert upstream.circuit_breaker.state == "open"
+    assert made[0].is_closed is False
+    gate.release_slow.set()
+    slow = await slow_task
+    assert slow["ok"] is True
+    assert gate.slow_finished is True
     assert made[0].is_closed is True

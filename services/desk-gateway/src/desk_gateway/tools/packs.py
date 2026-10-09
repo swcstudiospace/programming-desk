@@ -42,7 +42,7 @@ async def app_tools_load(ctx: ToolContext, args: dict[str, Any]) -> dict[str, An
 def _api(ctx: ToolContext) -> HttpUpstream:
     app = ctx.spec.pack or ""
     base = ctx.services.settings.pack_api_bases.get(app, "")
-    return HttpUpstream(f"{app} api", base, timeout=10.0)
+    return HttpUpstream(f"{app} api", base, timeout=10.0, ephemeral=True)
 
 
 async def api_smoke(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:

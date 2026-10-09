@@ -18,6 +18,7 @@ from desk_gateway.config import (
     RECALL_BANK_TIMEOUT_SEC,
     SEAT_LABEL,
     SEATS,
+    TOOL_DEADLINE_SEC,
 )
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.tools import ToolContext, failure
@@ -72,8 +73,17 @@ async def brief(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
 
 
 def _docs_budgets(settings: Any) -> tuple[float, float]:
-    lookup = float(getattr(settings, "docs_lookup_budget_sec", DOCS_LOOKUP_BUDGET_SEC))
-    retrieval = float(getattr(settings, "docs_retrieval_budget_sec", DOCS_RETRIEVAL_BUDGET_SEC))
+    lookup = max(0.0, float(getattr(settings, "docs_lookup_budget_sec", DOCS_LOOKUP_BUDGET_SEC)))
+    retrieval = max(0.0, float(getattr(settings, "docs_retrieval_budget_sec", DOCS_RETRIEVAL_BUDGET_SEC)))
+    # Stay inside the tool wrapper's deadline so a slow phase is named ragflow,
+    # not reported as the outer "deadline" error.
+    slack = min(0.5, TOOL_DEADLINE_SEC * 0.05) if TOOL_DEADLINE_SEC > 0 else 0.0
+    ceiling = max(0.0, TOOL_DEADLINE_SEC - slack)
+    if lookup > ceiling:
+        lookup = ceiling
+    remaining = max(0.0, ceiling - lookup)
+    if retrieval > remaining:
+        retrieval = remaining
     return lookup, retrieval
 
 
@@ -144,9 +154,13 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     lookup_budget, retrieval_budget = _docs_budgets(settings)
     names = _wanted_datasets(settings, args)
     loop = asyncio.get_running_loop()
-    lookup_deadline = loop.time() + lookup_budget
+    slack = min(0.5, TOOL_DEADLINE_SEC * 0.05) if TOOL_DEADLINE_SEC > 0 else 0.0
+    outer_end = loop.time() + max(0.0, TOOL_DEADLINE_SEC - slack)
+    lookup_started = loop.time()
+    lookup_deadline = min(lookup_started + lookup_budget, outer_end)
 
     resolved = await _within(lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget)
+    unused_lookup = max(0.0, lookup_budget - (loop.time() - lookup_started))
     if _is_ragflow_budget(resolved):
         return resolved
     if resolved.get("error"):
@@ -167,11 +181,16 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         return _empty(missing)
 
     limit = args.get("limit", 8)
-    retrieval_deadline = loop.time() + retrieval_budget
+    retrieval_started = loop.time()
+    retrieval_deadline = min(retrieval_started + retrieval_budget, outer_end)
     hit = await _within(retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget)
+    unused_retrieval = max(0.0, retrieval_budget - (loop.time() - retrieval_started))
     if not _is_ragflow_budget(hit) and is_unknown_dataset(hit):
+        # Retrieval time does not consume the lookup allowance. The refresh gets
+        # whatever lookup budget was left when the first list finished.
+        refresh_allowance = min(unused_lookup, max(0.0, outer_end - loop.time()))
         resolved = await _within(
-            lookup_deadline,
+            loop.time() + refresh_allowance,
             svc.ragflow.resolve_dataset_ids(names, refresh=True),
             "dataset lookup",
             lookup_budget,
@@ -184,7 +203,13 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         missing = list(resolved.get("missing") or [])
         if not ids:
             return _empty(missing)
-        hit = await _within(retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget)
+        retry_allowance = min(unused_retrieval, max(0.0, outer_end - loop.time()))
+        hit = await _within(
+            loop.time() + retry_allowance,
+            svc.ragflow.retrieve(args["query"], ids, limit),
+            "retrieval",
+            retrieval_budget,
+        )
     if _is_ragflow_budget(hit):
         return hit
     if hit.get("error"):
@@ -315,7 +340,8 @@ async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
             if not isinstance(hit, dict):
                 return {"bank": bank, "status": "error", "error": "upstream_error", "reason": "hindsight recall returned no result", "plane": "hindsight"}
             if hit.get("error"):
-                return _bank_row(bank, hit, "error")
+                status = "timeout" if hit.get("error") == "upstream_timeout" else "error"
+                return _bank_row(bank, hit, status)
             return _bank_row(bank, hit, "ok")
 
         out["results"] = list(await asyncio.gather(*(one(bank) for bank in banks)))

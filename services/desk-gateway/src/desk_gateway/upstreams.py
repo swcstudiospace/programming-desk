@@ -114,6 +114,16 @@ class CircuitBreaker:
         self.last_failure_time = 0.0
 
 
+class _PooledClient:
+    """One shared httpx client plus the requests still using it."""
+
+    def __init__(self, client: httpx.AsyncClient) -> None:
+        self.client = client
+        self.inflight = 0
+        self.retire = False
+        self.closing = False
+
+
 class HttpUpstream:
     def __init__(
         self,
@@ -123,6 +133,8 @@ class HttpUpstream:
         timeout: float = 15.0,
         failure_threshold: int = 5,
         recovery_timeout_sec: float = 30.0,
+        *,
+        ephemeral: bool = False,
     ) -> None:
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -135,36 +147,53 @@ class HttpUpstream:
         self._etag_cache: dict[str, tuple[str, Any]] = {}
         # One pooled client per upstream. Created on the first request so tests can
         # still inject a transport by patching AsyncClient before that call.
-        self._client: httpx.AsyncClient | None = None
+        # ephemeral clients (App Store Connect, pack APIs) are not owned by Services,
+        # so each request closes its client once the call finishes or is cancelled.
+        self._ephemeral = ephemeral
+        self._pooled: _PooledClient | None = None
         self._client_lock = asyncio.Lock()
 
     @property
     def configured(self) -> bool:
         return bool(self.base_url)
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        client = self._client
-        if client is not None and not client.is_closed:
-            return client
+    async def _acquire(self) -> _PooledClient:
         async with self._client_lock:
-            client = self._client
-            if client is None or client.is_closed:
-                self._client = httpx.AsyncClient(timeout=self.timeout, headers=self.headers)
-            return self._client
+            pooled = self._pooled
+            if pooled is None or pooled.retire or pooled.client.is_closed:
+                pooled = _PooledClient(httpx.AsyncClient(timeout=self.timeout, headers=self.headers))
+                self._pooled = pooled
+            pooled.inflight += 1
+            return pooled
+
+    async def _release(self, pooled: _PooledClient, *, retire: bool) -> None:
+        async with self._client_lock:
+            pooled.inflight -= 1
+            if retire:
+                pooled.retire = True
+                if self._pooled is pooled:
+                    self._pooled = None
+            client = self._claim_close(pooled)
+        if client is not None:
+            await client.aclose()
+
+    def _claim_close(self, pooled: _PooledClient) -> httpx.AsyncClient | None:
+        if pooled.inflight > 0 or not pooled.retire or pooled.closing or pooled.client.is_closed:
+            return None
+        pooled.closing = True
+        return pooled.client
 
     async def aclose(self) -> None:
         async with self._client_lock:
-            client = self._client
-            self._client = None
-        if client is not None and not client.is_closed:
+            pooled = self._pooled
+            self._pooled = None
+            client = None
+            if pooled is not None and not pooled.closing and not pooled.client.is_closed:
+                pooled.retire = True
+                pooled.closing = True
+                client = pooled.client
+        if client is not None:
             await client.aclose()
-
-    async def _drop_if_open(self) -> None:
-        # A tripped breaker drops the pooled connection. The next probe, once the
-        # breaker allows it, builds a fresh client. That is also what the recovery
-        # test relies on: it injects a new transport into the next construction.
-        if self.circuit_breaker.state == "open":
-            await self.aclose()
 
     async def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         if not self.configured:
@@ -198,64 +227,72 @@ class HttpUpstream:
             if "If-None-Match" not in headers:
                 headers["If-None-Match"] = cached_etag
 
+        pooled: _PooledClient | None = None
+        retire = False
         try:
-            client = await self._get_client()
-            resp = await client.request(method_upper, url, headers=headers, **kwargs)
-        except httpx.TimeoutException:
-            self.circuit_breaker.record_failure()
-            await self._drop_if_open()
-            return {"error": UPSTREAM_TIMEOUT, "reason": f"{self.name} did not answer within {self.timeout:.0f}s"}
-        except httpx.HTTPError as exc:
-            self.circuit_breaker.record_failure()
-            await self._drop_if_open()
-            return {"error": UPSTREAM_ERROR, "reason": f"{self.name}: {redact_text(str(exc))[:300]}"}
-
-        # HTTP 304 Not Modified: return cached response body
-        if resp.status_code == 304 and cache_key in self._etag_cache:
-            self.circuit_breaker.record_success()
-            cached_etag, cached_body = self._etag_cache[cache_key]
-            return {"ok": True, "status": 304, "body": cached_body, "cached": True, "etag": cached_etag}
-
-        body = await _json(resp)
-        if resp.status_code >= 400:
-            if resp.status_code >= 500:
+            try:
+                pooled = await self._acquire()
+                resp = await pooled.client.request(method_upper, url, headers=headers, **kwargs)
+            except httpx.TimeoutException:
                 self.circuit_breaker.record_failure()
-                await self._drop_if_open()
-            else:
+                retire = self.circuit_breaker.state == "open"
+                return {"error": UPSTREAM_TIMEOUT, "reason": f"{self.name} did not answer within {self.timeout:.0f}s"}
+            except httpx.HTTPError as exc:
+                self.circuit_breaker.record_failure()
+                retire = self.circuit_breaker.state == "open"
+                return {"error": UPSTREAM_ERROR, "reason": f"{self.name}: {redact_text(str(exc))[:300]}"}
+
+            # HTTP 304 Not Modified: return cached response body
+            if resp.status_code == 304 and cache_key in self._etag_cache:
                 self.circuit_breaker.record_success()
+                cached_etag, cached_body = self._etag_cache[cache_key]
+                return {"ok": True, "status": 304, "body": cached_body, "cached": True, "etag": cached_etag}
 
-            status = resp.status_code
-            error_code = UPSTREAM_ERROR
-            title = f"{self.name} upstream error"
-            detail = f"{self.name} returned HTTP {status}"
-            extra_fields: dict[str, Any] = {
-                "body": redact_value(body) if isinstance(body, (dict, list)) else body,
-            }
-            if status in (401, 403):
-                title = f"{self.name} authentication failed"
-                detail = f"{self.name} refused credentials (HTTP {status})"
-            problem = problem_details(
-                status=status,
-                title=title,
-                detail=detail,
-                error_code="upstream_401" if status in (401, 403) else error_code,
-                instance=url,
-                **extra_fields,
-            )
-            return {
-                "error": error_code,
-                "reason": detail,
-                "status": status,
-                "problem": problem,
-                "body": extra_fields["body"],
-            }
+            body = await _json(resp)
+            if resp.status_code >= 400:
+                if resp.status_code >= 500:
+                    self.circuit_breaker.record_failure()
+                    retire = self.circuit_breaker.state == "open"
+                else:
+                    self.circuit_breaker.record_success()
 
-        self.circuit_breaker.record_success()
-        etag_header = resp.headers.get("etag") or resp.headers.get("ETag")
-        if method_upper == "GET" and etag_header:
-            self._etag_cache[cache_key] = (etag_header, redact_value(body))
+                status = resp.status_code
+                error_code = UPSTREAM_ERROR
+                title = f"{self.name} upstream error"
+                detail = f"{self.name} returned HTTP {status}"
+                extra_fields: dict[str, Any] = {
+                    "body": redact_value(body) if isinstance(body, (dict, list)) else body,
+                }
+                if status in (401, 403):
+                    title = f"{self.name} authentication failed"
+                    detail = f"{self.name} refused credentials (HTTP {status})"
+                problem = problem_details(
+                    status=status,
+                    title=title,
+                    detail=detail,
+                    error_code="upstream_401" if status in (401, 403) else error_code,
+                    instance=url,
+                    **extra_fields,
+                )
+                return {
+                    "error": error_code,
+                    "reason": detail,
+                    "status": status,
+                    "problem": problem,
+                    "body": extra_fields["body"],
+                }
 
-        return {"ok": True, "status": resp.status_code, "body": redact_value(body)}
+            self.circuit_breaker.record_success()
+            etag_header = resp.headers.get("etag") or resp.headers.get("ETag")
+            if method_upper == "GET" and etag_header:
+                self._etag_cache[cache_key] = (etag_header, redact_value(body))
+
+            return {"ok": True, "status": resp.status_code, "body": redact_value(body)}
+        finally:
+            if pooled is not None:
+                await self._release(pooled, retire=retire)
+            if self._ephemeral:
+                await self.aclose()
 
 
 _MEMORY_WRITE_REFUSED = frozenset({"denied", "quarantined", "rejected"})
@@ -656,6 +693,17 @@ class RAGFlow:
         self._dataset_listed_at = time.monotonic()
         return None
 
+    def _cached_resolution(self, names: list[str]) -> dict[str, Any] | None:
+        if not self._dataset_cache_fresh():
+            return None
+        if any(name not in self._dataset_ids and name not in self._dataset_absent for name in names):
+            return None
+        return {
+            "ok": True,
+            "ids": [self._dataset_ids[name] for name in names if name in self._dataset_ids],
+            "missing": [name for name in names if name not in self._dataset_ids],
+        }
+
     async def resolve_dataset_ids(self, names: list[str], *, refresh: bool = False) -> dict[str, Any]:
         """Map dataset names to ids. One list per TTL, plus one refresh on a miss.
 
@@ -663,10 +711,19 @@ class RAGFlow:
         expires, so a dataset RAGflow does not have is not listed on every call.
         ``refresh=True`` drops the cache under the same lock before that lookup,
         which is how an unknown-dataset retrieval forces exactly one new list.
+        A fresh cache is returned without waiting on a reload another search started.
         """
+        if not refresh:
+            cached = self._cached_resolution(names)
+            if cached is not None:
+                return cached
         async with self._dataset_lock:
             if refresh:
                 self._clear_dataset_cache()
+            else:
+                cached = self._cached_resolution(names)
+                if cached is not None:
+                    return cached
             if not self._dataset_cache_fresh():
                 failed = await self._reload_dataset_ids()
                 if failed is not None:
@@ -903,6 +960,7 @@ class AppStoreConnect:
             "https://api.appstoreconnect.apple.com/v1" if token else "",
             headers={"Authorization": f"Bearer {token}"} if token else {},
             timeout=15.0,
+            ephemeral=True,
         )
 
 

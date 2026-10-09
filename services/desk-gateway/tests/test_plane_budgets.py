@@ -544,3 +544,76 @@ async def test_open_breaker_lets_an_inflight_sibling_finish(monkeypatch: pytest.
     assert slow["ok"] is True
     assert gate.slow_finished is True
     assert made[0].is_closed is True
+
+
+class _Hang(httpx.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.started.set()
+        await asyncio.Event().wait()
+        return httpx.Response(200, json={"ok": True})
+
+
+async def test_docs_budget_timeout_opens_the_circuit_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, _Hang())
+    settings = _settings(docs_lookup_budget_sec=0.15, docs_retrieval_budget_sec=0.15)
+    rag = RAGFlow(settings)
+    rag.http.circuit_breaker.failure_threshold = 1
+    ctx = _ctx(ragflow=rag, settings=settings)
+    first = await docs_search(ctx, {"query": "alpha"})
+    assert first["results"] == []
+    assert first.get("error") == "upstream_timeout"
+    assert rag.http.circuit_breaker.state == "open"
+    started = time.monotonic()
+    second = await docs_search(ctx, {"query": "beta"})
+    assert time.monotonic() - started < 0.05
+    assert second.get("error") == "circuit_breaker_open"
+
+
+async def test_recall_budget_timeout_opens_the_circuit_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, _Hang())
+    http = HttpUpstream(
+        "hindsight",
+        "http://hindsight.test",
+        timeout=30.0,
+        failure_threshold=1,
+        recovery_timeout_sec=30.0,
+    )
+
+    class _Hindsight:
+        def __init__(self) -> None:
+            self.http = http
+
+        async def recall(self, bank: str, query: str, limit: int) -> dict:
+            return await self.http.request("POST", f"/banks/{bank}", json={"query": query})
+
+    settings = _settings(recall_bank_timeout_sec=0.15)
+    seat = SimpleNamespace(short="systems", memory_own="pd-systems", memory_shared=(), bot_id="bot-01-systems-backend")
+    ctx = _ctx(
+        ragflow=SimpleNamespace(http=SimpleNamespace(configured=False)),
+        settings=settings,
+        hindsight=_Hindsight(),
+        seat=seat,
+    )
+    first = await memory_recall(ctx, {"query": "current work", "include_shared": False, "limit": 1})
+    assert first["results"][0]["status"] == "timeout"
+    assert http.circuit_breaker.state == "open"
+    started = time.monotonic()
+    second = await memory_recall(ctx, {"query": "current work", "include_shared": False, "limit": 1})
+    assert time.monotonic() - started < 0.05
+    assert second["results"][0]["error"] == "circuit_breaker_open"
+
+
+async def test_caller_cancel_does_not_record_an_upstream_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    hang = _Hang()
+    _patch_client(monkeypatch, hang)
+    upstream = HttpUpstream("hindsight", "http://hindsight.test", timeout=30.0, failure_threshold=1)
+    task = asyncio.create_task(upstream.request("GET", "/slow"))
+    await hang.started.wait()
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert upstream.circuit_breaker.failure_count == 0
+    assert upstream.circuit_breaker.state == "closed"

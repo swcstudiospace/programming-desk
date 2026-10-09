@@ -65,3 +65,18 @@
 
 ---
 
+## v3.4 Autonomous Swarm Self-Healing & Active Immune Defense (Shipped: 2026-10-10)
+
+**Phases completed:** 2 phases (Phases 34-35), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Real-time behavioral anomaly detection monitoring latency, Shannon entropy, and error rate spikes against dynamic seat baselines with deterministic containment state machine (`HEALTHY` -> `SUSPICIOUS` -> `QUARANTINED` -> `DRAINED`).
+- Synthetic shadow execution sandboxing isolating unverified tool calls to ephemeral scratchpads before committing desk mutations, dynamic capability pruning, and cryptographically signed HMAC quarantine attestation receipts.
+- Autonomous seat reconstitution engine regenerating clean agent runtime contexts from golden checkpoint snapshots and resetting containment state.
+- Tamper-evident immune memory ledger recording behavioral attack signatures and quarantine heuristics into a SHA-256 block-chained audit chain with Merkle root verification.
+- Proactive antibody distribution sharing verified attack heuristics and mitigation policies across federated desks with HMAC package authentication and pattern threat filtering.
+- Progressive post-quarantine rehabilitation protocol validating reconstituted seats via synthetic benchmark drills before graduating back to healthy status.
+- End-to-end swarm immune defense verification harness and chaos anomaly injection test suite validating resilience against entropy surges, latency poisoning, and Byzantine tool bursts.
+
+---
+

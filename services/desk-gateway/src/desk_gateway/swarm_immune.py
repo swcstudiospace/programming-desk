@@ -56,24 +56,38 @@ class BehavioralProfile:
         """Update metrics and calculate new anomaly score (0.0 to 1.0+)."""
         self.sample_count += 1
         if self.sample_count == 1:
+            # Anomaly is relative to default normal baseline (50ms, 3.5 entropy)
+            latency_deviation = max(0.0, (latency_ms - self.avg_latency_ms) / max(10.0, self.avg_latency_ms))
+            entropy_deviation = max(0.0, (entropy - self.avg_entropy) / max(1.0, self.avg_entropy))
             self.avg_latency_ms = latency_ms
             self.avg_entropy = entropy
             self.error_rate = 1.0 if is_error else 0.0
         else:
+            latency_deviation = max(0.0, (latency_ms - self.avg_latency_ms) / max(10.0, self.avg_latency_ms))
+            entropy_deviation = max(0.0, (entropy - self.avg_entropy) / max(1.0, self.avg_entropy))
             self.avg_latency_ms = (self.alpha * latency_ms) + ((1.0 - self.alpha) * self.avg_latency_ms)
             self.avg_entropy = (self.alpha * entropy) + ((1.0 - self.alpha) * self.avg_entropy)
             error_val = 1.0 if is_error else 0.0
             self.error_rate = (self.alpha * error_val) + ((1.0 - self.alpha) * self.error_rate)
 
-        # Deviation components
-        latency_deviation = max(0.0, (latency_ms - self.avg_latency_ms) / max(10.0, self.avg_latency_ms))
-        entropy_deviation = max(0.0, (entropy - self.avg_entropy) / max(1.0, self.avg_entropy))
         error_penalty = 1.0 if is_error else 0.0
 
         # Weighted anomaly score
         instant_score = (0.3 * min(2.0, latency_deviation)) + (0.3 * min(2.0, entropy_deviation)) + (0.4 * (self.error_rate + error_penalty))
         self.anomaly_score = round(instant_score, 4)
         return self.anomaly_score
+
+    def reset_baseline(self, allowed_capabilities: Set[str], target_state: SeatContainmentState = SeatContainmentState.HEALTHY) -> None:
+        """Reset profile metrics and capabilities back to a golden baseline."""
+        self.sample_count = 0
+        self.avg_latency_ms = 50.0
+        self.avg_entropy = 3.5
+        self.error_rate = 0.0
+        self.anomaly_score = 0.0
+        self.state = target_state
+        self.pruned_capabilities = set(SwarmImmuneEngine.ALL_CAPABILITIES) - allowed_capabilities
+        self.quarantine_reason = None
+        self.quarantine_timestamp = None
 
 
 class ShadowExecutionSandbox:
@@ -215,6 +229,7 @@ class SwarmImmuneEngine:
         return {
             "seat_id": seat_id,
             "state": profile.state.value,
+            "new_state": profile.state.value,
             "reason": reason,
             "receipt": receipt,
         }
@@ -227,6 +242,7 @@ class SwarmImmuneEngine:
         return {
             "seat_id": seat_id,
             "state": profile.state.value,
+            "new_state": profile.state.value,
             "reason": reason,
             "receipt": receipt,
         }
@@ -239,6 +255,7 @@ class SwarmImmuneEngine:
         return {
             "seat_id": seat_id,
             "state": profile.state.value,
+            "new_state": profile.state.value,
             "reason": reason,
             "receipt": self.receipts[-1],
         }

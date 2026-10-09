@@ -12,8 +12,8 @@ This document defines the requirements for Milestone v3.4 of Programming Desk.
 
 ## 2. Self-Healing Reconstitution & Immune Memory Attestation (Phase 35)
 
-- [ ] **REQ-HEAL-006**: Autonomous seat reconstitution engine regenerating clean agent runtime contexts from attested checkpoint baselines.
-- [ ] **REQ-HEAL-007**: Swarm immune memory ledger recording behavioral attack signatures and quarantine heuristics into a tamper-evident audit chain.
-- [ ] **REQ-HEAL-008**: Proactive antibody distribution sharing verified attack heuristics and mitigation policies across federated desks.
-- [ ] **REQ-HEAL-009**: Progressive post-quarantine rehabilitation protocol validating reconstituted seats via synthetic benchmark drills.
-- [ ] **REQ-HEAL-010**: End-to-end swarm immune defense verification harness and chaos anomaly injection test suite.
+- [x] **REQ-HEAL-006**: Autonomous seat reconstitution engine regenerating clean agent runtime contexts from attested checkpoint baselines.
+- [x] **REQ-HEAL-007**: Swarm immune memory ledger recording behavioral attack signatures and quarantine heuristics into a tamper-evident audit chain.
+- [x] **REQ-HEAL-008**: Proactive antibody distribution sharing verified attack heuristics and mitigation policies across federated desks.
+- [x] **REQ-HEAL-009**: Progressive post-quarantine rehabilitation protocol validating reconstituted seats via synthetic benchmark drills.
+- [x] **REQ-HEAL-010**: End-to-end swarm immune defense verification harness and chaos anomaly injection test suite.

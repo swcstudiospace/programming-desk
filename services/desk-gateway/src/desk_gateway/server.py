@@ -3521,10 +3521,25 @@ def create_mcp(
     setattr(mcp, "_ledger_exporter", ledger_exporter)
     setattr(mcp, "_byzantine_simulator", byzantine_simulator)
 
-    # Milestone v3.4 (Phase 34): Swarm Self-Healing & Active Immune Defense
+    # Milestone v3.4 (Phase 34 & 35): Swarm Self-Healing & Active Immune Defense
     from desk_gateway.swarm_immune import SwarmImmuneEngine
+    from desk_gateway.swarm_reconstitution import (
+        SwarmReconstitutionEngine,
+        ChaosAnomalyHarness,
+        AntibodyPolicy,
+    )
     swarm_immune = SwarmImmuneEngine()
+    swarm_reconstitution = SwarmReconstitutionEngine(
+        immune_engine=swarm_immune,
+        desk_id=settings.public_host or "desk-local",
+    )
+    chaos_immune_harness = ChaosAnomalyHarness(
+        immune_engine=swarm_immune,
+        reconstitution_engine=swarm_reconstitution,
+    )
     setattr(mcp, "_swarm_immune", swarm_immune)
+    setattr(mcp, "_swarm_reconstitution", swarm_reconstitution)
+    setattr(mcp, "_chaos_immune_harness", chaos_immune_harness)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -3589,6 +3604,58 @@ def create_mcp(
     async def immune_status_route(request: Request) -> Response:
         status = swarm_immune.get_status()
         return JSONResponse({"ok": True, "status": status})
+
+    @mcp.custom_route("/v1/immune/reconstitute", methods=["POST"])
+    async def immune_reconstitute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Autonomous post-quarantine self-healing")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_reconstitution.reconstitute_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/memory/ledger", methods=["GET"])
+    async def immune_memory_ledger_route(request: Request) -> Response:
+        ledger = swarm_reconstitution.ledger
+        entries = [e.to_dict() for e in ledger.entries]
+        valid = ledger.verify_integrity()
+        root = ledger.get_merkle_root()
+        return JSONResponse({"ok": True, "valid": valid, "merkle_root": root, "entries": entries})
+
+    @mcp.custom_route("/v1/immune/antibodies/broadcast", methods=["POST"])
+    async def immune_antibodies_broadcast_route(request: Request) -> Response:
+        pkg = swarm_reconstitution.antibody_mesh.export_distribution_package()
+        return JSONResponse({"ok": True, "package": pkg})
+
+    @mcp.custom_route("/v1/immune/antibodies/ingest", methods=["POST"])
+    async def immune_antibodies_ingest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pkg = body.get("package")
+        if not pkg:
+            return JSONResponse({"ok": False, "error": "package is required"}, status_code=400)
+        try:
+            count = swarm_reconstitution.antibody_mesh.ingest_distribution_package(pkg)
+            return JSONResponse({"ok": True, "ingested_count": count})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/immune/rehabilitate/benchmark", methods=["POST"])
+    async def immune_rehabilitate_benchmark_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        tasks = body.get("tasks")
+        res = swarm_reconstitution.rehabilitation.run_synthetic_benchmarks(seat_id, benchmark_tasks=tasks)
+        return JSONResponse({"ok": True, "rehabilitation": res})
+
+    @mcp.custom_route("/v1/immune/chaos/inject", methods=["POST"])
+    async def immune_chaos_inject_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "chaos-seat")
+        res = chaos_immune_harness.run_chaos_resilience_drill(seat_id=seat_id)
+        return JSONResponse({"ok": True, "drill": res})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -5030,6 +5097,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "ledger_exporter": getattr(mcp, "_ledger_exporter", None),
         "byzantine_simulator": getattr(mcp, "_byzantine_simulator", None),
         "swarm_immune": getattr(mcp, "_swarm_immune", None),
+        "swarm_reconstitution": getattr(mcp, "_swarm_reconstitution", None),
+        "chaos_immune_harness": getattr(mcp, "_chaos_immune_harness", None),
     }
     return app, settings
 

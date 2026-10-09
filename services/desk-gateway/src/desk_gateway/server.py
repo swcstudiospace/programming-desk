@@ -3468,6 +3468,21 @@ def create_mcp(
     memory_graph_engine = SensoryMemoryGraphEngine()
     setattr(mcp, "_memory_graph_engine", memory_graph_engine)
 
+    # Milestone v3.2 (Phase 31): Dynamic Context Window Compression & Semantic Pruning
+    from desk_gateway.context_compressor import (
+        ContextCompressionEngine,
+        ModelTier,
+        ContextSegment,
+        LosslessCompactor,
+        LosslessCompactedPayload,
+        SemanticPruner,
+        HierarchicalRollupEngine,
+        DynamicWindowAdapter,
+        ContextFidelityVerifier,
+    )
+    context_compressor = ContextCompressionEngine()
+    setattr(mcp, "_context_compressor", context_compressor)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4219,6 +4234,131 @@ def create_mcp(
         valid = memory_graph_engine.verify_commitment(receipt)
         return JSONResponse({"ok": True, "valid": valid, "receipt": receipt.to_dict()})
 
+    # Dynamic Context Window Compression & Semantic Pruning Endpoints (Phase 31)
+    @mcp.custom_route("/v1/context/compress", methods=["POST"])
+    async def context_compress_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        text = body.get("text", "")
+        if not text:
+            return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
+        payload = context_compressor.compactor.compress_text(text)
+        return JSONResponse({"ok": True, "compressed": payload.to_dict()})
+
+    @mcp.custom_route("/v1/context/decompress", methods=["POST"])
+    async def context_decompress_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        comp_b64 = body.get("compressed_b64", "")
+        orig_bytes = int(body.get("original_size_bytes", 0))
+        comp_bytes = int(body.get("compressed_size_bytes", 0))
+        ratio = float(body.get("compression_ratio", 1.0))
+        checksum = body.get("checksum_sha256", "")
+        if not comp_b64 or not checksum:
+            return JSONResponse({"ok": False, "error": "compressed_b64 and checksum_sha256 are required"}, status_code=400)
+        try:
+            payload = LosslessCompactedPayload(
+                compressed_b64=comp_b64,
+                original_size_bytes=orig_bytes,
+                compressed_size_bytes=comp_bytes,
+                compression_ratio=ratio,
+                checksum_sha256=checksum,
+            )
+            decompressed = context_compressor.compactor.decompress_text(payload)
+            return JSONResponse({"ok": True, "text": decompressed})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/context/prune", methods=["POST"])
+    async def context_prune_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        text = body.get("text", "")
+        threshold = float(body.get("salience_threshold", 0.3))
+        preserve_syntax = bool(body.get("preserve_syntax", True))
+        pruned_text, ratio = context_compressor.pruner.prune_text(
+            text, salience_threshold=threshold, preserve_syntax=preserve_syntax
+        )
+        return JSONResponse({
+            "ok": True,
+            "pruned_text": pruned_text,
+            "compression_ratio": ratio,
+        })
+
+    @mcp.custom_route("/v1/context/rollup", methods=["POST"])
+    async def context_rollup_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_segments = body.get("segments", [])
+        chunk_size = int(body.get("chunk_size", 3))
+        level = int(body.get("level", 1))
+
+        segments = [
+            ContextSegment(
+                segment_id=s.get("segment_id", f"seg-{i}"),
+                content=s.get("content", ""),
+                token_count=int(s.get("token_count", 0)),
+                modality=s.get("modality", "text"),
+                salience_score=float(s.get("salience_score", 1.0)),
+                metadata=s.get("metadata", {}),
+            )
+            for i, s in enumerate(raw_segments)
+        ]
+        rollups = context_compressor.rollup_engine.rollup_segments(segments, chunk_size=chunk_size, level=level)
+        proof = context_compressor.rollup_engine.evict_and_prove(segments)
+        return JSONResponse({
+            "ok": True,
+            "rollups": [r.to_dict() for r in rollups],
+            "eviction_proof": proof.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/context/adapt", methods=["POST"])
+    async def context_adapt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_segments = body.get("segments", [])
+        tier_str = body.get("tier", "tier_2_standard")
+        ceiling = body.get("budget_ceiling")
+        hard_ceiling = int(ceiling) if ceiling is not None else None
+
+        try:
+            tier = ModelTier(tier_str)
+        except ValueError:
+            tier = ModelTier.TIER_2_STANDARD
+
+        segments = [
+            ContextSegment(
+                segment_id=s.get("segment_id", f"seg-{i}"),
+                content=s.get("content", ""),
+                token_count=int(s.get("token_count", 0)),
+                modality=s.get("modality", "text"),
+                salience_score=float(s.get("salience_score", 1.0)),
+                metadata=s.get("metadata", {}),
+            )
+            for i, s in enumerate(raw_segments)
+        ]
+
+        adapted_res = context_compressor.adapter.adapt_context(
+            segments=segments,
+            tier=tier,
+            hard_budget_ceiling=hard_ceiling,
+            pruner=context_compressor.pruner,
+            rollup_engine=context_compressor.rollup_engine,
+        )
+        return JSONResponse({"ok": True, **adapted_res})
+
+    @mcp.custom_route("/v1/context/verify", methods=["POST"])
+    async def context_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        content = body.get("content", "")
+        test_id = body.get("test_id")
+        if not content:
+            return JSONResponse({"ok": False, "error": "content is required"}, status_code=400)
+
+        result = context_compressor.verifier.run_verification(
+            test_content=content,
+            test_id=test_id,
+            compactor=context_compressor.compactor,
+            pruner=context_compressor.pruner,
+            rollup_engine=context_compressor.rollup_engine,
+        )
+        return JSONResponse({"ok": True, "verification": result.to_dict()})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4458,6 +4598,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "mcp_mesh_registry": getattr(mcp, "_mcp_mesh_registry", None),
         "remote_execution_supervisor": getattr(mcp, "_remote_execution_supervisor", None),
         "memory_graph_engine": getattr(mcp, "_memory_graph_engine", None),
+        "context_compressor": getattr(mcp, "_context_compressor", None),
     }
     return app, settings
 

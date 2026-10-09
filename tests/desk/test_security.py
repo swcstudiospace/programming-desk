@@ -77,6 +77,14 @@ def test_validate_command() -> None:
     valid_cmd = ["python3", "-m", "desk.cli", "--help"]
     assert sandbox.validate_command(valid_cmd) == valid_cmd
 
+    # Literal pipe in arguments (e.g. git log formatting) is safe and valid
+    git_cmd = ["git", "log", "--format=%H|%s"]
+    assert sandbox.validate_command(git_cmd) == git_cmd
+
+    # Inline python code with bitwise OR and semicolons is safe and valid
+    py_inline_cmd = ["python3", "-c", "x = 1 | 2; print(x)"]
+    assert sandbox.validate_command(py_inline_cmd) == py_inline_cmd
+
     with pytest.raises(BoundarySecurityError):
         sandbox.validate_command([])
 

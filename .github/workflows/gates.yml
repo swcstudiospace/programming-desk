@@ -36,7 +36,7 @@ jobs:
     # Pull requests only. A push to main has no head ref, so the acting bot would resolve
     # to "main" and fail attribution before any gate ran — every push red, for a question
     # that is already settled by the time the merge lands.
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'bot-0')
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4
@@ -226,3 +226,16 @@ jobs:
       - run: pip install pyyaml pytest
       - name: Gate test suite
         run: python3 -m pytest ci/tests/ -v
+
+  workbench-tests:
+    name: Workbench test suite
+    # Greptile P2: run desk tests in an isolated runner separate from the trusted-gate job
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml pytest
+      - name: Run workbench tests
+        run: python3 -m pytest tests/desk/ -v

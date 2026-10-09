@@ -60,3 +60,12 @@ def test_supervisor_rejection_of_unsafe_command() -> None:
     supervisor = ProcessSupervisor()
     with pytest.raises(BoundarySecurityError):
         supervisor.run(["cat", "test.py && rm -rf /"])
+
+
+def test_supervisor_partial_output_preserved_on_timeout() -> None:
+    supervisor = ProcessSupervisor()
+    # Flushes output before sleeping past the timeout
+    script = "import sys, time; sys.stdout.write('progress_before_timeout\\n'); sys.stdout.flush(); time.sleep(10)"
+    result = supervisor.run([sys.executable, "-c", script], timeout=0.3)
+    assert result.timed_out is True
+    assert "progress_before_timeout" in result.stdout

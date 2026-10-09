@@ -47,6 +47,8 @@ class TransactionContext:
         self._backup_dir: Path | None = None
         self.is_committed: bool = False
         self.is_rolled_back: bool = False
+        self.rollbacks_executed: int = 0
+        self.rollbacks_failed: int = 0
         self.failed_restorations: list[str] = []
 
     def register_compensation(
@@ -90,7 +92,7 @@ class TransactionContext:
     def rollback(self) -> tuple[int, int]:
         """Execute all compensations in reverse order (LIFO). Returns (executed, failed)."""
         if self.is_rolled_back:
-            return 0, 0
+            return self.rollbacks_executed, self.rollbacks_failed
 
         self.is_rolled_back = True
         executed = 0
@@ -104,6 +106,9 @@ class TransactionContext:
             except Exception as err:
                 failed += 1
                 self.failed_restorations.append(f"{comp.name}: {err}")
+
+        self.rollbacks_executed = executed
+        self.rollbacks_failed = failed
 
         # Retain backups if any restoration failed so original copies are preserved for recovery
         if failed == 0:
@@ -166,8 +171,8 @@ class RecoveryManager:
                         started_at=self.started_at,
                         finished_at=finished_at,
                         error_message="Transaction explicitly rolled back",
-                        rollbacks_executed=len(self.tx._compensations),
-                        rollbacks_failed=len(self.tx.failed_restorations),
+                        rollbacks_executed=self.tx.rollbacks_executed,
+                        rollbacks_failed=self.tx.rollbacks_failed,
                     )
                     mgr.history.append(report)
                     return False

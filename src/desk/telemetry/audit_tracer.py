@@ -40,7 +40,11 @@ class AuditTracer:
     """Thread-safe, append-only JSONL audit event recorder with integrated credential redaction."""
 
     SENSITIVE_KEY_RE = re.compile(
-        r"(password|passwd|secret|token|credential|api_key|auth|bearer|passphrase)",
+        r"^(.*_)?(password|passwd|secret|passphrase|credential|credentials|api_key|apikey|private_key|secret_key|auth_key|bearer)$"
+        r"|.*(_key|_secret|_password|_passwd|_token|_auth|_credential)$"
+        r"|^token$"
+        r"|^auth$"
+        r"|^authorization$",
         re.IGNORECASE,
     )
 

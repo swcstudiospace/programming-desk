@@ -160,15 +160,40 @@ class ProcessSupervisor:
 
                 stdout_data, stderr_data = proc.communicate(timeout=timeout_sec)
                 exit_code = proc.returncode
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
                 timed_out = True
+                out_accum = exc.output or ""
+                err_accum = exc.stderr or ""
+                if isinstance(out_accum, bytes):
+                    out_accum = out_accum.decode("utf-8", errors="replace")
+                if isinstance(err_accum, bytes):
+                    err_accum = err_accum.decode("utf-8", errors="replace")
+
+                stdout_data = out_accum
+                stderr_data = err_accum
+
                 if proc is not None:
                     self._terminate_process_tree(proc)
                     try:
                         # Bounded read to prevent hanging on surviving children keeping pipes open
-                        stdout_data, stderr_data = proc.communicate(timeout=1.0)
-                    except (subprocess.TimeoutExpired, Exception):
-                        stdout_data, stderr_data = "", ""
+                        more_out, more_err = proc.communicate(timeout=1.0)
+                        if more_out:
+                            stdout_data = (stdout_data + more_out) if stdout_data else more_out
+                        if more_err:
+                            stderr_data = (stderr_data + more_err) if stderr_data else more_err
+                    except subprocess.TimeoutExpired as exc2:
+                        extra_out = exc2.output or ""
+                        extra_err = exc2.stderr or ""
+                        if isinstance(extra_out, bytes):
+                            extra_out = extra_out.decode("utf-8", errors="replace")
+                        if isinstance(extra_err, bytes):
+                            extra_err = extra_err.decode("utf-8", errors="replace")
+                        if extra_out:
+                            stdout_data = (stdout_data + extra_out) if stdout_data else extra_out
+                        if extra_err:
+                            stderr_data = (stderr_data + extra_err) if stderr_data else extra_err
+                    except Exception:
+                        pass
                 exit_code = -signal.SIGKILL
             except (KeyboardInterrupt, BaseException):
                 # Cleanly reap and stop process on interrupt/cancellation before propagating

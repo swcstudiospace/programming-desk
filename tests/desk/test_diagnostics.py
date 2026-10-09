@@ -63,8 +63,32 @@ def test_doctor_engine_run() -> None:
     assert engine.exit_code(results) == 0
 
     report = engine.format_report(results, verbose=True)
-    assert "Programming Desk Health Inspection" in report
+    assert f"Programming Desk Health Inspection ({overall.value})" in report
+    assert "Detail:" in report
     assert "Summary:" in report
+
+
+def test_doctor_engine_warning_status() -> None:
+    engine = DoctorEngine(workspace_root=Path.cwd())
+    warn_results = [
+        DiagnosticCheckResult(
+            name="probe_ok",
+            status=CheckStatus.PASS,
+            message="all good",
+            details={"key": "val"},
+        ),
+        DiagnosticCheckResult(
+            name="probe_warn",
+            status=CheckStatus.WARN,
+            message="warning check",
+            fix_hint="check configuration",
+        ),
+    ]
+    assert engine.overall_status(warn_results) == CheckStatus.WARN
+    assert engine.exit_code(warn_results) == 0
+    report = engine.format_report(warn_results, verbose=True)
+    assert "Programming Desk Health Inspection (WARN)" in report
+    assert "Detail: key=val" in report
 
 
 def test_doctor_engine_custom_probe_and_failure() -> None:

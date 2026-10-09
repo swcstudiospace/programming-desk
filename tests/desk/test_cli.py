@@ -22,6 +22,13 @@ def test_cli_doctor(capsys) -> None:
     captured = capsys.readouterr()
     assert "overall_status" in captured.out
 
+    # Verbose text report test
+    code = cli.main(["doctor", "--verbose"])
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "Programming Desk Health Inspection" in captured.out
+    assert "Detail:" in captured.out
+
 
 def test_cli_session_lifecycle(capsys) -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:

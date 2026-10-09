@@ -145,18 +145,29 @@ class PolicySandbox:
                         f"Executable path '{raw_exe}' resolves to untrusted location '{resolved_target}'"
                     )
 
+        is_shell = exe_name in ("sh", "bash", "zsh", "dash", "ksh", "csh", "tcsh")
+        is_runtime = exe_name.startswith("python") or exe_name in ("node", "bun", "deno", "ruby", "perl")
+
         # Inspect individual argument strings for shell injection sequences
         for i, arg in enumerate(cmd):
             if not isinstance(arg, str):
                 raise BoundarySecurityError(f"Command argument must be string, got: {type(arg)}")
+            if "\x00" in arg:
+                raise BoundarySecurityError("Null byte detected in command argument")
+
+            is_inline_code = i > 0 and cmd[i - 1] in ("-c", "-e", "--command")
+
+            # Inline code for programming language runtimes allows arbitrary language code (bitwise |, semicolons, etc.)
+            if is_inline_code and is_runtime:
+                continue
+
             for token in self.DANGEROUS_SHELL_TOKENS:
                 if token in arg:
                     raise BoundarySecurityError(
                         f"Potentially dangerous shell metacharacter '{token}' detected in command argument: {arg}"
                     )
 
-            # Check for command chaining semicolon, &&, || outside language code arguments (-c, -e, --command)
-            is_inline_code = i > 0 and cmd[i - 1] in ("-c", "-e", "--command")
+            # Check for command chaining semicolon, &&, || outside language code arguments
             if not is_inline_code:
                 if ";" in arg or "\n" in arg or "\r" in arg or "&&" in arg or "||" in arg:
                     raise BoundarySecurityError(

@@ -44,6 +44,8 @@ def test_audit_redaction() -> None:
         secret_token = "ghp_" + "z" * 36
         tracer.emit(
             action="deploy_job",
+            author="Alice",
+            token_count=123,
             token=secret_token,
             nested={"auth": f"Bearer token1234567890abcdef", "safe": "public_data"},
         )
@@ -52,6 +54,8 @@ def test_audit_redaction() -> None:
         assert len(records) == 1
         details = records[0]["details"]
         assert secret_token not in json.dumps(details)
+        assert details["author"] == "Alice"
+        assert details["token_count"] == 123
         assert details["token"] == "[REDACTED]"
         assert "token1234567890abcdef" not in details["nested"]["auth"]  # pragma: allowlist secret (redaction test fixture)
         assert details["nested"]["safe"] == "public_data"

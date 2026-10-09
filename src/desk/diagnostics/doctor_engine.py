@@ -306,7 +306,7 @@ class DoctorEngine:
         warns = sum(1 for r in results if r.status == CheckStatus.WARN)
         fails = sum(1 for r in results if r.status == CheckStatus.FAIL)
 
-        overall = "PASS" if fails == 0 else "FAIL"
+        overall = self.overall_status(results).value
         lines = [
             f"=== Programming Desk Health Inspection ({overall}) ===",
             f"Workspace: {self.workspace_root}",
@@ -318,6 +318,9 @@ class DoctorEngine:
             lines.append(f"{tag} {r.name}: {r.message}")
             if r.fix_hint and r.status != CheckStatus.PASS:
                 lines.append(f"         Hint: {r.fix_hint}")
+            if verbose and r.details:
+                for k, v in r.details.items():
+                    lines.append(f"         Detail: {k}={v}")
 
         lines.append("")
         lines.append(f"Summary: {passes} passed, {warns} warnings, {fails} failures")

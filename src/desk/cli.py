@@ -18,16 +18,17 @@ from .telemetry.audit_tracer import AuditTracer
 def handle_doctor(args: argparse.Namespace) -> int:
     engine = DoctorEngine()
     results = engine.run_all()
-    fails = sum(1 for r in results if r.status == CheckStatus.FAIL)
+    overall = engine.overall_status(results)
     if args.json:
         payload = {
-            "overall_status": "PASS" if fails == 0 else "FAIL",
+            "overall_status": overall.value,
             "checks": [r.to_dict() for r in results],
         }
         print(json.dumps(payload, indent=2))
     else:
-        print(engine.format_report(results))
-    return 0 if fails == 0 else 1
+        verbose = getattr(args, "verbose", False)
+        print(engine.format_report(results, verbose=verbose))
+    return engine.exit_code(results)
 
 
 def handle_audit(args: argparse.Namespace) -> int:

@@ -90,3 +90,27 @@ def test_suppressed_exception() -> None:
     assert len(mgr.history) == 1
     assert mgr.history[0].succeeded is False
     assert "missing key" in (mgr.history[0].error_message or "")
+
+
+def test_explicit_rollback_partial_failure() -> None:
+    mgr = RecoveryManager()
+
+    def failing_action():
+        raise RuntimeError("failed to clean up resource")
+
+    executed_log: list[str] = []
+
+    with mgr.transaction("step-explicit-rollback") as tx:
+        tx.register_compensation(lambda: executed_log.append("first_succeeded"), name="success_comp")
+        tx.register_compensation(failing_action, name="failing_comp")
+        executed, failed = tx.rollback()
+        assert executed == 1
+        assert failed == 1
+
+    assert len(mgr.history) == 1
+    report = mgr.history[0]
+    assert report.succeeded is False
+    assert report.rollbacks_executed == 1
+    assert report.rollbacks_failed == 1
+    assert len(tx.failed_restorations) == 1
+    assert "failing_comp: failed to clean up resource" in tx.failed_restorations[0]

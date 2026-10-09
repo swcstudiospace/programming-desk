@@ -7406,6 +7406,23 @@ def create_mcp(
         QuantumThermodynamicSolanaAnchorExporter,
         QuantumThermodynamicVerificationDrill,
     )
+    from desk_gateway.quantum_nonlocality_mesh import (
+        CHSHBellInequalityEngine,
+        CHSHTestSummary,
+        DeviceIndependentQKDEngine,
+        DeviceIndependentRandomnessExpander,
+        DIQKDKeyResult,
+        DIRandomnessResult,
+        MerminGHZSummary,
+        MultipartiteMerminGHZEngine,
+        QuantumNonLocalityMesh,
+    )
+    from desk_gateway.quantum_nonlocality_anchoring import (
+        QuantumNonLocalityMerkleLedger,
+        QuantumNonLocalityReceipt,
+        QuantumNonLocalitySolanaAnchorExporter,
+        QuantumNonLocalityVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -7528,6 +7545,149 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/thermo/drill/simulate", methods=["POST"])
     async def quantum_thermo_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumThermodynamicVerificationDrill()
+        res = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qnonloc_mesh = QuantumNonLocalityMesh()
+    qnonloc_ledger = QuantumNonLocalityMerkleLedger()
+    qnonloc_exporter = QuantumNonLocalitySolanaAnchorExporter()
+    mcp._qnonloc_mesh = qnonloc_mesh  # type: ignore[attr-defined]
+    mcp._qnonloc_ledger = qnonloc_ledger  # type: ignore[attr-defined]
+    mcp._qnonloc_exporter = qnonloc_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/nonlocality/chsh", methods=["POST"])
+    async def quantum_nonlocality_chsh_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_trials = int(body.get("num_trials", 1500))
+        noise = float(body.get("noise_depolarizing", 0.0))
+        res = qnonloc_mesh.run_chsh_evaluation(num_trials=num_trials, noise_depolarizing=noise)
+
+        rcpt = QuantumNonLocalityReceipt(
+            receipt_id=f"rcpt-chsh-{int(time.time()*1000)}",
+            test_type="CHSH_BELL",
+            parameter_value=res.chsh_parameter_s,
+            classical_bound=res.classical_bound,
+            quantum_violation=res.quantum_violation,
+            num_trials=res.num_trials,
+            p_value=res.p_value_classical_refutation,
+            extra_data_hash=hashlib.sha256(json.dumps(res.correlations).encode()).hexdigest(),
+        )
+        qnonloc_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "chsh": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qnonloc_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/nonlocality/mermin", methods=["POST"])
+    async def quantum_nonlocality_mermin_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_trials_per_setting = int(body.get("num_trials_per_setting", 400))
+        noise = float(body.get("noise_depolarizing", 0.0))
+        res = qnonloc_mesh.run_mermin_evaluation(num_trials_per_setting=num_trials_per_setting, noise_depolarizing=noise)
+
+        rcpt = QuantumNonLocalityReceipt(
+            receipt_id=f"rcpt-mermin-{int(time.time()*1000)}",
+            test_type="GHZ_MERMIN",
+            parameter_value=res.mermin_operator_expectation,
+            classical_bound=res.classical_bound,
+            quantum_violation=res.quantum_violation,
+            num_trials=res.num_trials,
+            p_value=1e-12 if res.quantum_violation else 1.0,
+            extra_data_hash=hashlib.sha256(json.dumps(res.correlations).encode()).hexdigest(),
+        )
+        qnonloc_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "mermin": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qnonloc_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/nonlocality/randomness/expand", methods=["POST"])
+    async def quantum_nonlocality_randomness_expand_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seed = body.get("seed_bits", "1010101010101010")
+        bell_s = float(body.get("bell_s", 2.8284))
+        rounds = int(body.get("num_rounds", 1000))
+        res = qnonloc_mesh.expand_randomness(seed_bits=seed, bell_s=bell_s, num_rounds=rounds)
+
+        rcpt = QuantumNonLocalityReceipt(
+            receipt_id=f"rcpt-rand-{int(time.time()*1000)}",
+            test_type="DI_RANDOMNESS",
+            parameter_value=res.min_entropy_per_bit,
+            classical_bound=0.0,
+            quantum_violation=res.min_entropy_per_bit > 0.0,
+            num_trials=res.num_rounds,
+            p_value=0.0,
+            extra_data_hash=hashlib.sha256(res.expanded_bits.encode()).hexdigest(),
+        )
+        qnonloc_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "randomness": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qnonloc_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/nonlocality/qkd/session", methods=["POST"])
+    async def quantum_nonlocality_qkd_session_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_pairs = int(body.get("num_pairs", 1500))
+        noise = float(body.get("noise_depolarizing", 0.02))
+        res = qnonloc_mesh.run_di_qkd(num_pairs=num_pairs, noise_depolarizing=noise)
+
+        rcpt = QuantumNonLocalityReceipt(
+            receipt_id=f"rcpt-diqkd-{int(time.time()*1000)}",
+            test_type="DI_QKD",
+            parameter_value=res.secret_key_rate,
+            classical_bound=0.0,
+            quantum_violation=res.security_certified,
+            num_trials=res.raw_key_length,
+            p_value=0.0 if res.security_certified else 1.0,
+            extra_data_hash=hashlib.sha256(res.secure_key_hex.encode()).hexdigest(),
+        )
+        qnonloc_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "qkd": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qnonloc_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/nonlocality/anchor/export", methods=["POST"])
+    async def quantum_nonlocality_anchor_export_route(_request: Request) -> Response:
+        root = qnonloc_ledger.get_merkle_root()
+        chsh_receipts = [r for r in qnonloc_ledger.receipts if r.test_type == "CHSH_BELL"]
+        mean_s = sum(r.parameter_value for r in chsh_receipts) / max(1, len(chsh_receipts)) if chsh_receipts else 2.8284
+
+        rand_receipts = [r for r in qnonloc_ledger.receipts if r.test_type == "DI_RANDOMNESS"]
+        tot_rand = sum(r.parameter_value * r.num_trials for r in rand_receipts) if rand_receipts else 500.0
+
+        qkd_receipts = [r for r in qnonloc_ledger.receipts if r.test_type == "DI_QKD"]
+        mean_rate = sum(r.parameter_value for r in qkd_receipts) / max(1, len(qkd_receipts)) if qkd_receipts else 0.25
+
+        anchor_payload = QuantumNonLocalitySolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            num_receipts=len(qnonloc_ledger.receipts),
+            mean_chsh_s=mean_s,
+            certified_random_bits=tot_rand,
+            di_key_rate=mean_rate,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": qnonloc_exporter.export_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/nonlocality/drill/simulate", methods=["POST"])
+    async def quantum_nonlocality_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumNonLocalityVerificationDrill()
         res = drill.run_drill()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -9471,6 +9631,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qthermo_mesh": getattr(mcp, "_qthermo_mesh", None),
         "qthermo_ledger": getattr(mcp, "_qthermo_ledger", None),
         "qthermo_exporter": getattr(mcp, "_qthermo_exporter", None),
+        "qnonloc_mesh": getattr(mcp, "_qnonloc_mesh", None),
+        "qnonloc_ledger": getattr(mcp, "_qnonloc_ledger", None),
+        "qnonloc_exporter": getattr(mcp, "_qnonloc_exporter", None),
     }
     return app, settings
 

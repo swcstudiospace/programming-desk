@@ -7514,6 +7514,21 @@ def create_mcp(
         QuantumOptomechanicsSolanaAnchorExporter,
         QuantumOptomechanicsVerificationDrill,
     )
+    from desk_gateway.quantum_scrambling_mesh import (
+        HaydenPreskillProtocolEngine,
+        HaydenPreskillResult,
+        OTOCMeasurementPoint,
+        QuantumScramblingEngine,
+        QuantumScramblingMesh,
+        ScramblerType,
+        ScramblingSystemConfig,
+    )
+    from desk_gateway.quantum_scrambling_anchoring import (
+        QuantumScramblingMerkleLedger,
+        QuantumScramblingReceipt,
+        QuantumScramblingSolanaAnchorExporter,
+        QuantumScramblingVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -8425,6 +8440,115 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/optomechanics/drill/simulate", methods=["POST"])
     async def quantum_optomechanics_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumOptomechanicsVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qscramble_mesh = QuantumScramblingMesh()
+    qscramble_ledger = QuantumScramblingMerkleLedger()
+    qscramble_exporter = QuantumScramblingSolanaAnchorExporter()
+    mcp._qscramble_mesh = qscramble_mesh  # type: ignore[attr-defined]
+    mcp._qscramble_ledger = qscramble_ledger  # type: ignore[attr-defined]
+    mcp._qscramble_exporter = qscramble_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/scrambling/otoc/simulate", methods=["POST"])
+    async def quantum_scrambling_otoc_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        n_qubits = int(body.get("n_qubits", 6))
+        scrambler_type = body.get("scrambler_type", "RANDOM_CLIFFORD")
+        temp = float(body.get("temperature_k", 1.0))
+        steps = int(body.get("steps", 8))
+
+        res = qscramble_mesh.run_otoc_analysis(
+            n_qubits=n_qubits,
+            scrambler_type=scrambler_type,
+            temperature_k=temp,
+            steps=steps,
+        )
+        rcpt = QuantumScramblingReceipt(
+            receipt_id=f"rcpt-otoc-{int(time.time()*1000)}",
+            operation_type="OTOC_DECAY_ANALYSIS",
+            scrambler_type=scrambler_type,
+            otoc_f_or_fidelity=res["final_otoc_f"],
+            lyapunov_or_epsilon=res["mss_lyapunov_bound"],
+            tripartite_i3=res["final_tripartite_mutual_info_i3"],
+            status="SCRAMBLED_BOUND_SATURATED" if res["is_fast_scrambled"] else "NON_SCRAMBLING",
+            parameters_digest=hashlib.sha256(f"{n_qubits}:{scrambler_type}:{temp}:{res['final_otoc_f']}".encode()).hexdigest(),
+        )
+        qscramble_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "otoc_analysis": res,
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qscramble_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/scrambling/hayden-preskill/teleport", methods=["POST"])
+    async def quantum_scrambling_hayden_preskill_teleport_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        exp_id = body.get("experiment_id", f"hp-exp-{int(time.time()*1000)}")
+        n_bh = int(body.get("n_black_hole_qubits", 6))
+        k_sec = int(body.get("k_secret_qubits", 1))
+        eps = int(body.get("epsilon_qubits", 2))
+        scrambler = body.get("scrambler_type", "RANDOM_CLIFFORD")
+
+        try:
+            hp_res = qscramble_mesh.run_hayden_preskill_teleportation(
+                experiment_id=exp_id,
+                n_black_hole_qubits=n_bh,
+                k_secret_qubits=k_sec,
+                epsilon_qubits=eps,
+                scrambler_type=scrambler,
+            )
+            rcpt = QuantumScramblingReceipt(
+                receipt_id=f"rcpt-hp-{int(time.time()*1000)}",
+                operation_type="HAYDEN_PRESKILL_RETRIEVAL",
+                scrambler_type=scrambler,
+                otoc_f_or_fidelity=hp_res.reconstruction_fidelity,
+                lyapunov_or_epsilon=float(eps),
+                tripartite_i3=-1.9,
+                status="RETRIEVAL_VERIFIED" if hp_res.teleportation_successful else "RETRIEVAL_DEGRADED",
+                parameters_digest=hashlib.sha256(f"{exp_id}:{n_bh}:{k_sec}:{eps}:{hp_res.reconstruction_fidelity}".encode()).hexdigest(),
+            )
+            qscramble_ledger.append_receipt(rcpt)
+
+            return JSONResponse({
+                "ok": True,
+                "hayden_preskill": hp_res.to_dict(),
+                "receipt": rcpt.to_dict(),
+                "merkle_root": qscramble_ledger.get_merkle_root(),
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/scrambling/anchor/export", methods=["POST"])
+    async def quantum_scrambling_anchor_export_route(_request: Request) -> Response:
+        root = qscramble_ledger.get_merkle_root()
+        latest_rcpt = qscramble_ledger.receipts[-1] if qscramble_ledger.receipts else QuantumScramblingReceipt(
+            receipt_id="genesis-scramble",
+            operation_type="HAYDEN_PRESKILL_RETRIEVAL",
+            scrambler_type="RANDOM_CLIFFORD",
+            otoc_f_or_fidelity=0.96,
+            lyapunov_or_epsilon=2.0,
+            tripartite_i3=-1.9,
+            status="RETRIEVAL_VERIFIED",
+            parameters_digest="0" * 64,
+        )
+        proof = qscramble_ledger.get_proof(len(qscramble_ledger.receipts) - 1) if qscramble_ledger.receipts else []
+        payload = QuantumScramblingSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": QuantumScramblingSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/scrambling/drill/simulate", methods=["POST"])
+    async def quantum_scrambling_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumScramblingVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -10385,6 +10509,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qoptomech_mesh": getattr(mcp, "_qoptomech_mesh", None),
         "qoptomech_ledger": getattr(mcp, "_qoptomech_ledger", None),
         "qoptomech_exporter": getattr(mcp, "_qoptomech_exporter", None),
+        "qscramble_mesh": getattr(mcp, "_qscramble_mesh", None),
+        "qscramble_ledger": getattr(mcp, "_qscramble_ledger", None),
+        "qscramble_exporter": getattr(mcp, "_qscramble_exporter", None),
     }
     return app, settings
 

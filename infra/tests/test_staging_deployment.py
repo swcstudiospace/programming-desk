@@ -737,6 +737,55 @@ def test_guard_rejects_pathlike_host_binary(tmp_path, monkeypatch):
         )
 
 
+def test_guard_rejects_executable_override(tmp_path, monkeypatch):
+    """Popen runs `executable`, not the argv name that PATH would resolve."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_bin = tmp_path / "host" / "systemctl"
+    host_bin.parent.mkdir()
+    _write_executable(host_bin, "#!/bin/sh\necho guard-regression >&2\nexit 99\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="executable"):
+        subprocess.run(
+            ["systemctl", "restart", "desk-gateway.service"],
+            executable=str(host_bin),
+            check=False,
+        )
+
+
+def test_guard_rejects_bytes_systemctl_bin(tmp_path, monkeypatch):
+    """A bytes-keyed environment can still name the host systemctl."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_bin = tmp_path / "host" / "systemctl"
+    host_bin.parent.mkdir()
+    _write_executable(host_bin, "#!/bin/sh\necho guard-regression >&2\nexit 99\n")
+    stub = tmp_path / "stub"
+    stub.mkdir()
+    _write_executable(stub / "systemctl", "#!/bin/sh\nexit 0\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    env = {
+        b"PATH": os.fsencode(str(stub)),
+        b"SYSTEMCTL_BIN": os.fsencode(str(host_bin)),
+    }
+    with pytest.raises(Failed, match="SYSTEMCTL_BIN"):
+        subprocess.run(
+            [str(RELOAD_SCRIPT)],
+            env=env,
+            check=False,
+        )
+
+
 def test_reload_pid_file_keeps_builtin_kill_without_external(tmp_path, decoy_gateway):
     """No external kill leaves Bash's builtin, which signals a child this test owns.
 

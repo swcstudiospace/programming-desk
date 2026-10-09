@@ -95,9 +95,46 @@ def _command_search_path(env: dict | None) -> str:
     """PATH the child searches.
 
     An explicit env that omits PATH is not empty: Python uses
-    os.defpath (`/bin:/usr/bin`) for that process.
+    os.defpath (`/bin:/usr/bin`) for that process. Byte-keyed
+    environments are accepted, matching os.get_exec_path.
     """
     return os.pathsep.join(os.get_exec_path(env))
+
+
+def _mapping_get(source: dict, key: str) -> object | None:
+    """Value for `key` in a str-keyed or bytes-keyed environment.
+
+    os.environ rejects bytes keys. A plain dict and os.environb accept them.
+    """
+    if key in source:
+        return source[key]
+    encoded = os.fsencode(key)
+    try:
+        if encoded in source:
+            return source[encoded]
+    except (TypeError, UnicodeError):
+        return None
+    return None
+
+
+def resolved_program(args: object, executable: object, env: dict | None) -> str | None:
+    """Program Popen executes.
+
+    Matches Popen._execute_child: an omitted executable is args[0]; a path
+    with a directory component is used as given; a bare name is searched on
+    the child's PATH.
+    """
+    if executable is None:
+        if not isinstance(args, (list, tuple)) or not args:
+            return None
+        program = _command_text(args[0])
+    else:
+        program = _command_text(executable)
+    if not program:
+        return None
+    if os.path.dirname(program):
+        return program
+    return shutil.which(program, path=_command_search_path(env)) or program
 
 
 def reachable_host_service_bins(
@@ -128,7 +165,7 @@ def selected_service_bins(
     path = _command_search_path(env)
     hits: list[str] = []
     for key, name in _SERVICE_BIN_ENV.items():
-        chosen = source.get(key)
+        chosen = _command_text(_mapping_get(source, key))
         reals = _host_realpaths(host_bins.get(name))
         if not chosen or not reals:
             continue
@@ -138,6 +175,27 @@ def selected_service_bins(
             candidate = shutil.which(chosen, path=path) or ""
         if candidate and os.path.realpath(candidate) in reals:
             hits.append(f"{key} -> {candidate}")
+    return hits
+
+
+def executable_reaches_host_service(
+    args: object,
+    executable: object,
+    env: dict | None,
+    host: dict | None = None,
+) -> list[str]:
+    """Popen `executable=` that is the host systemctl or nginx binary."""
+    if executable is None:
+        return []
+    host_bins = HOST_SERVICE_BINS if host is None else host
+    program = resolved_program(args, executable, env)
+    if not program:
+        return []
+    real = os.path.realpath(program)
+    hits: list[str] = []
+    for name in _SERVICE_BIN_ENV.values():
+        if real in _host_realpaths(host_bins.get(name)):
+            hits.append(f"executable -> {program}")
     return hits
 
 
@@ -167,11 +225,13 @@ def reject_host_service_bins(
     args: object,
     env: dict | None,
     host: dict | None = None,
+    executable: object = None,
 ) -> None:
     hits = (
         reachable_host_service_bins(env, host)
         + selected_service_bins(env, host)
         + argv_reaches_host_service(args, host)
+        + executable_reaches_host_service(args, executable, env, host)
     )
     if hits:
         pytest.fail(
@@ -198,7 +258,16 @@ def forbid_host_systemctl_and_nginx(monkeypatch, tmp_path_factory):
 
     class GuardedPopen(real_popen):
         def __init__(self, args, *popenargs, **kwargs):
-            reject_host_service_bins(args, kwargs.get("env"))
+            # Popen(args, bufsize, executable, ..., env=). subprocess.run
+            # passes executable and env as keywords; a positional call puts
+            # executable in popenargs[1].
+            executable = kwargs.get("executable")
+            if executable is None and len(popenargs) >= 2:
+                executable = popenargs[1]
+            env = kwargs.get("env")
+            if env is None and len(popenargs) >= 10:
+                env = popenargs[9]
+            reject_host_service_bins(args, env, executable=executable)
             super().__init__(args, *popenargs, **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", GuardedPopen)

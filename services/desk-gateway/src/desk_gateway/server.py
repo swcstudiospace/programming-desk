@@ -6905,6 +6905,72 @@ def create_mcp(
         drill_results = QuantumConsensusDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.6 (Phases 78 & 79): Distributed Quantum Sensing & Clock Synchronization Mesh
+    from desk_gateway.quantum_sensing_mesh import (
+        NOONStateMetrologyResult,
+        QuantumClockSyncResult,
+        QuantumClockSynchronizer,
+        QuantumMetrologyEstimator,
+        QuantumSensorTelemetry,
+        SensorType,
+    )
+    from desk_gateway.quantum_sensing_anchoring import (
+        QuantumSensingAnchorExporter,
+        QuantumSensingDrillSimulator,
+        QuantumSensingLedger,
+        QuantumSensingReceipt,
+    )
+
+    qsensing_clock_sync = QuantumClockSynchronizer(base_fidelity=0.99)
+    qsensing_ledger = QuantumSensingLedger()
+    qsensing_exporter = QuantumSensingAnchorExporter()
+
+    mcp._qsensing_clock_sync = qsensing_clock_sync  # type: ignore[attr-defined]
+    mcp._qsensing_ledger = qsensing_ledger  # type: ignore[attr-defined]
+    mcp._qsensing_exporter = qsensing_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/sensing/noon/estimate", methods=["POST"])
+    async def quantum_sensing_noon_estimate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        true_phase = float(body.get("true_phase", 1.570796))
+        n_photons = int(body.get("n_photons", 10))
+        noise = float(body.get("detector_noise", 0.01))
+
+        res = QuantumMetrologyEstimator.estimate_phase_with_noon(true_phase, n_photons, noise)
+        rcpt = qsensing_ledger.append_event(
+            "NOON_PHASE_ESTIMATION",
+            "desk-alpha",
+            res.entanglement_advantage_factor,
+            res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/sensing/clock/sync", methods=["POST"])
+    async def quantum_sensing_clock_sync_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        node_b = body.get("node_b", "desk-beta")
+        skew_ps = float(body.get("initial_skew_ps", 100.0))
+
+        sync_res = qsensing_clock_sync.synchronize_clocks(node_a, node_b, skew_ps)
+        rcpt = qsensing_ledger.append_event(
+            "QUANTUM_CLOCK_SYNCHRONIZATION",
+            node_b,
+            10.0,
+            sync_res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "sync": sync_res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/sensing/anchor/export", methods=["POST"])
+    async def quantum_sensing_anchor_export_route(_request: Request) -> Response:
+        commitment = qsensing_exporter.export_commitment(qsensing_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/sensing/drill/simulate", methods=["POST"])
+    async def quantum_sensing_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumSensingDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8465,6 +8531,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qconsensus_arbitrator": getattr(mcp, "_qconsensus_arbitrator", None),
         "qconsensus_ledger": getattr(mcp, "_qconsensus_ledger", None),
         "qconsensus_exporter": getattr(mcp, "_qconsensus_exporter", None),
+        "qsensing_clock_sync": getattr(mcp, "_qsensing_clock_sync", None),
+        "qsensing_ledger": getattr(mcp, "_qsensing_ledger", None),
+        "qsensing_exporter": getattr(mcp, "_qsensing_exporter", None),
     }
     return app, settings
 

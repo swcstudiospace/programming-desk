@@ -7206,6 +7206,62 @@ def create_mcp(
         drill_results = QuantumHomomorphicDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v6.0 (Phases 86 & 87): Quantum Cellular Automata & Discrete-Time Quantum Walk Mesh
+    from desk_gateway.quantum_cellular_automata_mesh import (
+        CoinType,
+        QuantumCellularAutomaton,
+        QuantumWalkEngine,
+        QuantumWalkState,
+    )
+    from desk_gateway.quantum_cellular_automata_anchoring import (
+        QCAAnchorExporter,
+        QCADrillSimulator,
+        QCALedger,
+        QCAReceipt,
+    )
+
+    qca_walk_engine = QuantumWalkEngine(lattice_size=31, coin_type=CoinType.HADAMARD)
+    qca_automaton = QuantumCellularAutomaton(n_cells=16)
+    qca_ledger = QCALedger()
+    qca_exporter = QCAAnchorExporter()
+
+    mcp._qca_walk_engine = qca_walk_engine  # type: ignore[attr-defined]
+    mcp._qca_automaton = qca_automaton  # type: ignore[attr-defined]
+    mcp._qca_ledger = qca_ledger  # type: ignore[attr-defined]
+    mcp._qca_exporter = qca_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/cellular/walk/step", methods=["POST"])
+    async def quantum_cellular_walk_step_route(_request: Request) -> Response:
+        state = qca_walk_engine.step()
+        rcpt = qca_ledger.append_event(
+            "QUANTUM_WALK_STEP",
+            state.step,
+            state.variance,
+            state.to_dict(),
+        )
+        return JSONResponse({"ok": True, "state": state.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cellular/automaton/step", methods=["POST"])
+    async def quantum_cellular_automaton_step_route(_request: Request) -> Response:
+        res = qca_automaton.step()
+        rcpt = qca_ledger.append_event(
+            "QCA_UNITARY_STEP",
+            res["step"],
+            res["total_excitation"],
+            res,
+        )
+        return JSONResponse({"ok": True, "automaton": res, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cellular/anchor/export", methods=["POST"])
+    async def quantum_cellular_anchor_export_route(_request: Request) -> Response:
+        commitment = qca_exporter.export_commitment(qca_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/cellular/drill/simulate", methods=["POST"])
+    async def quantum_cellular_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QCADrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8778,6 +8834,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qhe_engine": getattr(mcp, "_qhe_engine", None),
         "qhe_ledger": getattr(mcp, "_qhe_ledger", None),
         "qhe_exporter": getattr(mcp, "_qhe_exporter", None),
+        "qca_walk_engine": getattr(mcp, "_qca_walk_engine", None),
+        "qca_automaton": getattr(mcp, "_qca_automaton", None),
+        "qca_ledger": getattr(mcp, "_qca_ledger", None),
+        "qca_exporter": getattr(mcp, "_qca_exporter", None),
     }
     return app, settings
 

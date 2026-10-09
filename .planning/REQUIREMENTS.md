@@ -1,19 +1,19 @@
-# Requirements: Milestone v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+# Requirements: Milestone v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
 
-This document defines the requirements for Milestone v2.9 of Programming Desk.
+This document defines the requirements for Milestone v3.0 of Programming Desk.
 
-## 1. Cross-Substrate Continuous State Mirroring & Fast RPO Sync (Phase 24)
+## 1. Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS (Phase 26)
 
-- [x] **REQ-DR-001**: Continuous asynchronous state mirroring engine across primary and secondary data substrates.
-- [x] **REQ-DR-002**: Delta snapshotting with cryptographic block checksums and incremental catch-up replication.
-- [x] **REQ-DR-003**: Replication lag monitor with dynamic throttle adaptation under WAN congestion.
-- [x] **REQ-DR-004**: Atomic cross-substrate state cutover harness ensuring zero data loss (RPO = 0).
-- [x] **REQ-DR-005**: Standby health polling and automated warm-replica promotion readiness verification.
+- [x] **REQ-ZERO-001**: Ephemeral per-seat session credential issuer with micro-TTL token expiry.
+- [x] **REQ-ZERO-002**: Dynamic mutual TLS (mTLS) certificate authority for inter-seat and inter-desk communication.
+- [x] **REQ-ZERO-003**: Hardware/enclave attestation evidence verifier evaluating cryptographic measurement claims.
+- [x] **REQ-ZERO-004**: Zero-trust continuous authentication policy engine re-verifying seat posture on sensitive tool calls.
+- [x] **REQ-ZERO-005**: Instantaneous session revocation & certificate revocation list (CRL) distribution across edge nodes.
 
-## 2. Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery (Phase 25)
+## 2. Continuous Merkle Proof Verification & Immutable Audit Export (Phase 27)
 
-- [x] **REQ-DR-006**: Distributed fencing token allocator preventing split-brain writes during failover.
-- [x] **REQ-DR-007**: Automatic quorum heartbeat evaluator isolating partitioned primary clusters.
-- [x] **REQ-DR-008**: Deterministic state conflict reconciler using vector clock ordering.
-- [x] **REQ-DR-009**: Fast failover recovery orchestrator achieving sub-second recovery time objectives (RTO < 1s).
-- [x] **REQ-DR-010**: End-to-end disaster recovery drill verifier generating non-repudiable audit receipts.
+- [ ] **REQ-ZERO-006**: Continuous incremental Merkle tree aggregator over all desk operations.
+- [ ] **REQ-ZERO-007**: Cryptographic inclusion & consistency proof generator for arbitrary time windows.
+- [ ] **REQ-ZERO-008**: External immutable audit log export adapter supporting WORM/Solana devnet anchoring.
+- [ ] **REQ-ZERO-009**: Automated tamper-detection audit scrubber identifying manipulated log entries.
+- [ ] **REQ-ZERO-010**: End-to-end zero-trust compliance verification suite with signed attestation receipts.

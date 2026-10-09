@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (in progress)
 - ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
 - ✅ **v2.7 Multi-Modal Processing & Streaming Tool Execution** — Phases 20-21 (shipped 2026-10-10) — [Archive](milestones/v2.7-ROADMAP.md)
@@ -15,14 +16,23 @@
 
 ## Phases
 
-### Current Milestone: v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+### Current Milestone: v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
 
-- [x] **Phase 24: Cross-Substrate Continuous State Mirroring & Fast RPO Sync**
-  - [x] 24-01: Asynchronous State Mirroring, Delta Snapshots, Replication Lag Throttling, and Warm-Replica Readiness (`REQ-DR-001`, `REQ-DR-002`, `REQ-DR-003`, `REQ-DR-004`, `REQ-DR-005`)
-- [x] **Phase 25: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery**
-  - [x] 25-01: Fencing Token Allocator, Quorum Heartbeat Evaluator, Deterministic Conflict Reconciler, and DR Drill Verifier (`REQ-DR-006`, `REQ-DR-007`, `REQ-DR-008`, `REQ-DR-009`, `REQ-DR-010`)
+- [x] **Phase 26: Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS**
+  - [x] 26-01: Ephemeral Credentials, Dynamic mTLS CA, Enclave Attestation, Continuous Posture Check, and CRL Revocation (`REQ-ZERO-001`, `REQ-ZERO-002`, `REQ-ZERO-003`, `REQ-ZERO-004`, `REQ-ZERO-005`)
+- [ ] **Phase 27: Continuous Merkle Proof Verification & Immutable Audit Export**
+  - [ ] 27-01: Incremental Merkle Aggregator, Consistency Proofs, External Anchor Export, Tamper Scrubber, and Compliance Verification (`REQ-ZERO-006`, `REQ-ZERO-007`, `REQ-ZERO-008`, `REQ-ZERO-009`, `REQ-ZERO-010`)
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication (Phases 24-25) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 24: Cross-Substrate Continuous State Mirroring & Fast RPO Sync (1/1 plan)
+- [x] Phase 25: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery (1/1 plan)
+
+See [milestones/v2.9-ROADMAP.md](milestones/v2.9-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh (Phases 22-23) — SHIPPED 2026-10-10</summary>
@@ -31,22 +41,4 @@
 - [x] Phase 23: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts (1/1 plan)
 
 See [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.7 Multi-Modal Processing & Streaming Tool Execution (Phases 20-21) — SHIPPED 2026-10-10</summary>
-
-- [x] Phase 20: Multi-Modal Artifact Ingestion & Streaming Tool Execution (2/2 plans)
-- [x] Phase 21: Dynamic Streaming Tool Mesh & Real-Time Telemetry (2/2 plans)
-
-See [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization (Phases 18-19) — SHIPPED 2026-10-10</summary>
-
-- [x] Phase 18: FinOps Dynamic Token Budgeting & Cost Governance (2/2 plans)
-- [x] Phase 19: LLM Tier Routing & Cost-Aware Model Optimization (1/1 plan)
-
-See [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md) for full phase details and execution history.
 </details>

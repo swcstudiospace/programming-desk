@@ -3432,6 +3432,11 @@ def create_mcp(
     setattr(mcp, "_failover_orchestrator", failover_orchestrator)
     setattr(mcp, "_drill_verifier", drill_verifier)
 
+    # Milestone v3.0 (Phase 26): Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+    from desk_gateway.zero_trust import ZeroTrustEnclaveManager, AttestationReport
+    zero_trust_mgr = ZeroTrustEnclaveManager()
+    setattr(mcp, "_zero_trust_mgr", zero_trust_mgr)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3730,6 +3735,90 @@ def create_mcp(
             }
         })
 
+    # Zero-Trust Security & Enclave Attestation (Phase 26)
+    @mcp.custom_route("/v1/zero-trust/claim/issue", methods=["POST"])
+    async def zt_token_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        ttl = body.get("ttl_seconds")
+        cred = zero_trust_mgr.issue_ephemeral_token(
+            seat_id=seat_id,
+            ttl_seconds=float(ttl) if ttl is not None else None,
+        )
+        return JSONResponse({
+            "ok": True,
+            "token_id": cred.token_id,
+            "seat_id": cred.seat_id,
+            "expires_at": cred.expires_at,
+            "ttl_seconds": cred.ttl_seconds,
+            "signature": cred.signature,
+        })
+
+    @mcp.custom_route("/v1/zero-trust/claim/validate", methods=["POST"])
+    async def zt_token_validate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        token_id = body.get("claim_id") or body.get("token_id", "")
+        seat_id = body.get("seat_id", "")
+        valid, msg = zero_trust_mgr.validate_ephemeral_token(token_id=token_id, seat_id=seat_id)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/cert/issue", methods=["POST"])
+    async def zt_cert_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        pk_pem = body.get("public_key_pem", f"PUBLIC_KEY_{seat_id}")
+        cert = zero_trust_mgr.issue_seat_cert(seat_id=seat_id, public_key_pem=pk_pem)
+        return JSONResponse({
+            "ok": True,
+            "serial_number": cert.serial_number,
+            "seat_id": cert.seat_id,
+            "public_key_hash": cert.public_key_hash,
+            "expires_at": cert.expires_at,
+            "fingerprint": cert.fingerprint,
+        })
+
+    @mcp.custom_route("/v1/zero-trust/attestation/verify", methods=["POST"])
+    async def zt_attestation_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        report = AttestationReport(
+            enclave_id=body.get("enclave_id", "lead"),
+            measurement_hash=body.get("measurement_hash", ""),
+            platform_nonce=body.get("platform_nonce", secrets.token_hex(8)),
+            timestamp=float(body.get("timestamp", time.time())),
+            signature=body.get("signature", "sig"),
+        )
+        valid, msg = zero_trust_mgr.verify_attestation_report(report)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/posture/evaluate", methods=["POST"])
+    async def zt_posture_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "standard_tool")
+        is_sensitive = bool(body.get("is_sensitive", False))
+        valid, msg = zero_trust_mgr.evaluate_tool_invocation_posture(
+            seat_id=seat_id,
+            tool_name=tool_name,
+            is_sensitive=is_sensitive,
+        )
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/revoke", methods=["POST"])
+    async def zt_revoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        token_id = body.get("token_id")
+        serial = body.get("serial_number")
+        reason = body.get("reason", "admin_revocation")
+        if token_id:
+            zero_trust_mgr.revoke_token(token_id, reason=reason)
+        if serial:
+            zero_trust_mgr.revoke_cert(serial, reason=reason)
+        return JSONResponse({"ok": True, "crl": zero_trust_mgr.get_crl()})
+
+    @mcp.custom_route("/v1/zero-trust/crl", methods=["GET"])
+    async def zt_crl_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **zero_trust_mgr.get_crl()})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3962,6 +4051,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "quorum_evaluator": getattr(mcp, "_quorum_evaluator", None),
         "failover_orchestrator": getattr(mcp, "_failover_orchestrator", None),
         "drill_verifier": getattr(mcp, "_drill_verifier", None),
+        "zero_trust_mgr": getattr(mcp, "_zero_trust_mgr", None),
     }
     return app, settings
 

@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "verification",
+  "task_id": "verify-skills-ut-muzt4gj6",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/verify-skills-ut-muzt4gj6",
+  "evidence_provenance": "Commands and outcomes observed by the parent orchestrator in /tmp/pr87 after the proof-contract and citation review fixes. No signed acceptance or independent approval is inferred from advisory review.",
+  "commands": [
+    {
+      "cmd": "python3 ci/tests/test_verify_skills.py",
+      "cwd": "/tmp/pr87",
+      "exit_code": 0,
+      "duration_s": 0.17,
+      "output_tail": "verify-skills: ok"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_verify_skills.py -q",
+      "cwd": "/tmp/pr87",
+      "exit_code": 0,
+      "output_tail": "9 passed in 4.35s"
+    },
+    {
+      "cmd": "python3 ci/tests/test_verify_skills.py --fixture missing-section",
+      "cwd": "/tmp/pr87",
+      "exit_code": 1,
+      "output_tail": "verify-skills: 1 problem(s)\n- skills/verify/SKILL.md: missing section 'Cleanup'"
+    },
+    {
+      "cmd": "python3 ci/tests/test_verify_skills.py --fixture missing-path",
+      "cwd": "/tmp/pr87",
+      "exit_code": 1,
+      "output_tail": "verify-skills: 1 problem(s)\n  - skills/verify/SKILL.md: cites missing path web/verify/missing.sh"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "cwd": "/tmp/pr87",
+      "exit_code": 0,
+      "output_tail": "308 passed in 15.40s"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom ci.tests.test_verify_skills import _minimal_skill, skill_problems\nwith TemporaryDirectory() as directory:\n result=skill_problems(_minimal_skill(extra='See [web/verify/missing.py].\\nPattern: [apps/web/[ab]/test_*.py].'),Path(directory),'smoke')\n assert len(result)==1 and 'web/verify/missing.py' in result[0],result\n print({'missing_bracketed_citation_rejected':True,'glob_ignored':True,'problems':result})\nPY",
+      "cwd": "/tmp/pr87",
+      "exit_code": 0,
+      "output_tail": "{'missing_bracketed_citation_rejected': True, 'glob_ignored': True, 'problems': ['smoke: cites missing path web/verify/missing.py']}"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The verification skill validator accepted the seven live skill files after the review corrections.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The verification-skill behavior suite passed 9 tests, including Markdown-bracketed missing citations versus ignored glob/path patterns.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The missing Cleanup section fixture was rejected with process exit 1.",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "The nonexistent concrete web/verify/missing.sh citation fixture was rejected with process exit 1.",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "The complete local ci/tests suite passed 308 tests in the post-correction run; this does not prove product runtime or hosted CI.",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Direct validator smoke rejected the Markdown-bracketed concrete missing path and ignored the bracketed glob.",
+      "evidence_command_index": 5
+    }
+  ],
+  "unverified": [
+    "Independent LEAD or human approval is absent; QUALITY must not approve its own change. approved_by is intentionally omitted and strict G-2 remains blocked.",
+    "Latest pushed-head Greptile and CI are not established by the recorded local commands; the PR remains draft.",
+    "Account/client skill activation and actual platform execution were not exercised; skill validation is structural and behavioral validator evidence only.",
+    "Generated dist/build/.next bundle secret coverage remains explicitly unverified: G-3 skips those directories and directory arguments do not recursively scan them.",
+    "No macOS Simulator, Android device, infrastructure deployment or production live-plane operation was performed.",
+    "No merge, auto-merge, force-push or fabricated approval was performed."
+  ],
+  "files_changed": [
+    "skills/verify/SKILL.md",
+    "skills/verify-web/SKILL.md",
+    "skills/verify-android/SKILL.md",
+    "skills/verify-ios/SKILL.md",
+    "skills/verify-infra/SKILL.md",
+    "skills/verify-systems/SKILL.md",
+    "ci/tests/test_verify_skills.py",
+    ".receipts/bot-06-quality-security/verify-skills-ut-muzt4gj6.json"
+  ],
+  "files_changed_scope": "Review corrections and this receipt; not a retrospective inventory of every original implementation file.",
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

@@ -22,6 +22,13 @@ came from the skill or from its application.
 | `trackplan-dispatch` | LEAD | Dispatch the second-uplift XML to Cursor Cloud Agent (default) or Hermes |
 | `greptile-merge-gate` | QUALITY | Merge-claim Greptile gate. Does not replace G-1…G-6 — the split is in `docs/quality-gates.md` § *Greptile is not a gate* |
 | `verification-receipts` | all | The G-2 artefact. **Always loaded.** |
+| `verify` | LEAD, QUALITY | Router and proof standard. Maps a real run onto the G-2 receipt |
+| `verify-web` | WEB | Browser and Vercel preview proof. Does not promote |
+| `verify-desktop` | WEB | Desktop-shell window proof |
+| `verify-ios` | IOS | Minimum-OS run, plus the Linux-safe checks that are not a Simulator |
+| `verify-android` | ANDROID | minSdk device proof. A `skipped:` line is not a pass |
+| `verify-infra` | INFRA | Plan review and read-only health. Does not redeploy |
+| `verify-systems` | SYSTEMS | Service tests that can fail |
 | `pack-sync` | 5, 0, all | Refresh the box pack from GitHub `main`. One direction only — the pack never writes back |
 | `contract-first-changes` | 1, 6 | Breaking-change analysis, consumer impact |
 | `code-review` | 6 | Review order, what to flag, what to let go |

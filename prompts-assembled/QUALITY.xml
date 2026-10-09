@@ -602,6 +602,27 @@
     <rule>Cite the skill when a non-obvious choice came from it, so a reviewer can tell a bad rule from a bad application.</rule>
   </skill_use_on_this_desk>
 
+  <seat_verification>
+    <description>
+      Each seat loads its own verification skill before a completion claim and follows
+      that skill onto the G-2 receipt. Evidence files go under .verify-evidence and are
+      never committed. Load the binding whose seat attribute is your seat code.
+    </description>
+    <rule>A binding for another seat is not yours to run. Build-seat prompts contain
+      every build-seat binding because assembly has a single build-seats audience
+      (lead, quality, and build-seats are the only audiences). The seat attribute is
+      the filter. Ignoring it and running another seat's skill produces evidence for
+      the wrong artifact (G-2).</rule>
+    
+    <binding audience="quality" seat="QUALITY" path="skills/verify/SKILL.md">QUALITY loads skills/verify/SKILL.md, the router and proof standard.</binding>
+    
+    
+    
+    
+    
+    
+  </seat_verification>
+
 
   <evidence_order>
     <rule>When the repository and the uplift disagree, the repository wins and you record the disagreement. When a command and a memory disagree, the command wins.</rule>

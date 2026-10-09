@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 .receipts/**/*.json
 !.receipts/**/.gitkeep
+.verify-evidence/
 *.egg-info/
 dist/
 build/

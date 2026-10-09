@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.9
-milestone_name: Cross-Cloud Disaster Recovery & Multi-Substrate Replication
-status: completed
-stopped_at: Completed Phase 25 (Plan 25-01). Milestone v2.9 fully delivered.
-last_updated: "2026-10-10T10:00:00.000Z"
+milestone: v3.0
+milestone_name: Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+status: in_progress
+stopped_at: Completed Phase 26 (Plan 26-01). Advancing to Phase 27.
+last_updated: "2026-10-10T12:00:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 25 (Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery).
+last_activity_desc: Completed Phase 26 (Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS).
 progress:
-  total_phases: 25
-  completed_phases: 25
-  total_plans: 69
-  completed_plans: 69
-  percent: 100.0
-current_phase: 25
-current_phase_name: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery
+  total_phases: 27
+  completed_phases: 26
+  total_plans: 71
+  completed_plans: 70
+  percent: 98.5
+current_phase: 27
+current_phase_name: Continuous Merkle Proof Verification & Immutable Audit Export
 ---
 
 # Project State
@@ -24,25 +24,24 @@ current_phase_name: Automated Split-Brain Protection, Fencing Tokens & Fast RTO 
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication
-**Milestone:** v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication (Completed)
+**Current focus:** Milestone v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+**Milestone:** v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation (In Progress)
 
 ## Current Position
 
-Phase: Phase 25 (Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery) - Completed (1/1 plan).
-Milestone: Milestone v2.9 (Phases 24 & 25) - 100% Complete.
-Status: Completed.
-Last activity: 2026-10-10 — Completed Phase 25 (`REQ-DR-006` through `REQ-DR-010`).
+Phase: Phase 26 (Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS) - Completed (1/1 plan).
+Milestone: Milestone v3.0 (Phases 26 & 27) - In Progress.
+Status: In Progress.
+Last activity: 2026-10-10 — Completed Phase 26 (`REQ-ZERO-001` through `REQ-ZERO-005`).
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v2.0 through v2.8 (Phases 1-23, 67 plans) 100% completed, tagged (`v2.0.0` through `v2.8.0`), and archived.
-- Milestone v2.9 covers Cross-Substrate Continuous State Mirroring & Fast RPO Sync (Phase 24) and Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery (Phase 25).
-- Plan 24-01 implemented `SubstrateStateMirrorEngine`, delta snapshots with block checksum chaining, dynamic WAN lag throttling, zero-data-loss atomic cutover (RPO=0), and warm-replica promotion readiness verification.
-- Plan 25-01 implemented `FencingTokenAllocator`, `QuorumHeartbeatEvaluator`, `VectorClockReconciler`, `FastFailoverOrchestrator` (RTO < 1s), and `DisasterRecoveryDrillVerifier`.
+- Milestone v2.0 through v2.9 (Phases 1-25, 69 plans) 100% completed, tagged (`v2.0.0` through `v2.9.0`), and archived.
+- Milestone v3.0 covers Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS (Phase 26) and Continuous Merkle Proof Verification & Immutable Audit Export (Phase 27).
+- Plan 26-01 implemented `ZeroTrustEnclaveManager`, ephemeral micro-TTL credentials, dynamic mTLS cert issuer, hardware enclave measurement verifier, continuous posture check, and instant CRL revocation.
 
 ### Pending Todos
 
-- None. Milestone v2.9 is complete. Ready to merge PR and tag `v2.9.0`.
+- Plan and execute Phase 27 (Continuous Merkle Proof Verification & Immutable Audit Export).

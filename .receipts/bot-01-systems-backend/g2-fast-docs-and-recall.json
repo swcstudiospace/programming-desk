@@ -26,7 +26,7 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-01-systems-backend: 8 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 9 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
@@ -38,7 +38,7 @@
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.21,
-      "output_tail": "G-3 PASS — 7 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 9 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",

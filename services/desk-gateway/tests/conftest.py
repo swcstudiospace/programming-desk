@@ -8,7 +8,15 @@ from pathlib import Path
 
 import httpx
 import pytest
-from asgi_lifespan import LifespanManager
+
+try:
+    from asgi_lifespan import LifespanManager
+except ImportError:
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def LifespanManager(app, **kwargs):
+        yield app
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parents[1]

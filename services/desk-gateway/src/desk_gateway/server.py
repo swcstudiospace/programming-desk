@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextvars
 import hashlib
 import hmac
@@ -122,6 +123,35 @@ from desk_gateway.tier_routing import (
     PromptCacheOptimizer,
     TierBenchmarkMonitor,
 )
+from desk_gateway.multimodal import (
+    ArtifactMetadata,
+    ArtifactType,
+    MultiModalArtifactPipeline,
+    StreamCancellationSupervisor,
+    StreamingFrame,
+    StreamingFrameType,
+    StreamingToolBus,
+)
+from desk_gateway.multimodal_memory import (
+    MultiModalStreamingVerifier,
+    SensoryMemoryIndexer,
+    SensoryMemoryRecord,
+    SensorySearchResult,
+    cosine_similarity,
+)
+from desk_gateway.streaming_mesh import (
+    AdaptivePayloadDownsampler,
+    CompressionQuality,
+    DistributedMediaCache,
+    MediaCacheEntry,
+    NetworkConditions,
+    StreamAuditReceipt,
+    StreamRPCFrame,
+    StreamRPCFrameType,
+    StreamingClientMultiplexer,
+    StreamingMeshRPC,
+    StreamingToolAuditLogger,
+)
 from desk_gateway.rbac import (
     AccessDecision,
     PolicyEvaluationResult,
@@ -210,6 +240,11 @@ current_seat: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_
 current_pack: contextvars.ContextVar[str | None] = contextvars.ContextVar("desk_pack", default=None)
 _origin_request_timestamps: dict[str, list[float]] = {}
 _idempotency_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+# Milestone v4.5 Registry
+_global_neuro_graphs: dict[str, Any] = {}
+_global_causal_dags: dict[str, Any] = {}
+
 
 INSTRUCTIONS = """\
 Programming Desk gateway. You are connected as one seat; tools/list is your contract
@@ -636,6 +671,40 @@ def create_mcp(
         isolation_manager=iso_mgr,
         edge_gateway=edge_gw,
     )
+
+    from desk_gateway.zk_proving import (
+        ZKCircuit,
+        ZKConstraint,
+        ZKProof,
+        ZKProofGenerator,
+        ZKProofReceipt,
+        ZKProofVerifier,
+        ZKStateTransitionProver,
+    )
+    from desk_gateway.zk_privacy import (
+        HomomorphicCipherEngine,
+        PrivateZKAnchorExporter,
+        SecureMPCInferenceCoordinator,
+        ThresholdSecretSharing,
+        ZKPrivacyAgentSwarmDrillSimulator,
+    )
+
+    zk_proof_generator = ZKProofGenerator()
+    zk_proof_verifier = ZKProofVerifier()
+    zk_state_prover = ZKStateTransitionProver(proof_generator=zk_proof_generator, verifier=zk_proof_verifier)
+    homomorphic_cipher = HomomorphicCipherEngine()
+    tss_engine = ThresholdSecretSharing()
+    mpc_coordinator = SecureMPCInferenceCoordinator()
+    zk_anchor_exporter = PrivateZKAnchorExporter()
+    zk_circuits_registry: dict[str, ZKCircuit] = {}
+
+    mcp._zk_proof_generator = zk_proof_generator  # type: ignore[attr-defined]
+    mcp._zk_proof_verifier = zk_proof_verifier  # type: ignore[attr-defined]
+    mcp._zk_state_prover = zk_state_prover  # type: ignore[attr-defined]
+    mcp._homomorphic_cipher = homomorphic_cipher  # type: ignore[attr-defined]
+    mcp._tss_engine = tss_engine  # type: ignore[attr-defined]
+    mcp._mpc_coordinator = mpc_coordinator  # type: ignore[attr-defined]
+    mcp._zk_anchor_exporter = zk_anchor_exporter  # type: ignore[attr-defined]
 
     @mcp.custom_route("/health", methods=["GET"])
     async def health(_request: Request) -> Response:
@@ -3004,7 +3073,8 @@ def create_mcp(
         }
         if seat_id:
             res["seat_id"] = seat_id
-            res["seat_spend_micro_dollars"] = token_ledger.get_seat_spend(tenant_id, seat_id)
+            spend_val = token_ledger.get_seat_spend(tenant_id, seat_id)
+            res["seat_spend_micro_dollars"] = spend_val
         return JSONResponse(res)
 
     @mcp.custom_route("/v1/finops/budget", methods=["POST"])
@@ -3125,6 +3195,4490 @@ def create_mcp(
         tenant_id = body.get("tenant_id", f"verify-{int(time.time()*1000)}")
         res = finops_verifier.verify_all(tenant_id=tenant_id)
         return JSONResponse(res)
+
+    # Multi-Modal Artifact Ingestion & Streaming Tool Execution components (Phase 20)
+    mm_pipeline = MultiModalArtifactPipeline()
+    stream_supervisor = StreamCancellationSupervisor()
+    streaming_bus = StreamingToolBus(supervisor=stream_supervisor)
+
+    setattr(mcp, "_mm_pipeline", mm_pipeline)
+    setattr(mcp, "_stream_supervisor", stream_supervisor)
+    setattr(mcp, "_streaming_bus", streaming_bus)
+
+    @mcp.custom_route("/v1/multimodal/ingest", methods=["POST"])
+    async def multimodal_ingest_route(request: Request) -> Response:
+        ctype = request.headers.get("content-type", "")
+        if "application/json" in ctype:
+            body = await request.json()
+            raw_b64 = body.get("payload_b64", "")
+            try:
+                payload = base64.b64decode(raw_b64)
+            except Exception as e:
+                return JSONResponse({"error": f"Invalid base64 payload: {e}"}, status_code=400)
+            filename = body.get("filename")
+            tenant_id = body.get("tenant_id", "default")
+            seat_id = body.get("seat_id")
+            extra_meta = body.get("metadata", {})
+        else:
+            payload = await request.body()
+            filename = request.headers.get("x-filename")
+            tenant_id = request.headers.get("x-tenant-id", "default")
+            seat_id = request.headers.get("x-seat-id")
+            extra_meta = {}
+
+        try:
+            meta = mm_pipeline.ingest(
+                payload=payload,
+                filename=filename,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                extra_metadata=extra_meta,
+            )
+            return JSONResponse({
+                "ok": True,
+                "artifact": {
+                    "artifact_id": meta.artifact_id,
+                    "artifact_type": meta.artifact_type.value,
+                    "mime_type": meta.mime_type,
+                    "size_bytes": meta.size_bytes,
+                    "sha256": meta.sha256,
+                    "filename": meta.filename,
+                    "width": meta.width,
+                    "height": meta.height,
+                    "duration_seconds": meta.duration_seconds,
+                    "tenant_id": meta.tenant_id,
+                    "seat_id": meta.seat_id,
+                    "created_at": meta.created_at,
+                    "metadata": meta.metadata,
+                }
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/multimodal/artifacts/{artifact_id}", methods=["GET"])
+    async def multimodal_get_artifact_route(request: Request) -> Response:
+        artifact_id = request.path_params.get("artifact_id", "")
+        meta = mm_pipeline.get_metadata(artifact_id)
+        if not meta:
+            return JSONResponse({"error": "Artifact not found"}, status_code=404)
+        return JSONResponse({
+            "ok": True,
+            "artifact": {
+                "artifact_id": meta.artifact_id,
+                "artifact_type": meta.artifact_type.value,
+                "mime_type": meta.mime_type,
+                "size_bytes": meta.size_bytes,
+                "sha256": meta.sha256,
+                "filename": meta.filename,
+                "width": meta.width,
+                "height": meta.height,
+                "duration_seconds": meta.duration_seconds,
+                "tenant_id": meta.tenant_id,
+                "seat_id": meta.seat_id,
+                "created_at": meta.created_at,
+                "metadata": meta.metadata,
+            }
+        })
+
+    @mcp.custom_route("/v1/tools/streaming/execute", methods=["POST"])
+    async def streaming_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name", "generic_stream_tool")
+        stream_id = body.get("stream_id")
+        chunks = body.get("mock_chunks", ["chunk 1", "chunk 2"])
+        delay = float(body.get("chunk_delay", 0.01))
+
+        async def chunk_gen():
+            for i, chunk in enumerate(chunks):
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                yield ("telemetry", {"progress": round((i + 1) / len(chunks), 2)})
+                yield ("chunk", {"text": chunk, "index": i})
+
+        frames = []
+        async for frame in streaming_bus.execute_stream(
+            tool_name=tool_name,
+            generator_func=chunk_gen,
+            stream_id=stream_id,
+        ):
+            frames.append({
+                "stream_id": frame.stream_id,
+                "seq": frame.sequence,
+                "type": frame.frame_type.value,
+                "tool": frame.tool_name,
+                "payload": frame.payload,
+                "elapsed_ms": frame.elapsed_ms,
+            })
+
+        return JSONResponse({
+            "ok": True,
+            "stream_id": frames[0]["stream_id"] if frames else None,
+            "total_frames": len(frames),
+            "frames": frames,
+        })
+
+    @mcp.custom_route("/v1/tools/streaming/{stream_id}/cancel", methods=["POST"])
+    async def streaming_cancel_route(request: Request) -> Response:
+        stream_id = request.path_params.get("stream_id", "")
+        success = stream_supervisor.cancel_stream(stream_id)
+        return JSONResponse({"ok": True, "stream_id": stream_id, "cancelled": success})
+
+    @mcp.custom_route("/v1/tools/streaming/{stream_id}/status", methods=["GET"])
+    async def streaming_status_route(request: Request) -> Response:
+        stream_id = request.path_params.get("stream_id", "")
+        status = streaming_bus.get_status(stream_id)
+        is_cancelled = stream_supervisor.is_cancelled(stream_id)
+        return JSONResponse({"ok": True, "stream_id": stream_id, "status": status, "is_cancelled": is_cancelled})
+
+    # Multi-Modal Sensory Memory Indexing & Streaming Verification (Phase 20-02)
+    sensory_indexer = SensoryMemoryIndexer()
+    mm_verifier = MultiModalStreamingVerifier(
+        pipeline=mm_pipeline,
+        streaming_bus=streaming_bus,
+        memory_indexer=sensory_indexer,
+    )
+
+    setattr(mcp, "_sensory_indexer", sensory_indexer)
+    setattr(mcp, "_mm_verifier", mm_verifier)
+
+    @mcp.custom_route("/v1/multimodal/memory/index", methods=["POST"])
+    async def multimodal_memory_index_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        artifact_id = body.get("artifact_id", "")
+        modality = body.get("modality", "image")
+        embedding = body.get("embedding", [])
+        caption = body.get("caption", "")
+        ledger_ref = body.get("ledger_ref")
+        tenant_id = body.get("tenant_id", "default")
+        seat_id = body.get("seat_id")
+        metadata = body.get("metadata", {})
+
+        try:
+            record = sensory_indexer.index(
+                artifact_id=artifact_id,
+                modality=modality,
+                embedding=embedding,
+                caption=caption,
+                ledger_ref=ledger_ref,
+                tenant_id=tenant_id,
+                seat_id=seat_id,
+                metadata=metadata,
+            )
+            return JSONResponse({
+                "ok": True,
+                "memory": {
+                    "memory_id": record.memory_id,
+                    "artifact_id": record.artifact_id,
+                    "modality": record.modality,
+                    "dimensions": record.dimensions,
+                    "caption": record.caption,
+                    "ledger_ref": record.ledger_ref,
+                    "tenant_id": record.tenant_id,
+                    "seat_id": record.seat_id,
+                    "created_at": record.created_at,
+                }
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/multimodal/memory/search", methods=["POST"])
+    async def multimodal_memory_search_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        query_embedding = body.get("query_embedding", [])
+        tenant_id = body.get("tenant_id", "default")
+        modality = body.get("modality")
+        min_score = float(body.get("min_score", 0.0))
+        top_k = int(body.get("top_k", 10))
+
+        results = sensory_indexer.search(
+            query_embedding=query_embedding,
+            tenant_id=tenant_id,
+            modality=modality,
+            min_score=min_score,
+            top_k=top_k,
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "count": len(results),
+            "results": [
+                {
+                    "memory_id": r.record.memory_id,
+                    "artifact_id": r.record.artifact_id,
+                    "modality": r.record.modality,
+                    "caption": r.record.caption,
+                    "ledger_ref": r.record.ledger_ref,
+                    "score": r.score,
+                }
+                for r in results
+            ]
+        })
+
+    @mcp.custom_route("/v1/multimodal/streaming/verify", methods=["POST"])
+    async def multimodal_streaming_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id", f"verify-mm-{int(time.time()*1000)}")
+        res = await mm_verifier.verify_all(tenant_id=tenant_id)
+        return JSONResponse(res)
+
+    # Dynamic Streaming Tool Mesh & Real-Time Telemetry (Phase 21)
+    streaming_rpc = StreamingMeshRPC(local_desk_id=settings.public_host)
+    media_cache = DistributedMediaCache()
+    client_multiplexer = StreamingClientMultiplexer()
+    downsampler = AdaptivePayloadDownsampler()
+    audit_logger = StreamingToolAuditLogger()
+
+    setattr(mcp, "_streaming_rpc", streaming_rpc)
+    setattr(mcp, "_media_cache", media_cache)
+    setattr(mcp, "_client_multiplexer", client_multiplexer)
+    setattr(mcp, "_downsampler", downsampler)
+    setattr(mcp, "_audit_logger", audit_logger)
+
+    # Milestone v2.8 (Phase 22): Autonomous Swarm Load Balancing & Backpressure Mesh
+    from desk_gateway.swarm_balancer import SwarmSeatLoadBalancer, SwarmTaskAssignment, TaskPriority
+    swarm_balancer = SwarmSeatLoadBalancer()
+    setattr(mcp, "_swarm_balancer", swarm_balancer)
+
+    # Milestone v2.8 (Phase 23): Autonomous Hierarchical Delegation & Byzantine Consensus Receipts
+    from desk_gateway.swarm_delegation import SwarmDelegationMesh
+    delegation_mesh = SwarmDelegationMesh()
+    setattr(mcp, "_delegation_mesh", delegation_mesh)
+
+    # Milestone v2.9 (Phase 24): Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+    from desk_gateway.disaster_recovery import SubstrateStateMirrorEngine
+    dr_engine = SubstrateStateMirrorEngine(primary_id=settings.public_host)
+    setattr(mcp, "_dr_engine", dr_engine)
+
+    # Milestone v2.9 (Phase 25): Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery
+    from desk_gateway.split_brain_recovery import (
+        FencingTokenAllocator,
+        QuorumHeartbeatEvaluator,
+        VectorClockReconciler,
+        FastFailoverOrchestrator,
+        DisasterRecoveryDrillVerifier,
+    )
+    fencing_allocator = FencingTokenAllocator(cluster_gen_id="prod-cluster-01")
+    quorum_evaluator = QuorumHeartbeatEvaluator(cluster_nodes=["node-1", "node-2", "node-3"])
+    vector_reconciler = VectorClockReconciler()
+    failover_orchestrator = FastFailoverOrchestrator(
+        fencing_allocator=fencing_allocator,
+        quorum_evaluator=quorum_evaluator,
+    )
+    drill_verifier = DisasterRecoveryDrillVerifier(orchestrator=failover_orchestrator)
+    setattr(mcp, "_fencing_allocator", fencing_allocator)
+    setattr(mcp, "_quorum_evaluator", quorum_evaluator)
+    setattr(mcp, "_vector_reconciler", vector_reconciler)
+    setattr(mcp, "_failover_orchestrator", failover_orchestrator)
+    setattr(mcp, "_drill_verifier", drill_verifier)
+
+    # Milestone v3.0 (Phase 26): Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+    from desk_gateway.zero_trust import ZeroTrustEnclaveManager, AttestationReport
+    zero_trust_mgr = ZeroTrustEnclaveManager()
+    setattr(mcp, "_zero_trust_mgr", zero_trust_mgr)
+
+    # Milestone v3.0 (Phase 27): Continuous Merkle Proof Verification & Immutable Audit Export
+    from desk_gateway.merkle_audit import (
+        IncrementalMerkleTree,
+        ImmutableAuditExporter,
+        AuditLogScrubber,
+        ZeroTrustComplianceVerifier,
+    )
+    merkle_tree = IncrementalMerkleTree()
+    audit_exporter = ImmutableAuditExporter()
+    compliance_verifier = ZeroTrustComplianceVerifier(tree=merkle_tree)
+    setattr(mcp, "_merkle_tree", merkle_tree)
+    setattr(mcp, "_audit_exporter", audit_exporter)
+    setattr(mcp, "_compliance_verifier", compliance_verifier)
+
+    # Milestone v3.1 (Phase 28): Dynamic MCP Tool Mesh Registry & Capability Scopes
+    from desk_gateway.mcp_mesh import DynamicMCPToolMeshRegistry, SeatPermissionScope
+    from desk_gateway.mcp_remote_invoker import (
+        MCPRemoteExecutionSupervisor,
+        ExecutionReceipt,
+        InvocationStatus,
+    )
+    mcp_mesh_registry = DynamicMCPToolMeshRegistry()
+    setattr(mcp, "_mcp_mesh_registry", mcp_mesh_registry)
+    remote_execution_supervisor = MCPRemoteExecutionSupervisor(registry=mcp_mesh_registry)
+    setattr(mcp, "_remote_execution_supervisor", remote_execution_supervisor)
+
+    # Milestone v3.2 (Phase 30): Distributed Sensory Memory Graph & Cross-Modal Embeddings
+    from desk_gateway.memory_graph import SensoryMemoryGraphEngine, ModalType, GraphNode, GraphEdge
+    memory_graph_engine = SensoryMemoryGraphEngine()
+    setattr(mcp, "_memory_graph_engine", memory_graph_engine)
+
+    # Milestone v3.2 (Phase 31): Dynamic Context Window Compression & Semantic Pruning
+    from desk_gateway.context_compressor import (
+        ContextCompressionEngine,
+        ModelTier,
+        ContextSegment,
+        LosslessCompactor,
+        LosslessCompactedPayload,
+        SemanticPruner,
+        HierarchicalRollupEngine,
+        DynamicWindowAdapter,
+        ContextFidelityVerifier,
+    )
+    context_compressor = ContextCompressionEngine()
+    setattr(mcp, "_context_compressor", context_compressor)
+
+    # Milestone v3.3 (Phase 32): Decentralized Multi-Desk Governance & Proposal State Machine
+    from desk_gateway.governance import (
+        GovernanceStateMachine,
+        ProposalStatus,
+        VoteChoice,
+        Ballot,
+        Proposal,
+        QuorumEngine,
+        TimelockExecutor,
+        EmergencyVetoCircuitBreaker,
+    )
+    governance_sm = GovernanceStateMachine()
+    setattr(mcp, "_governance_sm", governance_sm)
+
+    # Milestone v3.3 (Phase 33): Byzantine Consensus Voting & Verifiable On-Chain Attestation
+    from desk_gateway.byzantine_consensus import (
+        ByzantineConsensusEngine,
+        ConsensusPhase,
+        ConsensusDecision,
+        ConsensusMessage,
+        GovernanceReceiptMerkleTree,
+        GovernanceMerkleReceipt,
+        LedgerAnchorExporter,
+        OnChainAnchor,
+        ByzantineAttackSimulator,
+    )
+    byzantine_engine = ByzantineConsensusEngine(
+        desks=["desk-alpha", "desk-beta", "desk-gamma", "desk-delta"],
+        local_desk_id=settings.public_host or "desk-alpha",
+    )
+    receipt_merkle_tree = GovernanceReceiptMerkleTree()
+    ledger_exporter = LedgerAnchorExporter()
+    byzantine_simulator = ByzantineAttackSimulator(byzantine_engine)
+    setattr(mcp, "_byzantine_engine", byzantine_engine)
+    setattr(mcp, "_receipt_merkle_tree", receipt_merkle_tree)
+    setattr(mcp, "_ledger_exporter", ledger_exporter)
+    setattr(mcp, "_byzantine_simulator", byzantine_simulator)
+
+    # Milestone v3.4 (Phase 34 & 35): Swarm Self-Healing & Active Immune Defense
+    from desk_gateway.swarm_immune import SwarmImmuneEngine
+    from desk_gateway.swarm_reconstitution import (
+        SwarmReconstitutionEngine,
+        ChaosAnomalyHarness,
+        AntibodyPolicy,
+    )
+    swarm_immune = SwarmImmuneEngine()
+    swarm_reconstitution = SwarmReconstitutionEngine(
+        immune_engine=swarm_immune,
+        desk_id=settings.public_host or "desk-local",
+    )
+    chaos_immune_harness = ChaosAnomalyHarness(
+        immune_engine=swarm_immune,
+        reconstitution_engine=swarm_reconstitution,
+    )
+    setattr(mcp, "_swarm_immune", swarm_immune)
+    setattr(mcp, "_swarm_reconstitution", swarm_reconstitution)
+    setattr(mcp, "_chaos_immune_harness", chaos_immune_harness)
+
+    # Milestone v3.5 (Phase 36 & 37): Autonomous Swarm Self-Evolution & Capability Synthesis
+    from desk_gateway.skill_synthesis import (
+        SkillSynthesisEngine,
+        SkillSpecification,
+        ToolParameterSchema,
+        SyntheticTestCase,
+        ToolLifecycleState,
+        SecurityViolationError,
+        SandboxExecutionError,
+    )
+    from desk_gateway.prompt_optimizer import (
+        PromptRolloutOrchestrator,
+        PromptTelemetryEvaluator,
+        EvolutionaryPromptEngine,
+        CanaryBenchmarkHarness,
+        RolloutState,
+        FitnessScore,
+    )
+    from desk_gateway.neural_routing import (
+        NeuralRoutingEngine,
+        IntentVectorizer,
+        DeskCapabilityProfile,
+        RoutingCircuitBreaker,
+        CircuitState,
+    )
+    from desk_gateway.sovereign_enclaves import (
+        SovereignEnclaveManager,
+        TenantSovereigntyProfile,
+        TenancyTier,
+        ZKTokenMasker,
+        TenantKeyEncapsulationMesh,
+        AttestedDataFencingEngine,
+        EnclaveBreachSimulator,
+    )
+    from desk_gateway.formal_verification import (
+        FormalVerificationPipeline,
+        InvariantContract,
+        InvariantType,
+        VerificationVerdict,
+        CounterExample,
+        FormalVerificationCertificate,
+    )
+    from desk_gateway.synthesis_proving import (
+        MultiSeatConsensusEngine,
+        ProofReceiptLedger,
+        CrossDeskProofExporter,
+        FormalVerificationDrillSimulator,
+        ReviewVote,
+        PromotionState,
+        ConsensusReceipt,
+    )
+    from desk_gateway.sharding import (
+        ConsistentHashRing,
+        CRDTStore,
+        GeoReplicationEngine,
+        ShardRouter,
+        ShardNode,
+        ConsistencyLevel,
+    )
+    from desk_gateway.mesh_consensus import (
+        AntiEntropyGossip,
+        SplitBrainDetector,
+        EpochCoordinator,
+        PartitionHealingOrchestrator,
+        GeoPartitionDrillSimulator,
+    )
+    from desk_gateway.post_quantum import (
+        HybridKEM,
+        HybridSignatureEngine,
+        PQCChannelSession,
+        QuantumAuditInspector,
+    )
+    from desk_gateway.lattice_ledger import (
+        PQCMerkleLedger,
+        PQCIdentityAuthority,
+        CrossDeskLatticeVerifier,
+        PQCAnchorExporter,
+        QuantumAttackDrillSimulator,
+    )
+    from desk_gateway.swarm_orchestration import (
+        CrossDeskWorkflowCompiler,
+        WorkflowExecutionEngine,
+        DependencyPipeline,
+        SwarmResourceScheduler,
+    )
+    from desk_gateway.swarm_federation import (
+        CapabilityFederationBroker,
+        WorkflowReceiptLedger,
+        WorkflowAnchorExporter,
+        WorkflowFailureSynthesizer,
+        SwarmOrchestrationDrillSimulator,
+    )
+    from desk_gateway.swarm_dao import (
+        SwarmDAOEngine,
+        StakeReputationRegistry,
+        PolicyTimelockExecutor,
+        VoteOption,
+        ProposalStatus,
+    )
+    from desk_gateway.swarm_tokenomics import (
+        ComputeCreditLedger,
+        PaymentChannelManager,
+        CrossDeskClearinghouse,
+        SettlementAnchorExporter,
+        TokenomicsDrillSimulator,
+    )
+    from desk_gateway.cross_chain_relay import (
+        CrossChainRelayEngine,
+        StateTrieVerifier,
+        RelayerStakingRegistry,
+        BlockHeader,
+        ChainType,
+        CrossChainMessage,
+    )
+    from desk_gateway.cross_chain_oracle import (
+        OracleAggregator,
+        MedianizerFilter,
+        ThresholdOracleAttestor,
+        OracleAnchorExporter,
+        CrossChainOracleDrillSimulator,
+        OracleReport,
+    )
+    from desk_gateway.model_distillation import (
+        EnsembleDistillationEngine,
+        QuantizationCompressor,
+        DistillationBenchmarker,
+        ModelArtifactRegistry,
+        TeacherPrediction,
+    )
+    from desk_gateway.edge_mesh import (
+        EdgeNode,
+        EdgeComputeScheduler,
+        InferenceProofEngine,
+        EdgeClusterMonitor,
+        EdgeCommitmentExporter,
+        DistillationEdgeDrillSimulator,
+    )
+    import dataclasses
+    secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"  # pragma: allowlist secret
+    skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
+    prompt_rollout_orchestrator = PromptRolloutOrchestrator(signing_key=secret_key)
+    neural_routing_engine = NeuralRoutingEngine(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    sovereign_enclave_manager = SovereignEnclaveManager(master_seed=secret_key.decode("utf-8", errors="ignore"))
+    formal_verification_pipeline = FormalVerificationPipeline(secret_key=secret_key.decode("utf-8", errors="ignore"))
+    proof_receipt_ledger = ProofReceiptLedger()
+    synthesis_consensus_engine = MultiSeatConsensusEngine(
+        ledger=proof_receipt_ledger,
+        signing_secret=secret_key.decode("utf-8", errors="ignore"),
+    )
+    proof_exporter = CrossDeskProofExporter()
+    shard_ring = ConsistentHashRing()
+    shard_ring.add_node(ShardNode(node_id="desk-primary-local", region_id=settings.edge_default_region))
+    shard_crdt_store = CRDTStore(region_id=settings.edge_default_region, node_id="desk-primary-local")
+    geo_replication_engine = GeoReplicationEngine(
+        region_id=settings.edge_default_region,
+        signing_secret=secret_key.decode("utf-8", errors="ignore"),
+    )
+    shard_router = ShardRouter(
+        ring=shard_ring,
+        store=shard_crdt_store,
+        replicator=geo_replication_engine,
+    )
+    anti_entropy_gossip = AntiEntropyGossip(
+        region_id=settings.edge_default_region,
+        store=shard_crdt_store,
+    )
+    split_brain_detector = SplitBrainDetector(
+        local_region=settings.edge_default_region,
+        total_regions=[settings.edge_default_region, "us-west", "eu-central"],
+    )
+    epoch_coordinator = EpochCoordinator(
+        node_id="desk-primary-local",
+        region_id=settings.edge_default_region,
+        split_detector=split_brain_detector,
+    )
+    partition_healing_orchestrator = PartitionHealingOrchestrator(
+        store=shard_crdt_store,
+        replicator=geo_replication_engine,
+        split_detector=split_brain_detector,
+    )
+
+    pqc_kem = HybridKEM(seed=secret_key)
+    pqc_sig_engine = HybridSignatureEngine(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    pqc_inspector = QuantumAuditInspector()
+    pqc_ca = PQCIdentityAuthority(ca_secret=secret_key.decode("utf-8", errors="ignore"))
+    pqc_ledger = PQCMerkleLedger(sig_engine=pqc_sig_engine)
+    pqc_verifier = CrossDeskLatticeVerifier(authority=pqc_ca)
+    pqc_anchor_exporter = PQCAnchorExporter()
+
+    # Milestone v4.0 components
+    workflow_compiler = CrossDeskWorkflowCompiler()
+    workflow_scheduler = SwarmResourceScheduler()
+    workflow_pipeline = DependencyPipeline()
+    workflow_engine = WorkflowExecutionEngine(scheduler=workflow_scheduler, pipeline=workflow_pipeline)
+    capability_broker = CapabilityFederationBroker()
+    workflow_receipt_ledger = WorkflowReceiptLedger(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    workflow_anchor_exporter = WorkflowAnchorExporter()
+
+    # Milestone v4.1 components
+    dao_registry = StakeReputationRegistry()
+    swarm_dao_engine = SwarmDAOEngine(registry=dao_registry, signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    policy_timelock_executor = PolicyTimelockExecutor(dao_engine=swarm_dao_engine)
+    compute_credit_ledger = ComputeCreditLedger()
+    payment_channel_manager = PaymentChannelManager(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    cross_desk_clearinghouse = CrossDeskClearinghouse(ledger=compute_credit_ledger)
+    settlement_anchor_exporter = SettlementAnchorExporter()
+
+    # Milestone v4.2 components
+    relayer_staking_registry = RelayerStakingRegistry()
+    cross_chain_relay_engine = CrossChainRelayEngine(staking_registry=relayer_staking_registry)
+    oracle_aggregator = OracleAggregator()
+    oracle_anchor_exporter = OracleAnchorExporter()
+
+    # Milestone v4.3: Model Distillation & Edge Compute Mesh
+    distillation_engine = EnsembleDistillationEngine()
+    quantization_compressor = QuantizationCompressor()
+    distillation_benchmarker = DistillationBenchmarker()
+    model_artifact_registry = ModelArtifactRegistry()
+    edge_compute_scheduler = EdgeComputeScheduler()
+    # Register default edge nodes
+    edge_compute_scheduler.register_node(EdgeNode(node_id="edge-desk-us-west", region="us-west", vram_mb=8192))
+    edge_compute_scheduler.register_node(EdgeNode(node_id="edge-desk-eu-central", region="eu-central", vram_mb=4096))
+    inference_proof_engine = InferenceProofEngine(secret_key=secret_key.decode("utf-8", errors="ignore"))
+    edge_cluster_monitor = EdgeClusterMonitor(scheduler=edge_compute_scheduler)
+    edge_commitment_exporter = EdgeCommitmentExporter()
+
+    setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
+    setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
+    setattr(mcp, "_neural_routing_engine", neural_routing_engine)
+    setattr(mcp, "_sovereign_enclave_manager", sovereign_enclave_manager)
+    setattr(mcp, "_formal_verification_pipeline", formal_verification_pipeline)
+    setattr(mcp, "_synthesis_consensus_engine", synthesis_consensus_engine)
+    setattr(mcp, "_proof_receipt_ledger", proof_receipt_ledger)
+    setattr(mcp, "_proof_exporter", proof_exporter)
+    setattr(mcp, "_shard_ring", shard_ring)
+    setattr(mcp, "_shard_crdt_store", shard_crdt_store)
+    setattr(mcp, "_geo_replication_engine", geo_replication_engine)
+    setattr(mcp, "_shard_router", shard_router)
+    setattr(mcp, "_anti_entropy_gossip", anti_entropy_gossip)
+    setattr(mcp, "_split_brain_detector", split_brain_detector)
+    setattr(mcp, "_epoch_coordinator", epoch_coordinator)
+    setattr(mcp, "_partition_healing_orchestrator", partition_healing_orchestrator)
+    setattr(mcp, "_pqc_kem", pqc_kem)
+    setattr(mcp, "_pqc_sig_engine", pqc_sig_engine)
+    setattr(mcp, "_pqc_inspector", pqc_inspector)
+    setattr(mcp, "_pqc_ca", pqc_ca)
+    setattr(mcp, "_pqc_ledger", pqc_ledger)
+    setattr(mcp, "_pqc_verifier", pqc_verifier)
+    setattr(mcp, "_pqc_anchor_exporter", pqc_anchor_exporter)
+    setattr(mcp, "_workflow_compiler", workflow_compiler)
+    setattr(mcp, "_workflow_engine", workflow_engine)
+    setattr(mcp, "_capability_broker", capability_broker)
+    setattr(mcp, "_workflow_receipt_ledger", workflow_receipt_ledger)
+    setattr(mcp, "_workflow_anchor_exporter", workflow_anchor_exporter)
+    setattr(mcp, "_dao_registry", dao_registry)
+    setattr(mcp, "_swarm_dao_engine", swarm_dao_engine)
+    setattr(mcp, "_policy_timelock_executor", policy_timelock_executor)
+    setattr(mcp, "_compute_credit_ledger", compute_credit_ledger)
+    setattr(mcp, "_payment_channel_manager", payment_channel_manager)
+    setattr(mcp, "_cross_desk_clearinghouse", cross_desk_clearinghouse)
+    setattr(mcp, "_settlement_anchor_exporter", settlement_anchor_exporter)
+    setattr(mcp, "_relayer_staking_registry", relayer_staking_registry)
+    setattr(mcp, "_cross_chain_relay_engine", cross_chain_relay_engine)
+    setattr(mcp, "_oracle_aggregator", oracle_aggregator)
+    setattr(mcp, "_oracle_anchor_exporter", oracle_anchor_exporter)
+    setattr(mcp, "_distillation_engine", distillation_engine)
+    setattr(mcp, "_quantization_compressor", quantization_compressor)
+    setattr(mcp, "_distillation_benchmarker", distillation_benchmarker)
+    setattr(mcp, "_model_artifact_registry", model_artifact_registry)
+    setattr(mcp, "_edge_compute_scheduler", edge_compute_scheduler)
+    setattr(mcp, "_inference_proof_engine", inference_proof_engine)
+    setattr(mcp, "_edge_cluster_monitor", edge_cluster_monitor)
+    setattr(mcp, "_edge_commitment_exporter", edge_commitment_exporter)
+
+    @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
+    async def immune_telemetry_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "generic_tool")
+        payload = body.get("payload", "")
+        latency_ms = float(body.get("latency_ms", 50.0))
+        is_error = bool(body.get("is_error", False))
+        result = swarm_immune.record_telemetry(
+            seat_id=seat_id,
+            tool_name=tool_name,
+            payload=payload,
+            latency_ms=latency_ms,
+            is_error=is_error,
+        )
+        return JSONResponse({"ok": True, "telemetry": result})
+
+    @mcp.custom_route("/v1/immune/seat/quarantine", methods=["POST"])
+    async def immune_seat_quarantine_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Manual operator quarantine")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_immune.quarantine_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/seat/unquarantine", methods=["POST"])
+    async def immune_seat_unquarantine_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Operator unquarantine")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_immune.unquarantine_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/shadow/execute", methods=["POST"])
+    async def immune_shadow_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        execution_id = body.get("execution_id", f"shadow-{secrets.token_hex(4)}")
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "speculative_tool")
+        arguments = body.get("arguments", {})
+
+        def dummy_handler(args):
+            if args.get("fail"):
+                raise RuntimeError("Simulated execution failure")
+            return {"status": "executed", "echo": args}
+
+        res = swarm_immune.shadow_sandbox.execute_in_shadow(
+            execution_id=execution_id,
+            seat_id=seat_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            handler=dummy_handler,
+        )
+        return JSONResponse({"ok": True, "execution": res})
+
+    @mcp.custom_route("/v1/immune/status", methods=["GET"])
+    async def immune_status_route(request: Request) -> Response:
+        status = swarm_immune.get_status()
+        return JSONResponse({"ok": True, "status": status})
+
+    @mcp.custom_route("/v1/immune/reconstitute", methods=["POST"])
+    async def immune_reconstitute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Autonomous post-quarantine self-healing")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_reconstitution.reconstitute_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/memory/ledger", methods=["GET"])
+    async def immune_memory_ledger_route(request: Request) -> Response:
+        ledger = swarm_reconstitution.ledger
+        entries = [e.to_dict() for e in ledger.entries]
+        valid = ledger.verify_integrity()
+        root = ledger.get_merkle_root()
+        return JSONResponse({"ok": True, "valid": valid, "merkle_root": root, "entries": entries})
+
+    @mcp.custom_route("/v1/immune/antibodies/broadcast", methods=["POST"])
+    async def immune_antibodies_broadcast_route(request: Request) -> Response:
+        pkg = swarm_reconstitution.antibody_mesh.export_distribution_package()
+        return JSONResponse({"ok": True, "package": pkg})
+
+    @mcp.custom_route("/v1/immune/antibodies/ingest", methods=["POST"])
+    async def immune_antibodies_ingest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pkg = body.get("package")
+        if not pkg:
+            return JSONResponse({"ok": False, "error": "package is required"}, status_code=400)
+        try:
+            count = swarm_reconstitution.antibody_mesh.ingest_distribution_package(pkg)
+            return JSONResponse({"ok": True, "ingested_count": count})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/immune/rehabilitate/benchmark", methods=["POST"])
+    async def immune_rehabilitate_benchmark_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        tasks = body.get("tasks")
+        res = swarm_reconstitution.rehabilitation.run_synthetic_benchmarks(seat_id, benchmark_tasks=tasks)
+        return JSONResponse({"ok": True, "rehabilitation": res})
+
+    @mcp.custom_route("/v1/immune/chaos/inject", methods=["POST"])
+    async def immune_chaos_inject_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "chaos-seat")
+        res = chaos_immune_harness.run_chaos_resilience_drill(seat_id=seat_id)
+        return JSONResponse({"ok": True, "drill": res})
+
+    # Milestone v3.5: Dynamic Skill & Tool Synthesis Routes (Phase 36)
+    @mcp.custom_route("/v1/evolution/skills/deploy", methods=["POST"])
+    async def evolution_skill_deploy_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        version = body.get("version", "1.0.0")
+        description = body.get("description", "")
+        return_type = body.get("return_type", "Any")
+        author_seat_id = body.get("author_seat_id", "systems")
+        python_source = body.get("python_source", "")
+        raw_params = body.get("parameters", [])
+        raw_tests = body.get("test_cases", [])
+        permissions = set(body.get("required_permissions", []))
+
+        if not tool_name or not python_source:
+            return JSONResponse({"ok": False, "error": "tool_name and python_source are required"}, status_code=400)
+
+        params = [
+            ToolParameterSchema(
+                name=p.get("name", ""),
+                type_name=p.get("type_name", "str"),
+                description=p.get("description", ""),
+                required=p.get("required", True),
+                default=p.get("default"),
+            )
+            for p in raw_params
+        ]
+
+        test_cases = [
+            SyntheticTestCase(
+                input_args=t.get("input_args", {}),
+                expected_output=t.get("expected_output"),
+                description=t.get("description", ""),
+            )
+            for t in raw_tests
+        ]
+
+        spec = SkillSpecification(
+            tool_name=tool_name,
+            version=version,
+            description=description,
+            parameters=params,
+            return_type=return_type,
+            required_permissions=permissions,
+            author_seat_id=author_seat_id,
+            python_source=python_source,
+            test_cases=test_cases,
+        )
+
+        try:
+            receipt = skill_synthesis_engine.verify_and_deploy_skill(spec)
+            return JSONResponse({
+                "ok": True,
+                "receipt": {
+                    "tool_name": receipt.tool_name,
+                    "version": receipt.version,
+                    "author_seat_id": receipt.author_seat_id,
+                    "code_hash": receipt.code_hash,
+                    "attestation_signature": receipt.attestation_signature,
+                    "timestamp": receipt.timestamp,
+                    "lifecycle_state": receipt.lifecycle_state.value,
+                }
+            })
+        except (SecurityViolationError, SandboxExecutionError, Exception) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/evolution/skills/invoke", methods=["POST"])
+    async def evolution_skill_invoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        arguments = body.get("arguments", {})
+        if not tool_name:
+            return JSONResponse({"ok": False, "error": "tool_name is required"}, status_code=400)
+
+        try:
+            result = skill_synthesis_engine.invoke_synthetic_tool(tool_name, **arguments)
+            return JSONResponse({"ok": True, "result": result})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @mcp.custom_route("/v1/evolution/skills/list", methods=["GET"])
+    async def evolution_skills_list_route(request: Request) -> Response:
+        tools = skill_synthesis_engine.list_active_tools()
+        return JSONResponse({"ok": True, "tools": tools})
+
+    @mcp.custom_route("/v1/evolution/skills/lifecycle", methods=["POST"])
+    async def evolution_skills_lifecycle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        action = body.get("action", "deprecate")  # "deprecate" or "retire"
+        if not tool_name:
+            return JSONResponse({"ok": False, "error": "tool_name is required"}, status_code=400)
+        try:
+            if action == "retire":
+                skill_synthesis_engine.retire_tool(tool_name)
+            else:
+                skill_synthesis_engine.deprecate_tool(tool_name)
+            metrics = skill_synthesis_engine.lifecycle.get_metrics(tool_name)
+            return JSONResponse({"ok": True, "tool_name": tool_name, "metrics": metrics})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    # Autonomous Prompt Optimization Routes (Phase 37)
+    @mcp.custom_route("/v1/evolution/prompts/baseline", methods=["POST"])
+    async def evolution_prompt_baseline_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        prompt_text = body.get("prompt_text")
+        if not seat_id or not prompt_text:
+            return JSONResponse({"ok": False, "error": "seat_id and prompt_text are required"}, status_code=400)
+        variant = prompt_rollout_orchestrator.register_baseline_prompt(seat_id, prompt_text)
+        return JSONResponse({"ok": True, "variant": variant.to_dict()})
+
+    @mcp.custom_route("/v1/evolution/prompts/mutate", methods=["POST"])
+    async def evolution_prompt_mutate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        strategy = body.get("strategy")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        try:
+            candidate = prompt_rollout_orchestrator.generate_candidate_variant(seat_id, strategy=strategy)
+            return JSONResponse({"ok": True, "candidate": candidate.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/canary", methods=["POST"])
+    async def evolution_prompt_canary_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        revision_id = body.get("revision_id")
+        if not revision_id:
+            return JSONResponse({"ok": False, "error": "revision_id is required"}, status_code=400)
+        try:
+            fitness = prompt_rollout_orchestrator.run_canary_evaluation(revision_id)
+            variant = prompt_rollout_orchestrator.get_variant(revision_id)
+            return JSONResponse({"ok": True, "variant": variant.to_dict() if variant else None, "fitness": dataclasses.asdict(fitness)})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/promote", methods=["POST"])
+    async def evolution_prompt_promote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        revision_id = body.get("revision_id")
+        if not revision_id:
+            return JSONResponse({"ok": False, "error": "revision_id is required"}, status_code=400)
+        try:
+            promoted = prompt_rollout_orchestrator.promote_candidate(revision_id)
+            variant = prompt_rollout_orchestrator.get_variant(revision_id)
+            return JSONResponse({"ok": True, "promoted": promoted, "variant": variant.to_dict() if variant else None})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/evolution/prompts/rollback", methods=["POST"])
+    async def evolution_prompt_rollback_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        reverted = prompt_rollout_orchestrator.rollback_to_previous(seat_id)
+        if reverted:
+            return JSONResponse({"ok": True, "reverted_to": reverted.to_dict()})
+        return JSONResponse({"ok": False, "error": "No prior revision available to rollback to"}, status_code=400)
+
+    @mcp.custom_route("/v1/evolution/prompts/lineage/{seat_id}", methods=["GET"])
+    async def evolution_prompt_lineage_route(request: Request) -> Response:
+        seat_id = request.path_params.get("seat_id", "")
+        lineage = prompt_rollout_orchestrator.get_lineage(seat_id)
+        active = prompt_rollout_orchestrator.get_active_prompt(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "active": active.to_dict() if active else None, "lineage": lineage})
+
+    @mcp.custom_route("/v1/neural-routing/register-desk", methods=["POST"])
+    async def neural_routing_register_desk_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id")
+        if not desk_id:
+            return JSONResponse({"ok": False, "error": "desk_id is required"}, status_code=400)
+        profile = DeskCapabilityProfile(
+            desk_id=desk_id,
+            seat_ids=body.get("seat_ids", []),
+            domains=body.get("domains", []),
+            supported_tools=body.get("supported_tools", []),
+            capacity_limit=int(body.get("capacity_limit", 100)),
+            active_load=int(body.get("active_load", 0)),
+            base_latency_ms=float(body.get("base_latency_ms", 25.0)),
+            cost_per_1k_tokens=float(body.get("cost_per_1k_tokens", 0.002)),
+        )
+        neural_routing_engine.register_desk(profile)
+        return JSONResponse({"ok": True, "desk_id": desk_id, "registered": True})
+
+    @mcp.custom_route("/v1/neural-routing/dispatch", methods=["POST"])
+    async def neural_routing_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        task_text = body.get("task_text", "")
+        if not task_text:
+            return JSONResponse({"ok": False, "error": "task_text is required"}, status_code=400)
+        required_tools = body.get("required_tools", [])
+        max_latency_budget_ms = float(body.get("max_latency_budget_ms", 500.0))
+        max_cost_budget = float(body.get("max_cost_budget", 0.05))
+        conversation_state = body.get("conversation_state", {})
+        sensory_context = body.get("sensory_context", {})
+
+        receipt, selected_desk = neural_routing_engine.route_task(
+            task_id=task_id,
+            task_text=task_text,
+            required_tools=required_tools,
+            max_latency_budget_ms=max_latency_budget_ms,
+            max_cost_budget=max_cost_budget,
+        )
+
+        envelope = None
+        if selected_desk:
+            envelope = neural_routing_engine.create_context_envelope(
+                task_id=task_id,
+                source_desk_id=settings.public_host,
+                target_desk_id=selected_desk.desk_id,
+                target_seat_id=receipt.selected_seat_id,
+                conversation_state=conversation_state,
+                sensory_context=sensory_context,
+            )
+
+        return JSONResponse({
+            "ok": True,
+            "routed": bool(selected_desk is not None),
+            "receipt": dataclasses.asdict(receipt),
+            "envelope": dataclasses.asdict(envelope) if envelope else None,
+        })
+
+    @mcp.custom_route("/v1/neural-routing/circuit-breaker/probe", methods=["POST"])
+    async def neural_routing_circuit_breaker_probe_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id")
+        if not desk_id:
+            return JSONResponse({"ok": False, "error": "desk_id is required"}, status_code=400)
+        success = bool(body.get("success", True))
+        latency_ms = float(body.get("latency_ms", 30.0))
+        state = neural_routing_engine.circuit_breaker.record_probe(desk_id, success=success, latency_ms=latency_ms)
+        return JSONResponse({"ok": True, "desk_id": desk_id, "circuit_state": state.value})
+
+    @mcp.custom_route("/v1/neural-routing/mesh/status", methods=["GET"])
+    async def neural_routing_mesh_status_route(_request: Request) -> Response:
+        status_desks = {}
+        for d_id, d in neural_routing_engine.desks.items():
+            state = neural_routing_engine.circuit_breaker.get_state(d_id)
+            status_desks[d_id] = {
+                "seat_ids": d.seat_ids,
+                "domains": d.domains,
+                "supported_tools": d.supported_tools,
+                "active_load": d.active_load,
+                "capacity_limit": d.capacity_limit,
+                "load_ratio": round(d.load_ratio, 3),
+                "circuit_state": state.value,
+            }
+        return JSONResponse({
+            "ok": True,
+            "registered_desks_count": len(neural_routing_engine.desks),
+            "desks": status_desks,
+        })
+
+    @mcp.custom_route("/v1/neural-routing/receipt/{receipt_id}", methods=["GET"])
+    async def neural_routing_receipt_route(request: Request) -> Response:
+        receipt_id = request.path_params.get("receipt_id", "")
+        receipt = neural_routing_engine.decision_receipts.get(receipt_id)
+        if not receipt:
+            return JSONResponse({"ok": False, "error": "receipt not found"}, status_code=404)
+        return JSONResponse({"ok": True, "receipt": dataclasses.asdict(receipt)})
+
+    @mcp.custom_route("/v1/enclaves/tenant/register", methods=["POST"])
+    async def enclaves_tenant_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        if not tenant_id:
+            return JSONResponse({"ok": False, "error": "tenant_id is required"}, status_code=400)
+        tier_str = body.get("tier", "STANDARD")
+        try:
+            tier = TenancyTier(tier_str)
+        except ValueError:
+            tier = TenancyTier.STANDARD
+
+        profile = TenantSovereigntyProfile(
+            tenant_id=tenant_id,
+            tier=tier,
+            allowed_residency_regions=body.get("allowed_residency_regions", []),
+            allowed_desks=body.get("allowed_desks", []),
+            allowed_tools=body.get("allowed_tools", []),
+            forbidden_egress_domains=body.get("forbidden_egress_domains", []),
+            enforce_pii_masking=bool(body.get("enforce_pii_masking", True)),
+        )
+        sovereign_enclave_manager.register_tenant(profile)
+        return JSONResponse({"ok": True, "tenant_id": tenant_id, "tier": tier.value})
+
+    @mcp.custom_route("/v1/enclaves/mask", methods=["POST"])
+    async def enclaves_mask_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "default_session")
+        text = body.get("text", "")
+        masked = sovereign_enclave_manager.masker.mask_payload(session_id, text)
+        return JSONResponse({"ok": True, "session_id": session_id, "masked_text": masked})
+
+    @mcp.custom_route("/v1/enclaves/unmask", methods=["POST"])
+    async def enclaves_unmask_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "default_session")
+        masked_text = body.get("masked_text", "")
+        unmasked = sovereign_enclave_manager.masker.unmask_payload(session_id, masked_text)
+        return JSONResponse({"ok": True, "session_id": session_id, "unmasked_text": unmasked})
+
+    @mcp.custom_route("/v1/enclaves/fencing/evaluate", methods=["POST"])
+    async def enclaves_fencing_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        profile = sovereign_enclave_manager.profiles.get(tenant_id)
+        if not profile:
+            return JSONResponse({"ok": False, "error": f"Tenant '{tenant_id}' not found"}, status_code=404)
+
+        action = body.get("action", "transfer_context")
+        destination_region = body.get("destination_region", "us-east-1")
+        destination_desk = body.get("destination_desk", "desk-default")
+        tools_requested = body.get("tools_requested", [])
+
+        receipt = sovereign_enclave_manager.fencing_engine.evaluate_boundary(
+            profile=profile,
+            action=action,
+            destination_region=destination_region,
+            destination_desk=destination_desk,
+            tools_requested=tools_requested,
+        )
+        return JSONResponse({"ok": True, "fencing_decision": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/enclaves/key/rotate", methods=["POST"])
+    async def enclaves_key_rotate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        if not tenant_id:
+            return JSONResponse({"ok": False, "error": "tenant_id is required"}, status_code=400)
+        new_ver, _ = sovereign_enclave_manager.kem.rotate_key(tenant_id)
+        return JSONResponse({"ok": True, "tenant_id": tenant_id, "active_key_version": new_ver})
+
+    @mcp.custom_route("/v1/enclaves/breach-test/run", methods=["POST"])
+    async def enclaves_breach_test_run_route(_request: Request) -> Response:
+        results = EnclaveBreachSimulator.run_benchmark(sovereign_enclave_manager)
+        return JSONResponse({"ok": True, "benchmark": results})
+
+    # Milestone v3.7 (Phase 40): Autonomous Formal Verification Routes
+    @mcp.custom_route("/v1/verification/verify", methods=["POST"])
+    async def verification_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        version = body.get("version", "1.0.0")
+        author_seat_id = body.get("author_seat_id", "systems")
+        source_code = body.get("source_code")
+        param_types = body.get("param_types", {})
+        raw_contracts = body.get("contracts", [])
+        trials = int(body.get("trials", 50))
+
+        if not tool_name or not source_code:
+            return JSONResponse({"ok": False, "error": "tool_name and source_code are required"}, status_code=400)
+
+        contracts: List[InvariantContract] = []
+        for c in raw_contracts:
+            inv_type_str = c.get("invariant_type", "POST_CONDITION")
+            try:
+                inv_type = InvariantType(inv_type_str)
+            except ValueError:
+                inv_type = InvariantType.POST_CONDITION
+            contracts.append(
+                InvariantContract(
+                    contract_id=c.get("contract_id", f"contract-{len(contracts)+1}"),
+                    invariant_type=inv_type,
+                    expression=c.get("expression", "True"),
+                    description=c.get("description", ""),
+                    target_function=c.get("target_function", tool_name),
+                )
+            )
+
+        cert = formal_verification_pipeline.verify_tool_synthesis(
+            tool_name=tool_name,
+            version=version,
+            author_seat_id=author_seat_id,
+            source_code=source_code,
+            param_types=param_types,
+            contracts=contracts,
+            trials=trials,
+        )
+
+        return JSONResponse({"ok": True, "certificate": cert.to_dict()})
+
+    @mcp.custom_route("/v1/verification/certificate/{certificate_id}", methods=["GET"])
+    async def verification_certificate_get_route(request: Request) -> Response:
+        cert_id = request.path_params.get("certificate_id", "")
+        cert = formal_verification_pipeline.certificates.get(cert_id)
+        if not cert:
+            return JSONResponse({"ok": False, "error": f"Certificate '{cert_id}' not found"}, status_code=404)
+        valid = formal_verification_pipeline.verify_certificate(cert)
+        return JSONResponse({"ok": True, "valid": valid, "certificate": cert.to_dict()})
+
+    @mcp.custom_route("/v1/verification/triage", methods=["POST"])
+    async def verification_triage_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_ces = body.get("counterexamples", [])
+        ces: List[CounterExample] = []
+        for r in raw_ces:
+            inv_type = InvariantType(r.get("invariant_type", "POST_CONDITION")) if r.get("invariant_type") in [e.value for e in InvariantType] else InvariantType.POST_CONDITION
+            ces.append(
+                CounterExample(
+                    contract_id=r.get("contract_id", "ce-1"),
+                    invariant_type=inv_type,
+                    expression=r.get("expression", ""),
+                    inputs=r.get("inputs", {}),
+                    output=r.get("output"),
+                    error_message=r.get("error_message", ""),
+                    suggested_patch=r.get("suggested_patch", ""),
+                )
+            )
+        triage_report = formal_verification_pipeline.triage_analyzer.triage(ces)
+        return JSONResponse({"ok": True, "triage": triage_report})
+
+    # Milestone v3.7 (Phase 41): Multi-Seat Synthesis Consensus & Cryptographic Proof Ledger
+    @mcp.custom_route("/v1/synthesis/review/initiate", methods=["POST"])
+    async def synthesis_review_initiate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        cert_id = body.get("certificate_id")
+        if not cert_id:
+            return JSONResponse({"ok": False, "error": "certificate_id is required"}, status_code=400)
+        cert = formal_verification_pipeline.certificates.get(cert_id)
+        if not cert:
+            return JSONResponse({"ok": False, "error": f"Certificate '{cert_id}' not found"}, status_code=404)
+        threshold_ratio = float(body.get("threshold_ratio", 0.60))
+        consensus_id = synthesis_consensus_engine.initiate_review(cert, threshold_ratio=threshold_ratio)
+        return JSONResponse({"ok": True, "consensus_id": consensus_id, "status": "PENDING_REVIEW"})
+
+    @mcp.custom_route("/v1/synthesis/review/vote", methods=["POST"])
+    async def synthesis_review_vote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        reviewer_seat_id = body.get("reviewer_seat_id")
+        vote_str = body.get("vote", "APPROVE")
+        critique_notes = body.get("critique_notes", "")
+        if not consensus_id or not reviewer_seat_id:
+            return JSONResponse({"ok": False, "error": "consensus_id and reviewer_seat_id are required"}, status_code=400)
+        try:
+            vote = ReviewVote(vote_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid vote: {vote_str}"}, status_code=400)
+        try:
+            ballot = synthesis_consensus_engine.cast_ballot(
+                consensus_id=consensus_id,
+                reviewer_seat_id=reviewer_seat_id,
+                vote=vote,
+                critique_notes=critique_notes,
+            )
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/synthesis/review/finalize", methods=["POST"])
+    async def synthesis_review_finalize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        if not consensus_id:
+            return JSONResponse({"ok": False, "error": "consensus_id is required"}, status_code=400)
+        try:
+            receipt = synthesis_consensus_engine.tally_and_finalize(consensus_id)
+            root = proof_receipt_ledger.compute_root()
+            return JSONResponse({"ok": True, "receipt": receipt.to_dict(), "ledger_root": root})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/synthesis/ledger/proof/{leaf_index}", methods=["GET"])
+    async def synthesis_ledger_proof_route(request: Request) -> Response:
+        leaf_idx_str = request.path_params.get("leaf_index", "0")
+        try:
+            leaf_idx = int(leaf_idx_str)
+            proof = proof_receipt_ledger.generate_proof(leaf_idx)
+            is_valid = ProofReceiptLedger.verify_proof(proof)
+            return JSONResponse({"ok": True, "valid": is_valid, "proof": proof.to_dict()})
+        except (IndexError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/synthesis/anchor/solana", methods=["POST"])
+    async def synthesis_anchor_solana_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        receipt = next((r for r in proof_receipt_ledger.receipts if r.consensus_id == consensus_id), None)
+        if not receipt:
+            return JSONResponse({"ok": False, "error": f"Receipt '{consensus_id}' not found in ledger"}, status_code=404)
+        root = proof_receipt_ledger.compute_root()
+        anchor = proof_exporter.export_solana_anchor(receipt, root)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/synthesis/drill/simulate", methods=["POST"])
+    async def synthesis_drill_simulate_route(_request: Request) -> Response:
+        drill_results = FormalVerificationDrillSimulator.run_synthesis_consensus_drill(synthesis_consensus_engine)
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v3.8 (Phases 42 & 43): Dynamic Sharding & Sovereign Mesh Consensus
+    @mcp.custom_route("/v1/sharding/nodes/register", methods=["POST"])
+    async def sharding_node_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id")
+        region_id = body.get("region_id", settings.edge_default_region)
+        weight = int(body.get("weight", 1))
+        if not node_id:
+            return JSONResponse({"ok": False, "error": "node_id is required"}, status_code=400)
+        node = ShardNode(node_id=node_id, region_id=region_id, weight=weight)
+        shard_ring.add_node(node)
+        return JSONResponse({"ok": True, "node": node.to_dict(), "total_nodes": len(shard_ring.nodes)})
+
+    @mcp.custom_route("/v1/sharding/nodes", methods=["GET"])
+    async def sharding_nodes_list_route(_request: Request) -> Response:
+        return JSONResponse({"ok": True, "nodes": shard_ring.list_nodes()})
+
+    @mcp.custom_route("/v1/sharding/route/{key}", methods=["GET"])
+    async def sharding_route_key_route(request: Request) -> Response:
+        key = request.path_params.get("key", "")
+        routing = shard_router.route_key(key)
+        return JSONResponse({"ok": True, "routing": routing})
+
+    @mcp.custom_route("/v1/sharding/crdt/write", methods=["POST"])
+    async def sharding_crdt_write_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key = body.get("key")
+        crdt_type = body.get("crdt_type", "lww")
+        if not key:
+            return JSONResponse({"ok": False, "error": "key is required"}, status_code=400)
+
+        if crdt_type == "lww":
+            val = body.get("value")
+            res = shard_router.write_lww(key, val)
+            return JSONResponse({"ok": True, **res})
+        elif crdt_type == "pn_counter":
+            delta = int(body.get("delta", 1))
+            res = shard_router.update_counter(key, delta)
+            return JSONResponse({"ok": True, **res})
+        elif crdt_type == "or_set":
+            elem = body.get("element", "")
+            action = body.get("action", "add")
+            if action == "remove":
+                s = shard_crdt_store.remove_set(key, elem)
+            else:
+                s = shard_crdt_store.add_set(key, elem)
+            routing = shard_router.route_key(key)
+            delta_obj = geo_replication_engine.create_delta(
+                key=key,
+                crdt_type="or_set",
+                payload=s.to_dict(),
+                vector_clock=shard_crdt_store.vector_clock,
+            )
+            return JSONResponse({
+                "ok": True,
+                "key": key,
+                "elements": sorted(list(s.read())),
+                "delta_id": delta_obj.delta_id,
+                "routing": routing,
+            })
+        else:
+            return JSONResponse({"ok": False, "error": f"Unsupported crdt_type: {crdt_type}"}, status_code=400)
+
+    @mcp.custom_route("/v1/sharding/crdt/read/{key}", methods=["GET"])
+    async def sharding_crdt_read_route(request: Request) -> Response:
+        key = request.path_params.get("key", "")
+        crdt_type = request.query_params.get("crdt_type", "lww")
+        routing = shard_router.route_key(key)
+
+        if crdt_type == "lww":
+            val = shard_crdt_store.read_lww(key)
+            return JSONResponse({"ok": True, "key": key, "value": val, "crdt_type": "lww", "routing": routing})
+        elif crdt_type == "pn_counter":
+            val = shard_crdt_store.read_counter(key)
+            return JSONResponse({"ok": True, "key": key, "value": val, "crdt_type": "pn_counter", "routing": routing})
+        elif crdt_type == "or_set":
+            elems = shard_crdt_store.read_set(key)
+            return JSONResponse({"ok": True, "key": key, "elements": sorted(list(elems)), "crdt_type": "or_set", "routing": routing})
+        return JSONResponse({"ok": False, "error": f"Unknown crdt_type: {crdt_type}"}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/consensus/gossip/digest", methods=["POST"])
+    async def mesh_consensus_gossip_digest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        peer_digest_dict = body.get("digest")
+        if not peer_digest_dict:
+            # return local digest
+            local_digest = anti_entropy_gossip.generate_digest()
+            return JSONResponse({"ok": True, "digest": local_digest.to_dict()})
+
+        from desk_gateway.mesh_consensus import GossipDigest
+        remote_digest = GossipDigest(
+            region_id=peer_digest_dict["region_id"],
+            vector_clock=peer_digest_dict["vector_clock"],
+            known_keys_hash=peer_digest_dict["known_keys_hash"],
+            timestamp=peer_digest_dict.get("timestamp", time.time()),
+        )
+        res = anti_entropy_gossip.receive_digest(remote_digest)
+        return JSONResponse({"ok": True, "comparison": res})
+
+    @mcp.custom_route("/v1/mesh/consensus/lease/acquire", methods=["POST"])
+    async def mesh_consensus_lease_acquire_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        ttl = float(body.get("ttl_seconds", 30.0))
+        lease = epoch_coordinator.acquire_lease(ttl_seconds=ttl)
+        if not lease:
+            return JSONResponse({"ok": False, "error": "Split-brain partition fencing active: quorum unavailable"}, status_code=503)
+        return JSONResponse({"ok": True, "lease": lease.to_dict()})
+
+    @mcp.custom_route("/v1/mesh/consensus/drill/simulate", methods=["POST"])
+    async def mesh_consensus_drill_simulate_route(_request: Request) -> Response:
+        drill_results = GeoPartitionDrillSimulator.run_partition_and_healing_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v3.9 (Phases 44 & 45): Post-Quantum Cryptographic Migration & Lattice Attestation Mesh
+    @mcp.custom_route("/v1/pqc/keys/generate", methods=["POST"])
+    async def pqc_keys_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key_id = body.get("key_id")
+        keypair = pqc_kem.generate_keypair(key_id=key_id)
+        return JSONResponse({"ok": True, "bundle": keypair.public_bundle()})
+
+    @mcp.custom_route("/v1/pqc/kem/encapsulate", methods=["POST"])
+    async def pqc_kem_encapsulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key_id = body.get("key_id", "default-kem-key")
+        keypair = pqc_kem.generate_keypair(key_id=key_id)
+        sec, receipt = pqc_kem.encapsulate(keypair)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/signature/sign", methods=["POST"])
+    async def pqc_signature_sign_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        message = body.get("message", "").encode("utf-8")
+        key_id = body.get("key_id", "seat-pqc-signer")
+        sig = pqc_sig_engine.sign(message, key_id=key_id)
+        return JSONResponse({"ok": True, "signature": sig.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/signature/verify", methods=["POST"])
+    async def pqc_signature_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        message = body.get("message", "").encode("utf-8")
+        sig_data = body.get("signature", {})
+        from desk_gateway.post_quantum import HybridSignature
+        sig = HybridSignature(
+            key_id=sig_data.get("key_id", ""),
+            classical_sig=sig_data.get("classical_sig", ""),
+            lattice_sig=sig_data.get("lattice_sig", ""),
+            algorithm_suite=sig_data.get("algorithm_suite", ""),
+            message_digest=sig_data.get("message_digest", ""),
+            timestamp=sig_data.get("timestamp", time.time()),
+        )
+        valid = pqc_sig_engine.verify(message, sig)
+        return JSONResponse({"ok": True, "valid": valid})
+
+    @mcp.custom_route("/v1/pqc/audit/negotiate", methods=["POST"])
+    async def pqc_audit_negotiate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        client_suites = body.get("client_suites", [])
+        server_suites = body.get("server_suites", [])
+        agreed_suite = body.get("agreed_suite", "")
+        res = pqc_inspector.evaluate_negotiation(client_suites, server_suites, agreed_suite)
+        return JSONResponse({"ok": True, "negotiation": res})
+
+    @mcp.custom_route("/v1/pqc/identity/passport/issue", methods=["POST"])
+    async def pqc_identity_passport_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        desk_id = body.get("desk_id", settings.public_host)
+        roles = body.get("roles")
+        passport = pqc_ca.issue_passport(seat_id, desk_id, roles=roles)
+        return JSONResponse({"ok": True, "passport": passport.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/identity/passport/verify", methods=["POST"])
+    async def pqc_identity_passport_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pass_data = body.get("passport", {})
+        from desk_gateway.lattice_ledger import PQCSeatPassport
+        passport = PQCSeatPassport(
+            seat_id=pass_data["seat_id"],
+            desk_id=pass_data["desk_id"],
+            public_bundle=pass_data["public_bundle"],
+            roles=pass_data["roles"],
+            expires_at=pass_data["expires_at"],
+            ca_signature=pass_data["ca_signature"],
+            issued_at=pass_data.get("issued_at", time.time()),
+        )
+        res = pqc_verifier.verify_remote_peer(passport)
+        return JSONResponse({"ok": True, "verification": res})
+
+    @mcp.custom_route("/v1/pqc/ledger/append", methods=["POST"])
+    async def pqc_ledger_append_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id", settings.public_host)
+        action = body.get("action", "record_event")
+        payload = body.get("payload", {})
+        entry = pqc_ledger.append_entry(desk_id=desk_id, action=action, payload=payload)
+        return JSONResponse({
+            "ok": True,
+            "entry": entry.to_dict(),
+            "merkle_root": pqc_ledger.compute_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/pqc/ledger/anchor/export", methods=["POST"])
+    async def pqc_ledger_anchor_export_route(_request: Request) -> Response:
+        anchor = pqc_anchor_exporter.export_anchor(pqc_ledger)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/pqc/drill/simulate", methods=["POST"])
+    async def pqc_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumAttackDrillSimulator.run_quantum_attack_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.0 (Phases 46 & 47): Autonomous Swarm Orchestration & Self-Synthesizing Workflow Mesh
+    @mcp.custom_route("/v1/swarm/workflows/compile", methods=["POST"])
+    async def swarm_workflows_compile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        try:
+            dag = workflow_compiler.compile(body)
+            return JSONResponse({"ok": True, "workflow": dag.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/workflows/submit", methods=["POST"])
+    async def swarm_workflows_submit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        try:
+            dag = workflow_compiler.compile(body)
+            workflow_engine.submit_workflow(dag)
+            return JSONResponse({"ok": True, "workflow_id": dag.workflow_id, "status": "SUBMITTED"})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/step", methods=["POST"])
+    async def swarm_workflows_step_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        if workflow_id not in workflow_engine.workflows:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        res = workflow_engine.step_execution(workflow_id)
+        return JSONResponse({"ok": True, "execution": res})
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/status", methods=["GET"])
+    async def swarm_workflows_status_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        dag = workflow_engine.workflows.get(workflow_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        return JSONResponse({"ok": True, "workflow": dag.to_dict()})
+
+    @mcp.custom_route("/v1/swarm/capabilities/register", methods=["POST"])
+    async def swarm_capabilities_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        from desk_gateway.swarm_federation import FederatedCapability
+        cap = FederatedCapability(
+            capability_name=body.get("capability_name", "generic_cap"),
+            desk_id=body.get("desk_id", "desk-local"),
+            seat_id=body.get("seat_id", "systems"),
+            schema_contract=body.get("schema_contract", {}),
+            version=body.get("version", "1.0.0"),
+        )
+        capability_broker.register_capability(cap)
+        return JSONResponse({"ok": True, "capability": cap.to_dict()})
+
+    @mcp.custom_route("/v1/swarm/capabilities", methods=["GET"])
+    async def swarm_capabilities_list_route(_request: Request) -> Response:
+        return JSONResponse({"ok": True, "capabilities": capability_broker.list_capabilities()})
+
+    @mcp.custom_route("/v1/swarm/workflows/{workflow_id}/receipt", methods=["POST"])
+    async def swarm_workflows_receipt_route(request: Request) -> Response:
+        workflow_id = request.path_params.get("workflow_id", "")
+        dag = workflow_engine.workflows.get(workflow_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": "Workflow not found"}, status_code=404)
+        receipt = workflow_receipt_ledger.record_execution(dag, duration_ms=50.0)
+        anchor = workflow_anchor_exporter.export_anchor(receipt)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict(), "anchor": anchor})
+
+    @mcp.custom_route("/v1/swarm/workflows/drill/simulate", methods=["POST"])
+    async def swarm_workflows_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SwarmOrchestrationDrillSimulator.run_swarm_orchestration_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.1 (Phases 48 & 49): Swarm DAO Governance & Algorithmic Tokenomics
+    @mcp.custom_route("/v1/dao/proposals/create", methods=["POST"])
+    async def dao_proposals_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        prop = swarm_dao_engine.create_proposal(
+            proposer_seat=body.get("proposer_seat", "lead"),
+            title=body.get("title", "Governance Proposal"),
+            description=body.get("description", ""),
+            action_payload=body.get("action_payload", {}),
+            voting_duration_seconds=float(body.get("voting_duration_seconds", 300.0)),
+            timelock_delay_seconds=float(body.get("timelock_delay_seconds", 60.0)),
+        )
+        return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/vote", methods=["POST"])
+    async def dao_proposals_vote_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        voter_seat = body.get("voter_seat", "lead")
+        opt_str = body.get("option", "YES")
+        try:
+            ballot = swarm_dao_engine.cast_vote(proposal_id, voter_seat, VoteOption(opt_str))
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/resolve", methods=["POST"])
+    async def dao_proposals_resolve_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        try:
+            prop = swarm_dao_engine.resolve_proposal(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/execute", methods=["POST"])
+    async def dao_proposals_execute_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        force_unlock = bool(body.get("force_unlock", False))
+        try:
+            rec = policy_timelock_executor.execute_proposal(proposal_id, force_unlock=force_unlock)
+            return JSONResponse({"ok": True, "execution": rec})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/tokenomics/pricing", methods=["GET"])
+    async def dao_tokenomics_pricing_route(request: Request) -> Response:
+        load = float(request.query_params.get("node_load", 0.0))
+        price = compute_credit_ledger.calculate_compute_price(load)
+        return JSONResponse({"ok": True, "node_load": load, "unit_price": price})
+
+    @mcp.custom_route("/v1/dao/tokenomics/drill/simulate", methods=["POST"])
+    async def dao_tokenomics_drill_simulate_route(_request: Request) -> Response:
+        drill_results = TokenomicsDrillSimulator.run_tokenomics_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.2 (Phases 50 & 51): Autonomous Cross-Chain Bridge & Decentralized Oracle Mesh
+    @mcp.custom_route("/v1/bridge/relay/header", methods=["POST"])
+    async def bridge_relay_header_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        chain_str = body.get("chain_type", "EVM")
+        try:
+            chain = ChainType(chain_str.upper())
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid chain_type: {chain_str}"}, status_code=400)
+
+        relayer_id = body.get("relayer_id", "relayer-primary")
+        header = BlockHeader(
+            chain=chain,
+            height=int(body.get("height", body.get("block_number", 0))),
+            block_hash=body.get("block_hash", ""),
+            parent_hash=body.get("parent_hash", ""),
+            state_root=body.get("state_root", ""),
+            receipts_root=body.get("receipts_root", "0x0"),
+            timestamp=float(body.get("timestamp", time.time())),
+        )
+        try:
+            stored = cross_chain_relay_engine.relay_header(relayer_id=relayer_id, header=header)
+            return JSONResponse({"ok": True, "header": stored.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/bridge/message/dispatch", methods=["POST"])
+    async def bridge_message_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        src_str = body.get("source_chain", "EVM")
+        tgt_str = body.get("target_chain", "SOLANA")
+        try:
+            src_chain = ChainType(src_str.upper())
+            tgt_chain = ChainType(tgt_str.upper())
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Invalid chain type specified"}, status_code=400)
+
+        relayer_id = body.get("relayer_id", "relayer-primary")
+        msg = CrossChainMessage(
+            message_id=body.get("message_id", f"msg-{secrets.token_hex(4)}"),
+            source_chain=src_chain,
+            target_chain=tgt_chain,
+            sender_address=body.get("sender_address", body.get("sender", "0xSender")),
+            recipient_address=body.get("recipient_address", body.get("recipient", "RecipientAccount")),
+            payload=body.get("payload", {}),
+            nonce=int(body.get("nonce", 1)),
+            proof=body.get("proof", "proof-dummy"),
+            signature=body.get("signature", ""),
+            timestamp=float(body.get("timestamp", time.time())),
+        )
+        proof_nodes = body.get("proof_nodes", [])
+        try:
+            res = cross_chain_relay_engine.dispatch_message(relayer_id=relayer_id, message=msg, proof_nodes=proof_nodes)
+            return JSONResponse({"ok": True, "dispatch": res})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/reports/ingest", methods=["POST"])
+    async def oracle_reports_ingest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        feed_name = body.get("feed_name", "SOL/USD")
+        source_id = body.get("source_id", body.get("reporter_seat", "lead"))
+        value = float(body.get("value", 0.0))
+        report = OracleReport(
+            source_id=source_id,
+            feed_name=feed_name,
+            value=value,
+            timestamp=float(body.get("timestamp", time.time())),
+            signature=body.get("signature", "sig"),
+        )
+        try:
+            oracle_aggregator.ingest_report(report)
+            return JSONResponse({"ok": True, "report": report.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/feeds/{feed_name}/finalize", methods=["POST"])
+    async def oracle_feed_finalize_route(request: Request) -> Response:
+        feed_name = request.path_params.get("feed_name", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        min_reports = int(body.get("min_reports", 3))
+        try:
+            feed = oracle_aggregator.finalize_feed(feed_name, min_reports=min_reports)
+            anchor = oracle_anchor_exporter.export_oracle_anchor(feed)
+            return JSONResponse({"ok": True, "feed": feed.to_dict(), "anchor": anchor})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/oracle/feeds/{feed_name}", methods=["GET"])
+    async def oracle_feed_get_route(request: Request) -> Response:
+        feed_name = request.path_params.get("feed_name", "")
+        feed = oracle_aggregator.finalized_feeds.get(feed_name)
+        if not feed:
+            return JSONResponse({"ok": False, "error": f"Feed not found: {feed_name}"}, status_code=404)
+        return JSONResponse({"ok": True, "feed": feed.to_dict()})
+
+    @mcp.custom_route("/v1/bridge/drill/simulate", methods=["POST"])
+    async def bridge_drill_simulate_route(_request: Request) -> Response:
+        drill_results = CrossChainOracleDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.3: Model Distillation & Edge Compute Routes
+    @mcp.custom_route("/v1/distillation/jobs", methods=["POST"])
+    async def distillation_job_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        student_model = body.get("student_model", "student-desk-v1")
+        teacher_models = body.get("teacher_models", ["teacher-llama-70b", "teacher-qwen-72b"])
+        temperature = float(body.get("temperature", 2.0))
+        alpha = float(body.get("alpha", 0.5))
+        target_quant = body.get("target_quantization", "INT8")
+
+        job = model_artifact_registry.register_job(
+            student_model_name=student_model,
+            teacher_models=teacher_models,
+            temperature=temperature,
+            alpha=alpha,
+            target_quantization=target_quant,
+        )
+        return JSONResponse({"ok": True, "job_id": job.job_id, "status": job.status, "student_model": job.student_model_name})
+
+    @mcp.custom_route("/v1/distillation/step", methods=["POST"])
+    async def distillation_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        student_logits = body.get("student_logits", [1.0, 0.0, 0.0])
+        teachers_data = body.get("teacher_predictions", [])
+        ground_truth = int(body.get("ground_truth_label", 0))
+        temp = body.get("temperature")
+        alpha = body.get("alpha")
+
+        predictions = [
+            TeacherPrediction(
+                model_id=t.get("model_id", "teacher"),
+                weight=float(t.get("weight", 1.0)),
+                logits=t.get("logits", [1.0, 0.0, 0.0]),
+            )
+            for t in teachers_data
+        ]
+        metrics = distillation_engine.compute_distillation_step(
+            student_logits=student_logits,
+            teacher_predictions=predictions,
+            ground_truth_label=ground_truth,
+            temperature=temp,
+            alpha=alpha,
+        )
+        return JSONResponse({"ok": True, "metrics": metrics})
+
+    @mcp.custom_route("/v1/distillation/artifacts", methods=["POST"])
+    async def distillation_artifact_store_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        model_name = body.get("model_name", "student-desk-v1")
+        quant_type = body.get("quantization_type", "INT8")
+        weights = body.get("weights", [0.1, -0.2, 0.5, -0.8])
+        metadata = body.get("metadata", {})
+
+        art = model_artifact_registry.store_artifact(
+            model_name=model_name,
+            quantization_type=quant_type,
+            weights=weights,
+            metadata=metadata,
+        )
+        return JSONResponse({
+            "ok": True,
+            "artifact_id": art.artifact_id,
+            "digest": art.sha256_digest,
+            "parameter_count": art.parameter_count,
+            "compressed_size_bytes": art.compressed_size_bytes,
+        })
+
+    @mcp.custom_route("/v1/distillation/artifacts/{artifact_id}", methods=["GET"])
+    async def distillation_artifact_get_route(request: Request) -> Response:
+        artifact_id = request.path_params.get("artifact_id", "")
+        art = model_artifact_registry.get_artifact(artifact_id)
+        if not art:
+            return JSONResponse({"ok": False, "error": f"Artifact not found: {artifact_id}"}, status_code=404)
+        return JSONResponse({
+            "ok": True,
+            "artifact": {
+                "artifact_id": art.artifact_id,
+                "model_name": art.model_name,
+                "quantization_type": art.quantization_type,
+                "parameter_count": art.parameter_count,
+                "compressed_size_bytes": art.compressed_size_bytes,
+                "sha256_digest": art.sha256_digest,
+                "scales": art.scales,
+                "zero_points": art.zero_points,
+            }
+        })
+
+    @mcp.custom_route("/v1/distillation/benchmark/retention", methods=["POST"])
+    async def distillation_benchmark_retention_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        t_acc = float(body.get("teacher_accuracy", 0.85))
+        s_acc = float(body.get("student_accuracy", 0.82))
+        res = distillation_benchmarker.evaluate_retention(t_acc, s_acc)
+        return JSONResponse({"ok": True, "evaluation": res})
+
+    @mcp.custom_route("/v1/edge/nodes", methods=["GET"])
+    async def edge_nodes_list_route(_request: Request) -> Response:
+        nodes = edge_compute_scheduler.list_nodes()
+        return JSONResponse({
+            "ok": True,
+            "nodes": [
+                {
+                    "node_id": n.node_id,
+                    "region": n.region,
+                    "vram_mb": n.vram_mb,
+                    "used_vram_mb": n.used_vram_mb,
+                    "active_tasks": n.active_tasks,
+                    "is_healthy": n.is_healthy,
+                    "latency_ms": n.latency_ms,
+                    "supported_quantizations": n.supported_quantizations,
+                }
+                for n in nodes
+            ]
+        })
+
+    @mcp.custom_route("/v1/edge/schedule", methods=["POST"])
+    async def edge_schedule_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        art_id = body.get("artifact_id", "art-default")
+        vram = int(body.get("required_vram_mb", 1024))
+        quant = body.get("quantization", "INT8")
+
+        node = edge_compute_scheduler.schedule_inference(art_id, vram, quant)
+        if not node:
+            return JSONResponse({"ok": False, "error": "No available edge node satisfying constraints"}, status_code=503)
+        return JSONResponse({
+            "ok": True,
+            "scheduled_node": {
+                "node_id": node.node_id,
+                "region": node.region,
+                "used_vram_mb": node.used_vram_mb,
+                "active_tasks": node.active_tasks,
+            }
+        })
+
+    @mcp.custom_route("/v1/edge/inference/prove", methods=["POST"])
+    async def edge_inference_prove_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        node_id = body.get("node_id", "edge-desk-us-west")
+        art_id = body.get("artifact_id", "art-default")
+        prompt = body.get("prompt", "")
+        completion = body.get("completion", "")
+        latency = float(body.get("latency_ms", 12.5))
+
+        receipt = inference_proof_engine.generate_receipt(
+            task_id=task_id,
+            node_id=node_id,
+            artifact_id=art_id,
+            prompt_text=prompt,
+            completion_text=completion,
+            latency_ms=latency,
+        )
+        return JSONResponse({
+            "ok": True,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "task_id": receipt.task_id,
+                "node_id": receipt.node_id,
+                "artifact_id": receipt.artifact_id,
+                "input_hash": receipt.input_hash,
+                "output_hash": receipt.output_hash,
+                "signature_proof": receipt.signature_proof,
+                "timestamp": receipt.timestamp,
+            }
+        })
+
+    @mcp.custom_route("/v1/edge/commitments/export", methods=["POST"])
+    async def edge_commitments_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipts_data = body.get("receipts", [])
+        from desk_gateway.edge_mesh import InferenceProofReceipt
+        receipts = [
+            InferenceProofReceipt(
+                receipt_id=r.get("receipt_id", ""),
+                task_id=r.get("task_id", ""),
+                node_id=r.get("node_id", ""),
+                artifact_id=r.get("artifact_id", ""),
+                input_hash=r.get("input_hash", ""),
+                output_hash=r.get("output_hash", ""),
+                timestamp=float(r.get("timestamp", time.time())),
+                signature_proof=r.get("signature_proof", ""),
+            )
+            for r in receipts_data
+        ]
+        commitment = edge_commitment_exporter.export_batch_commitment(receipts)
+        return JSONResponse({"ok": True, "commitment": commitment})
+
+    @mcp.custom_route("/v1/distillation/drill/simulate", methods=["POST"])
+    async def distillation_drill_simulate_route(_request: Request) -> Response:
+        simulator = DistillationEdgeDrillSimulator()
+        drill_results = simulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.4: Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
+    @mcp.custom_route("/v1/zk/circuits/synthesize", methods=["POST"])
+    async def zk_circuits_synthesize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "custom-circuit")
+        circuit_name = body.get("name", "CustomArithmeticCircuit")
+        pub_wires = body.get("public_wires", ["one", "x", "y"])
+        priv_wires = body.get("private_wires", ["w"])
+        raw_constraints = body.get("constraints", [])
+
+        circuit = ZKCircuit(
+            circuit_id=circuit_id,
+            name=circuit_name,
+            public_wire_names=pub_wires,
+            private_wire_names=priv_wires,
+        )
+        for idx, c in enumerate(raw_constraints):
+            constraint = ZKConstraint(
+                constraint_id=c.get("constraint_id", f"c_{idx}"),
+                a_coefficients=c.get("a", {}),
+                b_coefficients=c.get("b", {}),
+                c_coefficients=c.get("c", {}),
+            )
+            circuit.add_constraint(constraint)
+
+        zk_circuits_registry[circuit_id] = circuit
+        return JSONResponse({
+            "ok": True,
+            "circuit_id": circuit_id,
+            "constraints_count": len(circuit.constraints),
+            "public_wires": circuit.public_wire_names,
+            "private_wires": circuit.private_wire_names,
+        })
+
+    @mcp.custom_route("/v1/zk/proof/generate", methods=["POST"])
+    async def zk_proof_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+        public_inputs = body.get("public_inputs", {})
+        private_witness = body.get("private_witness", {})
+        proof_type = body.get("proof_type", "GROTH16")
+
+        circuit = zk_circuits_registry.get(circuit_id)
+        if not circuit:
+            # Build default state transition circuit if not yet registered
+            circuit = zk_state_prover.build_state_transition_circuit(circuit_id)
+            zk_circuits_registry[circuit_id] = circuit
+
+        try:
+            proof = zk_proof_generator.generate_proof(
+                circuit=circuit,
+                public_inputs=public_inputs,
+                private_witness=private_witness,
+                proof_type=proof_type,
+            )
+            return JSONResponse({
+                "ok": True,
+                "proof": {
+                    "proof_id": proof.proof_id,
+                    "circuit_id": proof.circuit_id,
+                    "proof_type": proof.proof_type,
+                    "public_inputs": proof.public_inputs,
+                    "commitment_hash": proof.commitment_hash,
+                    "proof_bytes": proof.proof_bytes,
+                    "timestamp": proof.timestamp,
+                }
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/zk/proof/verify", methods=["POST"])
+    async def zk_proof_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+        proof_dict = body.get("proof", {})
+
+        circuit = zk_circuits_registry.get(circuit_id)
+        if not circuit:
+            circuit = zk_state_prover.build_state_transition_circuit(circuit_id)
+            zk_circuits_registry[circuit_id] = circuit
+
+        proof = ZKProof(
+            proof_id=proof_dict.get("proof_id", ""),
+            circuit_id=circuit_id,
+            proof_type=proof_dict.get("proof_type", "GROTH16"),
+            public_inputs=proof_dict.get("public_inputs", {}),
+            commitment_hash=proof_dict.get("commitment_hash", ""),
+            proof_bytes=proof_dict.get("proof_bytes", "{}"),
+            timestamp=float(proof_dict.get("timestamp", time.time())),
+        )
+        receipt = zk_proof_verifier.verify_proof(circuit, proof)
+        return JSONResponse({
+            "ok": True,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "proof_id": receipt.proof_id,
+                "circuit_id": receipt.circuit_id,
+                "is_valid": receipt.is_valid,
+                "verified_at": receipt.verified_at,
+                "verification_digest": receipt.verification_digest,
+                "public_inputs": receipt.public_inputs,
+            }
+        })
+
+    @mcp.custom_route("/v1/zk/state/prove", methods=["POST"])
+    async def zk_state_prove_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        initial_state = float(body.get("initial_state", 100.0))
+        delta = float(body.get("delta", 25.0))
+        secret_auth = float(body.get("secret_auth_code", 1234.0))
+        circuit_id = body.get("circuit_id", "state-transition-v1")
+
+        proof, receipt = zk_state_prover.prove_state_transition(
+            initial_state=initial_state,
+            delta=delta,
+            secret_auth_code=secret_auth,
+            circuit_id=circuit_id,
+        )
+        return JSONResponse({
+            "ok": True,
+            "proof_id": proof.proof_id,
+            "is_valid": receipt.is_valid,
+            "final_state": initial_state + delta,
+            "verification_digest": receipt.verification_digest,
+        })
+
+    @mcp.custom_route("/v1/privacy/homomorphic/encrypt", methods=["POST"])
+    async def privacy_homomorphic_encrypt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        val = int(body.get("value", 42))
+        c = homomorphic_cipher.encrypt(val)
+        return JSONResponse({
+            "ok": True,
+            "ciphertext_id": c.ciphertext_id,
+            "encrypted_data": c.encrypted_data,
+            "modulus": c.modulus,
+            "public_key_fingerprint": c.public_key_fingerprint,
+        })
+
+    @mcp.custom_route("/v1/privacy/homomorphic/add", methods=["POST"])
+    async def privacy_homomorphic_add_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        val1 = int(body.get("val1", 10))
+        val2 = int(body.get("val2", 20))
+        c1 = homomorphic_cipher.encrypt(val1)
+        c2 = homomorphic_cipher.encrypt(val2)
+        c_res = homomorphic_cipher.add(c1, c2)
+        decrypted = homomorphic_cipher.decrypt(c_res)
+        return JSONResponse({
+            "ok": True,
+            "ciphertext_id": c_res.ciphertext_id,
+            "encrypted_data": c_res.encrypted_data,
+            "decrypted_sum": decrypted,
+        })
+
+    @mcp.custom_route("/v1/privacy/tss/split", methods=["POST"])
+    async def privacy_tss_split_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        secret = int(body.get("secret", 987654321))
+        threshold = int(body.get("threshold", 3))
+        total_shares = int(body.get("total_shares", 5))
+
+        shares = tss_engine.split_secret(secret, threshold=threshold, total_shares=total_shares)
+        return JSONResponse({
+            "ok": True,
+            "threshold": threshold,
+            "total_shares": total_shares,
+            "shares": [
+                {
+                    "share_index": s.share_index,
+                    "share_value": s.share_value,
+                }
+                for s in shares
+            ]
+        })
+
+    @mcp.custom_route("/v1/privacy/mpc/infer", methods=["POST"])
+    async def privacy_mpc_infer_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", f"mpc-{secrets.token_hex(4)}")
+        seat_inputs = body.get("seat_inputs", {
+            "lead": [0.5, 0.2, 0.1],
+            "systems": [0.4, 0.3, 0.2],
+            "infra": [0.6, 0.1, 0.3],
+        })
+        weights = body.get("weights", [0.8, -0.4, 1.2])
+
+        try:
+            res = mpc_coordinator.run_mpc_inference(
+                session_id=session_id,
+                seat_inputs=seat_inputs,
+                weights=weights,
+            )
+            return JSONResponse({
+                "ok": True,
+                "session_id": res.session_id,
+                "prediction": res.aggregated_prediction,
+                "participating_seats": res.participating_seats,
+                "commitment_hash": res.mpc_commitment_hash,
+            })
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/privacy/zk/commitments/export", methods=["POST"])
+    async def privacy_zk_commitments_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipts_data = body.get("receipts", [])
+        receipts = [
+            ZKProofReceipt(
+                receipt_id=r.get("receipt_id", f"zkrec-{secrets.token_hex(4)}"),
+                proof_id=r.get("proof_id", "zkp-default"),
+                circuit_id=r.get("circuit_id", "circuit-default"),
+                is_valid=bool(r.get("is_valid", True)),
+                verified_at=float(r.get("verified_at", time.time())),
+                verification_digest=r.get("verification_digest", "hash-dummy"),
+                public_inputs=r.get("public_inputs", {}),
+            )
+            for r in receipts_data
+        ]
+        anchor = zk_anchor_exporter.export_zk_commitment(receipts)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/zk/drill/simulate", methods=["POST"])
+    async def zk_drill_simulate_route(_request: Request) -> Response:
+        drill_results = ZKPrivacyAgentSwarmDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.5: Autonomous Multi-Agent Neuro-Symbolic Reasoning & Causal Inference Mesh
+    from desk_gateway.neuro_symbolic import (
+        FirstOrderLogicEngine,
+        LogicalInvariantChecker,
+        NeuroSymbolicGraph,
+        Predicate,
+        RuleExtractionEngine,
+        SymbolicRule,
+    )
+    from desk_gateway.causal_mesh import (
+        CausalAnchorExporter,
+        CausalDAG,
+        CausalEdge,
+        CausalVariable,
+        ConstraintCausalDiscovery,
+        CounterfactualSimulator,
+        DoCalculusEngine,
+        NeuroSymbolicCausalDrillSimulator,
+    )
+
+    neuro_graph = NeuroSymbolicGraph(embedding_dimension=4)
+    logic_engine = neuro_graph.logic_engine
+    invariant_checker = LogicalInvariantChecker(logic_engine)
+    rule_extractor = RuleExtractionEngine()
+    causal_discovery = ConstraintCausalDiscovery()
+    causal_anchor_exporter = CausalAnchorExporter()
+
+    mcp._neuro_graph = neuro_graph  # type: ignore[attr-defined]
+    mcp._logic_engine = logic_engine  # type: ignore[attr-defined]
+    mcp._invariant_checker = invariant_checker  # type: ignore[attr-defined]
+    mcp._rule_extractor = rule_extractor  # type: ignore[attr-defined]
+    mcp._causal_discovery = causal_discovery  # type: ignore[attr-defined]
+    mcp._causal_anchor_exporter = causal_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/neuro-symbolic/facts", methods=["POST"])
+    async def neuro_symbolic_add_fact_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        name = body.get("name", "")
+        args = tuple(body.get("args", []))
+        truth_val = float(body.get("truth_val", 1.0))
+        if not name:
+            return JSONResponse({"ok": False, "error": "Predicate name is required"}, status_code=400)
+        pred = Predicate(name=name, args=args, truth_val=truth_val)
+        logic_engine.add_fact(pred)
+        return JSONResponse({"ok": True, "predicate": pred.key(), "truth_val": pred.truth_val})
+
+    @mcp.custom_route("/v1/neuro-symbolic/rules", methods=["POST"])
+    async def neuro_symbolic_add_rule_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        rule_id = body.get("rule_id", f"rule-{secrets.token_hex(4)}")
+        raw_antecedents = body.get("antecedents", [])
+        raw_consequent = body.get("consequent", {})
+        conf = float(body.get("confidence", 1.0))
+        desc = body.get("description", "")
+
+        antecedents = [
+            Predicate(name=a["name"], args=tuple(a.get("args", [])), truth_val=float(a.get("truth_val", 1.0)))
+            for a in raw_antecedents
+        ]
+        consequent = Predicate(
+            name=raw_consequent.get("name", "inferred"),
+            args=tuple(raw_consequent.get("args", [])),
+            truth_val=float(raw_consequent.get("truth_val", 1.0)),
+        )
+        rule = SymbolicRule(rule_id=rule_id, antecedents=antecedents, consequent=consequent, confidence=conf, description=desc)
+        logic_engine.add_rule(rule)
+        return JSONResponse({"ok": True, "rule": rule.to_dict()})
+
+    @mcp.custom_route("/v1/neuro-symbolic/deduce", methods=["POST"])
+    async def neuro_symbolic_deduce_route(_request: Request) -> Response:
+        inferred = logic_engine.evaluate_forward_chaining()
+        return JSONResponse({
+            "ok": True,
+            "inferred_count": len(inferred),
+            "inferred_facts": [p.key() for p in inferred],
+        })
+
+    @mcp.custom_route("/v1/neuro-symbolic/query", methods=["POST"])
+    async def neuro_symbolic_query_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        name = body.get("name", "")
+        args = tuple(body.get("args", []))
+        pred = Predicate(name=name, args=args)
+        bindings = logic_engine.query(pred)
+        return JSONResponse({"ok": True, "predicate": pred.key(), "matches_count": len(bindings), "bindings": bindings})
+
+    @mcp.custom_route("/v1/neuro-symbolic/concepts", methods=["POST"])
+    async def neuro_symbolic_concept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", f"node-{secrets.token_hex(4)}")
+        name = body.get("name", node_id)
+        category = body.get("category", "entity")
+        embedding = body.get("embedding", [0.0, 0.0, 0.0, 0.0])
+        attributes = body.get("attributes", {})
+        node = neuro_graph.add_concept(
+            node_id=node_id,
+            name=name,
+            category=category,
+            embedding=embedding,
+            attributes=attributes,
+        )
+        return JSONResponse({"ok": True, "node_id": node.node_id, "category": node.category})
+
+    @mcp.custom_route("/v1/neuro-symbolic/concepts/search", methods=["POST"])
+    async def neuro_symbolic_concept_search_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        query_emb = body.get("query_embedding", [0.0, 0.0, 0.0, 0.0])
+        top_k = int(body.get("top_k", 3))
+        results = neuro_graph.query_similarity(query_emb, top_k=top_k)
+        return JSONResponse({
+            "ok": True,
+            "results": [{"node_id": node.node_id, "name": node.name, "similarity": round(sim, 4)} for node, sim in results],
+        })
+
+    @mcp.custom_route("/v1/neuro-symbolic/invariants/check", methods=["POST"])
+    async def neuro_symbolic_invariant_check_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        action = body.get("action", "execute_operation")
+        raw_facts = body.get("candidate_facts", [])
+        candidate_facts = [
+            Predicate(name=f["name"], args=tuple(f.get("args", [])))
+            for f in raw_facts
+        ]
+        violations = invariant_checker.check_invariants(action, candidate_facts)
+        return JSONResponse({
+            "ok": len(violations) == 0,
+            "action": action,
+            "violations_count": len(violations),
+            "violations": [
+                {
+                    "invariant_name": v.invariant_name,
+                    "target_action": v.target_action,
+                    "violating_bindings": v.violating_bindings,
+                    "message": v.message,
+                }
+                for v in violations
+            ],
+        })
+
+    @mcp.custom_route("/v1/causal/dags/create", methods=["POST"])
+    async def causal_dag_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", f"dag-{secrets.token_hex(4)}")
+        variables = body.get("variables", [])
+        edges = body.get("edges", [])
+
+        dag = CausalDAG(dag_id=dag_id)
+        for v in variables:
+            dag.add_variable(CausalVariable(name=v.get("name", "v"), base_mean=float(v.get("base_mean", 0.0))))
+        for e in edges:
+            dag.add_edge(CausalEdge(source=e["source"], target=e["target"], weight=float(e.get("weight", 1.0))))
+
+        _global_causal_dags[dag_id] = dag
+        return JSONResponse({
+            "ok": True,
+            "dag_id": dag.dag_id,
+            "variables_count": len(dag.variables),
+            "edges_count": len(dag.edges),
+            "topological_order": dag.topological_sort(),
+        })
+
+    @mcp.custom_route("/v1/causal/discover", methods=["POST"])
+    async def causal_discover_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", f"discovered-{secrets.token_hex(4)}")
+        variables = body.get("variables", [])
+        samples = body.get("samples", [])
+
+        dag = causal_discovery.discover_skeleton_and_dag(
+            dag_id=dag_id,
+            variable_names=variables,
+            data_samples=samples,
+        )
+        _global_causal_dags[dag_id] = dag
+        return JSONResponse({
+            "ok": True,
+            "dag_id": dag.dag_id,
+            "edges": [{"source": e.source, "target": e.target, "weight": e.weight} for e in dag.edges],
+            "topological_order": dag.topological_sort(),
+        })
+
+    @mcp.custom_route("/v1/causal/intervene", methods=["POST"])
+    async def causal_intervene_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", "")
+        treatment = body.get("treatment", "")
+        val = float(body.get("intervention_value", 1.0))
+        outcome = body.get("outcome", "")
+        baseline = body.get("baseline_values")
+
+        dag = _global_causal_dags.get(dag_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": f"Causal DAG '{dag_id}' not found"}, status_code=404)
+
+        engine = DoCalculusEngine(dag)
+        res = engine.simulate_intervention(
+            treatment=treatment,
+            intervention_value=val,
+            outcome=outcome,
+            baseline_values=baseline,
+        )
+        return JSONResponse({"ok": True, **res})
+
+    @mcp.custom_route("/v1/causal/counterfactual", methods=["POST"])
+    async def causal_counterfactual_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        dag_id = body.get("dag_id", "")
+        evidence = body.get("factual_evidence", {})
+        intervention = body.get("counterfactual_intervention", {})
+        target_var = body.get("target_variable", "")
+
+        dag = _global_causal_dags.get(dag_id)
+        if not dag:
+            return JSONResponse({"ok": False, "error": f"Causal DAG '{dag_id}' not found"}, status_code=404)
+
+        sim = CounterfactualSimulator(dag)
+        res = sim.evaluate_counterfactual(
+            factual_evidence=evidence,
+            counterfactual_intervention=intervention,
+            target_variable=target_var,
+        )
+        return JSONResponse({"ok": True, **res})
+
+    @mcp.custom_route("/v1/neuro-symbolic/drill/simulate", methods=["POST"])
+    async def neuro_symbolic_drill_simulate_route(_request: Request) -> Response:
+        drill_results = NeuroSymbolicCausalDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.6: Autonomous Self-Reflective Metacognition & Continuous Epistemic Verification Mesh
+    from desk_gateway.metacognition import (
+        EpistemicCalibrator,
+        MetacognitiveIntrospector,
+        EpistemicBeliefNetwork,
+        IntrospectiveStrategyOptimizer,
+    )
+    from desk_gateway.epistemic_mesh import (
+        CounterEvidenceSynthesizer,
+        EpistemicConsistencyVerifier,
+        EpistemicReceiptLedger,
+        EpistemicAnchorExporter,
+        MetacognitiveEpistemicDrillSimulator,
+    )
+
+    epistemic_calibrator = EpistemicCalibrator()
+    metacognitive_introspector = MetacognitiveIntrospector()
+    epistemic_network = EpistemicBeliefNetwork()
+    strategy_optimizer = IntrospectiveStrategyOptimizer()
+    counter_evidence_synthesizer = CounterEvidenceSynthesizer()
+    epistemic_verifier = EpistemicConsistencyVerifier()
+    epistemic_ledger = EpistemicReceiptLedger()
+    epistemic_anchor_exporter = EpistemicAnchorExporter()
+
+    mcp._epistemic_calibrator = epistemic_calibrator  # type: ignore[attr-defined]
+    mcp._metacognitive_introspector = metacognitive_introspector  # type: ignore[attr-defined]
+    mcp._epistemic_network = epistemic_network  # type: ignore[attr-defined]
+    mcp._strategy_optimizer = strategy_optimizer  # type: ignore[attr-defined]
+    mcp._counter_evidence_synthesizer = counter_evidence_synthesizer  # type: ignore[attr-defined]
+    mcp._epistemic_verifier = epistemic_verifier  # type: ignore[attr-defined]
+    mcp._epistemic_ledger = epistemic_ledger  # type: ignore[attr-defined]
+    mcp._epistemic_anchor_exporter = epistemic_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/metacognition/calibrate", methods=["POST"])
+    async def metacognition_calibrate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_conf = float(body.get("raw_confidence", 0.5))
+        history_samples = body.get("history_samples", [])
+        for item in history_samples:
+            epistemic_calibrator.record_outcome(float(item["confidence"]), bool(item["is_correct"]))
+        if history_samples:
+            epistemic_calibrator.fit_temperature()
+        calibrated = epistemic_calibrator.calibrate(raw_conf)
+        return JSONResponse({"ok": True, "calibration": calibrated.to_dict()})
+
+    @mcp.custom_route("/v1/metacognition/introspect", methods=["POST"])
+    async def metacognition_introspect_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        steps = body.get("reasoning_steps", [])
+        report = metacognitive_introspector.introspect_reasoning_chain(steps, calibrator=epistemic_calibrator)
+        return JSONResponse({"ok": True, "bias_report": report.to_dict()})
+
+    @mcp.custom_route("/v1/metacognition/beliefs", methods=["POST"])
+    async def metacognition_beliefs_add_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        h_id = body.get("hypothesis_id", f"hyp-{secrets.token_hex(4)}")
+        desc = body.get("description", "")
+        prior = float(body.get("prior", 0.5))
+        node = epistemic_network.register_hypothesis(h_id, desc, prior)
+        return JSONResponse({"ok": True, "node": node.to_dict()})
+
+    @mcp.custom_route("/v1/metacognition/beliefs/{hypothesis_id}/assimilate", methods=["POST"])
+    async def metacognition_beliefs_assimilate_route(request: Request) -> Response:
+        h_id = request.path_params.get("hypothesis_id", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        lr = float(body.get("likelihood_ratio", 1.0))
+        try:
+            update = epistemic_network.assimilate_evidence(h_id, lr)
+            return JSONResponse({"ok": True, "update": update.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/metacognition/strategy/select", methods=["POST"])
+    async def metacognition_strategy_select_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        entropy = body.get("epistemic_entropy")
+        if entropy is None:
+            entropy = epistemic_network.compute_epistemic_entropy()
+        else:
+            entropy = float(entropy)
+        crit = body.get("task_criticality", "medium")
+        res = strategy_optimizer.select_strategy(epistemic_entropy=entropy, task_criticality=crit)
+        return JSONResponse({"ok": True, **res})
+
+    @mcp.custom_route("/v1/epistemic/socratic/challenge", methods=["POST"])
+    async def epistemic_socratic_challenge_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        h_id = body.get("hypothesis_id", "hyp-default")
+        desc = body.get("description", "default premise")
+        prob = float(body.get("current_probability", 0.5))
+        probe = body.get("probe_type", "boundary_falsification")
+        challenge = counter_evidence_synthesizer.synthesize_challenge(h_id, desc, prob, probe)
+        return JSONResponse({"ok": True, "challenge": challenge.to_dict()})
+
+    @mcp.custom_route("/v1/epistemic/coherence/verify", methods=["POST"])
+    async def epistemic_coherence_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_beliefs = body.get("seat_beliefs", {})
+        thresh = float(body.get("divergence_threshold", 0.25))
+        coherence = epistemic_verifier.verify_coherence(seat_beliefs, divergence_threshold=thresh)
+        return JSONResponse({"ok": True, "coherence": coherence})
+
+    @mcp.custom_route("/v1/epistemic/ledger/receipts", methods=["POST"])
+    async def epistemic_ledger_receipt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        net_id = body.get("network_id", "default-net")
+        rtype = body.get("receipt_type", "EPISTEMIC_UPDATE")
+        payload = body.get("payload", {})
+        rec = epistemic_ledger.append_receipt(net_id, rtype, payload)
+        return JSONResponse({"ok": True, "receipt": rec.to_dict()})
+
+    @mcp.custom_route("/v1/epistemic/anchor/export", methods=["POST"])
+    async def epistemic_anchor_export_route(_request: Request) -> Response:
+        anchor = epistemic_anchor_exporter.export_epistemic_commitment(epistemic_ledger.receipts)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/metacognition/drill/simulate", methods=["POST"])
+    async def metacognition_drill_simulate_route(_request: Request) -> Response:
+        drill_results = MetacognitiveEpistemicDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.7: Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh
+    from desk_gateway.hardware_mesh import (
+        HardwareSubstrate,
+        KernelOpType,
+        SubstrateKernelCompiler,
+        SubstrateProfile,
+        SubstrateRegistry,
+        SubstrateTelemetryProfiler,
+        SubstrateWorkloadDispatcher,
+    )
+    from desk_gateway.neuromorphic_mesh import (
+        HardwareNeuromorphicDrillSimulator,
+        NeuromorphicAnchorExporter,
+        NeuromorphicMesh,
+        SpikeEvent,
+        SynapticAttestationLedger,
+    )
+
+    substrate_registry = SubstrateRegistry()
+    substrate_compiler = SubstrateKernelCompiler()
+    substrate_dispatcher = SubstrateWorkloadDispatcher(substrate_registry, substrate_compiler)
+    substrate_profiler = SubstrateTelemetryProfiler(substrate_registry)
+    neuromorphic_mesh = NeuromorphicMesh(mesh_id="primary-neuromorphic-mesh")
+    synaptic_ledger = SynapticAttestationLedger()
+    neuromorphic_anchor_exporter = NeuromorphicAnchorExporter()
+
+    mcp._substrate_registry = substrate_registry  # type: ignore[attr-defined]
+    mcp._substrate_compiler = substrate_compiler  # type: ignore[attr-defined]
+    mcp._substrate_dispatcher = substrate_dispatcher  # type: ignore[attr-defined]
+    mcp._substrate_profiler = substrate_profiler  # type: ignore[attr-defined]
+    mcp._neuromorphic_mesh = neuromorphic_mesh  # type: ignore[attr-defined]
+    mcp._synaptic_ledger = synaptic_ledger  # type: ignore[attr-defined]
+    mcp._neuromorphic_anchor_exporter = neuromorphic_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/hardware/substrates", methods=["GET"])
+    async def hardware_substrates_list_route(_request: Request) -> Response:
+        substrates = [s.to_dict() for s in substrate_registry.list_substrates()]
+        return JSONResponse({"ok": True, "substrates": substrates})
+
+    @mcp.custom_route("/v1/hardware/compile", methods=["POST"])
+    async def hardware_compile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        op_str = body.get("op_type", "gemm")
+        sub_str = body.get("target_substrate", "gpu_cuda")
+        shapes = body.get("input_shapes", [[1024, 1024], [1024, 1024]])
+        opt_level = int(body.get("optimization_level", 3))
+
+        try:
+            op_type = KernelOpType(op_str.lower())
+        except ValueError:
+            op_type = KernelOpType.GEMM
+
+        try:
+            substrate = HardwareSubstrate(sub_str.lower())
+        except ValueError:
+            substrate = HardwareSubstrate.GPU_CUDA
+
+        compiled = substrate_compiler.compile(op_type=op_type, target_substrate=substrate, input_shapes=shapes, optimization_level=opt_level)
+        return JSONResponse({"ok": True, "kernel": compiled.to_dict()})
+
+    @mcp.custom_route("/v1/hardware/dispatch", methods=["POST"])
+    async def hardware_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        op_str = body.get("op_type", "gemm")
+        shapes = body.get("input_shapes", [[512, 512], [512, 512]])
+        priority = int(body.get("priority", 5))
+        sub_override_str = body.get("target_override")
+
+        try:
+            op_type = KernelOpType(op_str.lower())
+        except ValueError:
+            op_type = KernelOpType.GEMM
+
+        override_sub = None
+        if sub_override_str:
+            try:
+                override_sub = HardwareSubstrate(sub_override_str.lower())
+            except ValueError:
+                override_sub = None
+
+        assignment = substrate_dispatcher.schedule_task(
+            op_type=op_type,
+            input_shapes=shapes,
+            priority=priority,
+            target_override=override_sub,
+        )
+        return JSONResponse({"ok": True, "assignment": assignment.to_dict()})
+
+    @mcp.custom_route("/v1/hardware/telemetry", methods=["GET"])
+    async def hardware_telemetry_route(_request: Request) -> Response:
+        telemetry = substrate_profiler.collect_cluster_telemetry()
+        return JSONResponse({"ok": True, "telemetry": telemetry})
+
+    @mcp.custom_route("/v1/neuromorphic/spikes/inject", methods=["POST"])
+    async def neuromorphic_spikes_inject_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        spikes_data = body.get("spikes", [])  # list of [neuron_id, intensity]
+        parsed_spikes = [(item[0], float(item[1])) for item in spikes_data if len(item) == 2]
+        count = neuromorphic_mesh.inject_spikes(parsed_spikes)
+        return JSONResponse({"ok": True, "injected_spikes_count": count})
+
+    @mcp.custom_route("/v1/neuromorphic/step", methods=["POST"])
+    async def neuromorphic_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        duration_us = float(body.get("duration_us", 10.0))
+        step_dt_us = float(body.get("step_dt_us", 1.0))
+        step_res = neuromorphic_mesh.step_simulation(duration_us=duration_us, step_dt_us=step_dt_us)
+        return JSONResponse({"ok": True, "simulation": step_res})
+
+    @mcp.custom_route("/v1/neuromorphic/ledger/receipts", methods=["POST"])
+    async def neuromorphic_ledger_receipts_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        mesh_id = body.get("mesh_id", neuromorphic_mesh.mesh_id)
+        rtype = body.get("receipt_type", "SYNAPTIC_WEIGHT_UPDATE")
+        payload = body.get("payload", {})
+        fp = neuromorphic_mesh.compute_synaptic_fingerprint()
+
+        rec = synaptic_ledger.append_receipt(
+            mesh_id=mesh_id,
+            receipt_type=rtype,
+            simulated_time_us=neuromorphic_mesh.simulated_time_us,
+            total_spikes=neuromorphic_mesh.total_mesh_spikes,
+            synaptic_fingerprint=fp,
+            payload=payload,
+        )
+        return JSONResponse({"ok": True, "receipt": rec.to_dict()})
+
+    @mcp.custom_route("/v1/neuromorphic/anchor/export", methods=["POST"])
+    async def neuromorphic_anchor_export_route(_request: Request) -> Response:
+        anchor = neuromorphic_anchor_exporter.export_commitment(synaptic_ledger.receipts)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/hardware/drill/simulate", methods=["POST"])
+    async def hardware_drill_simulate_route(_request: Request) -> Response:
+        drill_results = HardwareNeuromorphicDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.8: Autonomous Swarm Immune & DePIN Physical Resource Mesh
+    from desk_gateway.swarm_immune_mesh import (
+        ImmuneAntibody,
+        MitigationAction,
+        MultiSeatAntibodyDistributor,
+        RuntimeReconstitutionSupervisor,
+        SwarmAntiFragilityEngine,
+        ThreatSeverity,
+        ThreatVectorType,
+    )
+    from desk_gateway.depin_mesh import (
+        DePINAnchorExporter,
+        DePINResourceLedger,
+        PhysicalResourceNode,
+        PhysicalResourceType,
+        SwarmImmuneDePINDrillSimulator,
+        VerifiableResourceOrchestrator,
+    )
+
+    swarm_antibody_distributor = MultiSeatAntibodyDistributor(seat_id="gateway")
+    swarm_antifragility_engine = SwarmAntiFragilityEngine(swarm_antibody_distributor)
+    runtime_reconstitution_supervisor = RuntimeReconstitutionSupervisor(swarm_antifragility_engine)
+    depin_orchestrator = VerifiableResourceOrchestrator()
+    depin_ledger = DePINResourceLedger()
+    depin_anchor_exporter = DePINAnchorExporter()
+
+    mcp._swarm_antibody_distributor = swarm_antibody_distributor  # type: ignore[attr-defined]
+    mcp._swarm_antifragility_engine = swarm_antifragility_engine  # type: ignore[attr-defined]
+    mcp._runtime_reconstitution_supervisor = runtime_reconstitution_supervisor  # type: ignore[attr-defined]
+    mcp._depin_orchestrator = depin_orchestrator  # type: ignore[attr-defined]
+    mcp._depin_ledger = depin_ledger  # type: ignore[attr-defined]
+    mcp._depin_anchor_exporter = depin_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/immune/mesh/antibodies", methods=["GET"])
+    async def immune_mesh_antibodies_list_route(_request: Request) -> Response:
+        antibodies = [ab.to_dict() for ab in swarm_antibody_distributor.antibodies.values()]
+        return JSONResponse({"ok": True, "antibodies": antibodies})
+
+    @mcp.custom_route("/v1/immune/mesh/antibodies/create", methods=["POST"])
+    async def immune_mesh_antibodies_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        vtype_str = body.get("vector_type", "byzantine_injection")
+        pattern_str = body.get("indicator_pattern", "UNAUTHORIZED_OP")
+        mitigation_str = body.get("mitigation", "quarantine_isolate")
+        severity_str = body.get("severity", "high")
+        fitness = float(body.get("fitness_score", 0.85))
+
+        try:
+            vtype = ThreatVectorType(vtype_str.lower())
+        except ValueError:
+            vtype = ThreatVectorType.BYZANTINE_INJECTION
+
+        try:
+            mitigation = MitigationAction(mitigation_str.lower())
+        except ValueError:
+            mitigation = MitigationAction.QUARANTINE_ISOLATE
+
+        try:
+            severity = ThreatSeverity(severity_str.lower())
+        except ValueError:
+            severity = ThreatSeverity.HIGH
+
+        ab = swarm_antibody_distributor.create_and_sign(
+            vector_type=vtype,
+            indicator_pattern=pattern_str,
+            mitigation=mitigation,
+            severity=severity,
+            fitness_score=fitness,
+        )
+        return JSONResponse({"ok": True, "antibody": ab.to_dict()})
+
+    @mcp.custom_route("/v1/immune/mesh/perturb", methods=["POST"])
+    async def immune_mesh_perturb_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "bot-02-web-edge")
+        vtype_str = body.get("vector_type", "latency_poisoning")
+        payload = body.get("payload", "BENCHMARK_PROBE")
+        entropy = float(body.get("entropy", 0.5))
+
+        try:
+            vtype = ThreatVectorType(vtype_str.lower())
+        except ValueError:
+            vtype = ThreatVectorType.LATENCY_POISONING
+
+        res = swarm_antifragility_engine.inject_chaos_perturbation(
+            target_seat=seat_id,
+            vector_type=vtype,
+            attack_payload=payload,
+            simulated_entropy=entropy,
+        )
+        return JSONResponse({"ok": True, "perturbation": res})
+
+    @mcp.custom_route("/v1/immune/mesh/reconstitute", methods=["POST"])
+    async def immune_mesh_reconstitute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "bot-02-web-edge")
+        reconstitution = runtime_reconstitution_supervisor.reconstitute_seat(seat_id)
+        return JSONResponse({"ok": True, "reconstitution": reconstitution})
+
+    @mcp.custom_route("/v1/depin/nodes", methods=["GET"])
+    async def depin_nodes_list_route(_request: Request) -> Response:
+        nodes = [n.to_dict() for n in depin_orchestrator.nodes.values()]
+        return JSONResponse({"ok": True, "nodes": nodes})
+
+    @mcp.custom_route("/v1/depin/lease", methods=["POST"])
+    async def depin_lease_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("consumer_seat", "lead")
+        rtype_str = body.get("resource_type", "gpu_cluster")
+        units = float(body.get("units", 100.0))
+        duration = float(body.get("duration_seconds", 3600.0))
+
+        try:
+            rtype = PhysicalResourceType(rtype_str.lower())
+        except ValueError:
+            rtype = PhysicalResourceType.GPU_CLUSTER
+
+        lease = depin_orchestrator.allocate_lease(
+            consumer_seat=seat_id,
+            resource_type=rtype,
+            required_units=units,
+            duration_seconds=duration,
+        )
+        if not lease:
+            return JSONResponse({"ok": False, "error": "insufficient_capacity"}, status_code=400)
+
+        depin_ledger.append_event("LEASE_ALLOCATION", lease.to_dict())
+        return JSONResponse({"ok": True, "lease": lease.to_dict()})
+
+    @mcp.custom_route("/v1/depin/popw/generate", methods=["POST"])
+    async def depin_popw_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "depin-us-east-gpu-0")
+        work_units = float(body.get("work_units", 50.0))
+        workload = body.get("workload_payload", "TENSOR_GEMM_1024")
+        elapsed = float(body.get("elapsed_ms", 25.0))
+
+        try:
+            popw = depin_orchestrator.generate_proof_of_physical_work(
+                node_id=node_id,
+                work_units=work_units,
+                workload_payload=workload,
+                elapsed_ms=elapsed,
+            )
+        except ValueError as err:
+            return JSONResponse({"ok": False, "error": str(err)}, status_code=404)
+
+        depin_ledger.append_event("POPW_VERIFIED", popw.to_dict())
+        return JSONResponse({"ok": True, "proof": popw.to_dict()})
+
+    @mcp.custom_route("/v1/depin/anchor/export", methods=["POST"])
+    async def depin_anchor_export_route(_request: Request) -> Response:
+        commitment = depin_anchor_exporter.export_commitment(depin_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/immune/drill/simulate", methods=["POST"])
+    async def immune_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SwarmImmuneDePINDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.9 (Phases 64 & 65): Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
+    from desk_gateway.sagin_orbital_mesh import (
+        BundlePriority,
+        ContactGraphRouter,
+        ContactPlanEntry,
+        CustodialStorageManager,
+        DelayTolerantBundle,
+        DopplerTelemetryTracker,
+        OrbitalEphemeris,
+    )
+    from desk_gateway.sagin_downlink_consensus import (
+        GroundStationNode,
+        IntermittentGroundConsensusEngine,
+        MultiConstellationDownlinkManager,
+        SAGINAnchorExporter,
+        SAGINOrbitalVerificationDrillSimulator,
+        SatelliteMerkleReceiptLedger,
+    )
+
+    sagin_cgr = ContactGraphRouter(local_eid="dtn://gateway-orbital-0")
+    sagin_custody = CustodialStorageManager(custodian_eid="dtn://gateway-orbital-0")
+    sagin_downlink_mgr = MultiConstellationDownlinkManager()
+    sagin_consensus = IntermittentGroundConsensusEngine()
+    sagin_ledger = SatelliteMerkleReceiptLedger()
+    sagin_anchor_exporter = SAGINAnchorExporter()
+
+    # Pre-populate sample ephemeris and contact plan for demonstration / testing
+    sat_sample = OrbitalEphemeris("sat-starlink-leo-01", "Starlink-Gen2", 550.0, 53.0)
+    sagin_cgr.register_ephemeris(sat_sample)
+    now_ts = time.time()
+    sagin_cgr.add_contact(ContactPlanEntry("contact-01", "dtn://gateway-orbital-0", "dtn://gs-svalbard-01", now_ts, now_ts + 3600, 50000.0))
+
+    mcp._sagin_cgr = sagin_cgr  # type: ignore[attr-defined]
+    mcp._sagin_custody = sagin_custody  # type: ignore[attr-defined]
+    mcp._sagin_downlink_mgr = sagin_downlink_mgr  # type: ignore[attr-defined]
+    mcp._sagin_consensus = sagin_consensus  # type: ignore[attr-defined]
+    mcp._sagin_ledger = sagin_ledger  # type: ignore[attr-defined]
+    mcp._sagin_anchor_exporter = sagin_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/sagin/ephemeris/contact_window", methods=["POST"])
+    async def sagin_ephemeris_window_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        constellation = body.get("constellation", "Starlink-Gen2")
+        alt = float(body.get("altitude_km", 550.0))
+        inc = float(body.get("inclination_deg", 53.0))
+        lat = float(body.get("station_latitude", 78.22))
+        lon = float(body.get("station_longitude", 15.65))
+
+        ephem = OrbitalEphemeris(satellite_id=sat_id, constellation=constellation, altitude_km=alt, inclination_deg=inc)
+        window = ephem.calculate_contact_window(lat, lon)
+        return JSONResponse({"ok": True, "contact_window": window})
+
+    @mcp.custom_route("/v1/sagin/doppler/shift", methods=["POST"])
+    async def sagin_doppler_shift_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        carrier_ghz = float(body.get("carrier_frequency_ghz", 28.5))
+        rel_vel = float(body.get("relative_velocity_km_s", 7.2))
+        res = DopplerTelemetryTracker.compute_doppler_shift(carrier_ghz, rel_vel)
+        return JSONResponse({"ok": True, "doppler": res})
+
+    @mcp.custom_route("/v1/sagin/bundle/route", methods=["POST"])
+    async def sagin_bundle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://gateway-orbital-0")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "TELEMETRY_PAYLOAD")
+        prio_str = body.get("priority", "normal")
+
+        try:
+            prio = BundlePriority(prio_str.lower())
+        except ValueError:
+            prio = BundlePriority.NORMAL
+
+        bundle = DelayTolerantBundle(
+            bundle_id=bundle_id,
+            source_eid=source_eid,
+            destination_eid=dest_eid,
+            payload_raw=payload,
+            priority=prio,
+        )
+        route_result = sagin_cgr.route_bundle(bundle)
+        return JSONResponse({"ok": True, "route_result": route_result, "bundle": bundle.to_dict()})
+
+    @mcp.custom_route("/v1/sagin/custody/accept", methods=["POST"])
+    async def sagin_custody_accept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://sat-relay-1")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "ORBITAL_IMAGERY_STREAM")
+
+        bundle = DelayTolerantBundle(bundle_id=bundle_id, source_eid=source_eid, destination_eid=dest_eid, payload_raw=payload)
+        rcpt = sagin_custody.accept_custody(bundle)
+        sagin_ledger.append_event("CUSTODY_ACCEPTED", source_eid, sagin_custody.custodian_eid, rcpt)
+        return JSONResponse({"ok": True, "custody_receipt": rcpt})
+
+    @mcp.custom_route("/v1/sagin/downlink/session", methods=["POST"])
+    async def sagin_downlink_session_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        station_id = body.get("station_id", "gs-svalbard-01")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        ephem = sagin_cgr.ephemeris_registry.get(sat_id) or OrbitalEphemeris(sat_id, "Starlink-Gen2", 550.0, 53.0)
+        session = sagin_downlink_mgr.initiate_downlink_session(station_id, ephem)
+        return JSONResponse({"ok": True, "downlink_session": session})
+
+    @mcp.custom_route("/v1/sagin/consensus/propose", methods=["POST"])
+    async def sagin_consensus_propose_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", f"batch-{secrets.token_hex(4)}")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        state_root = body.get("state_root", secrets.token_hex(32))
+        digests = body.get("downlink_digests", [secrets.token_hex(32)])
+        station_id = body.get("proposer_station", "gs-svalbard-01")
+
+        batch = sagin_consensus.propose_orbital_batch(batch_id, sat_id, state_root, digests, station_id)
+        return JSONResponse({"ok": True, "batch": batch})
+
+    @mcp.custom_route("/v1/sagin/consensus/ballot", methods=["POST"])
+    async def sagin_consensus_ballot_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", "")
+        station_id = body.get("station_id", "gs-singapore-01")
+        vote = body.get("vote", "APPROVE")
+        res = sagin_consensus.submit_ballot(batch_id, station_id, vote)
+        if res.get("is_committed"):
+            sagin_ledger.append_event("CONSENSUS_COMMITTED", "swarm-constellation", station_id, res)
+        return JSONResponse({"ok": True, "ballot_result": res})
+
+    @mcp.custom_route("/v1/sagin/anchor/export", methods=["POST"])
+    async def sagin_anchor_export_route(_request: Request) -> Response:
+        commitment = sagin_anchor_exporter.export_commitment(sagin_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/sagin/drill/simulate", methods=["POST"])
+    async def sagin_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SAGINOrbitalVerificationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.0 (Phases 66 & 67): Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
+    from desk_gateway.quantum_hybrid_mesh import (
+        AnsatzCircuit,
+        HamiltonianOperator,
+        NoiseModel,
+        QAOAOptimizer,
+        QuantumCircuitState,
+        QuantumDecoherenceSimulator,
+        QuantumGate,
+        QuantumGateType,
+        QuantumWorkloadScheduler,
+        VQEProcessor,
+    )
+    from desk_gateway.quantum_topological_mesh import (
+        MWPMDecoder,
+        QuantumAnchorExporter,
+        QuantumStateReceiptLedger,
+        QuantumTopologicalDrillSimulator,
+        SurfaceCodeLattice,
+        SyndromeExtractor,
+    )
+
+    quantum_scheduler = QuantumWorkloadScheduler()
+    quantum_decoherence = QuantumDecoherenceSimulator()
+    quantum_ledger = QuantumStateReceiptLedger()
+    quantum_anchor_exporter = QuantumAnchorExporter()
+
+    mcp._quantum_scheduler = quantum_scheduler  # type: ignore[attr-defined]
+    mcp._quantum_decoherence = quantum_decoherence  # type: ignore[attr-defined]
+    mcp._quantum_ledger = quantum_ledger  # type: ignore[attr-defined]
+    mcp._quantum_anchor_exporter = quantum_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/circuit/simulate", methods=["POST"])
+    async def quantum_circuit_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        gates_data = body.get("gates", [])
+
+        circuit = QuantumCircuitState(num_qubits=num_qubits)
+        for g_dict in gates_data:
+            gtype = QuantumGateType(g_dict.get("gate_type", "H"))
+            targets = g_dict.get("target_qubits", [0])
+            controls = g_dict.get("control_qubits", [])
+            params = g_dict.get("parameters", [])
+            gate = QuantumGate(gtype, targets, controls, params)
+            circuit.apply_gate(gate)
+
+        return JSONResponse({"ok": True, "circuit": circuit.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/vqe/solve", methods=["POST"])
+    async def quantum_vqe_solve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        terms = body.get("hamiltonian_terms", [{"coefficient": -1.0, "pauli_string": "Z Z"}])
+        layers = int(body.get("layers", 1))
+        max_iters = int(body.get("max_iterations", 15))
+
+        h = HamiltonianOperator()
+        for t in terms:
+            h.add_term(float(t["coefficient"]), str(t["pauli_string"]))
+
+        ansatz = AnsatzCircuit(num_qubits=num_qubits, num_layers=layers)
+        vqe = VQEProcessor(h, ansatz)
+        opt_res = vqe.optimize(max_iterations=max_iters)
+
+        quantum_ledger.append_event("VQE_CONVERGED", opt_res["final_state_digest"], 0, 0)
+        return JSONResponse({"ok": True, "vqe": opt_res})
+
+    @mcp.custom_route("/v1/quantum/qaoa/partition", methods=["POST"])
+    async def quantum_qaoa_partition_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 3))
+        edges_raw = body.get("edges", [[[0, 1], 1.0], [[1, 2], 1.0]])
+        gammas = [float(x) for x in body.get("gammas", [0.3])]
+        betas = [float(x) for x in body.get("betas", [0.4])]
+
+        weights = {(int(e[0][0]), int(e[0][1])): float(e[1]) for e in edges_raw}
+        qaoa = QAOAOptimizer(num_qubits=num_qubits, p_steps=len(gammas))
+        res = qaoa.solve_partition(weights, gammas, betas)
+        return JSONResponse({"ok": True, "qaoa": res})
+
+    @mcp.custom_route("/v1/quantum/schedule/dispatch", methods=["POST"])
+    async def quantum_schedule_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_name = body.get("task_name", "q-vqe-ground-state")
+        circuit_type = body.get("circuit_type", "ansatz-hea")
+        num_qubits = int(body.get("num_qubits", 2))
+        params = body.get("params", {})
+
+        task = quantum_scheduler.dispatch_quantum_task(task_name, circuit_type, num_qubits, params)
+        return JSONResponse({"ok": True, "task": task})
+
+    @mcp.custom_route("/v1/quantum/surface-code/syndrome", methods=["POST"])
+    async def quantum_surface_code_syndrome_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        distance = int(body.get("distance", 3))
+        errors = body.get("inject_errors", [{"row": 1, "col": 1, "error": "X"}])
+
+        lattice = SurfaceCodeLattice(distance=distance)
+        for err in errors:
+            lattice.inject_physical_error(int(err["row"]), int(err["col"]), str(err["error"]))
+
+        extractor = SyndromeExtractor(lattice)
+        syndromes = extractor.extract_syndrome()
+
+        decoder = MWPMDecoder(lattice)
+        corrections = decoder.decode_syndromes(syndromes)
+        post_syndromes = extractor.extract_syndrome()
+
+        rcpt = quantum_ledger.append_event(
+            "SURFACE_CODE_CORRECTION",
+            hashlib.sha256(json.dumps(lattice.to_dict()).encode("utf-8")).hexdigest(),
+            len([s for s in syndromes if s.syndrome_bit == -1]),
+            len(corrections),
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "lattice": lattice.to_dict(),
+            "defects_count": len([s for s in syndromes if s.syndrome_bit == -1]),
+            "corrections": [{"qubit_id": c.qubit_id, "correction": c.pauli_correction} for c in corrections],
+            "resolved": all(s.syndrome_bit == 1 for s in post_syndromes),
+            "receipt": rcpt.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/anchor/export", methods=["POST"])
+    async def quantum_anchor_export_route(_request: Request) -> Response:
+        commitment = quantum_anchor_exporter.export_commitment(quantum_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/drill/simulate", methods=["POST"])
+    async def quantum_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTopologicalDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.1 (Phases 68 & 69): Inter-Cluster Quantum Teleportation, QKD & Entangled Swarm Mesh
+    from desk_gateway.quantum_teleportation import (
+        BellPairPool,
+        BellStateType,
+        EntanglementPurifier,
+        EntanglementSwapper,
+        QuantumRepeaterMesh,
+        QuantumTeleportationProtocol,
+    )
+    from desk_gateway.quantum_qkd_mesh import (
+        EavesdropDetector,
+        QKDProtocolEngine,
+        QuantumTeleportationAnchorExporter,
+        QuantumTeleportationDrillSimulator,
+        QuantumTeleportationReceiptLedger,
+    )
+
+    qteleport_pool = BellPairPool()
+    qteleport_mesh = QuantumRepeaterMesh(qteleport_pool)
+    qteleport_proto = QuantumTeleportationProtocol(qteleport_mesh)
+    qkd_engine = QKDProtocolEngine(qteleport_mesh)
+    qteleport_ledger = QuantumTeleportationReceiptLedger()
+    qteleport_exporter = QuantumTeleportationAnchorExporter()
+
+    mcp._qteleport_pool = qteleport_pool  # type: ignore[attr-defined]
+    mcp._qteleport_mesh = qteleport_mesh  # type: ignore[attr-defined]
+    mcp._qteleport_proto = qteleport_proto  # type: ignore[attr-defined]
+    mcp._qkd_engine = qkd_engine  # type: ignore[attr-defined]
+    mcp._qteleport_ledger = qteleport_ledger  # type: ignore[attr-defined]
+    mcp._qteleport_exporter = qteleport_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/teleportation/bell-pair/create", methods=["POST"])
+    async def quantum_bell_pair_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        node_b = body.get("node_b", "desk-beta")
+        stype_raw = body.get("state_type", "PHI_PLUS")
+        try:
+            stype = BellStateType(stype_raw)
+        except ValueError:
+            stype = BellStateType.PHI_PLUS
+        fidelity = float(body.get("initial_fidelity", 0.99))
+        pair = qteleport_pool.create_pair(node_a, node_b, stype, fidelity)
+        return JSONResponse({"ok": True, "bell_pair": pair.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/purify", methods=["POST"])
+    async def quantum_teleportation_purify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pair_id_1 = body.get("pair_id_1", "")
+        pair_id_2 = body.get("pair_id_2", "")
+        p1 = qteleport_pool.get_pair(pair_id_1)
+        p2 = qteleport_pool.get_pair(pair_id_2)
+        if not p1 or not p2:
+            return JSONResponse({"ok": False, "error": "Bell pairs not found"}, status_code=404)
+        ok, purified, p_succ = EntanglementPurifier.purify(p1, p2)
+        if ok and purified:
+            qteleport_pool.pairs[purified.pair_id] = purified
+            return JSONResponse({"ok": True, "purified_pair": purified.to_dict(), "p_succ": p_succ})
+        return JSONResponse({"ok": False, "error": "Purification distillation failed"}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/repeater/route", methods=["POST"])
+    async def quantum_repeater_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_path = body.get("node_path", ["desk-alpha", "repeater-1", "desk-beta"])
+        base_fidelity = float(body.get("base_fidelity", 0.98))
+        purify = bool(body.get("purify", True))
+        ok, pair, logs = qteleport_mesh.establish_multi_hop_entanglement(node_path, base_fidelity, purify)
+        return JSONResponse({
+            "ok": ok,
+            "bell_pair": pair.to_dict() if pair else None,
+            "logs": logs,
+        })
+
+    @mcp.custom_route("/v1/quantum/teleportation/teleport", methods=["POST"])
+    async def quantum_teleportation_teleport_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source_node = body.get("source_node", "desk-alpha")
+        target_node = body.get("target_node", "desk-beta")
+        alpha_val = body.get("alpha", {"real": 1.0, "imag": 0.0})
+        beta_val = body.get("beta", {"real": 0.0, "imag": 0.0})
+        alpha = complex(float(alpha_val.get("real", 1.0)), float(alpha_val.get("imag", 0.0)))
+        beta = complex(float(beta_val.get("real", 0.0)), float(beta_val.get("imag", 0.0)))
+        intermediate_hops = body.get("intermediate_hops")
+
+        res = qteleport_proto.teleport_qubit(
+            source_node=source_node,
+            target_node=target_node,
+            alpha=alpha,
+            beta=beta,
+            intermediate_hops=intermediate_hops,
+        )
+        rcpt = qteleport_ledger.append_event(
+            "QUANTUM_TELEPORTATION",
+            [source_node, target_node],
+            res.session_id,
+            res.fidelity,
+            res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/bb84", methods=["POST"])
+    async def quantum_qkd_bb84_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        bit_length = int(body.get("bit_length", 128))
+        intercept_ratio = float(body.get("intercept_ratio", 0.0))
+
+        session = qkd_engine.run_bb84_exchange(sender, receiver, bit_length, intercept_ratio)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_BB84_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/e91", methods=["POST"])
+    async def quantum_qkd_e91_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        pair_count = int(body.get("pair_count", 100))
+        noise_level = float(body.get("noise_level", 0.01))
+
+        session = qkd_engine.run_e91_exchange(sender, receiver, pair_count, noise_level)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_E91_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/anchor/export", methods=["POST"])
+    async def quantum_teleportation_anchor_export_route(_request: Request) -> Response:
+        commitment = qteleport_exporter.export_commitment(qteleport_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/teleportation/drill/simulate", methods=["POST"])
+    async def quantum_teleportation_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTeleportationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+
+    @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
+    async def swarm_telemetry_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        active_jobs = int(body.get("active_jobs", 0))
+        latency_ms = float(body.get("latency_ms", 10.0))
+        queue_depth = body.get("queue_depth")
+        max_concurrency = body.get("max_concurrency")
+        status = swarm_balancer.record_telemetry(
+            seat_id=seat_id,
+            active_jobs=active_jobs,
+            latency_ms=latency_ms,
+            queue_depth=int(queue_depth) if queue_depth is not None else None,
+            max_concurrency=int(max_concurrency) if max_concurrency is not None else None,
+        )
+        return JSONResponse({
+            "ok": True,
+            "seat_id": status.seat_id,
+            "active_jobs": status.active_jobs,
+            "max_concurrency": status.max_concurrency,
+            "latency_ms": status.latency_ms,
+            "capacity_score": round(status.capacity_score, 2),
+            "circuit_state": status.circuit_state.value,
+        })
+
+    @mcp.custom_route("/v1/swarm/dispatch", methods=["POST"])
+    async def swarm_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        target_seat = body.get("target_seat", "lead")
+        priority_str = body.get("priority", "normal")
+        try:
+            priority = TaskPriority(priority_str.lower())
+        except ValueError:
+            priority = TaskPriority.NORMAL
+        fallback_seats = body.get("fallback_seats", [])
+        payload = body.get("payload", {})
+
+        assignment = SwarmTaskAssignment(
+            task_id=task_id,
+            target_seat=target_seat,
+            priority=priority,
+            payload=payload,
+            fallback_seats=fallback_seats,
+        )
+        result = swarm_balancer.dispatch_task(assignment)
+        return JSONResponse(result)
+
+    @mcp.custom_route("/v1/swarm/complete", methods=["POST"])
+    async def swarm_complete_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        swarm_balancer.complete_task(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id})
+
+    @mcp.custom_route("/v1/swarm/failure", methods=["POST"])
+    async def swarm_failure_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        circuit_state = swarm_balancer.record_failure(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "circuit_state": circuit_state.value})
+
+    @mcp.custom_route("/v1/swarm/status", methods=["GET"])
+    async def swarm_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **swarm_balancer.get_status()})
+
+    @mcp.custom_route("/v1/swarm/reset-breaker", methods=["POST"])
+    async def swarm_reset_breaker_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        success = swarm_balancer.reset_breaker(seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "reset": success})
+
+    # Hierarchical Subagent Delegation (Phase 23)
+    @mcp.custom_route("/v1/swarm/delegation/create", methods=["POST"])
+    async def swarm_delegation_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        parent_task_id = body.get("parent_task_id")
+        title = body.get("title", "delegated_task")
+        delegator_seat = body.get("delegator_seat", "lead")
+        delegatee_seat = body.get("delegatee_seat", "systems")
+        payload = body.get("payload", {})
+        try:
+            if parent_task_id:
+                node = delegation_mesh.decompose_subtask(
+                    parent_task_id=parent_task_id,
+                    subtask_id=task_id,
+                    title=title,
+                    delegator_seat=delegator_seat,
+                    delegatee_seat=delegatee_seat,
+                    payload=payload,
+                )
+            else:
+                node = delegation_mesh.create_root_task(
+                    task_id=task_id,
+                    title=title,
+                    delegator_seat=delegator_seat,
+                    delegatee_seat=delegatee_seat,
+                    payload=payload,
+                )
+            receipt = delegation_mesh.offer_delegation(
+                task_id=task_id,
+                delegator_seat=delegator_seat,
+                delegatee_seat=delegatee_seat,
+            )
+            return JSONResponse({
+                "ok": True,
+                "task_id": node.task_id,
+                "parent_task_id": node.parent_task_id,
+                "depth": node.depth,
+                "delegator_signature": receipt.delegator_signature,
+                "state": receipt.state.value,
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/accept", methods=["POST"])
+    async def swarm_delegation_accept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        delegatee_seat = body.get("delegatee_seat", "")
+        signature = body.get("signature")
+        try:
+            receipt = delegation_mesh.accept_delegation(task_id, delegatee_seat, signature)
+            return JSONResponse({
+                "ok": True,
+                "task_id": receipt.task_id,
+                "delegatee_signature": receipt.delegatee_signature,
+                "state": receipt.state.value,
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/complete", methods=["POST"])
+    async def swarm_delegation_complete_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        delegatee_seat = body.get("delegatee_seat", "")
+        try:
+            receipt = delegation_mesh.complete_delegation(task_id, delegatee_seat)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/dispute", methods=["POST"])
+    async def swarm_delegation_dispute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        reporter_seat = body.get("reporter_seat", "lead")
+        reason = body.get("reason", "Byzantine anomaly detected")
+        try:
+            receipt = delegation_mesh.raise_dispute(task_id, reporter_seat, reason)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/arbitrate", methods=["POST"])
+    async def swarm_delegation_arbitrate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        ruling = body.get("ruling", "Task revoked and reclaimed to pool")
+        arbitrator_seat = body.get("arbitrator_seat", "lead")
+        try:
+            receipt = delegation_mesh.arbitrate_dispute(task_id, ruling, arbitrator_seat)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value, "ruling": receipt.ruling})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/audit/{root_task_id}", methods=["GET"])
+    async def swarm_delegation_audit_route(request: Request) -> Response:
+        root_task_id = request.path_params.get("root_task_id", "")
+        try:
+            proof = delegation_mesh.generate_tree_audit_receipt(root_task_id)
+            return JSONResponse({"ok": True, **proof})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    # Disaster Recovery & State Mirroring (Phase 24)
+    @mcp.custom_route("/v1/dr/mirror/block", methods=["POST"])
+    async def dr_mirror_block_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload = body.get("payload", {})
+        block = dr_engine.append_state_delta(payload)
+        return JSONResponse({
+            "ok": True,
+            "block_index": block.block_index,
+            "block_hash": block.block_hash,
+            "prev_hash": block.prev_hash,
+            "timestamp": block.timestamp,
+            "is_throttled": dr_engine.is_throttled,
+        })
+
+    @mcp.custom_route("/v1/dr/mirror/status", methods=["GET"])
+    async def dr_mirror_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **dr_engine.get_mirror_status()})
+
+    @mcp.custom_route("/v1/dr/replica/register", methods=["POST"])
+    async def dr_replica_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        replica_id = body.get("replica_id", "warm-standby-1")
+        region = body.get("region", "us-east")
+        replica = dr_engine.register_replica(replica_id=replica_id, region=region)
+        return JSONResponse({
+            "ok": True,
+            "replica_id": replica.replica_id,
+            "region": replica.region,
+            "state": replica.state.value,
+        })
+
+    @mcp.custom_route("/v1/dr/replica/sync", methods=["POST"])
+    async def dr_replica_sync_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        replica_id = body.get("replica_id", "")
+        up_to_index = body.get("up_to_index")
+        try:
+            synced = dr_engine.sync_replica(
+                replica_id=replica_id,
+                up_to_index=int(up_to_index) if up_to_index is not None else None,
+            )
+            return JSONResponse({
+                "ok": True,
+                "replica_id": replica_id,
+                "synced_blocks_count": len(synced),
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/dr/cutover", methods=["POST"])
+    async def dr_cutover_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        target_replica_id = body.get("target_replica_id", "")
+        try:
+            result = dr_engine.execute_atomic_cutover(target_replica_id)
+            return JSONResponse(result)
+        except (KeyError, RuntimeError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    # Split-Brain Protection & Fast RTO Recovery (Phase 25)
+    @mcp.custom_route("/v1/dr/fencing/allocate", methods=["POST"])
+    async def dr_fencing_allocate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "candidate-node")
+        token = fencing_allocator.allocate(node_id)
+        return JSONResponse({"ok": True, "token": token.to_dict()})
+
+    @mcp.custom_route("/v1/dr/fencing/validate", methods=["POST"])
+    async def dr_fencing_validate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        epoch = int(body.get("epoch", 0))
+        cluster_gen_id = body.get("cluster_gen_id", "")
+        valid, msg = fencing_allocator.validate(epoch, cluster_gen_id)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/dr/quorum/heartbeat", methods=["POST"])
+    async def dr_quorum_heartbeat_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "node-1")
+        quorum_evaluator.record_heartbeat(node_id)
+        state, alive, total = quorum_evaluator.evaluate_quorum()
+        return JSONResponse({
+            "ok": True,
+            "quorum_state": state.value,
+            "alive_nodes": alive,
+            "total_nodes": total,
+        })
+
+    @mcp.custom_route("/v1/dr/reconcile", methods=["POST"])
+    async def dr_reconcile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        entry_a = body.get("entry_a", {})
+        entry_b = body.get("entry_b", {})
+        winner = vector_reconciler.reconcile(entry_a, entry_b)
+        return JSONResponse({"ok": True, "winner": winner})
+
+    @mcp.custom_route("/v1/dr/drill/run", methods=["POST"])
+    async def dr_drill_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        drill_id = body.get("drill_id", f"drill-{secrets.token_hex(4)}")
+        candidate_node = body.get("candidate_node", "node-2")
+        receipt = drill_verifier.run_drill(drill_id=drill_id, candidate_node=candidate_node)
+        valid = drill_verifier.verify_receipt(receipt)
+        return JSONResponse({
+            "ok": True,
+            "valid": valid,
+            "receipt": {
+                "drill_id": receipt.drill_id,
+                "scenario": receipt.scenario,
+                "simulated_failure_node": receipt.simulated_failure_node,
+                "promoted_node": receipt.promoted_node,
+                "rto_ms": receipt.rto_ms,
+                "rpo_loss_blocks": receipt.rpo_loss_blocks,
+                "passed": receipt.passed,
+                "receipt_hash": receipt.receipt_hash,
+                "signature": receipt.signature,
+            }
+        })
+
+    # Zero-Trust Security & Enclave Attestation (Phase 26)
+    @mcp.custom_route("/v1/zero-trust/claim/issue", methods=["POST"])
+    async def zt_token_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        ttl = body.get("ttl_seconds")
+        cred = zero_trust_mgr.issue_ephemeral_token(
+            seat_id=seat_id,
+            ttl_seconds=float(ttl) if ttl is not None else None,
+        )
+        return JSONResponse({
+            "ok": True,
+            "token_id": cred.token_id,
+            "seat_id": cred.seat_id,
+            "expires_at": cred.expires_at,
+            "ttl_seconds": cred.ttl_seconds,
+            "signature": cred.signature,
+        })
+
+    @mcp.custom_route("/v1/zero-trust/claim/validate", methods=["POST"])
+    async def zt_token_validate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        token_id = body.get("claim_id") or body.get("token_id", "")
+        seat_id = body.get("seat_id", "")
+        valid, msg = zero_trust_mgr.validate_ephemeral_token(token_id=token_id, seat_id=seat_id)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/cert/issue", methods=["POST"])
+    async def zt_cert_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        pk_pem = body.get("public_key_pem", f"PUBLIC_KEY_{seat_id}")
+        cert = zero_trust_mgr.issue_seat_cert(seat_id=seat_id, public_key_pem=pk_pem)
+        return JSONResponse({
+            "ok": True,
+            "serial_number": cert.serial_number,
+            "seat_id": cert.seat_id,
+            "public_key_hash": cert.public_key_hash,
+            "expires_at": cert.expires_at,
+            "fingerprint": cert.fingerprint,
+        })
+
+    @mcp.custom_route("/v1/zero-trust/attestation/verify", methods=["POST"])
+    async def zt_attestation_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        report = AttestationReport(
+            enclave_id=body.get("enclave_id", "lead"),
+            measurement_hash=body.get("measurement_hash", ""),
+            platform_nonce=body.get("platform_nonce", secrets.token_hex(8)),
+            timestamp=float(body.get("timestamp", time.time())),
+            signature=body.get("signature", "sig"),
+        )
+        valid, msg = zero_trust_mgr.verify_attestation_report(report)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/posture/evaluate", methods=["POST"])
+    async def zt_posture_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "standard_tool")
+        is_sensitive = bool(body.get("is_sensitive", False))
+        valid, msg = zero_trust_mgr.evaluate_tool_invocation_posture(
+            seat_id=seat_id,
+            tool_name=tool_name,
+            is_sensitive=is_sensitive,
+        )
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/zero-trust/revoke", methods=["POST"])
+    async def zt_revoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        token_id = body.get("token_id")
+        serial = body.get("serial_number")
+        reason = body.get("reason", "admin_revocation")
+        if token_id:
+            zero_trust_mgr.revoke_token(token_id, reason=reason)
+        if serial:
+            zero_trust_mgr.revoke_cert(serial, reason=reason)
+        return JSONResponse({"ok": True, "crl": zero_trust_mgr.get_crl()})
+
+    @mcp.custom_route("/v1/zero-trust/crl", methods=["GET"])
+    async def zt_crl_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **zero_trust_mgr.get_crl()})
+
+    # Merkle Proof Verification & Immutable Audit Export (Phase 27)
+    @mcp.custom_route("/v1/audit/merkle/append", methods=["POST"])
+    async def audit_merkle_append_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        operation = body.get("operation", "system_event")
+        payload = body.get("payload", {})
+        leaf = merkle_tree.append_leaf(seat_id=seat_id, operation=operation, payload=payload)
+        return JSONResponse({
+            "ok": True,
+            "leaf_index": leaf.index,
+            "leaf_hash": leaf.leaf_hash,
+            "merkle_root": merkle_tree.get_root_hash(),
+            "total_leaves": len(merkle_tree.leaves),
+        })
+
+    @mcp.custom_route("/v1/audit/merkle/root", methods=["GET"])
+    async def audit_merkle_root_route(request: Request) -> Response:
+        return JSONResponse({
+            "ok": True,
+            "merkle_root": merkle_tree.get_root_hash(),
+            "total_leaves": len(merkle_tree.leaves),
+        })
+
+    @mcp.custom_route("/v1/audit/merkle/proof", methods=["POST"])
+    async def audit_merkle_proof_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        leaf_index = int(body.get("leaf_index", 0))
+        try:
+            target_hash, proof_path = merkle_tree.generate_inclusion_proof(leaf_index)
+            return JSONResponse({
+                "ok": True,
+                "leaf_index": leaf_index,
+                "target_hash": target_hash,
+                "proof_path": proof_path,
+                "merkle_root": merkle_tree.get_root_hash(),
+            })
+        except IndexError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/audit/merkle/verify", methods=["POST"])
+    async def audit_merkle_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        leaf_hash = body.get("leaf_hash", "")
+        proof_path = body.get("proof_path", [])
+        expected_root = body.get("expected_root", "")
+        valid = IncrementalMerkleTree.verify_inclusion_proof(leaf_hash, proof_path, expected_root)
+        return JSONResponse({"ok": True, "valid": valid})
+
+    @mcp.custom_route("/v1/audit/export/anchor", methods=["POST"])
+    async def audit_export_anchor_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", f"batch-{secrets.token_hex(4)}")
+        target = body.get("anchor_target", "solana_devnet")
+        root = merkle_tree.get_root_hash()
+        count = len(merkle_tree.leaves)
+        start_t = merkle_tree.leaves[0].timestamp if merkle_tree.leaves else time.time()
+        end_t = merkle_tree.leaves[-1].timestamp if merkle_tree.leaves else time.time()
+        batch = audit_exporter.export_anchor(
+            batch_id=batch_id,
+            merkle_root=root,
+            leaf_count=count,
+            start_t=start_t,
+            end_t=end_t,
+            anchor_target=target,
+        )
+        return JSONResponse({
+            "ok": True,
+            "batch_id": batch.batch_id,
+            "merkle_root": batch.merkle_root,
+            "leaf_count": batch.leaf_count,
+            "anchor_target": batch.anchor_target,
+            "signature": batch.signature,
+        })
+
+    @mcp.custom_route("/v1/audit/scrub", methods=["POST"])
+    async def audit_scrub_route(request: Request) -> Response:
+        passed, anomalies = AuditLogScrubber.scrub(merkle_tree.leaves)
+        return JSONResponse({"ok": True, "passed": passed, "anomalies": anomalies})
+
+    @mcp.custom_route("/v1/audit/compliance/drill", methods=["POST"])
+    async def audit_compliance_drill_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_id = body.get("receipt_id", f"receipt-{secrets.token_hex(4)}")
+        receipt = compliance_verifier.run_compliance_drill(receipt_id=receipt_id)
+        valid = compliance_verifier.verify_compliance_receipt(receipt)
+        return JSONResponse({
+            "ok": True,
+            "valid": valid,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "merkle_root": receipt.merkle_root,
+                "total_leaves": receipt.total_leaves,
+                "scrub_passed": receipt.scrub_passed,
+                "signature": receipt.signature,
+                "timestamp": receipt.timestamp,
+            }
+        })
+
+    # Dynamic MCP Tool Mesh Registry (Phase 28)
+    @mcp.custom_route("/v1/mcp-mesh/server/register", methods=["POST"])
+    async def mcp_mesh_server_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "remote-mcp-1")
+        host = body.get("host", "http://127.0.0.1:9000")
+        transport = body.get("transport", "sse")
+        caps = body.get("capabilities", ["standard"])
+        max_concurrency = int(body.get("max_concurrency", 5))
+        max_rpm = int(body.get("max_rpm", 60))
+
+        ep = mcp_mesh_registry.register_server(
+            server_id=server_id,
+            host=host,
+            transport=transport,
+            capabilities=caps,
+            max_concurrency=max_concurrency,
+            max_rpm=max_rpm,
+        )
+        return JSONResponse({
+            "ok": True,
+            "server_id": ep.server_id,
+            "host": ep.host,
+            "transport": ep.transport,
+            "max_concurrency": ep.max_concurrency,
+            "circuit_state": ep.circuit_state.value,
+        })
+
+    @mcp.custom_route("/v1/mcp-mesh/tool/register", methods=["POST"])
+    async def mcp_mesh_tool_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        tool_name = body.get("tool_name", "")
+        description = body.get("description", "")
+        input_schema = body.get("input_schema", {})
+        output_schema = body.get("output_schema", {})
+        caps = body.get("required_capabilities", [])
+        is_sensitive = bool(body.get("is_sensitive", False))
+        try:
+            tool = mcp_mesh_registry.register_tool(
+                server_id=server_id,
+                tool_name=tool_name,
+                description=description,
+                input_schema=input_schema,
+                output_schema=output_schema,
+                required_capabilities=caps,
+                is_sensitive=is_sensitive,
+            )
+            return JSONResponse({
+                "ok": True,
+                "tool_name": tool.tool_name,
+                "server_id": tool.server_id,
+                "is_sensitive": tool.is_sensitive,
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/mcp-mesh/tools", methods=["GET"])
+    async def mcp_mesh_tools_list_route(request: Request) -> Response:
+        seat_id = request.query_params.get("seat_id", "lead")
+        tools = mcp_mesh_registry.list_tools_for_seat(seat_id=seat_id)
+        return JSONResponse({"ok": True, "seat_id": seat_id, "tools": tools})
+
+    @mcp.custom_route("/v1/mcp-mesh/tools/authorize", methods=["POST"])
+    async def mcp_mesh_tools_authorize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "")
+        args = body.get("arguments", {})
+
+        auth_ok, auth_msg = mcp_mesh_registry.authorize_seat_tool_call(seat_id, tool_name)
+        if not auth_ok:
+            return JSONResponse({"ok": False, "authorized": False, "detail": auth_msg})
+
+        val_ok, val_msg = mcp_mesh_registry.validate_tool_arguments(tool_name, args)
+        if not val_ok:
+            return JSONResponse({"ok": False, "authorized": True, "valid_args": False, "detail": val_msg})
+
+        return JSONResponse({"ok": True, "authorized": True, "valid_args": True, "detail": "Authorized and arguments valid"})
+
+    @mcp.custom_route("/v1/mcp-mesh/slot/acquire", methods=["POST"])
+    async def mcp_mesh_slot_acquire_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        acquired, msg = mcp_mesh_registry.acquire_execution_slot(server_id)
+        return JSONResponse({"ok": acquired, "detail": msg})
+
+    @mcp.custom_route("/v1/mcp-mesh/slot/release", methods=["POST"])
+    async def mcp_mesh_slot_release_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        server_id = body.get("server_id", "")
+        mcp_mesh_registry.release_execution_slot(server_id)
+        return JSONResponse({"ok": True, "server_id": server_id})
+
+    @mcp.custom_route("/v1/mcp-mesh/status", methods=["GET"])
+    async def mcp_mesh_status_route(request: Request) -> Response:
+        return JSONResponse({"ok": True, **mcp_mesh_registry.get_mesh_status()})
+
+    # Cross-Desk Remote Tool Invocation & Attested Execution Receipts (Phase 29)
+    @mcp.custom_route("/v1/mcp-mesh/invoke", methods=["POST"])
+    async def mcp_mesh_invoke_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name", "")
+        arguments = body.get("arguments", {})
+        source_seat = body.get("source_seat", "lead")
+        timeout_seconds = body.get("timeout_seconds")
+        timeout = float(timeout_seconds) if timeout_seconds is not None else None
+
+        try:
+            success, output, receipt = await remote_execution_supervisor.invoke_remote_tool(
+                tool_name=tool_name,
+                arguments=arguments,
+                source_seat=source_seat,
+                timeout_seconds=timeout,
+            )
+            return JSONResponse({
+                "ok": success,
+                "output": output,
+                "receipt": receipt.to_dict(),
+            })
+        except (PermissionError, ValueError, RuntimeError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
+
+    @mcp.custom_route("/v1/mcp-mesh/receipts/{invocation_id}", methods=["GET"])
+    async def mcp_mesh_get_receipt_route(request: Request) -> Response:
+        inv_id = request.path_params.get("invocation_id", "")
+        receipt = remote_execution_supervisor.receipts.get(inv_id)
+        if not receipt:
+            return JSONResponse({"error": f"Receipt '{inv_id}' not found"}, status_code=404)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/mcp-mesh/receipts/verify", methods=["POST"])
+    async def mcp_mesh_verify_receipt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_data = body.get("receipt", {})
+        try:
+            receipt = ExecutionReceipt(
+                invocation_id=receipt_data["invocation_id"],
+                tool_name=receipt_data["tool_name"],
+                source_seat=receipt_data["source_seat"],
+                target_server_id=receipt_data["target_server_id"],
+                status=InvocationStatus(receipt_data["status"]),
+                input_hash=receipt_data["input_hash"],
+                output_hash=receipt_data["output_hash"],
+                duration_ms=float(receipt_data["duration_ms"]),
+                timestamp=float(receipt_data["timestamp"]),
+                signature=receipt_data["signature"],
+            )
+            valid = remote_execution_supervisor.verify_execution_receipt(receipt)
+            return JSONResponse({"ok": True, "valid": valid, "invocation_id": receipt.invocation_id})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Invalid receipt format: {exc}"}, status_code=400)
+
+    # Multi-Modal Sensory Memory Graph Endpoints (Phase 30)
+    @mcp.custom_route("/v1/graph/node/create", methods=["POST"])
+    async def graph_node_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id")
+        if not node_id:
+            return JSONResponse({"ok": False, "error": "node_id is required"}, status_code=400)
+        modality = body.get("modality", "text")
+        label = body.get("label", "")
+        content = body.get("content", "")
+        embedding = body.get("embedding", [])
+        metadata = body.get("metadata", {})
+        partition_id = body.get("partition_id", "default")
+        attention_score = float(body.get("attention_score", 1.0))
+
+        try:
+            node = memory_graph_engine.add_node(
+                node_id=node_id,
+                modality=modality,
+                label=label,
+                content=content,
+                embedding=embedding,
+                metadata=metadata,
+                partition_id=partition_id,
+                attention_score=attention_score,
+            )
+            return JSONResponse({"ok": True, "node": node.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/graph/edge/create", methods=["POST"])
+    async def graph_edge_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        edge_id = body.get("edge_id")
+        source_id = body.get("source_id")
+        target_id = body.get("target_id")
+        relation = body.get("relation", "RELATED_TO")
+        weight = float(body.get("weight", 1.0))
+        metadata = body.get("metadata", {})
+
+        if not edge_id or not source_id or not target_id:
+            return JSONResponse({"ok": False, "error": "edge_id, source_id, and target_id are required"}, status_code=400)
+
+        try:
+            edge = memory_graph_engine.add_edge(
+                edge_id=edge_id,
+                source_id=source_id,
+                target_id=target_id,
+                relation=relation,
+                weight=weight,
+                metadata=metadata,
+            )
+            return JSONResponse({"ok": True, "edge": edge.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/graph/search/semantic", methods=["POST"])
+    async def graph_search_semantic_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        embedding = body.get("query_embedding", [])
+        if not embedding:
+            return JSONResponse({"ok": False, "error": "query_embedding is required"}, status_code=400)
+        top_k = int(body.get("top_k", 10))
+        modality = body.get("modality")
+        partition_id = body.get("partition_id")
+        min_score = float(body.get("min_score", 0.0))
+        apply_decay = bool(body.get("apply_decay", True))
+
+        results = memory_graph_engine.search_semantic(
+            query_embedding=embedding,
+            top_k=top_k,
+            modality=modality,
+            partition_id=partition_id,
+            min_score=min_score,
+            apply_decay=apply_decay,
+        )
+        return JSONResponse({
+            "ok": True,
+            "count": len(results),
+            "results": [
+                {
+                    "node": r.node.to_dict(),
+                    "raw_similarity": r.raw_similarity,
+                    "decayed_score": r.decayed_score,
+                    "temporal_factor": r.temporal_factor,
+                }
+                for r in results
+            ],
+        })
+
+    @mcp.custom_route("/v1/graph/traverse/{node_id}", methods=["GET"])
+    async def graph_traverse_route(request: Request) -> Response:
+        node_id = request.path_params.get("node_id", "")
+        max_depth = int(request.query_params.get("max_depth", 2))
+        partition_id = request.query_params.get("partition_id")
+        direction = request.query_params.get("direction", "out")
+        try:
+            traversal = memory_graph_engine.traverse(
+                start_node_id=node_id,
+                max_depth=max_depth,
+                partition_id=partition_id,
+                direction=direction,
+            )
+            return JSONResponse({"ok": True, **traversal})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/graph/commit", methods=["POST"])
+    async def graph_commit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        commit_id = body.get("commit_id")
+        receipt = memory_graph_engine.commit_state(commit_id=commit_id)
+        valid = memory_graph_engine.verify_commitment(receipt)
+        return JSONResponse({"ok": True, "valid": valid, "receipt": receipt.to_dict()})
+
+    # Dynamic Context Window Compression & Semantic Pruning Endpoints (Phase 31)
+    @mcp.custom_route("/v1/context/compress", methods=["POST"])
+    async def context_compress_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        text = body.get("text", "")
+        if not text:
+            return JSONResponse({"ok": False, "error": "text is required"}, status_code=400)
+        payload = context_compressor.compactor.compress_text(text)
+        return JSONResponse({"ok": True, "compressed": payload.to_dict()})
+
+    @mcp.custom_route("/v1/context/decompress", methods=["POST"])
+    async def context_decompress_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        comp_b64 = body.get("compressed_b64", "")
+        orig_bytes = int(body.get("original_size_bytes", 0))
+        comp_bytes = int(body.get("compressed_size_bytes", 0))
+        ratio = float(body.get("compression_ratio", 1.0))
+        checksum = body.get("checksum_sha256", "")
+        if not comp_b64 or not checksum:
+            return JSONResponse({"ok": False, "error": "compressed_b64 and checksum_sha256 are required"}, status_code=400)
+        try:
+            payload = LosslessCompactedPayload(
+                compressed_b64=comp_b64,
+                original_size_bytes=orig_bytes,
+                compressed_size_bytes=comp_bytes,
+                compression_ratio=ratio,
+                checksum_sha256=checksum,
+            )
+            decompressed = context_compressor.compactor.decompress_text(payload)
+            return JSONResponse({"ok": True, "text": decompressed})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/context/prune", methods=["POST"])
+    async def context_prune_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        text = body.get("text", "")
+        threshold = float(body.get("salience_threshold", 0.3))
+        preserve_syntax = bool(body.get("preserve_syntax", True))
+        pruned_text, ratio = context_compressor.pruner.prune_text(
+            text, salience_threshold=threshold, preserve_syntax=preserve_syntax
+        )
+        return JSONResponse({
+            "ok": True,
+            "pruned_text": pruned_text,
+            "compression_ratio": ratio,
+        })
+
+    @mcp.custom_route("/v1/context/rollup", methods=["POST"])
+    async def context_rollup_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_segments = body.get("segments", [])
+        chunk_size = int(body.get("chunk_size", 3))
+        level = int(body.get("level", 1))
+
+        segments = [
+            ContextSegment(
+                segment_id=s.get("segment_id", f"seg-{i}"),
+                content=s.get("content", ""),
+                token_count=int(s.get("token_count", 0)),
+                modality=s.get("modality", "text"),
+                salience_score=float(s.get("salience_score", 1.0)),
+                metadata=s.get("metadata", {}),
+            )
+            for i, s in enumerate(raw_segments)
+        ]
+        rollups = context_compressor.rollup_engine.rollup_segments(segments, chunk_size=chunk_size, level=level)
+        proof = context_compressor.rollup_engine.evict_and_prove(segments)
+        return JSONResponse({
+            "ok": True,
+            "rollups": [r.to_dict() for r in rollups],
+            "eviction_proof": proof.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/context/adapt", methods=["POST"])
+    async def context_adapt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_segments = body.get("segments", [])
+        tier_str = body.get("tier", "tier_2_standard")
+        ceiling = body.get("budget_ceiling")
+        hard_ceiling = int(ceiling) if ceiling is not None else None
+
+        try:
+            tier = ModelTier(tier_str)
+        except ValueError:
+            tier = ModelTier.TIER_2_STANDARD
+
+        segments = [
+            ContextSegment(
+                segment_id=s.get("segment_id", f"seg-{i}"),
+                content=s.get("content", ""),
+                token_count=int(s.get("token_count", 0)),
+                modality=s.get("modality", "text"),
+                salience_score=float(s.get("salience_score", 1.0)),
+                metadata=s.get("metadata", {}),
+            )
+            for i, s in enumerate(raw_segments)
+        ]
+
+        adapted_res = context_compressor.adapter.adapt_context(
+            segments=segments,
+            tier=tier,
+            hard_budget_ceiling=hard_ceiling,
+            pruner=context_compressor.pruner,
+            rollup_engine=context_compressor.rollup_engine,
+        )
+        return JSONResponse({"ok": True, **adapted_res})
+
+    @mcp.custom_route("/v1/context/verify", methods=["POST"])
+    async def context_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        content = body.get("content", "")
+        test_id = body.get("test_id")
+        if not content:
+            return JSONResponse({"ok": False, "error": "content is required"}, status_code=400)
+
+        result = context_compressor.verifier.run_verification(
+            test_content=content,
+            test_id=test_id,
+            compactor=context_compressor.compactor,
+            pruner=context_compressor.pruner,
+            rollup_engine=context_compressor.rollup_engine,
+        )
+        return JSONResponse({"ok": True, "verification": result.to_dict()})
+
+    # Milestone v3.3 (Phase 32): Decentralized Multi-Desk Governance REST Endpoints
+    @mcp.custom_route("/v1/governance/proposal/create", methods=["POST"])
+    async def governance_proposal_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id")
+        proposer_seat = body.get("proposer_seat", "lead")
+        proposer_desk_id = body.get("proposer_desk_id", "desk-local")
+        title = body.get("title", "")
+        description = body.get("description", "")
+        action_payload = body.get("action_payload", {})
+        timelock_delay_seconds = float(body.get("timelock_delay_seconds", 60.0))
+        voting_period_seconds = float(body.get("voting_period_seconds", 300.0))
+        quorum_threshold = float(body.get("quorum_threshold", 0.5))
+        approval_threshold = float(body.get("approval_threshold", 0.66))
+        tags = body.get("tags", [])
+
+        if not proposal_id or not title:
+            return JSONResponse({"ok": False, "error": "proposal_id and title are required"}, status_code=400)
+
+        try:
+            prop = governance_sm.create_proposal(
+                proposal_id=proposal_id,
+                proposer_seat=proposer_seat,
+                proposer_desk_id=proposer_desk_id,
+                title=title,
+                description=description,
+                action_payload=action_payload,
+                timelock_delay_seconds=timelock_delay_seconds,
+                voting_period_seconds=voting_period_seconds,
+                quorum_threshold=quorum_threshold,
+                approval_threshold=approval_threshold,
+                tags=tags,
+            )
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/proposal/{proposal_id}", methods=["GET"])
+    async def governance_proposal_get_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        try:
+            prop = governance_sm.get_proposal(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except KeyError:
+            return JSONResponse({"ok": False, "error": f"Proposal '{proposal_id}' not found"}, status_code=404)
+
+    @mcp.custom_route("/v1/governance/proposal/start_voting", methods=["POST"])
+    async def governance_proposal_start_voting_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        try:
+            prop = governance_sm.start_voting(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/vote", methods=["POST"])
+    async def governance_vote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        seat = body.get("seat", "lead")
+        desk_id = body.get("desk_id", "desk-local")
+        choice = body.get("choice", "YES")
+        raw_votes = float(body.get("raw_votes", 1.0))
+        reason = body.get("reason", "")
+        signature = body.get("signature")
+
+        try:
+            ballot = governance_sm.cast_vote(
+                proposal_id=proposal_id,
+                seat=seat,
+                desk_id=desk_id,
+                choice=choice,
+                raw_votes=raw_votes,
+                reason=reason,
+                signature=signature,
+            )
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except (KeyError, ValueError, TimeoutError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/tally", methods=["POST"])
+    async def governance_tally_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        total_possible_seats = int(body.get("total_possible_seats", 7))
+        try:
+            result = governance_sm.tally_and_resolve(proposal_id, total_possible_seats=total_possible_seats)
+            return JSONResponse({"ok": True, "result": result.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/queue", methods=["POST"])
+    async def governance_queue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        try:
+            prop = governance_sm.queue_for_execution(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/execute", methods=["POST"])
+    async def governance_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        executor_seat = body.get("executor_seat", "lead")
+        current_time = body.get("current_time")
+        now = float(current_time) if current_time is not None else None
+        try:
+            receipt = governance_sm.execute_proposal(proposal_id, executor_seat=executor_seat, current_time=now)
+            return JSONResponse({"ok": True, "receipt": receipt})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/veto", methods=["POST"])
+    async def governance_veto_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        veto_seat = body.get("veto_seat", "security")
+        reason = body.get("reason", "Emergency veto triggered")
+        try:
+            prop = governance_sm.emergency_veto(proposal_id, veto_seat=veto_seat, reason=reason)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/cancel", methods=["POST"])
+    async def governance_cancel_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        requester_seat = body.get("requester_seat", "lead")
+        try:
+            prop = governance_sm.cancel_proposal(proposal_id, requester_seat=requester_seat)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    # Milestone v3.3 (Phase 33): Byzantine Consensus REST Endpoints
+    @mcp.custom_route("/v1/consensus/round/start", methods=["POST"])
+    async def consensus_round_start_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id")
+        proposal_id = body.get("proposal_id")
+        proposal_payload = body.get("proposal_payload", {})
+        leader_desk = body.get("leader_desk")
+        if not round_id or not proposal_id:
+            return JSONResponse({"ok": False, "error": "round_id and proposal_id are required"}, status_code=400)
+        try:
+            msg = byzantine_engine.start_round(
+                round_id=round_id,
+                proposal_id=proposal_id,
+                proposal_payload=proposal_payload,
+                leader_desk=leader_desk,
+            )
+            return JSONResponse({"ok": True, "message": msg.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/round/prepare", methods=["POST"])
+    async def consensus_round_prepare_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        proposal_digest = body.get("proposal_digest", "")
+        decision_str = body.get("decision", "APPROVE")
+        signature = body.get("signature")
+        try:
+            decision = ConsensusDecision(decision_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid decision: {decision_str}"}, status_code=400)
+
+        ok, reason, commit_msg = byzantine_engine.process_prepare(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            proposal_digest=proposal_digest,
+            decision=decision,
+            signature=signature,
+        )
+        if not ok:
+            return JSONResponse({"ok": False, "error": reason}, status_code=400)
+        return JSONResponse({
+            "ok": True,
+            "message": reason,
+            "commit_msg": commit_msg.to_dict() if commit_msg else None,
+        })
+
+    @mcp.custom_route("/v1/consensus/round/commit", methods=["POST"])
+    async def consensus_round_commit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        proposal_digest = body.get("proposal_digest", "")
+        decision_str = body.get("decision", "APPROVE")
+        signature = body.get("signature")
+        try:
+            decision = ConsensusDecision(decision_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid decision: {decision_str}"}, status_code=400)
+
+        ok, reason, finalized = byzantine_engine.process_commit(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            proposal_digest=proposal_digest,
+            decision=decision,
+            signature=signature,
+        )
+        if not ok:
+            return JSONResponse({"ok": False, "error": reason}, status_code=400)
+        return JSONResponse({
+            "ok": True,
+            "message": reason,
+            "finalized": finalized,
+        })
+
+    @mcp.custom_route("/v1/consensus/view_change", methods=["POST"])
+    async def consensus_view_change_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        sender_desk = body.get("sender_desk", "")
+        reason = body.get("reason", "Leader unresponsive")
+        ok, msg, current_view = byzantine_engine.request_view_change(
+            round_id=round_id,
+            sender_desk=sender_desk,
+            reason=reason,
+        )
+        return JSONResponse({
+            "ok": ok,
+            "message": msg,
+            "current_view": current_view,
+            "current_leader": byzantine_engine.current_leader,
+        })
+
+    @mcp.custom_route("/v1/consensus/round/{round_id}", methods=["GET"])
+    async def consensus_round_summary_route(request: Request) -> Response:
+        round_id = request.path_params.get("round_id", "")
+        try:
+            summary = byzantine_engine.get_round_summary(round_id)
+            return JSONResponse({"ok": True, "round": summary})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/consensus/receipt/build", methods=["POST"])
+    async def consensus_receipt_build_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        proposal_id = body.get("proposal_id", "")
+        proposal_digest = body.get("proposal_digest", "")
+        state_transitions = body.get("state_transitions", [])
+        ballot_tallies = body.get("ballot_tallies", {})
+        execution_outcome = body.get("execution_outcome", {})
+        signers = body.get("signers", ["desk-alpha"])
+
+        receipt = receipt_merkle_tree.build_receipt(
+            round_id=round_id,
+            proposal_id=proposal_id,
+            proposal_digest=proposal_digest,
+            state_transitions=state_transitions,
+            ballot_tallies=ballot_tallies,
+            execution_outcome=execution_outcome,
+            signers=signers,
+        )
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/consensus/receipt/verify", methods=["POST"])
+    async def consensus_receipt_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_dict = body.get("receipt", {})
+        try:
+            receipt = GovernanceMerkleReceipt(
+                receipt_id=receipt_dict["receipt_id"],
+                round_id=receipt_dict["round_id"],
+                proposal_id=receipt_dict["proposal_id"],
+                proposal_digest=receipt_dict["proposal_digest"],
+                merkle_root=receipt_dict["merkle_root"],
+                transition_hash=receipt_dict["transition_hash"],
+                tally_hash=receipt_dict["tally_hash"],
+                execution_hash=receipt_dict["execution_hash"],
+                signers=receipt_dict["signers"],
+                aggregate_signature=receipt_dict["aggregate_signature"],
+                timestamp=receipt_dict.get("timestamp", time.time()),
+            )
+            valid = receipt_merkle_tree.verify_receipt(receipt)
+            return JSONResponse({"ok": True, "valid": valid, "receipt_id": receipt.receipt_id})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Invalid receipt format: {exc}"}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/anchor/export", methods=["POST"])
+    async def consensus_anchor_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_dict = body.get("receipt", {})
+        target_ledger = body.get("target_ledger", "solana_devnet")
+        try:
+            receipt = GovernanceMerkleReceipt(
+                receipt_id=receipt_dict["receipt_id"],
+                round_id=receipt_dict["round_id"],
+                proposal_id=receipt_dict["proposal_id"],
+                proposal_digest=receipt_dict["proposal_digest"],
+                merkle_root=receipt_dict["merkle_root"],
+                transition_hash=receipt_dict["transition_hash"],
+                tally_hash=receipt_dict["tally_hash"],
+                execution_hash=receipt_dict["execution_hash"],
+                signers=receipt_dict["signers"],
+                aggregate_signature=receipt_dict["aggregate_signature"],
+                timestamp=receipt_dict.get("timestamp", time.time()),
+            )
+            anchor = ledger_exporter.anchor_receipt(receipt, target_ledger=target_ledger)
+            return JSONResponse({"ok": True, "anchor": anchor.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": f"Failed to anchor: {exc}"}, status_code=400)
+
+    @mcp.custom_route("/v1/consensus/drill/simulate", methods=["POST"])
+    async def consensus_drill_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload = body.get("payload", {"action": "emergency_param_update", "val": 42})
+        drill_results = byzantine_simulator.run_full_byzantine_resilience_suite(payload)
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
+    async def mesh_streaming_open_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        remote_desk = body.get("remote_desk_id", "peer-desk")
+        session_id = body.get("session_id")
+        frame = streaming_rpc.open_session(remote_desk_id=remote_desk, session_id=session_id)
+        return JSONResponse({"ok": True, "frame": frame.to_dict()})
+
+    @mcp.custom_route("/v1/mesh/streaming/frame/send", methods=["POST"])
+    async def mesh_streaming_send_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        payload = body.get("payload", {})
+        try:
+            audit_logger.start_session_audit(session_id=session_id, tool_name="remote_streaming_tool")
+            frame = streaming_rpc.send_data(session_id=session_id, data=payload)
+            audit_logger.record_frame(session_id, frame.to_dict())
+            return JSONResponse({"ok": True, "frame": frame.to_dict()})
+        except (KeyError, BufferError, TimeoutError) as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/streaming/cache/put", methods=["POST"])
+    async def mesh_streaming_cache_put_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload_b64 = body.get("payload_b64", "")
+        mime_type = body.get("mime_type", "application/octet-stream")
+        tenant_id = body.get("tenant_id", "default")
+        origin_node = body.get("origin_node")
+        try:
+            raw_bytes = base64.b64decode(payload_b64)
+            digest = media_cache.put(raw_bytes, mime_type=mime_type, tenant_id=tenant_id, origin_node=origin_node)
+            return JSONResponse({"ok": True, "content_hash": digest, "size_bytes": len(raw_bytes)})
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/streaming/cache/get/{content_hash}", methods=["GET"])
+    async def mesh_streaming_cache_get_route(request: Request) -> Response:
+        content_hash = request.path_params.get("content_hash", "")
+        entry = media_cache.get(content_hash)
+        if not entry:
+            return JSONResponse({"error": "not_found"}, status_code=404)
+        return JSONResponse({
+            "ok": True,
+            "content_hash": entry.content_hash,
+            "mime_type": entry.mime_type,
+            "size_bytes": entry.size_bytes,
+            "tenant_id": entry.tenant_id,
+            "sync_origins": list(entry.sync_origins),
+        })
+
+    @mcp.custom_route("/v1/mesh/streaming/downsample", methods=["POST"])
+    async def mesh_streaming_downsample_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        payload_b64 = body.get("payload_b64", "")
+        mime_type = body.get("mime_type", "image/png")
+        bw = float(body.get("bandwidth_kbps", 2000.0))
+        rtt = float(body.get("latency_ms", 50.0))
+        raw_bytes = base64.b64decode(payload_b64)
+        conditions = NetworkConditions(bandwidth_kbps=bw, latency_ms=rtt)
+        downsampled, tier, meta = downsampler.downsample_payload(raw_bytes, mime_type, conditions)
+        return JSONResponse({
+            "ok": True,
+            "tier": tier.value,
+            "metadata": meta,
+            "downsampled_b64": base64.b64encode(downsampled).decode("ascii"),
+        })
+
+    @mcp.custom_route("/v1/mesh/streaming/audit/finalize", methods=["POST"])
+    async def mesh_streaming_audit_finalize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        status = body.get("status", "completed")
+        try:
+            receipt = audit_logger.finalize_session(session_id=session_id, status=status)
+            valid = audit_logger.verify_receipt(receipt)
+            return JSONResponse({
+                "ok": True,
+                "valid": valid,
+                "receipt": {
+                    "session_id": receipt.session_id,
+                    "tool_name": receipt.tool_name,
+                    "frames_count": receipt.frames_count,
+                    "bytes_transferred": receipt.bytes_transferred,
+                    "receipt_hash": receipt.receipt_hash,
+                    "signature": receipt.signature,
+                    "session_status": receipt.session_status,
+                }
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
 
     return mcp
 
@@ -3255,6 +7809,131 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "prompt_cache_optimizer": getattr(mcp, "_prompt_cache_optimizer", None),
         "tier_benchmark_monitor": getattr(mcp, "_tier_benchmark_monitor", None),
         "finops_verifier": getattr(mcp, "_finops_verifier", None),
+        "streaming_rpc": getattr(mcp, "_streaming_rpc", None),
+        "media_cache": getattr(mcp, "_media_cache", None),
+        "client_multiplexer": getattr(mcp, "_client_multiplexer", None),
+        "downsampler": getattr(mcp, "_downsampler", None),
+        "audit_logger": getattr(mcp, "_audit_logger", None),
+        "swarm_balancer": getattr(mcp, "_swarm_balancer", None),
+        "delegation_mesh": getattr(mcp, "_delegation_mesh", None),
+        "dr_engine": getattr(mcp, "_dr_engine", None),
+        "fencing_allocator": getattr(mcp, "_fencing_allocator", None),
+        "quorum_evaluator": getattr(mcp, "_quorum_evaluator", None),
+        "failover_orchestrator": getattr(mcp, "_failover_orchestrator", None),
+        "drill_verifier": getattr(mcp, "_drill_verifier", None),
+        "zero_trust_mgr": getattr(mcp, "_zero_trust_mgr", None),
+        "merkle_tree": getattr(mcp, "_merkle_tree", None),
+        "audit_exporter": getattr(mcp, "_audit_exporter", None),
+        "compliance_verifier": getattr(mcp, "_compliance_verifier", None),
+        "mcp_mesh_registry": getattr(mcp, "_mcp_mesh_registry", None),
+        "remote_execution_supervisor": getattr(mcp, "_remote_execution_supervisor", None),
+        "memory_graph_engine": getattr(mcp, "_memory_graph_engine", None),
+        "context_compressor": getattr(mcp, "_context_compressor", None),
+        "governance_sm": getattr(mcp, "_governance_sm", None),
+        "byzantine_engine": getattr(mcp, "_byzantine_engine", None),
+        "receipt_merkle_tree": getattr(mcp, "_receipt_merkle_tree", None),
+        "ledger_exporter": getattr(mcp, "_ledger_exporter", None),
+        "byzantine_simulator": getattr(mcp, "_byzantine_simulator", None),
+        "swarm_immune": getattr(mcp, "_swarm_immune", None),
+        "swarm_reconstitution": getattr(mcp, "_swarm_reconstitution", None),
+        "chaos_immune_harness": getattr(mcp, "_chaos_immune_harness", None),
+        "skill_synthesis_engine": getattr(mcp, "_skill_synthesis_engine", None),
+        "prompt_rollout_orchestrator": getattr(mcp, "_prompt_rollout_orchestrator", None),
+        "neural_routing_engine": getattr(mcp, "_neural_routing_engine", None),
+        "sovereign_enclave_manager": getattr(mcp, "_sovereign_enclave_manager", None),
+        "formal_verification_pipeline": getattr(mcp, "_formal_verification_pipeline", None),
+        "synthesis_consensus_engine": getattr(mcp, "_synthesis_consensus_engine", None),
+        "proof_receipt_ledger": getattr(mcp, "_proof_receipt_ledger", None),
+        "proof_exporter": getattr(mcp, "_proof_exporter", None),
+        "shard_ring": getattr(mcp, "_shard_ring", None),
+        "shard_crdt_store": getattr(mcp, "_shard_crdt_store", None),
+        "geo_replication_engine": getattr(mcp, "_geo_replication_engine", None),
+        "shard_router": getattr(mcp, "_shard_router", None),
+        "anti_entropy_gossip": getattr(mcp, "_anti_entropy_gossip", None),
+        "split_brain_detector": getattr(mcp, "_split_brain_detector", None),
+        "epoch_coordinator": getattr(mcp, "_epoch_coordinator", None),
+        "partition_healing_orchestrator": getattr(mcp, "_partition_healing_orchestrator", None),
+        "pqc_kem": getattr(mcp, "_pqc_kem", None),
+        "pqc_sig_engine": getattr(mcp, "_pqc_sig_engine", None),
+        "pqc_inspector": getattr(mcp, "_pqc_inspector", None),
+        "pqc_ca": getattr(mcp, "_pqc_ca", None),
+        "pqc_ledger": getattr(mcp, "_pqc_ledger", None),
+        "pqc_verifier": getattr(mcp, "_pqc_verifier", None),
+        "pqc_anchor_exporter": getattr(mcp, "_pqc_anchor_exporter", None),
+        "workflow_compiler": getattr(mcp, "_workflow_compiler", None),
+        "workflow_engine": getattr(mcp, "_workflow_engine", None),
+        "capability_broker": getattr(mcp, "_capability_broker", None),
+        "workflow_receipt_ledger": getattr(mcp, "_workflow_receipt_ledger", None),
+        "workflow_anchor_exporter": getattr(mcp, "_workflow_anchor_exporter", None),
+        "dao_registry": getattr(mcp, "_dao_registry", None),
+        "swarm_dao_engine": getattr(mcp, "_swarm_dao_engine", None),
+        "policy_timelock_executor": getattr(mcp, "_policy_timelock_executor", None),
+        "compute_credit_ledger": getattr(mcp, "_compute_credit_ledger", None),
+        "payment_channel_manager": getattr(mcp, "_payment_channel_manager", None),
+        "cross_desk_clearinghouse": getattr(mcp, "_cross_desk_clearinghouse", None),
+        "settlement_anchor_exporter": getattr(mcp, "_settlement_anchor_exporter", None),
+        "relayer_staking_registry": getattr(mcp, "_relayer_staking_registry", None),
+        "cross_chain_relay_engine": getattr(mcp, "_cross_chain_relay_engine", None),
+        "oracle_aggregator": getattr(mcp, "_oracle_aggregator", None),
+        "oracle_anchor_exporter": getattr(mcp, "_oracle_anchor_exporter", None),
+        "distillation_engine": getattr(mcp, "_distillation_engine", None),
+        "quantization_compressor": getattr(mcp, "_quantization_compressor", None),
+        "distillation_benchmarker": getattr(mcp, "_distillation_benchmarker", None),
+        "model_artifact_registry": getattr(mcp, "_model_artifact_registry", None),
+        "edge_compute_scheduler": getattr(mcp, "_edge_compute_scheduler", None),
+        "inference_proof_engine": getattr(mcp, "_inference_proof_engine", None),
+        "edge_cluster_monitor": getattr(mcp, "_edge_cluster_monitor", None),
+        "edge_commitment_exporter": getattr(mcp, "_edge_commitment_exporter", None),
+        "zk_proof_generator": getattr(mcp, "_zk_proof_generator", None),
+        "zk_proof_verifier": getattr(mcp, "_zk_proof_verifier", None),
+        "zk_state_prover": getattr(mcp, "_zk_state_prover", None),
+        "homomorphic_cipher": getattr(mcp, "_homomorphic_cipher", None),
+        "tss_engine": getattr(mcp, "_tss_engine", None),
+        "mpc_coordinator": getattr(mcp, "_mpc_coordinator", None),
+        "zk_anchor_exporter": getattr(mcp, "_zk_anchor_exporter", None),
+        "neuro_graph": getattr(mcp, "_neuro_graph", None),
+        "logic_engine": getattr(mcp, "_logic_engine", None),
+        "invariant_checker": getattr(mcp, "_invariant_checker", None),
+        "rule_extractor": getattr(mcp, "_rule_extractor", None),
+        "causal_discovery": getattr(mcp, "_causal_discovery", None),
+        "causal_anchor_exporter": getattr(mcp, "_causal_anchor_exporter", None),
+        "epistemic_calibrator": getattr(mcp, "_epistemic_calibrator", None),
+        "metacognitive_introspector": getattr(mcp, "_metacognitive_introspector", None),
+        "epistemic_network": getattr(mcp, "_epistemic_network", None),
+        "strategy_optimizer": getattr(mcp, "_strategy_optimizer", None),
+        "counter_evidence_synthesizer": getattr(mcp, "_counter_evidence_synthesizer", None),
+        "epistemic_verifier": getattr(mcp, "_epistemic_verifier", None),
+        "epistemic_ledger": getattr(mcp, "_epistemic_ledger", None),
+        "epistemic_anchor_exporter": getattr(mcp, "_epistemic_anchor_exporter", None),
+        "substrate_registry": getattr(mcp, "_substrate_registry", None),
+        "substrate_compiler": getattr(mcp, "_substrate_compiler", None),
+        "substrate_dispatcher": getattr(mcp, "_substrate_dispatcher", None),
+        "substrate_profiler": getattr(mcp, "_substrate_profiler", None),
+        "neuromorphic_mesh": getattr(mcp, "_neuromorphic_mesh", None),
+        "synaptic_ledger": getattr(mcp, "_synaptic_ledger", None),
+        "neuromorphic_anchor_exporter": getattr(mcp, "_neuromorphic_anchor_exporter", None),
+        "swarm_antibody_distributor": getattr(mcp, "_swarm_antibody_distributor", None),
+        "swarm_antifragility_engine": getattr(mcp, "_swarm_antifragility_engine", None),
+        "runtime_reconstitution_supervisor": getattr(mcp, "_runtime_reconstitution_supervisor", None),
+        "depin_orchestrator": getattr(mcp, "_depin_orchestrator", None),
+        "depin_ledger": getattr(mcp, "_depin_ledger", None),
+        "depin_anchor_exporter": getattr(mcp, "_depin_anchor_exporter", None),
+        "sagin_cgr": getattr(mcp, "_sagin_cgr", None),
+        "sagin_custody": getattr(mcp, "_sagin_custody", None),
+        "sagin_downlink_mgr": getattr(mcp, "_sagin_downlink_mgr", None),
+        "sagin_consensus": getattr(mcp, "_sagin_consensus", None),
+        "sagin_ledger": getattr(mcp, "_sagin_ledger", None),
+        "sagin_anchor_exporter": getattr(mcp, "_sagin_anchor_exporter", None),
+        "quantum_scheduler": getattr(mcp, "_quantum_scheduler", None),
+        "quantum_decoherence": getattr(mcp, "_quantum_decoherence", None),
+        "quantum_ledger": getattr(mcp, "_quantum_ledger", None),
+        "quantum_anchor_exporter": getattr(mcp, "_quantum_anchor_exporter", None),
+        "qteleport_pool": getattr(mcp, "_qteleport_pool", None),
+        "qteleport_mesh": getattr(mcp, "_qteleport_mesh", None),
+        "qteleport_proto": getattr(mcp, "_qteleport_proto", None),
+        "qkd_engine": getattr(mcp, "_qkd_engine", None),
+        "qteleport_ledger": getattr(mcp, "_qteleport_ledger", None),
+        "qteleport_exporter": getattr(mcp, "_qteleport_exporter", None),
     }
     return app, settings
 

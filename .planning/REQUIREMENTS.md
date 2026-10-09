@@ -1,19 +1,20 @@
-# Requirements: Milestone v2.6 — FinOps Dynamic Token Budgeting & LLM Tier Optimization
+# Requirements: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
 
-This document defines the requirements for Milestone v2.6 of Programming Desk.
+This document defines the requirements for Milestone v5.1 of Programming Desk.
 
-## 1. FinOps Dynamic Token Budgeting & Cost Governance (Phase 18)
+## 1. Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing (Phase 68)
 
-- [x] **REQ-FINOPS-001**: Real-time token consumption ledger tracking per-tenant, per-seat, and per-model input/output token usage with rolling expenditure calculation.
-- [x] **REQ-FINOPS-002**: Dynamic token budget enforcer with graduated spend limits (warning threshold at 80%, soft throttle at 95%, hard circuit-breaker at 100%).
-- [x] **REQ-FINOPS-003**: Seat-level token allocation matrix distributing daily and monthly allowances across the seven seats with priority burst overdrafts.
-- [x] **REQ-FINOPS-004**: Multi-currency cost translation engine converting provider token tariffs (Anthropic, OpenAI, Grok/xAI, DeepSeek) into real-time micro-dollar balances.
-- [x] **REQ-FINOPS-005**: Cryptographic expenditure audit receipts chaining token usage vouchers with SHA-256 state anchors for cost reconciliation.
+- [x] **REQ-QTELEPORT-001**: Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `QuantumStateVector`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
+- [x] **REQ-QTELEPORT-002**: Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
+- [x] **REQ-QTELEPORT-003**: Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationSession`, `ClassicalCorrection`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
+- [x] **REQ-QTELEPORT-004**: Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`, `PurificationProtocol`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
+- [x] **REQ-QTELEPORT-005**: Quantum Phase 68 REST API endpoints under `/v1/quantum/teleportation/*` and `/v1/quantum/repeater/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## 2. LLM Tier Routing & Cost-Aware Model Optimization (Phase 19)
+## 2. Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring (Phase 69)
 
-- [x] **REQ-TIER-001**: Complexity-aware task classifier routing work to optimal LLM cost tiers (Tier 1: Fast/Small, Tier 2: Mid/Standard, Tier 3: Reasoning/Frontier).
-- [x] **REQ-TIER-002**: Dynamic fallback cascade automatically degrading or upgrading model tiers on provider rate limits (429), timeouts, or budget exhaustion.
-- [x] **REQ-TIER-003**: Cache-aware prompt optimizer detecting repeated prompt prefixes and semantic memory context to maximize prompt caching hit rates (>60%).
-- [x] **REQ-TIER-004**: Model performance & cost-efficiency benchmarking monitor tracking latency, completion quality, and tokens-per-dollar across tiers.
-- [x] **REQ-TIER-005**: Continuous FinOps verification test suite ensuring RPO=0 on spend tracking, sub-millisecond routing overhead (<5ms), and strict budget cutoff enforcement.
+- [x] **REQ-QTELEPORT-006**: BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
+- [x] **REQ-QTELEPORT-007**: Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`, `QuantumChannelInterception`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
+- [x] **REQ-QTELEPORT-008**: Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
+- [x] **REQ-QTELEPORT-009**: External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] **REQ-QTELEPORT-010**: End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
+- [x] **REQ-QTELEPORT-011**: Quantum Phase 69 REST API endpoints under `/v1/quantum/qkd/*`, `/v1/quantum/teleportation/ledger/*`, `/v1/quantum/teleportation/anchor/*`, and `/v1/quantum/teleportation/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

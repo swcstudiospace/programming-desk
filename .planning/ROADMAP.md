@@ -1,85 +1,16 @@
-# Roadmap: Programming Desk
+# Roadmap: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
 
-## Milestones
+## Phase 68: Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing
+- [x] Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `QuantumStateVector`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
+- [x] Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
+- [x] Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationSession`, `ClassicalCorrection`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
+- [x] Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`, `PurificationProtocol`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
+- [x] REST API routes under `/v1/quantum/teleportation/*` and `/v1/quantum/repeater/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-- ✅ **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (shipped 2026-10-10) — [Archive](milestones/v2.6-ROADMAP.md)
-- ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
-- ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
-- ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
-- ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09) — [Archive](milestones/v2.2-ROADMAP.md)
-- ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08) — [Archive](milestones/v2.1-ROADMAP.md)
-- ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
-
-## Phases
-
-### Completed Milestones
-
-<details>
-<summary>✅ v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization (Phases 18-19) — SHIPPED 2026-10-10</summary>
-
-- [x] Phase 18: FinOps Dynamic Token Budgeting & Cost Governance (2/2 plans)
-- [x] Phase 19: LLM Tier Routing & Cost-Aware Model Optimization (1/1 plan)
-
-See [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md) for full phase details and execution history.
-</details>
-
-### Completed Milestones
-
-<details>
-<summary>✅ v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh (Phases 16-17) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement (2/2 plans)
-- [x] Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution (1/1 plan)
-
-See [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery (Phases 14-15) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 14: Multi-Region Edge Federation & WAN Routing (2/2 plans)
-- [x] Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience (2/2 plans)
-
-See [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
-- [x] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (2/2 plans)
-
-See [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 10: Multi-Desk Federation & Inter-Seat Routing (2/2 plans)
-- [x] Phase 11: Automated Staging & VPS Environment Promotion (2/2 plans)
-
-See [milestones/v2.2-ROADMAP.md](milestones/v2.2-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.1 Live Drills & Intake Hardening (Phases 8-9) — SHIPPED 2026-10-08</summary>
-
-- [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
-- [x] Phase 9: External Intake Hardening & Telemetry Anchoring (4/4 plans)
-
-See [milestones/v2.1-ROADMAP.md](milestones/v2.1-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.0 Desk v2 (Phases 1-7) — SHIPPED 2026-10-08</summary>
-
-- [x] Phase 1: Inventory and prove assumptions (7/7 plans)
-- [x] Phase 2: Network plane (6/6 plans)
-- [x] Phase 3: Substrate data planes (6/6 plans)
-- [x] Phase 4: Desk Gateway and contracts (6/6 plans)
-- [x] Phase 5: Prompts, skills, templates, plugin (6/6 plans)
-- [x] Phase 6: Fresh-desk acceptance and external intake (6/6 plans)
-- [x] Phase 7: Ordered rollout and rollback (4/4 plans)
-
-See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase details and execution history.
-</details>
+## Phase 69: Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring
+- [x] BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
+- [x] Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`, `QuantumChannelInterception`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
+- [x] Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
+- [x] External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
+- [x] REST API routes under `/v1/quantum/qkd/*`, `/v1/quantum/teleportation/ledger/*`, `/v1/quantum/teleportation/anchor/*`, and `/v1/quantum/teleportation/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

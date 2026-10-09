@@ -41,6 +41,9 @@ class _Client:
         self.closed = False
         self._busy = 0
         self.max_inflight = 0
+        self.sha_seen: list[object] = []
+        self.fail_loads = 0
+        self.ping_started = asyncio.Event()
 
     async def _hold(self) -> None:
         self._busy += 1
@@ -68,12 +71,16 @@ class _Client:
     async def script_load(self, script: str) -> str:
         self.loads.append(script)
         await self._hold()
+        if self.fail_loads:
+            self.fail_loads -= 1
+            raise ConnectionError("load failed")
         if self.fail:
             raise ConnectionError("refused")
         return "sha"
 
-    async def evalsha(self, *_args: object) -> list[object]:
+    async def evalsha(self, sha: object, *_args: object) -> list[object]:
         self.shas += 1
+        self.sha_seen.append(sha)
         await self._hold()
         if self.fail:
             raise ConnectionError("refused")
@@ -87,6 +94,7 @@ class _Client:
 
     async def ping(self) -> bool:
         self.pings += 1
+        self.ping_started.set()
         if self.ping_delay:
             await asyncio.sleep(self.ping_delay)
         if self.fail:
@@ -138,6 +146,7 @@ async def test_twenty_slow_checks_finish_inside_one_second(monkeypatch: pytest.M
     created = _patch_factory(monkeypatch, client)
     dragonfly = Dragonfly(_Url())
     limiter = _limiter(dragonfly)
+    await dragonfly.open()
 
     started = time.monotonic()
     for _ in range(20):
@@ -186,13 +195,18 @@ async def test_refused_connections_open_the_breaker_and_then_one_trial_runs(
         "desk_gateway.upstreams._import_redis",
         lambda: SimpleNamespace(from_url=from_url),
     )
+    await limiter.check_rate_limit("lead")
+    if dragonfly._warm_task is not None:
+        await dragonfly._warm_task
+    assert dragonfly.warm is True
+    assert dragonfly.circuit_breaker.state == "closed"
+    assert len(created) == threshold + 1
     allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
     assert allowed is True
     assert remaining == 9
-    assert dragonfly.circuit_breaker.state == "closed"
-    assert len(created) == threshold + 1
     assert healthy.loads == [TOKEN_BUCKET_LUA]
-    assert healthy.shas == 1
+    assert healthy.shas >= 1
+    assert None not in healthy.sha_seen
 
 
 @pytest.mark.asyncio
@@ -217,6 +231,7 @@ async def test_healthy_pool_loads_the_script_once(monkeypatch: pytest.MonkeyPatc
     created = _patch_factory(monkeypatch, client)
     dragonfly = Dragonfly(_Url())
     limiter = _limiter(dragonfly)
+    await dragonfly.open()
 
     for _ in range(100):
         allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
@@ -260,7 +275,8 @@ async def test_hung_command_returns_inside_the_budget(monkeypatch: pytest.Monkey
     client = _Client(delay=2.0)
     _patch_factory(monkeypatch, client)
     dragonfly = Dragonfly(_Url())
-    dragonfly.request_budget_sec = 0.05
+    dragonfly.command_timeout_sec = 0.05
+    await dragonfly.open()
 
     started = time.monotonic()
     result = await dragonfly.command("get", "desk:cache:a", None, 60)
@@ -270,6 +286,82 @@ async def test_hung_command_returns_inside_the_budget(monkeypatch: pytest.Monkey
     assert result["error"] == "upstream_error"
     assert "budget" in result["reason"]
     assert PLACEHOLDER not in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_cache_command_uses_its_own_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(delay=0.2)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    dragonfly.request_budget_sec = 0.15
+    dragonfly.command_timeout_sec = 0.25
+    await dragonfly.open()
+
+    result = await dragonfly.command("get", "desk:cache:a", None, 60)
+
+    assert result["ok"] is True
+    assert result["value"] == "v"
+    assert dragonfly.circuit_breaker.state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_cancelled_half_open_trial_can_run_again(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(delay=0.05)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    await dragonfly.open()
+    dragonfly.circuit_breaker.state = "half-open"
+    dragonfly.circuit_breaker.last_failure_time = time.monotonic()
+    limiter = _limiter(dragonfly)
+
+    task = asyncio.create_task(limiter.check_rate_limit("lead"))
+    await asyncio.sleep(0.01)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert dragonfly._trial_in_flight is False
+    allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
+    assert allowed is True
+    assert remaining == 9
+    assert dragonfly.circuit_breaker.state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_failed_script_load_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client()
+    client.fail_loads = 1
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    await dragonfly.open()
+    limiter = _limiter(dragonfly)
+
+    await limiter.check_rate_limit("lead")
+    assert dragonfly._sha is None
+    allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
+
+    assert allowed is True
+    assert remaining == 9
+    assert client.loads == [TOKEN_BUCKET_LUA, TOKEN_BUCKET_LUA]
+    assert client.sha_seen == ["sha"]
+    assert None not in client.sha_seen
+
+
+@pytest.mark.asyncio
+async def test_shutdown_closes_the_unpublished_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(ping_delay=5.0)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    dragonfly.schedule_warm()
+    warm = dragonfly._warm_task
+    assert warm is not None
+    await client.ping_started.wait()
+
+    await dragonfly.aclose()
+
+    assert warm.done()
+    assert client.closed is True
+    assert dragonfly.warm is False
 
 
 @pytest.mark.asyncio

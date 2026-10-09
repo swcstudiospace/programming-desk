@@ -2,13 +2,13 @@
   "task_id": "dragonfly-limiter-pool",
   "bot": "bot-01-systems-backend",
   "started_at": "2026-10-09T14:54:00Z",
-  "completed_at": "2026-10-09T15:40:00Z",
+  "completed_at": "2026-10-09T15:55:00Z",
   "commands": [
     {
       "cmd": "cd /workspace/services/desk-gateway && /tmp/gw-venv/bin/python -m pytest tests/test_dragonfly_limiter.py tests/test_edge_routing.py tests/test_chaos_recovery.py -q --tb=line",
       "exit_code": 0,
-      "duration_s": 2.92,
-      "output_tail": "29 passed in 2.92s"
+      "duration_s": 3.0,
+      "output_tail": "33 passed in 3.00s"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
@@ -92,7 +92,7 @@
     "Pre-change failure was observed once in this session against edge.py at 81a6d3e: one slow check did not return within 0.4 s, and five checks opened five clients. That check replaced the file briefly and is not a re-runnable receipt command.",
     "The full desk-gateway suite is not green in this VM: many tests mkdir /var/lib/desk-gateway and raise PermissionError. That failure is environmental and is not evidence about this change.",
     "approved_by is absent until bot-00-programming-lead or a human stamps this receipt. The authoring seat does not self-approve. check_receipt.py --strict is expected to fail on that missing stamp and on nothing else.",
-    "Greptile reviewed 92d8730 with an empty review body and three comments (two of them on the deleted test file, one on ab508ac). No numeric score was in the review. This revision addresses those three comments. It is not a 5/5 merge claim."
+    "Greptile's review of 3113292 completed with five comments and an empty review body, so there is no numeric score. This revision addresses those five comments. It is not a 5/5 merge claim."
   ],
   "files_changed": [
     "services/desk-gateway/README.md",

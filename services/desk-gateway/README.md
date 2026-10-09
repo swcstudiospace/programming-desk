@@ -55,7 +55,7 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | `SUBSTRATE_URL/TOKEN`, `AGENT_BUS_URL/TOKEN` | Local upstreams on the VPS |
 | `HINDSIGHT_URL/API_KEY`, `RAGFLOW_URL/API_KEY`, `GREPTIME_*`, `SUBSTRATE_PG_URL`, `DRAGONFLY_URL` | Data planes via the per-project Tailscale forwarders |
 | `DRAGONFLY_CONNECT_TIMEOUT_MS` | Startup connect only. Default `500`. A seat request does not wait on this |
-| `DRAGONFLY_COMMAND_TIMEOUT_MS` | Socket timeout for one pooled command. Default `250` |
+| `DRAGONFLY_COMMAND_TIMEOUT_MS` | Socket timeout and budget for one cache command. Default `250`. Rate-limit checks use `DRAGONFLY_RATE_LIMIT_BUDGET_MS` instead |
 | `DRAGONFLY_RATE_LIMIT_BUDGET_MS` | Cap on one rate-limit check. Default `150`. The local token bucket answers when it expires |
 | `DRAGONFLY_HEALTH_CHECK_INTERVAL_SEC` | Idle-connection check on the shared pool. Default `30`. `DRAGONFLY_SOCKET_KEEPALIVE` defaults on |
 | `DRAGONFLY_BREAKER_FAILURES`, `DRAGONFLY_BREAKER_RECOVERY_SEC` | Shared circuit breaker. Defaults `3` failures and `30` seconds. While it is open, rate limits stay local and do no network I/O |

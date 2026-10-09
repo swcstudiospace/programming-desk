@@ -722,6 +722,7 @@ class Dragonfly:
         self._logged_failure = False
         self._inflight = 0
         self._warm_task: asyncio.Task[None] | None = None
+        self._script_lock = asyncio.Lock()
 
     @property
     def warm(self) -> bool:
@@ -750,21 +751,25 @@ class Dragonfly:
                 client.ping(),
                 timeout=self.connect_timeout_sec + self.command_timeout_sec,
             )
+            async with self._client_lock:
+                if self._client is not None:
+                    await client.aclose()
+                else:
+                    self._client = client
+                    self._script = None
+                    self._script_client = None
+                    self._sha = None
+                client = None
+            self.finish_attempt(ok=True)
+        except asyncio.CancelledError:
+            self.finish_neutral()
+            raise
         except Exception as exc:
-            if client is not None:
-                await client.aclose()
             self.finish_attempt(ok=False)
             self.note_failure(type(exc).__name__)
-            return
-        async with self._client_lock:
-            if self._client is not None:
+        finally:
+            if client is not None:
                 await client.aclose()
-            else:
-                self._client = client
-                self._script = None
-                self._script_client = None
-                self._sha = None
-        self.finish_attempt(ok=True)
 
     def schedule_warm(self) -> None:
         """Retry startup warming on the event loop, not on the request budget."""
@@ -872,6 +877,12 @@ class Dragonfly:
         self._warm_task = None
         if task is not None and task is not current and not task.done():
             task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
         async with self._client_lock:
             client = self._client
             self._client = None
@@ -899,12 +910,15 @@ class Dragonfly:
         try:
             result = await asyncio.wait_for(
                 self._execute(action, key, value, ttl_sec),
-                timeout=self.request_budget_sec,
+                timeout=self.command_timeout_sec,
             )
+        except asyncio.CancelledError:
+            self.finish_neutral()
+            raise
         except TimeoutError:
             self.finish_attempt(ok=False)
             self._note_failure("timeout")
-            return {"error": UPSTREAM_ERROR, "reason": "dragonfly: request budget exceeded"}
+            return {"error": UPSTREAM_ERROR, "reason": "dragonfly: command budget exceeded"}
         except PoolSaturated:
             self.finish_neutral()
             return {"error": UPSTREAM_ERROR, "reason": "dragonfly: pool busy"}
@@ -959,16 +973,29 @@ class Dragonfly:
 
     async def _evalsha(self, client: Any, redis_key: str, *args: str) -> Any:
         NoScriptError = _noscript_error()
+        sha = await self._ensure_sha(client)
+        try:
+            return await client.evalsha(sha, 1, redis_key, *args)
+        except NoScriptError:
+            sha = await self._reload_sha(client)
+            return await client.evalsha(sha, 1, redis_key, *args)
 
-        if self._script is None or self._script_client is not client:
+    async def _ensure_sha(self, client: Any) -> str:
+        async with self._script_lock:
+            if self._sha is not None and self._script_client is client:
+                return self._sha
+            sha = await client.script_load(TOKEN_BUCKET_LUA)
             self._script = client.register_script(TOKEN_BUCKET_LUA)
             self._script_client = client
-            self._sha = await client.script_load(TOKEN_BUCKET_LUA)
-        try:
-            return await client.evalsha(self._sha, 1, redis_key, *args)
-        except NoScriptError:
-            self._sha = await client.script_load(TOKEN_BUCKET_LUA)
-            return await client.evalsha(self._sha, 1, redis_key, *args)
+            self._sha = sha
+            return sha
+
+    async def _reload_sha(self, client: Any) -> str:
+        async with self._script_lock:
+            sha = await client.script_load(TOKEN_BUCKET_LUA)
+            self._script_client = client
+            self._sha = sha
+            return sha
 
     async def health(self) -> dict[str, Any]:
         return await self.command("ping", "health", None, 1)

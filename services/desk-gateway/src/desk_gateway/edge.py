@@ -407,6 +407,9 @@ class DistributedRateLimiter:
                         ),
                         timeout=self._request_budget(),
                     )
+                except asyncio.CancelledError:
+                    self.dragonfly.finish_neutral()
+                    raise
                 except PoolSaturated:
                     self.dragonfly.finish_neutral()
                     self.local_fallback += 1

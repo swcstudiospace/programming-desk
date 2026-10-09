@@ -139,14 +139,42 @@ await Promise.all([
 const started = performance.now();
 let runExit = 1;
 let runOutput = '';
+let cancellation: 'SIGINT' | 'SIGTERM' | undefined;
 try {
   if (!['verify', 'selftest', 'selftest:fail'].includes(mode ?? '')) {
     throw new Error('usage: to-receipt.ts verify|selftest|selftest:fail [Playwright test options]');
   }
   const require = createRequire(import.meta.url);
   const cli = join(dirname(require.resolve('playwright/package.json')), 'cli.js');
-  runExit = await new Promise<number>((resolveExit, reject) => {
-    const child = spawn(process.execPath, [cli, 'test', ...args], { env, stdio: ['inherit', 'pipe', 'pipe'] });
+  runExit = await new Promise<number>((resolveExit) => {
+    // Isolate the CLI/workers from the wrapper's terminal process group on POSIX.
+    // Playwright owns separate browser/web-server groups and tears them down in
+    // its SIGINT cancellation path; killing only the CLI with SIGTERM skips that.
+    const child = spawn(process.execPath, [cli, 'test', ...args], {
+      env, stdio: ['inherit', 'pipe', 'pipe'], detached: process.platform !== 'win32',
+    });
+    const cancel = (signal: 'SIGINT' | 'SIGTERM') => {
+      if (cancellation) return;
+      cancellation = signal;
+      // Forward both cancellation requests as SIGINT so the runner awaits its
+      // worker/browser/server teardown and finishes the interrupted report.
+      try {
+        if (process.platform !== 'win32' && child.pid) process.kill(-child.pid, 'SIGINT');
+        else child.kill('SIGINT');
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+          runOutput += ` Could not forward cancellation: ${error instanceof Error ? error.message : String(error)}`;
+        }
+      }
+    };
+    const onSigint = () => cancel('SIGINT');
+    const onSigterm = () => cancel('SIGTERM');
+    const unregister = () => {
+      process.off('SIGINT', onSigint);
+      process.off('SIGTERM', onSigterm);
+    };
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
     child.stdout.on('data', (chunk: Buffer) => {
       runOutput = (runOutput + chunk.toString()).slice(-4000);
       process.stdout.write(chunk);
@@ -155,8 +183,13 @@ try {
       runOutput = (runOutput + chunk.toString()).slice(-4000);
       process.stderr.write(chunk);
     });
-    child.on('error', reject);
-    child.on('close', (code, signal) => {
+    child.once('error', (error) => {
+      unregister();
+      runOutput += ` ${error.message}`;
+      // Even a failed spawn emits close; evidence is written only after close.
+    });
+    child.once('close', (code, signal) => {
+      unregister();
       if (signal) runOutput += ` Playwright terminated by ${signal}`;
       resolveExit(code ?? 1);
     });
@@ -192,6 +225,15 @@ if (reportError) {
     output_tail: tail(reportError),
   });
 }
+const cancellationExit = cancellation === 'SIGINT' ? 130 : cancellation === 'SIGTERM' ? 143 : 0;
+if (cancellation) {
+  commands.push({
+    cmd: replay(args),
+    exit_code: cancellationExit,
+    duration_s: 0,
+    output_tail: `Canceled by ${cancellation}; forwarded SIGINT and waited for Playwright close`,
+  });
+}
 await writeFile(outPath, `${JSON.stringify({ run: { exit_code: runExit, duration_s: duration }, commands }, null, 2)}\n`);
 const failed = commands.filter((entry) => entry.exit_code !== 0);
 process.stdout.write(`verify-result checks=${checks.length} failed=${failed.length} run_exit=${runExit}\n`);
@@ -199,7 +241,7 @@ process.stdout.write(`verify-result checks=${checks.length} failed=${failed.leng
 if (mode === 'selftest:fail') {
   const projects = (env.VERIFY_BROWSERS ?? 'chromium').split(',').map((name) => name.trim()).filter(Boolean);
   const expected = ['http-status', 'console-error', 'page-error', 'axe-serious-or-critical', 'screenshots'];
-  const correct = runExit === 1 && !reportError && checks.length === projects.length * expected.length &&
+  const correct = !cancellation && runExit === 1 && !reportError && checks.length === projects.length * expected.length &&
     projects.every((project) => expected.every((title) => {
       const matching = checks.filter((check) => check.project === project && check.route === '/fail.html' && check.title === title);
       if (matching.length !== 1) return false;
@@ -215,7 +257,7 @@ if (mode === 'selftest:fail') {
   process.stdout.write(correct
     ? 'selftest:fail: observed exactly the expected console-error and image-alt failures in every project\n'
     : 'selftest:fail: missing expected failures or encountered an unexpected failure; see current report\n');
-  process.exitCode = correct ? 0 : 1;
+  process.exitCode = cancellationExit || (correct ? 0 : 1);
 } else {
-  process.exitCode = runExit || (failed.length > 0 ? 1 : 0);
+  process.exitCode = cancellationExit || runExit || (failed.length > 0 ? 1 : 0);
 }

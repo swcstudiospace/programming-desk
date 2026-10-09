@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -135,6 +135,137 @@ if (process.env.VERIFY_FIXTURES === '1' && process.env.VERIFY_HARNESS_REGRESSION
       expect(opened.consoleErrors).toEqual(['fixture-console-error: desk-verify-fail']);
       expect(opened.pageErrors).toEqual(['fixture-page-error: desk-verify-fail']);
     });
+
+    for (const [mode, signal] of [
+      ['verify', 'SIGINT'], ['verify', 'SIGTERM'], ['selftest', 'SIGTERM'], ['selftest:fail', 'SIGTERM'],
+    ] as const) {
+      test(`cancellation ${mode} ${signal} waits for browser and fixture cleanup`, async () => {
+        test.skip(process.platform === 'win32', 'POSIX signal/process-group regression; Windows tree cleanup is not guaranteed');
+        test.setTimeout(60_000);
+        const sandbox = await mkdtemp(join(tmpdir(), 'web-verify-cancellation-'));
+        const packageRoot = fileURLToPath(new URL('../', import.meta.url));
+        let child: ChildProcess | undefined;
+        let cliPid: number | undefined;
+        let closed = false;
+        try {
+          for (const name of ['package.json', 'playwright.config.ts', 'scripts', 'fixtures']) {
+            await cp(join(packageRoot, name), join(sandbox, name), { recursive: true });
+          }
+          await symlink(join(packageRoot, 'node_modules'), join(sandbox, 'node_modules'), 'dir');
+          await mkdir(join(sandbox, 'tests'));
+          // This is a real Playwright test, not a substitute CLI. Readiness is
+          // emitted only after Chromium loads the actual managed fixture server.
+          await writeFile(join(sandbox, 'tests/cancellation.spec.ts'), `
+import { test } from '@playwright/test';
+import { writeFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
+test('cancellation target', async ({ page, browser }) => {
+  await page.goto('/pass.html');
+  const cdp = await browser.newBrowserCDPSession();
+  const { processInfo } = await cdp.send('SystemInfo.getProcessInfo');
+  const browserProcess = processInfo.find((entry) => entry.type === 'browser');
+  if (!browserProcess) throw new Error('Chromium process identity unavailable');
+  let writes = 0;
+  writeFileSync('worker-writes.txt', String(writes));
+  setInterval(() => writeFileSync('worker-writes.txt', String(++writes)), 50);
+  await writeFile('ready.json', JSON.stringify({
+    workerPid: process.pid, cliPid: process.ppid, browserPids: processInfo.map((entry) => entry.id),
+  }));
+  await page.waitForTimeout(25_000);
+});
+`);
+          const portServer = createServer();
+          await new Promise<void>((resolvePort) => portServer.listen(0, '127.0.0.1', resolvePort));
+          const address = portServer.address();
+          if (!address || typeof address === 'string') throw new Error('No fixture port allocated');
+          const port = address.port;
+          await new Promise<void>((resolvePort, reject) => portServer.close((error) => error ? reject(error) : resolvePort()));
+          child = spawn(process.execPath, ['--experimental-strip-types', 'scripts/to-receipt.ts', mode], {
+            cwd: sandbox, detached: true, stdio: ['ignore', 'pipe', 'pipe'],
+            env: {
+              ...process.env, VERIFY_FIXTURES: '1', VERIFY_HARNESS_REGRESSIONS: '0',
+              VERIFY_BROWSERS: 'chromium', VERIFY_FIXTURE_PORT: String(port),
+              BASE_URL: `http://127.0.0.1:${port}`,
+            },
+          });
+          let output = '';
+          child.stdout?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); });
+          child.stderr?.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-8000); });
+          let launchError: Error | undefined;
+          const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolveExit) => {
+            child!.once('error', (error) => { launchError = error; });
+            child!.once('close', (code, exitSignal) => {
+              closed = true;
+              resolveExit({ code, signal: exitSignal });
+            });
+          });
+          await expect.poll(async () => {
+            if (launchError) throw launchError;
+            try { return await readFile(join(sandbox, 'ready.json'), 'utf8'); }
+            catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+              if (closed) throw new Error(`Wrapper exited before Chromium readiness: ${output}`);
+              return '';
+            }
+          }, { timeout: 20_000 }).not.toBe('');
+          const ready = JSON.parse(await readFile(join(sandbox, 'ready.json'), 'utf8')) as {
+            workerPid: number; cliPid: number; browserPids: number[];
+          };
+          cliPid = ready.cliPid;
+          expect(child.kill(signal)).toBe(true); // Signal only the wrapper PID.
+          await expect.poll(() => closed, { timeout: 20_000 }).toBe(true);
+          const exit = await exited;
+          expect(exit.signal, output).toBeNull();
+          expect(exit.code, output).toBe(signal === 'SIGINT' ? 130 : 143);
+          const receiptText = await readFile(join(sandbox, 'out/verify-result.json'), 'utf8');
+          const receipt = JSON.parse(receiptText) as {
+            run: { exit_code: number };
+            commands: Array<{ exit_code: number; output_tail: string }>;
+          };
+          expect(receipt.run.exit_code, output).not.toBe(0);
+          expect(receipt.commands.some((entry) =>
+            entry.exit_code !== 0 && entry.output_tail.includes(`Canceled by ${signal}`),
+          )).toBe(true);
+          // Detached browsers and web servers are not covered by the CLI group:
+          // assert Playwright's own teardown actually stopped them before close.
+          for (const pid of [ready.cliPid, ready.workerPid, ...ready.browserPids]) {
+            let alive = true;
+            try {
+              process.kill(pid, 0);
+              if (process.platform === 'linux') {
+                const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
+                alive = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[0] !== 'Z';
+              }
+            } catch (error) {
+              if (!['ESRCH', 'ENOENT'].includes((error as NodeJS.ErrnoException).code ?? '')) throw error;
+              alive = false;
+            }
+            expect(alive, `Process ${pid} survived wrapper close: ${output}`).toBe(false);
+          }
+          const rebound = createServer();
+          await new Promise<void>((resolvePort, reject) => {
+            rebound.once('error', reject);
+            rebound.listen(port, '127.0.0.1', resolvePort);
+          });
+          await new Promise<void>((resolvePort, reject) => rebound.close((error) => error ? reject(error) : resolvePort()));
+          const workerWrites = await readFile(join(sandbox, 'worker-writes.txt'), 'utf8');
+          await new Promise<void>((resolveWait) => setTimeout(resolveWait, 250));
+          expect(await readFile(join(sandbox, 'worker-writes.txt'), 'utf8')).toBe(workerWrites);
+          expect(await readFile(join(sandbox, 'out/verify-result.json'), 'utf8')).toBe(receiptText);
+        } finally {
+          // Also clean a pre-fix reproduction's orphaned CLI group on failure.
+          for (const pid of [cliPid, child?.pid]) {
+            if (!pid) continue;
+            try { process.kill(-pid, 'SIGINT'); }
+            catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+          }
+          if (child && !closed) {
+            await new Promise<void>((resolveClose) => child!.once('close', () => resolveClose()));
+          }
+          await rm(sandbox, { recursive: true, force: true });
+        }
+      });
+    }
 
     test('writes current failure evidence, checks negative failures, and replays unique screenshots', async () => {
       test.setTimeout(120_000);

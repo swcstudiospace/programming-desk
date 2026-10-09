@@ -52,9 +52,17 @@ VERIFY_STARTUP_MS=2000 BASE_URL=http://127.0.0.1:3000 ROUTES=/ npm run verify
 
 Do not commit `node_modules/` or `out/`.
 
-All three run scripts launch Playwright and convert its **current** report even when Playwright fails. They remove the old raw report, result, screenshots, and `out/test-results/` traces before launch; configuration or browser-launch failures cannot reuse previous results or failure artifacts. `run.exit_code` is the actual Playwright exit code, including on a negative self-check. Normal `verify` and `selftest` exit nonzero for a failed invocation, failed/missing check, or unusable report. Retries remain disabled.
+All three run scripts launch Playwright and convert its **current** report even when Playwright fails. They remove the old raw report, result, screenshots, and `out/test-results/` traces before launch; configuration or browser-launch failures cannot reuse previous results or failure artifacts. `run.exit_code` is the actual Playwright exit code (or `1` if it closed without an exit code), including on a negative self-check. Normal `verify` and `selftest` exit nonzero for a failed invocation, failed/missing check, or unusable report. Retries remain disabled.
 
 Run from this package directory. Do not run concurrent invocations against the shared `out/` directory. Invoke `npm run verify`, not `npx playwright test && ...`: the latter bypasses cleanup/evidence generation. Additional Playwright test options may be passed after `--`; overriding the JSON reporter leaves no usable report and therefore fails verification. There is no standalone converter mode, because an old report cannot establish its invocation.
+
+### Cancellation
+
+Signal the native wrapper PID (`node --experimental-strip-types scripts/to-receipt.ts ...`), rather than relying on `npm` to forward signals. On POSIX, the wrapper starts the native Playwright CLI and workers in a separate process group. The first `SIGINT` or `SIGTERM` requests cancellation by forwarding **SIGINT** to that group: this Playwright version's test runner implements graceful cancellation through SIGINT, not SIGTERM. The runner owns the separately grouped Chromium and managed fixture-server processes; its teardown closes those resources. Sending SIGTERM directly to the CLI instead would bypass the runner's awaited teardown.
+
+The wrapper waits for the CLI's `close` event (including closed output pipes), unregisters signal handlers on child error/close, then writes the current evidence. A canceled run adds a nonzero `Canceled by SIGINT`/`SIGTERM` command entry, preserves the actual child exit code, and exits `130`/`143` respectively, even if the report contains passing checks or the mode is `selftest:fail`. Repeated cancellation requests do not interrupt teardown. No wrapper-side timeout or forced-kill escalation is implemented: a stuck Playwright teardown can keep the wrapper waiting. `SIGKILL`, a wrapper crash, or signaling unrelated/externally managed processes is outside this graceful-cleanup guarantee; the harness does not stop a server you started yourself.
+
+Windows has no equivalent POSIX process-group signaling here. The wrapper forwards SIGINT to the child PID and still waits for close/non-passing evidence, but Node may terminate that child rather than perform graceful SIGINT delivery. Windows descendant browser/server cleanup is **not guaranteed and has not been tested**; the cancellation regressions skip Windows. Use a POSIX runner for the process-group cancellation path covered by these regressions.
 
 Each `commands[].cmd` is shell-replayable from this directory. It preserves route, browser/project, fixture port, startup interval, and check selection, and safely quotes shell arguments. The original `BASE_URL` is deliberately **not** written into the command: export it when replaying. Use only credential-free routes and URLs; do not put tokens in query strings or CLI arguments.
 
@@ -93,11 +101,22 @@ VERIFY_STARTUP_MS=1000 npm run verify
 VERIFY_BROWSERS=unknown-browser npm run selftest
 ```
 
-The optional behavioral regression suite exercises real delayed errors and isolated child CLI runs: a passing run followed by configuration/browser-launch failures, exact negative self-checks, a missing console error, colliding route screenshot paths, and shell replay with a quoted route. It uses installed Chromium; child outputs are isolated in a temporary directory, removed afterward:
+The optional behavioral regression suite exercises real delayed errors and isolated child CLI runs: a passing run followed by configuration/browser-launch failures, exact negative self-checks, a missing console error, colliding route screenshot paths, shell replay with a quoted route, and POSIX SIGINT/SIGTERM cancellation in normal and self-check modes. It uses installed Chromium; child outputs are isolated in a temporary directory, removed afterward:
 
 ```bash
 VERIFY_HARNESS_REGRESSIONS=1 npm run selftest
 ```
+
+Run only the cancellation reproductions (installed Chromium and Node 22.6+ required; choose an unused outer fixture port):
+
+```bash
+VERIFY_FIXTURES=1 VERIFY_HARNESS_REGRESSIONS=1 VERIFY_BROWSERS=chromium \
+VERIFY_FIXTURE_PORT=4199 BASE_URL=http://127.0.0.1:4199 \
+node --experimental-strip-types scripts/to-receipt.ts verify \
+  --grep 'harness regressions cancellation'
+```
+
+The tests launch the real native wrapper/Playwright CLI in isolated package copies, wait until a real Chromium page loads the managed fixture server and starts a repeating worker file write, record the CLI/worker/browser PIDs, and signal **only** the wrapper PID. With the old wrapper, SIGTERM exits it immediately while the child keeps running; the same regression fails on wrapper signal exit/missing cancellation evidence. With the fix, each canceled child must exit `130`/`143` without a terminating signal, produce non-passing evidence, leave no running recorded CLI/worker/browser process, immediately release the fixture port for rebinding, and leave both the worker-write counter and result JSON unchanged after close. The outer regression command exits `0` only if those assertions pass; its passing report is evidence about cancellation handling, not a passing canceled child verification. Cleanup in the tests also signals the isolated groups if an assertion fails.
 
 After installing Firefox, confirm separate project and route destinations with:
 

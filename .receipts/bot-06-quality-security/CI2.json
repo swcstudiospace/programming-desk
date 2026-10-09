@@ -173,7 +173,7 @@
   ],
   "unverified": [
     "Bandit's finding diff, pip-audit, and Trivy were not re-executed. The bandit job lost the same --depth=1 fetch; its baseline scan was not run.",
-    "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict is expected to fail on that field alone.",
+    "Ming authorized this stamp in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy. This commit stamps the receipt; Lead merges the pull request.",
     "Greptile re-review of the P2 test tightening has not completed. The first review on e3a34b6 scored no numeric confidence in the check summary and left one P2 comment.",
     "Self-hosted Security PR Gate jobs were still queued at the first review. Bandit, pip-audit, and Trivy were not re-executed locally."
   ],
@@ -184,5 +184,6 @@
   ],
   "contract_changes": [],
   "rollback_plan": "Revert this commit with git revert. The next workflow run picks the previous fetch up immediately. No data, schema, or migration is involved.",
-  "approvals": []
+  "approvals": [],
+  "approved_by": "human:SomeRandmGuyy"
 }

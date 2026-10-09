@@ -2,74 +2,64 @@
   "task_id": "verify-android-harness-ut-muzt4gj6-5c134423",
   "bot": "bot-03-android",
   "branch": "bot-03-android/verify-android-harness-ut-muzt4gj6",
-  "started_at": "2026-10-08T17:34:00Z",
-  "completed_at": "2026-10-08T17:45:22Z",
+  "receipt_kind": "verification",
+  "evidence_provenance": "Commands and outcomes observed by the parent orchestrator in the isolated /tmp/pr89 worktree after the review, looping-path and XML security corrections. This is the single active receipt at the original work-packet path; pre-fix evidence remains immutable in Git history, not rewritten as post-fix evidence.",
+  "superseded_receipt": "https://github.com/swcstudiospace/programming-desk/blob/953b552eea908984b8ad8964f4d2cc80070f96f2/.receipts/bot-03-android/verify-android-harness-ut-muzt4gj6-5c134423.json",
+  "staging_provenance": "The ignored receipt was tracked with the repository-mandated git add -f; index staging is not verification. Command 2 records the separately executed Python verification subcommand, not the staging prelude.",
   "commands": [
     {
-      "cmd": "python3 -m pytest android/tools/tests/test_verify_tools.py::MaestroFlowTests::test_returns_1_when_junit_reports_a_failure -v",
-      "exit_code": 1,
-      "duration_s": 2.106,
-      "output_tail": "E       AssertionError: 0 != 1\n\nandroid/tools/tests/test_verify_tools.py:218: AssertionError\nFAILED android/tools/tests/test_verify_tools.py::MaestroFlowTests::test_returns_1_when_junit_reports_a_failure\n1 failed in 0.86s"
-    },
-    {
-      "cmd": "python3 -m pytest android/tools/tests -v",
+      "cmd": "/tmp/desk-android-verify-python/bin/python -m pytest android/tools/tests/ -q",
+      "cwd": "/tmp/pr89",
       "exit_code": 0,
-      "duration_s": 27.96,
-      "output_tail": "33 passed in 27.96s"
+      "output_tail": "46 passed, 14 subtests passed in 1.86s"
     },
     {
-      "cmd": "python3 -m android.tools accel_check --json",
+      "cmd": "/tmp/desk-android-verify-python/bin/python - <<'PY'\nimport os, subprocess, sys\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom android.tools.tests.test_verify_tools import ADB_BODY, MAESTRO_BODY, write_exe\nwith TemporaryDirectory() as directory:\n root=Path(directory); (root/'bin').mkdir(); (root/'flow.yaml').write_text('appId: smoke.fixture\\n---\\n- launchApp\\n')\n write_exe(root/'bin/maestro',MAESTRO_BODY); write_exe(root/'bin/adb',ADB_BODY)\n env={**os.environ,'PATH':'bin'+os.pathsep+os.environ.get('PATH',''),'PYTHONPATH':str(Path.cwd()),'MAESTRO_FAKE_RESULT':'pass'}\n def run(*args,extra=None):\n  proc=subprocess.run([sys.executable,'-m','android.tools',*args],cwd=root,env={**env,**(extra or {})},text=True,capture_output=True)\n  return proc.returncode,proc.stdout,proc.stderr\n code,stdout,stderr=run('maestro_flow','--serial','emulator-5554','--flow','flow.yaml','--out',str(root/'maestro'))\n assert code==0,(code,stdout,stderr)\n reports={'empty':'<testsuite tests=\"0\"/>','skipped':'<testsuite><testcase><skipped/></testcase></testsuite>','unrelated':'<config/>','doctype':'<!DOCTYPE testsuite><testsuite><testcase/></testsuite>','entity':'<!DOCTYPE testsuite [<!ENTITY x \"expanded\">]><testsuite><testcase name=\"&x;\"/></testsuite>'}; outcomes={}\n for case,xml in reports.items():\n  code,stdout,stderr=run('maestro_flow','--serial','emulator-5554','--flow','flow.yaml','--out',str(root/('maestro-'+case)),extra={'MAESTRO_FAKE_XML':xml})\n  assert code==1,(case,code,stdout,stderr); outcomes[case]=code\n (root/'loop').symlink_to(root/'loop')\n code,stdout,stderr=run('maestro_flow','--serial','emulator-5554','--flow','loop','--out',str(root/'loop-out'))\n assert code==2 and 'Traceback' not in stderr and not (root/'loop-out').exists(),(code,stdout,stderr)\n out=root/'recordings'; out.mkdir(); previous=out/'screenrecord.mp4'; previous.write_bytes(b'previous-recording')\n code,stdout,stderr=run('screenrecord','--serial','emulator-5554','--out',str(out),'--seconds','1',extra={'ADB_PULL_EXIT':'1'})\n assert code==1 and previous.read_bytes()==b'previous-recording',(code,stdout,stderr)\n code,stdout,stderr=run('screenrecord','--serial','emulator-5554','--out',str(out),'--seconds','1')\n assert code==0 and previous.read_bytes()==b'fake-screenrecord',(code,stdout,stderr)\n print({'python_version':sys.version.split()[0],'relative_path_and_flow_exit':0,'rejected_reports':outcomes,'looping_flow_exit':2,'loop_output_created':False,'failed_pull_exit':1,'previous_recording_preserved':True,'successful_pull_exit':code,'fresh_local_recording':True,'device_exercised':False})\nPY",
+      "cwd": "/tmp/pr89",
       "exit_code": 0,
-      "duration_s": 0.045,
-      "output_tail": "{\n  \"kvm_node\": true,\n  \"kvm_usable\": false,\n  \"emulator_accel\": null,\n  \"recommendation\": \"no-emulator\"\n}"
+      "output_tail": "{'python_version': '3.12.3', 'relative_path_and_flow_exit': 0, 'rejected_reports': {'empty': 1, 'skipped': 1, 'unrelated': 1, 'doctype': 1, 'entity': 1}, 'looping_flow_exit': 2, 'loop_output_created': False, 'failed_pull_exit': 1, 'previous_recording_preserved': True, 'successful_pull_exit': 0, 'fresh_local_recording': True, 'device_exercised': False}"
     },
     {
-      "cmd": "python3 -m android.tools accel_check --json --require",
-      "exit_code": 3,
-      "duration_s": 0.045,
-      "output_tail": "{\n  \"kvm_node\": true,\n  \"kvm_usable\": false,\n  \"emulator_accel\": null,\n  \"recommendation\": \"no-emulator\"\n}"
+      "cmd": "python3 - <<'PY'\nimport os, subprocess, sys, tempfile\nfrom pathlib import Path\nimport yaml\nroot=Path.cwd()\nworkflow=yaml.safe_load((root/'.github/workflows/gates.yml').read_text())\nrun=next(step['run'] for step in workflow['jobs']['gates']['steps'] if step.get('name')=='Locate the verification receipt')\nselector=run.split(\"python3 - <<'SELECT' > receipt.path\\n\",1)[1].split('\\nSELECT',1)[0]\nchanged=subprocess.run(['git','diff','--name-only','--cached','--diff-filter=d','origin/main','--','.receipts/bot-03-android'],check=True,capture_output=True,text=True).stdout.splitlines()\ncandidates=[item for item in changed if item.endswith('.json')]\nexpected='.receipts/bot-03-android/verify-android-harness-ut-muzt4gj6-5c134423.json'\nassert candidates==[expected],candidates\nwith tempfile.TemporaryDirectory() as directory:\n temporary=Path(directory); (temporary/'.receipts').symlink_to(root/'.receipts',target_is_directory=True)\n (temporary/'receipts.txt').write_text('\\n'.join(candidates)+'\\n')\n result=subprocess.run([sys.executable,'-c',selector],cwd=temporary,env={**os.environ,'BOT':'bot-03-android','HEAD_REF':'bot-03-android/verify-android-harness-ut-muzt4gj6'},capture_output=True,text=True)\n assert result.returncode==0 and result.stdout==expected+'\\n',(result.returncode,result.stdout,result.stderr)\n print({'workflow_selector_exit':result.returncode,'candidate_count':len(candidates),'selected_receipt':result.stdout.strip(),'candidate_source':'staged diff against origin/main','selector_source':'.github/workflows/gates.yml unmodified Python'})\nPY",
+      "cwd": "/tmp/pr89",
+      "exit_code": 0,
+      "output_tail": "{'workflow_selector_exit': 0, 'candidate_count': 1, 'selected_receipt': '.receipts/bot-03-android/verify-android-harness-ut-muzt4gj6-5c134423.json', 'candidate_source': 'staged diff against origin/main', 'selector_source': '.github/workflows/gates.yml unmodified Python'}"
     }
   ],
   "claims": [
     {
-      "claim": "Before the JUnit report was parsed, maestro_flow returned 0 on a report that contained a failure",
-      "evidence_command_index": 0,
-      "expects_failure": true
+      "claim": "The Android helper suite passed 46 tests and 14 subtests on Linux with Python 3.12.3 after the review, looping-path and XML security corrections; this is not Android device proof.",
+      "evidence_command_index": 0
     },
     {
-      "claim": "android/tools tests pass, including a missing KVM node reporting kvm_node false with recommendation no-emulator, --require exiting 3 in that case, and maestro_flow returning 1 when a JUnit report contains a failure",
+      "claim": "The actual Android CLI executed isolated executable fixtures: relative PATH and flow worked; empty/skipped/unrelated and DTD/entity-bearing JUnit reports returned 1; a looping flow symlink returned usage exit 2 without traceback or output creation; unsuccessful pull preserved previous local recording bytes; successful pull replaced them.",
       "evidence_command_index": 1
     },
     {
-      "claim": "On this host accel_check --json exits 0 with kvm_node true, kvm_usable false, emulator_accel null, and recommendation no-emulator",
+      "claim": "The unmodified workflow Python selector executed against the staged branch diff and chose exactly the canonical work-packet receipt. The superseded duplicate no longer participates; receipt selection is proven locally, not a hosted CI pass or independent approval.",
       "evidence_command_index": 2
-    },
-    {
-      "claim": "accel_check --require exits 3 on this host because the recommendation is no-emulator",
-      "evidence_command_index": 3,
-      "expects_failure": true
     }
   ],
   "unverified": [
-    "This VM has a /dev/kvm node the ubuntu user cannot open (EACCES). The acceptance host without a KVM node was not this machine; kvm_node false is the AccelCheckTests case that points the probe at a missing path.",
-    "No emulator binary is on PATH, so emulator -accel-check did not run on this host.",
-    "Maestro 2.11.0 was not installed. maestro_flow tests use a fake maestro binary. A real Maestro CLI that ignores --debug-output can still write logs under the user home directory.",
-    "No adb device or emulator was connected, so screenrecord and maestro_flow were not exercised on a device.",
-    "Not run on a device at minSdk. skills/platforms/android asks for that, and this host has no device.",
-    "The python executable is absent on this image; the commands above used python3.",
-    "Greptile was not run by this seat. QUALITY records that verdict. This change is not merge-ready.",
-    "approved_by is absent until LEAD (bot-00-programming-lead) or a human stamps the receipt."
+    "No Android emulator/KVM boot, physical device, real Maestro run or device recording was exercised; executable fixtures establish local CLI boundaries only.",
+    "Recording validation establishes a successful nonempty regular-file pull, not MP4 decoding or playback.",
+    "Remote cleanup is best-effort and warns on failure; actual device-side cleanup remains unverified.",
+    "Independent QUALITY approval is absent; approved_by is intentionally omitted and strict G-2 remains blocked.",
+    "This receipt does not claim latest-commit CI or Greptile completion; draft PR review must cover the pushed corrections.",
+    "Python verification used the isolated Python 3.12.3 /tmp/desk-android-verify-python environment with the pinned defusedxml dependency; system environments without that dependency were not exercised.",
+    "No deployment, production live-plane operation, merge, auto-merge or force-push was performed."
   ],
   "files_changed": [
-    "android/tools/accel_check.py",
-    "android/tools/maestro_flow.py",
-    "android/tools/screenrecord.py",
-    "android/tools/cli.py",
     "android/tools/USAGE.md",
+    "android/tools/maestro_flow.py",
+    "android/tools/requirements.txt",
+    "android/tools/screenrecord.py",
     "android/tools/tests/test_verify_tools.py",
     ".receipts/bot-03-android/verify-android-harness-ut-muzt4gj6-5c134423.json"
   ],
+  "files_changed_scope": "Review corrections and this receipt, not a retrospective inventory of the original implementation commit.",
   "contract_changes": [],
   "rollback_plan": null,
-  "approvals": []
+  "approvals": [],
+  "loop_acks": []
 }

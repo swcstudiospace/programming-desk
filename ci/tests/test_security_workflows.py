@@ -14,8 +14,10 @@ HIGH+ and still contains no bypass, which is the one thing a diff review can sil
 
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -69,6 +71,91 @@ class TestNoBypass:
         for block in _all_run_blocks(workflow):
             for snippet in BYPASS_SNIPPETS:
                 assert snippet not in block, f"bypass {snippet!r} found in a workflow run: block"
+
+
+# Git accepts both `git fetch --depth=1` and `git fetch --depth 1`. Either form
+# writes the shallow boundary that makes origin/$BASE_REF and HEAD have no merge base.
+DEPTH_FLAG = re.compile(r"--depth(?:=|\s+)\d+")
+
+HISTORY_JOBS = ("secrets", "semgrep", "bandit")
+
+
+def _executable_lines(block: str) -> str:
+    return "\n".join(line for line in block.splitlines() if not line.strip().startswith("#"))
+
+
+def _checkout_fetch_depth(job: dict):
+    for step in job["steps"]:
+        if str(step.get("uses", "")).startswith("actions/checkout"):
+            return (step.get("with") or {}).get("fetch-depth")
+    return None
+
+
+def _assert_scanners_keep_history(workflow: dict) -> None:
+    """secrets, semgrep, and bandit must see the base ref's ancestors.
+
+    A depth-limited fetch, or a checkout that is not fetch-depth: 0, hides those
+    ancestors once main has moved past the PR's fork point.
+    """
+    for block in _all_run_blocks(workflow):
+        commands = _executable_lines(block)
+        match = DEPTH_FLAG.search(commands)
+        assert match is None, f"depth-limited fetch {match.group(0)!r} cuts history the scanners need"
+    full_fetch = (
+        'git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"'
+    )
+    for job_name in HISTORY_JOBS:
+        job = _job(workflow, job_name)
+        depth = _checkout_fetch_depth(job)
+        assert depth == 0, f"{job_name} checkout fetch-depth is {depth!r}, not 0"
+        blocks = [step["run"] for step in job["steps"] if "run" in step]
+        assert any(full_fetch in block for block in blocks), (
+            f"{job_name} does not fetch the base ref with its history"
+        )
+
+
+class TestBaseRefFetchKeepsHistory:
+    """A depth-limited fetch of the base ref shallows that tip.
+
+    Checkout for the history scanners is fetch-depth: 0. Fetching the base with
+    --depth=1 or --depth 1 writes a shallow boundary at the new tip and hides its
+    ancestors. When main has moved past the PR's fork point, origin/$BASE_REF and
+    HEAD then have no merge base: gitleaks walks the whole branch (fixture tokens
+    included) and semgrep --baseline-commit exits 2. Confirmed on git 2.43 with a
+    branch cut from an older main: the depth-1 fetch yielded 142 commits in the
+    range, 21 gitleaks fixture hits, and semgrep exit 2; the full refspec fetch
+    yielded 1 commit, 0 gitleaks findings, and semgrep exit 0.
+    """
+
+    def test_workflow_keeps_full_history(self, workflow):
+        _assert_scanners_keep_history(workflow)
+
+    def test_equals_form_depth_flag_is_rejected(self, workflow):
+        mutated = copy.deepcopy(workflow)
+        step = _step(_job(mutated, "secrets"), "Fetch base ref")
+        step["run"] = 'git fetch --no-tags --depth=1 origin "$BASE_REF"\n'
+        with pytest.raises(AssertionError, match="depth-limited fetch"):
+            _assert_scanners_keep_history(mutated)
+
+    def test_space_form_depth_flag_is_rejected(self, workflow):
+        # `--depth=` does not occur in `git fetch --depth 1`, so a substring check
+        # for that spelling stays green while the shallow fetch comes back.
+        mutated = copy.deepcopy(workflow)
+        step = _step(_job(mutated, "bandit"), "Bandit baseline")
+        step["run"] = step["run"].replace(
+            'git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"',
+            'git fetch --no-tags --depth 1 origin "$BASE_REF"',
+        )
+        with pytest.raises(AssertionError, match="depth-limited fetch"):
+            _assert_scanners_keep_history(mutated)
+
+    def test_checkout_fetch_depth_must_stay_zero(self, workflow):
+        mutated = copy.deepcopy(workflow)
+        for step in _job(mutated, "semgrep")["steps"]:
+            if str(step.get("uses", "")).startswith("actions/checkout"):
+                step["with"]["fetch-depth"] = 1
+        with pytest.raises(AssertionError, match="fetch-depth"):
+            _assert_scanners_keep_history(mutated)
 
 
 class TestGitleaksBlocks:

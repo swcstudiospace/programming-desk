@@ -26,6 +26,12 @@ SEAT_LABEL: dict[str, str] = {
     "quality": "QUALITY",
 }
 TOOL_DEADLINE_SEC = 20.0
+# docs_search spends these inside the tool deadline: 4s lookup + 10s retrieval = 14s.
+DOCS_LOOKUP_BUDGET_SEC = 4.0
+DOCS_RETRIEVAL_BUDGET_SEC = 10.0
+RECALL_BANK_TIMEOUT_SEC = 6.0
+RAGFLOW_DATASET_TTL_SEC = 600.0
+DEFAULT_RAGFLOW_DATASETS = ("programming-desk", "agent-substrate")
 MAX_LIVE_TOOLS = 20
 PACK_MAX_TOOLS = 5
 
@@ -36,6 +42,13 @@ def _env(name: str, default: str = "") -> str:
 
 def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = _env(name)
+    if not raw:
+        return default
+    return float(raw)
 
 
 @dataclass
@@ -103,6 +116,11 @@ class Settings:
     edge_latency_threshold_ms: float = 400.0
     edge_rate_limit_per_minute: int = 60
     edge_burst_capacity: int = 120
+    ragflow_datasets: list[str] = field(default_factory=lambda: list(DEFAULT_RAGFLOW_DATASETS))
+    ragflow_dataset_ttl_sec: float = RAGFLOW_DATASET_TTL_SEC
+    docs_lookup_budget_sec: float = DOCS_LOOKUP_BUDGET_SEC
+    docs_retrieval_budget_sec: float = DOCS_RETRIEVAL_BUDGET_SEC
+    recall_bank_timeout_sec: float = RECALL_BANK_TIMEOUT_SEC
 
     @property
     def issuer_url(self) -> str:
@@ -232,4 +250,9 @@ class Settings:
             edge_latency_threshold_ms=float(_env("EDGE_LATENCY_THRESHOLD_MS", "400.0")),
             edge_rate_limit_per_minute=int(_env("EDGE_RATE_LIMIT_PER_MINUTE", "60")),
             edge_burst_capacity=int(_env("EDGE_BURST_CAPACITY", "120")),
+            ragflow_datasets=_csv(_env("RAGFLOW_DATASETS")) or list(DEFAULT_RAGFLOW_DATASETS),
+            ragflow_dataset_ttl_sec=_float_env("RAGFLOW_DATASET_TTL_SEC", RAGFLOW_DATASET_TTL_SEC),
+            docs_lookup_budget_sec=_float_env("DOCS_LOOKUP_BUDGET_SEC", DOCS_LOOKUP_BUDGET_SEC),
+            docs_retrieval_budget_sec=_float_env("DOCS_RETRIEVAL_BUDGET_SEC", DOCS_RETRIEVAL_BUDGET_SEC),
+            recall_bank_timeout_sec=_float_env("RECALL_BANK_TIMEOUT_SEC", RECALL_BANK_TIMEOUT_SEC),
         )

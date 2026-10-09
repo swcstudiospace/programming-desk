@@ -54,6 +54,11 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | `INTAKE_TOKENS` | `origin:token,...` accepted on `/v1/intake` |
 | `SUBSTRATE_URL/TOKEN`, `AGENT_BUS_URL/TOKEN` | Local upstreams on the VPS |
 | `HINDSIGHT_URL/API_KEY`, `RAGFLOW_URL/API_KEY`, `GREPTIME_*`, `SUBSTRATE_PG_URL`, `DRAGONFLY_URL` | Data planes via the per-project Tailscale forwarders |
+| `RAGFLOW_DATASETS` | Comma-separated dataset names to search. Unset means `programming-desk,agent-substrate`. A name RAGflow does not have is reported as missing and is not fatal |
+| `RAGFLOW_DATASET_TTL_SEC` | How long a dataset name-to-id entry is reused. Default `600`. A miss or an unknown-dataset retrieval refreshes once |
+| `DOCS_LOOKUP_BUDGET_SEC` | Cap on a RAGflow dataset lookup, including that one refresh. Default `4` |
+| `DOCS_RETRIEVAL_BUDGET_SEC` | Cap on a RAGflow retrieval, including one retry after an unknown dataset. Default `10` |
+| `RECALL_BANK_TIMEOUT_SEC` | Per-bank Hindsight recall budget. Default `6`. A slow bank is `timeout`; the others still return |
 | `RAILWAY_*`, `VERCEL_*`, `GREPTILE_*`, `GITHUB_TOKEN`, `PLAY_ACCESS_TOKEN`, `ASC_*` | Seat platform tools |
 | `PACK_<APP>_API_BASE` | Product API base per tool pack |
 

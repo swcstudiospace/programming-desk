@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -77,6 +78,34 @@ class Services:
             play=PlayConsole(settings),
             asc=AppStoreConnect(settings),
         )
+
+    async def aclose(self) -> None:
+        """Close pooled HTTP clients. Safe when a client was never opened."""
+        closers = []
+        seen: set[int] = set()
+        for name in (
+            "substrate",
+            "agent_bus",
+            "greptime",
+            "timescale",
+            "hindsight",
+            "ragflow",
+            "railway",
+            "vercel",
+            "greptile",
+            "github",
+            "play",
+            "asc",
+        ):
+            obj = getattr(self, name, None)
+            http = getattr(obj, "http", None) if obj is not None else None
+            close = getattr(http, "aclose", None)
+            if close is None or id(http) in seen:
+                continue
+            seen.add(id(http))
+            closers.append(close())
+        if closers:
+            await asyncio.gather(*closers)
 
 
 @dataclass

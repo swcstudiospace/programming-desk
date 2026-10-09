@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextlib
 import contextvars
 import hashlib
 import hmac
@@ -10312,6 +10313,25 @@ def create_mcp(
     return mcp
 
 
+def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
+    """Close pooled upstream clients when the ASGI app shuts down.
+
+    The MCP Starlette app already owns router.lifespan_context (the session
+    manager). Wrap that context so shutdown still runs it, then closes clients.
+    """
+    previous = starlette_app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def _close_upstreams_on_shutdown(app: Any):
+        try:
+            async with previous(app) as state:
+                yield state
+        finally:
+            await services.aclose()
+
+    starlette_app.router.lifespan_context = _close_upstreams_on_shutdown
+
+
 def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     settings = settings or Settings.from_env()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -10384,6 +10404,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         allowed_origins=origins,
     )
     starlette_app = mcp.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, transport_security=transport_security, host=settings.public_host)
+    _install_upstream_shutdown(starlette_app, services)
 
     async def desk_events(websocket: WebSocket) -> None:
         await websocket.accept()

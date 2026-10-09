@@ -23,9 +23,14 @@ class PolicySandbox:
     # 4. AWS access keys: AKIA followed by 16 uppercase alphanumeric characters
     SECRET_PATTERNS = [
         re.compile(r"\bghp_[a-zA-Z0-9]{36}\b"),
+        re.compile(r"\bgh[ousr]_[a-zA-Z0-9]{36}\b"),
+        re.compile(r"\bgithub_pat_[a-zA-Z0-9_]{20,}\b"),
         re.compile(r"\bsk-[a-zA-Z0-9]{20,}\b"),
+        re.compile(r"\bsk-ant-[A-Za-z0-9\-_]{20,}\b"),
         re.compile(r"Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*"),
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
+        re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b"),
+        re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     ]
 
     # Sensitive environment variable key prefixes/suffixes
@@ -82,26 +87,40 @@ class PolicySandbox:
         return sanitized
 
     def validate_path(self, target: str | Path) -> Path:
-        """Validate that a target path resolves strictly within the configured workspace root.
+        """Confine a path to the workspace without following symlinks.
 
-        Raises BoundarySecurityError if traversal outside workspace is detected.
+        Lexical `..` escapes are rejected. Any existing path component that is a
+        symlink is rejected, including a link whose target would still land inside
+        the workspace. Missing leaf names are allowed so callers can create files.
         """
-        raw_path = Path(target)
+        raw_text = os.fspath(target)
+        if "\x00" in raw_text:
+            raise BoundarySecurityError("Null byte detected in path")
+
+        raw_path = Path(raw_text)
         if raw_path.is_absolute():
-            resolved = raw_path.resolve()
+            candidate = Path(os.path.normpath(raw_text))
         else:
-            resolved = (self.workspace_root / raw_path).resolve()
+            candidate = Path(os.path.normpath(os.fspath(self.workspace_root / raw_path)))
 
         try:
-            # Check if resolved path is relative to workspace_root
-            resolved.relative_to(self.workspace_root)
+            relative = candidate.relative_to(self.workspace_root)
         except ValueError as err:
             raise BoundarySecurityError(
-                f"Path traversal violation: '{target}' resolves to '{resolved}', "
+                f"Path traversal violation: '{target}' resolves to '{candidate}', "
                 f"which is outside workspace root '{self.workspace_root}'"
             ) from err
 
-        return resolved
+        current = self.workspace_root
+        for part in relative.parts:
+            current = current / part
+            # is_symlink is false for a missing leaf and true for a dangling link.
+            if current.is_symlink():
+                raise BoundarySecurityError(
+                    f"Symlink rejected inside workspace: '{current}'"
+                )
+
+        return candidate
 
     def validate_command(
         self,

@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 
 from src.desk.assertions import MilestonePhase, MilestoneVerifier
+from src.desk.supervision.process_supervisor import ProcessSupervisor
 
 
 SAMPLE_ROADMAP = """# Roadmap: Milestone v8.0 — Enterprise Workbench Runtime
@@ -77,3 +78,38 @@ def test_verify_milestone_all_complete() -> None:
         assert report.completion_pct == 100.0
         summary = verifier.format_summary(report)
         assert "PASSED" in summary
+
+
+def test_check_layout_and_gaps_block_completion() -> None:
+    roadmap_done = """# Roadmap: Milestone v8.0
+## Phase 1: All Good
+- [x] Task 1
+- [x] Task 2
+"""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        empty = Path(tmp_dir)
+        probe = MilestoneVerifier()
+        assert probe.check_layout(empty) == list(MilestoneVerifier.REQUIRED_FILES)
+
+        roadmap_file = empty / "ROADMAP.md"
+        roadmap_file.write_text(roadmap_done, encoding="utf-8")
+
+        supervised = MilestoneVerifier(
+            roadmap_path=roadmap_file,
+            supervisor=ProcessSupervisor(),
+        )
+        counted = supervised.verify_milestone()
+        assert counted.total_tasks == 2
+        assert counted.completed_tasks == 2
+        assert counted.completion_pct == 100.0
+        assert counted.phases[0].total_tasks == 2
+        assert counted.phases[0].completed_tasks == 2
+        assert counted.phases[0].pending_tasks == 0
+
+        gapped = MilestoneVerifier(roadmap_path=roadmap_file)
+        report = gapped.verify_milestone(layout_root=empty)
+        assert report.layout_gaps
+        assert report.total_tasks == counted.total_tasks
+        assert report.completed_tasks == counted.completed_tasks
+        assert report.all_phases_complete is False
+        assert "Layout gaps" in gapped.format_summary(report)

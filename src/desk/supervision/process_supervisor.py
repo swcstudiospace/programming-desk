@@ -28,6 +28,8 @@ class SupervisedProcessResult:
     timed_out: bool = False
     retries: int = 0
     pid: int | None = None
+    stdout_truncated: bool = False
+    stderr_truncated: bool = False
 
     @property
     def succeeded(self) -> bool:
@@ -42,12 +44,57 @@ class ProcessSupervisor:
         default_timeout: float = 30.0,
         sandbox: PolicySandbox | None = None,
         workspace_root: str | Path | None = None,
+        max_output_bytes: int = 1_048_576,
     ) -> None:
         self.default_timeout = default_timeout
         self.sandbox = sandbox or PolicySandbox(workspace_root=workspace_root)
         self.workspace_root = self.sandbox.workspace_root
+        self.max_output_bytes = max_output_bytes
         self._active_processes: dict[int, subprocess.Popen[str]] = {}
         self._lock = threading.Lock()
+
+    def _signal_group(self, pgid: int, sig: int) -> bool:
+        """Signal a process group, never this supervisor's own group.
+
+        Returns False without calling ``os.killpg`` when ``pgid`` equals
+        ``os.getpgrp()``. Returns True after ``os.killpg`` delivers ``sig``.
+        """
+        if pgid == os.getpgrp():
+            return False
+        os.killpg(pgid, sig)
+        return True
+
+    @staticmethod
+    def _is_sensitive_env_key(key: str) -> bool:
+        return any(pattern.match(key) for pattern in PolicySandbox.SENSITIVE_KEY_PATTERNS)
+
+    def _child_environment(self, overlay: Mapping[str, str] | None) -> dict[str, str]:
+        """Copy the parent environment, then drop credential-like keys.
+
+        Caller overlay is applied after the scrub. Sensitive names in the
+        overlay are ignored so they cannot reintroduce a removed secret.
+        """
+        child = {
+            key: value
+            for key, value in os.environ.items()
+            if not self._is_sensitive_env_key(key)
+        }
+        if overlay is not None:
+            for key, value in overlay.items():
+                if self._is_sensitive_env_key(key):
+                    continue
+                child[key] = value
+        return child
+
+    @staticmethod
+    def _limit_output(text: str, limit: int) -> tuple[str, bool]:
+        """Keep the first ``limit`` UTF-8 bytes. Short text is returned unchanged."""
+        encoded = text.encode("utf-8")
+        if len(encoded) <= limit:
+            return text, False
+        if limit <= 0:
+            return "", True
+        return encoded[:limit].decode("utf-8", errors="ignore"), True
 
     def _terminate_process_tree(self, proc: subprocess.Popen[str], grace_period: float = 1.0) -> None:
         """Kill the process and all of its spawned child processes cleanly via process group."""
@@ -61,13 +108,15 @@ class ProcessSupervisor:
         except (ProcessLookupError, PermissionError, OSError):
             pgid = None
 
-        # 1. Send SIGTERM to process group or direct process
+        # 1. Send SIGTERM to the process group, or to the direct child when the
+        # group cannot be signaled (no pgid, or the group is our own).
+        deliver_direct_sigterm = pgid is None
         if pgid is not None:
             try:
-                os.killpg(pgid, signal.SIGTERM)
+                deliver_direct_sigterm = not self._signal_group(pgid, signal.SIGTERM)
             except (ProcessLookupError, PermissionError, OSError):
-                pass
-        else:
+                deliver_direct_sigterm = False
+        if deliver_direct_sigterm:
             try:
                 proc.terminate()
             except (ProcessLookupError, PermissionError, OSError):
@@ -80,8 +129,7 @@ class ProcessSupervisor:
             group_alive = False
             if pgid is not None:
                 try:
-                    os.killpg(pgid, 0)
-                    group_alive = True
+                    group_alive = self._signal_group(pgid, 0)
                 except (ProcessLookupError, PermissionError, OSError):
                     group_alive = False
             if not parent_alive and not group_alive:
@@ -91,7 +139,7 @@ class ProcessSupervisor:
         # 3. Force escalate to SIGKILL against entire process group and parent
         if pgid is not None:
             try:
-                os.killpg(pgid, signal.SIGKILL)
+                self._signal_group(pgid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError, OSError):
                 pass
         try:
@@ -117,8 +165,15 @@ class ProcessSupervisor:
         max_retries: int = 0,
         backoff_base: float = 0.2,
         retry_on_exit_codes: list[int] | None = None,
+        max_output_bytes: int | None = None,
     ) -> SupervisedProcessResult:
-        """Execute a command array with timeout traps, retries, and process group safety."""
+        """Execute a command array with timeout traps, retries, and process group safety.
+
+        Collected stdout and stderr longer than the byte cap are cut to the
+        first ``max_output_bytes`` (instance default when omitted). The child
+        environment starts from ``os.environ`` with credential-like keys removed;
+        ``env`` is applied after that, and sensitive overlay keys are dropped.
+        """
         # Policy & sandbox validation
         validated_cmd = self.sandbox.validate_command(cmd)
 
@@ -126,12 +181,12 @@ class ProcessSupervisor:
         if cwd is not None:
             exec_cwd = self.sandbox.validate_path(cwd)
 
-        # Prepare environment
-        exec_env = os.environ.copy()
-        if env is not None:
-            exec_env.update(env)
+        # Scrub credential-like keys before the child starts. Do not interpolate
+        # secret values into the command array.
+        exec_env = self._child_environment(env)
 
         timeout_sec = timeout if timeout is not None else self.default_timeout
+        output_limit = self.max_output_bytes if max_output_bytes is None else max_output_bytes
         retry_codes = set(retry_on_exit_codes or [143, 137, 75])  # Common transient codes
 
         attempt = 0
@@ -212,16 +267,21 @@ class ProcessSupervisor:
 
             duration_ms = (time.monotonic() - start_time) * 1000.0
 
+            stdout_text, stdout_truncated = self._limit_output(stdout_data or "", output_limit)
+            stderr_text, stderr_truncated = self._limit_output(stderr_data or "", output_limit)
+
             result = SupervisedProcessResult(
                 cmd=validated_cmd[0],
                 args=validated_cmd[1:],
                 exit_code=exit_code,
-                stdout=stdout_data or "",
-                stderr=stderr_data or "",
+                stdout=stdout_text,
+                stderr=stderr_text,
                 duration_ms=duration_ms,
                 timed_out=timed_out,
                 retries=attempt,
                 pid=last_pid,
+                stdout_truncated=stdout_truncated,
+                stderr_truncated=stderr_truncated,
             )
 
             # Check if retry condition is met

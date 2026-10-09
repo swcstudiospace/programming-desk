@@ -62,7 +62,9 @@ def handle_verify(args: argparse.Namespace) -> int:
     else:
         print(verifier.format_summary(report))
 
-    return 0 if report.all_phases_complete else 1
+    if report.layout_gaps or not report.all_phases_complete:
+        return 1
+    return 0
 
 
 def handle_session(args: argparse.Namespace) -> int:

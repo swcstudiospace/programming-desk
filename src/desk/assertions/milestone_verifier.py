@@ -43,6 +43,7 @@ class VerificationReport:
     completion_pct: float
     all_phases_complete: bool
     test_result: SupervisedProcessResult | None = None
+    layout_gaps: list[str] = field(default_factory=list)
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
@@ -61,6 +62,17 @@ class VerificationReport:
 
 class MilestoneVerifier:
     """Cross-validates .planning/ROADMAP.md checklist items and runs automated verification harnesses."""
+
+    REQUIRED_FILES: tuple[str, ...] = (
+        "src/desk/security/policy_sandbox.py",
+        "src/desk/telemetry/audit_tracer.py",
+        "src/desk/supervision/process_supervisor.py",
+        "src/desk/session/session_store.py",
+        "src/desk/recovery/recovery_manager.py",
+        "src/desk/diagnostics/doctor_engine.py",
+        "src/desk/assertions/milestone_verifier.py",
+        "src/desk/cli.py",
+    )
 
     def __init__(
         self,
@@ -128,24 +140,32 @@ class MilestoneVerifier:
 
         return milestone_name, phases
 
+    def check_layout(self, root: Path | None = None) -> list[str]:
+        """Return required repo-relative paths that are missing under root."""
+        base = Path.cwd() if root is None else Path(root)
+        return [rel for rel in self.REQUIRED_FILES if not (base / rel).is_file()]
+
     def verify_milestone(
         self,
         test_command: list[str] | None = None,
         timeout: float = 60.0,
+        layout_root: Path | None = None,
     ) -> VerificationReport:
-        """Evaluate roadmap task completion and optionally run test verification."""
+        """Evaluate roadmap task completion, required file layout, and optional tests."""
         milestone_name, phases = self.parse_roadmap()
 
         total_tasks = sum(p.total_tasks for p in phases)
         completed_tasks = sum(p.completed_tasks for p in phases)
         completion_pct = (completed_tasks / total_tasks * 100.0) if total_tasks > 0 else 100.0
         phases_complete = len(phases) > 0 and all(p.is_complete for p in phases)
+        layout_gaps = self.check_layout(layout_root)
 
         test_res: SupervisedProcessResult | None = None
         if test_command:
             test_res = self.supervisor.run(test_command, timeout=timeout)
 
-        all_ok = phases_complete and (test_res is None or test_res.succeeded)
+        tests_ok = test_res is None or test_res.succeeded
+        all_ok = phases_complete and not layout_gaps and tests_ok
 
         return VerificationReport(
             milestone_name=milestone_name,
@@ -155,6 +175,7 @@ class MilestoneVerifier:
             completion_pct=completion_pct,
             all_phases_complete=all_ok,
             test_result=test_res,
+            layout_gaps=layout_gaps,
         )
 
     def format_summary(self, report: VerificationReport) -> str:
@@ -172,6 +193,12 @@ class MilestoneVerifier:
             mark = "[✓]" if p.is_complete else "[ ]"
             pct = f"{p.completion_pct:.0f}%"
             lines.append(f"  {mark} {p.phase_name}: {p.completed_tasks}/{p.total_tasks} ({pct})")
+
+        if report.layout_gaps:
+            lines.append("")
+            lines.append("Layout gaps:")
+            for gap in report.layout_gaps:
+                lines.append(f"  MISSING {gap}")
 
         if report.test_result:
             lines.append("")

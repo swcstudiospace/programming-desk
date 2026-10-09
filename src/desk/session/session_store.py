@@ -1,4 +1,4 @@
-"""Workspace Context & Session State persistence module with atomic temp-rename writes."""
+"""Workspace session persistence with atomic writes and corrupt-file quarantine."""
 
 from __future__ import annotations
 
@@ -9,6 +9,25 @@ import os
 from pathlib import Path
 import threading
 from typing import Any
+
+from ..security.policy_sandbox import PolicySandbox
+
+SESSION_SCHEMA_VERSION = 1
+_STATE_REGION_START = "<!-- desk-session:start -->"
+_STATE_REGION_END = "<!-- desk-session:end -->"
+
+
+def _confine_path(path: str | Path) -> Path:
+    """Confine a storage path without following symlinks.
+
+    Relative paths must stay inside the process workspace. Absolute paths are
+    confined to their parent so tempfile locations keep working while a symlink
+    leaf is rejected.
+    """
+    raw = Path(path)
+    if raw.is_absolute():
+        return PolicySandbox(workspace_root=raw.parent).validate_path(raw)
+    return PolicySandbox().validate_path(raw)
 
 
 @dataclass
@@ -25,14 +44,24 @@ class SessionFrame:
     updated_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    schema_version: int = SESSION_SCHEMA_VERSION
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        payload = asdict(self)
+        payload["schema_version"] = SESSION_SCHEMA_VERSION
+        return payload
 
     @classmethod
     def from_dict(cls, data: Any) -> SessionFrame:
         if not isinstance(data, dict):
             raise TypeError(f"SessionFrame payload must be a dict, got: {type(data)}")
+        if "schema_version" in data:
+            version = data["schema_version"]
+            if type(version) is not int or version != SESSION_SCHEMA_VERSION:
+                raise ValueError(
+                    "Unsupported session schema_version "
+                    f"{version!r}; expected integer {SESSION_SCHEMA_VERSION}"
+                )
         if "session_id" not in data or not isinstance(data["session_id"], str):
             raise ValueError("SessionFrame requires a valid string 'session_id'")
 
@@ -53,6 +82,7 @@ class SessionFrame:
             completed_tasks=completed_tasks,
             metadata=metadata,
             updated_at=str(data.get("updated_at", datetime.now(timezone.utc).isoformat())),
+            schema_version=SESSION_SCHEMA_VERSION,
         )
 
 
@@ -64,8 +94,8 @@ class SessionStore:
         storage_path: str | Path = ".planning/session.json",
         state_md_path: str | Path = ".planning/STATE.md",
     ) -> None:
-        self.storage_path = Path(storage_path).resolve()
-        self.state_md_path = Path(state_md_path).resolve()
+        self.storage_path = _confine_path(storage_path)
+        self.state_md_path = _confine_path(state_md_path)
         self._lock = threading.Lock()
 
         # Ensure parent directories exist
@@ -99,6 +129,7 @@ class SessionStore:
     def save_session(self, frame: SessionFrame) -> SessionFrame:
         """Atomically persist session frame to JSON storage."""
         frame.updated_at = datetime.now(timezone.utc).isoformat()
+        frame.schema_version = SESSION_SCHEMA_VERSION
         payload = json.dumps(frame.to_dict(), indent=2)
 
         with self._lock:
@@ -107,56 +138,116 @@ class SessionStore:
         return frame
 
     def load_session(self) -> SessionFrame | None:
-        """Hydrate session frame from disk if present."""
+        """Hydrate session frame from disk if present.
+
+        JSON decode failures, read errors, and unsupported payloads are moved
+        aside to ``<name>.corrupt.<pid>`` in the same directory. The live path
+        is left absent so a later save can write a new file.
+        """
         with self._lock:
             if not self.storage_path.exists():
                 return None
             try:
-                with open(self.storage_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                with open(self.storage_path, "r", encoding="utf-8") as handle:
+                    raw = handle.read()
+            except OSError:
+                self._quarantine_corrupt_storage()
+                return None
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                self._quarantine_corrupt_storage()
+                return None
+            try:
                 return SessionFrame.from_dict(data)
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError):
+            except (ValueError, TypeError):
+                self._quarantine_corrupt_storage()
                 return None
 
+    def _quarantine_corrupt_storage(self) -> None:
+        """Rename the bad session file aside. Never writes a replacement over it."""
+        source = self.storage_path
+        destination = source.with_name(f"{source.name}.corrupt.{os.getpid()}")
+        if destination == source:
+            return
+        try:
+            os.replace(source, destination)
+        except FileNotFoundError:
+            return
+
     def sync_to_markdown_state(self, frame: SessionFrame) -> str:
-        """Render session frame into .planning/STATE.md format and atomically persist."""
-        lines = [
-            f"# State: Milestone {frame.milestone} — {frame.phase}",
-            "",
-            "## Current Status",
-            f"- Session ID: `{frame.session_id}`",
-            f"- Milestone: {frame.milestone}",
-            f"- Phase: {frame.phase}",
-            f"- Status: {frame.status}",
-            f"- Updated At: {frame.updated_at}",
-            "",
-            "## Active Tasks",
-        ]
+        """Render session frame into .planning/STATE.md and atomically persist.
 
-        if frame.active_tasks:
-            for task in frame.active_tasks:
-                lines.append(f"- [ ] {task}")
-        else:
-            lines.append("- *(No active tasks)*")
-
-        lines.append("")
-        lines.append("## Completed Tasks")
-        if frame.completed_tasks:
-            for task in frame.completed_tasks:
-                lines.append(f"- [x] {task}")
-        else:
-            lines.append("- *(No completed tasks)*")
-
-        if frame.metadata:
-            lines.append("")
-            lines.append("## Metadata")
-            for k, v in frame.metadata.items():
-                lines.append(f"- **{k}**: {v}")
-
-        lines.append("")
-        content = "\n".join(lines)
-
+        A missing or empty file becomes one marked document. An existing
+        document without the start marker keeps its text and gains one marked
+        section. When both markers are present, only that span is replaced.
+        """
+        section = _marked_session_document(_render_state_markdown(frame))
         with self._lock:
-            self.persist_atomic(self.state_md_path, content)
+            merged = self._merge_state_markdown(section)
+            self.persist_atomic(self.state_md_path, merged)
+        return merged
 
-        return content
+    def _merge_state_markdown(self, section: str) -> str:
+        path = self.state_md_path
+        if not path.exists():
+            return section
+        existing = path.read_text(encoding="utf-8")
+        if existing == "":
+            return section
+        start_idx = existing.find(_STATE_REGION_START)
+        if start_idx == -1:
+            if existing.endswith("\n"):
+                return existing + section
+            return existing + "\n" + section
+        end_idx = existing.find(_STATE_REGION_END, start_idx + len(_STATE_REGION_START))
+        if end_idx == -1:
+            return existing[:start_idx] + section
+        end_span = end_idx + len(_STATE_REGION_END)
+        if end_span < len(existing) and existing[end_span] == "\n":
+            end_span += 1
+        return existing[:start_idx] + section + existing[end_span:]
+
+
+def _render_state_markdown(frame: SessionFrame) -> str:
+    lines = [
+        f"# State: Milestone {frame.milestone} — {frame.phase}",
+        "",
+        "## Current Status",
+        f"- Session ID: `{frame.session_id}`",
+        f"- Milestone: {frame.milestone}",
+        f"- Phase: {frame.phase}",
+        f"- Status: {frame.status}",
+        f"- Updated At: {frame.updated_at}",
+        "",
+        "## Active Tasks",
+    ]
+
+    if frame.active_tasks:
+        for task in frame.active_tasks:
+            lines.append(f"- [ ] {task}")
+    else:
+        lines.append("- *(No active tasks)*")
+
+    lines.append("")
+    lines.append("## Completed Tasks")
+    if frame.completed_tasks:
+        for task in frame.completed_tasks:
+            lines.append(f"- [x] {task}")
+    else:
+        lines.append("- *(No completed tasks)*")
+
+    if frame.metadata:
+        lines.append("")
+        lines.append("## Metadata")
+        for k, v in frame.metadata.items():
+            lines.append(f"- **{k}**: {v}")
+
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _marked_session_document(body: str) -> str:
+    if not body.endswith("\n"):
+        body += "\n"
+    return f"{_STATE_REGION_START}\n{body}{_STATE_REGION_END}\n"

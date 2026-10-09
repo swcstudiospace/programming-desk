@@ -1,7 +1,9 @@
 """Tests for DoctorEngine and diagnostic checks."""
 
 from pathlib import Path
+import sys
 import tempfile
+from unittest.mock import patch
 
 from src.desk.diagnostics import (
     CheckStatus,
@@ -11,6 +13,8 @@ from src.desk.diagnostics import (
     check_ownership_manifest,
     check_planning_directory,
     check_python_version,
+    check_sandbox_roundtrip,
+    check_workbench_imports,
     check_workspace_permissions,
 )
 
@@ -52,6 +56,33 @@ def test_planning_directory_check() -> None:
 def test_workspace_permissions_check() -> None:
     res = check_workspace_permissions(Path.cwd())
     assert res.status == CheckStatus.PASS
+
+
+def test_ownership_manifest_warns_when_pyyaml_missing() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        (root / "ownership.yaml").write_text("placeholder: true\n", encoding="utf-8")
+        with patch.dict(sys.modules, {"yaml": None}):
+            res = check_ownership_manifest(root)
+    assert res.status == CheckStatus.WARN
+    assert res.fix_hint is not None
+    assert "pyyaml" in res.fix_hint.lower()
+
+
+def test_workbench_imports_check() -> None:
+    res = check_workbench_imports(Path.cwd())
+    assert res.name == "workbench_imports"
+    assert res.status == CheckStatus.PASS
+
+
+def test_sandbox_roundtrip_check() -> None:
+    root = Path.cwd()
+    probe = root / "desk-doctor-probe.txt"
+    existed = probe.exists()
+    res = check_sandbox_roundtrip(root)
+    assert res.name == "sandbox_roundtrip"
+    assert res.status == CheckStatus.PASS
+    assert probe.exists() is existed
 
 
 def test_doctor_engine_run() -> None:

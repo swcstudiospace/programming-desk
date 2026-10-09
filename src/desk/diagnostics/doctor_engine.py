@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from enum import Enum
+import importlib
 import os
 from pathlib import Path
 import shutil
@@ -160,7 +161,12 @@ def check_ownership_manifest(root: Path) -> DiagnosticCheckResult:
                     fix_hint=f"Declare bot '{rule['owner']}' in 'bots:' or fix the rule owner",
                 )
     except ImportError:
-        pass
+        return DiagnosticCheckResult(
+            name="ownership_manifest",
+            status=CheckStatus.WARN,
+            message="PyYAML is not installed; ownership.yaml schema was not validated",
+            fix_hint="Install pyyaml to validate ownership.yaml",
+        )
     except Exception as exc:
         return DiagnosticCheckResult(
             name="ownership_manifest",
@@ -248,6 +254,95 @@ def check_workspace_permissions(root: Path) -> DiagnosticCheckResult:
         )
 
 
+_WORKBENCH_MODULES = (
+    "src.desk.security",
+    "src.desk.telemetry",
+    "src.desk.supervision",
+    "src.desk.session",
+    "src.desk.recovery",
+    "src.desk.diagnostics",
+    "src.desk.assertions",
+)
+
+
+def check_workbench_imports(root: Path) -> DiagnosticCheckResult:
+    """Import workbench packages. A healthy checkout passes for any root."""
+    try:
+        for module_name in _WORKBENCH_MODULES:
+            importlib.import_module(module_name)
+    except Exception as exc:
+        return DiagnosticCheckResult(
+            name="workbench_imports",
+            status=CheckStatus.FAIL,
+            message=str(exc) or repr(exc),
+            fix_hint="Repair the workbench package so src.desk imports succeed",
+        )
+    return DiagnosticCheckResult(
+        name="workbench_imports",
+        status=CheckStatus.PASS,
+        message="Workbench packages import successfully",
+        details={"root": str(root), "modules": list(_WORKBENCH_MODULES)},
+    )
+
+
+def check_sandbox_roundtrip(root: Path) -> DiagnosticCheckResult:
+    """Confirm PolicySandbox accepts an in-root leaf and rejects traversal.
+
+    The probe file is not created. A file that appears during the check is removed.
+    """
+    probe_name = "desk-doctor-probe.txt"
+    probe = root / probe_name
+    existed_before = probe.exists()
+    try:
+        from ..security.policy_sandbox import BoundarySecurityError, PolicySandbox
+
+        sandbox = PolicySandbox(workspace_root=root)
+        allowed = Path(sandbox.validate_path(probe))
+        confined = allowed.name == probe_name and sandbox.workspace_root in allowed.parents
+        if not confined:
+            return DiagnosticCheckResult(
+                name="sandbox_roundtrip",
+                status=CheckStatus.FAIL,
+                message=(
+                    f"validate_path returned '{allowed}', which is not "
+                    f"'{probe_name}' under '{sandbox.workspace_root}'"
+                ),
+                fix_hint="PolicySandbox.validate_path must confine paths to the workspace root",
+            )
+        try:
+            sandbox.validate_path("../etc/passwd")
+        except BoundarySecurityError:
+            pass
+        else:
+            return DiagnosticCheckResult(
+                name="sandbox_roundtrip",
+                status=CheckStatus.FAIL,
+                message="validate_path('../etc/passwd') did not raise BoundarySecurityError",
+                fix_hint="PolicySandbox.validate_path must reject paths outside the workspace",
+            )
+    except Exception as exc:
+        return DiagnosticCheckResult(
+            name="sandbox_roundtrip",
+            status=CheckStatus.FAIL,
+            message=str(exc) or repr(exc),
+            fix_hint="Repair PolicySandbox path confinement",
+        )
+    finally:
+        if not existed_before:
+            try:
+                if not probe.is_symlink() and probe.is_file():
+                    probe.unlink()
+            except OSError:
+                pass
+
+    return DiagnosticCheckResult(
+        name="sandbox_roundtrip",
+        status=CheckStatus.PASS,
+        message="PolicySandbox confines an in-root path and rejects traversal",
+        details={"probe": probe_name},
+    )
+
+
 class DoctorEngine:
     """Extensible workspace diagnostic supervisor."""
 
@@ -263,6 +358,8 @@ class DoctorEngine:
             check_ownership_manifest,
             check_planning_directory,
             check_workspace_permissions,
+            check_workbench_imports,
+            check_sandbox_roundtrip,
         ]
 
     def register_probe(self, probe: DiagnosticProbe) -> None:

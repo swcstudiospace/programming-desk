@@ -5973,6 +5973,1154 @@ def create_mcp(
         drill_results = SwarmImmuneDePINDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.9 (Phases 64 & 65): Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
+    from desk_gateway.sagin_orbital_mesh import (
+        BundlePriority,
+        ContactGraphRouter,
+        ContactPlanEntry,
+        CustodialStorageManager,
+        DelayTolerantBundle,
+        DopplerTelemetryTracker,
+        OrbitalEphemeris,
+    )
+    from desk_gateway.sagin_downlink_consensus import (
+        GroundStationNode,
+        IntermittentGroundConsensusEngine,
+        MultiConstellationDownlinkManager,
+        SAGINAnchorExporter,
+        SAGINOrbitalVerificationDrillSimulator,
+        SatelliteMerkleReceiptLedger,
+    )
+
+    sagin_cgr = ContactGraphRouter(local_eid="dtn://gateway-orbital-0")
+    sagin_custody = CustodialStorageManager(custodian_eid="dtn://gateway-orbital-0")
+    sagin_downlink_mgr = MultiConstellationDownlinkManager()
+    sagin_consensus = IntermittentGroundConsensusEngine()
+    sagin_ledger = SatelliteMerkleReceiptLedger()
+    sagin_anchor_exporter = SAGINAnchorExporter()
+
+    # Pre-populate sample ephemeris and contact plan for demonstration / testing
+    sat_sample = OrbitalEphemeris("sat-starlink-leo-01", "Starlink-Gen2", 550.0, 53.0)
+    sagin_cgr.register_ephemeris(sat_sample)
+    now_ts = time.time()
+    sagin_cgr.add_contact(ContactPlanEntry("contact-01", "dtn://gateway-orbital-0", "dtn://gs-svalbard-01", now_ts, now_ts + 3600, 50000.0))
+
+    mcp._sagin_cgr = sagin_cgr  # type: ignore[attr-defined]
+    mcp._sagin_custody = sagin_custody  # type: ignore[attr-defined]
+    mcp._sagin_downlink_mgr = sagin_downlink_mgr  # type: ignore[attr-defined]
+    mcp._sagin_consensus = sagin_consensus  # type: ignore[attr-defined]
+    mcp._sagin_ledger = sagin_ledger  # type: ignore[attr-defined]
+    mcp._sagin_anchor_exporter = sagin_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/sagin/ephemeris/contact_window", methods=["POST"])
+    async def sagin_ephemeris_window_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        constellation = body.get("constellation", "Starlink-Gen2")
+        alt = float(body.get("altitude_km", 550.0))
+        inc = float(body.get("inclination_deg", 53.0))
+        lat = float(body.get("station_latitude", 78.22))
+        lon = float(body.get("station_longitude", 15.65))
+
+        ephem = OrbitalEphemeris(satellite_id=sat_id, constellation=constellation, altitude_km=alt, inclination_deg=inc)
+        window = ephem.calculate_contact_window(lat, lon)
+        return JSONResponse({"ok": True, "contact_window": window})
+
+    @mcp.custom_route("/v1/sagin/doppler/shift", methods=["POST"])
+    async def sagin_doppler_shift_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        carrier_ghz = float(body.get("carrier_frequency_ghz", 28.5))
+        rel_vel = float(body.get("relative_velocity_km_s", 7.2))
+        res = DopplerTelemetryTracker.compute_doppler_shift(carrier_ghz, rel_vel)
+        return JSONResponse({"ok": True, "doppler": res})
+
+    @mcp.custom_route("/v1/sagin/bundle/route", methods=["POST"])
+    async def sagin_bundle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://gateway-orbital-0")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "TELEMETRY_PAYLOAD")
+        prio_str = body.get("priority", "normal")
+
+        try:
+            prio = BundlePriority(prio_str.lower())
+        except ValueError:
+            prio = BundlePriority.NORMAL
+
+        bundle = DelayTolerantBundle(
+            bundle_id=bundle_id,
+            source_eid=source_eid,
+            destination_eid=dest_eid,
+            payload_raw=payload,
+            priority=prio,
+        )
+        route_result = sagin_cgr.route_bundle(bundle)
+        return JSONResponse({"ok": True, "route_result": route_result, "bundle": bundle.to_dict()})
+
+    @mcp.custom_route("/v1/sagin/custody/accept", methods=["POST"])
+    async def sagin_custody_accept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        bundle_id = body.get("bundle_id", f"b-{secrets.token_hex(4)}")
+        source_eid = body.get("source_eid", "dtn://sat-relay-1")
+        dest_eid = body.get("destination_eid", "dtn://gs-svalbard-01")
+        payload = body.get("payload_raw", "ORBITAL_IMAGERY_STREAM")
+
+        bundle = DelayTolerantBundle(bundle_id=bundle_id, source_eid=source_eid, destination_eid=dest_eid, payload_raw=payload)
+        rcpt = sagin_custody.accept_custody(bundle)
+        sagin_ledger.append_event("CUSTODY_ACCEPTED", source_eid, sagin_custody.custodian_eid, rcpt)
+        return JSONResponse({"ok": True, "custody_receipt": rcpt})
+
+    @mcp.custom_route("/v1/sagin/downlink/session", methods=["POST"])
+    async def sagin_downlink_session_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        station_id = body.get("station_id", "gs-svalbard-01")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        ephem = sagin_cgr.ephemeris_registry.get(sat_id) or OrbitalEphemeris(sat_id, "Starlink-Gen2", 550.0, 53.0)
+        session = sagin_downlink_mgr.initiate_downlink_session(station_id, ephem)
+        return JSONResponse({"ok": True, "downlink_session": session})
+
+    @mcp.custom_route("/v1/sagin/consensus/propose", methods=["POST"])
+    async def sagin_consensus_propose_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", f"batch-{secrets.token_hex(4)}")
+        sat_id = body.get("satellite_id", "sat-starlink-leo-01")
+        state_root = body.get("state_root", secrets.token_hex(32))
+        digests = body.get("downlink_digests", [secrets.token_hex(32)])
+        station_id = body.get("proposer_station", "gs-svalbard-01")
+
+        batch = sagin_consensus.propose_orbital_batch(batch_id, sat_id, state_root, digests, station_id)
+        return JSONResponse({"ok": True, "batch": batch})
+
+    @mcp.custom_route("/v1/sagin/consensus/ballot", methods=["POST"])
+    async def sagin_consensus_ballot_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", "")
+        station_id = body.get("station_id", "gs-singapore-01")
+        vote = body.get("vote", "APPROVE")
+        res = sagin_consensus.submit_ballot(batch_id, station_id, vote)
+        if res.get("is_committed"):
+            sagin_ledger.append_event("CONSENSUS_COMMITTED", "swarm-constellation", station_id, res)
+        return JSONResponse({"ok": True, "ballot_result": res})
+
+    @mcp.custom_route("/v1/sagin/anchor/export", methods=["POST"])
+    async def sagin_anchor_export_route(_request: Request) -> Response:
+        commitment = sagin_anchor_exporter.export_commitment(sagin_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/sagin/drill/simulate", methods=["POST"])
+    async def sagin_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SAGINOrbitalVerificationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.0 (Phases 66 & 67): Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
+    from desk_gateway.quantum_hybrid_mesh import (
+        AnsatzCircuit,
+        HamiltonianOperator,
+        NoiseModel,
+        QAOAOptimizer,
+        QuantumCircuitState,
+        QuantumDecoherenceSimulator,
+        QuantumGate,
+        QuantumGateType,
+        QuantumWorkloadScheduler,
+        VQEProcessor,
+    )
+    from desk_gateway.quantum_topological_mesh import (
+        MWPMDecoder,
+        QuantumAnchorExporter,
+        QuantumStateReceiptLedger,
+        QuantumTopologicalDrillSimulator,
+        SurfaceCodeLattice,
+        SyndromeExtractor,
+    )
+
+    quantum_scheduler = QuantumWorkloadScheduler()
+    quantum_decoherence = QuantumDecoherenceSimulator()
+    quantum_ledger = QuantumStateReceiptLedger()
+    quantum_anchor_exporter = QuantumAnchorExporter()
+
+    mcp._quantum_scheduler = quantum_scheduler  # type: ignore[attr-defined]
+    mcp._quantum_decoherence = quantum_decoherence  # type: ignore[attr-defined]
+    mcp._quantum_ledger = quantum_ledger  # type: ignore[attr-defined]
+    mcp._quantum_anchor_exporter = quantum_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/circuit/simulate", methods=["POST"])
+    async def quantum_circuit_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        gates_data = body.get("gates", [])
+
+        circuit = QuantumCircuitState(num_qubits=num_qubits)
+        for g_dict in gates_data:
+            gtype = QuantumGateType(g_dict.get("gate_type", "H"))
+            targets = g_dict.get("target_qubits", [0])
+            controls = g_dict.get("control_qubits", [])
+            params = g_dict.get("parameters", [])
+            gate = QuantumGate(gtype, targets, controls, params)
+            circuit.apply_gate(gate)
+
+        return JSONResponse({"ok": True, "circuit": circuit.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/vqe/solve", methods=["POST"])
+    async def quantum_vqe_solve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        terms = body.get("hamiltonian_terms", [{"coefficient": -1.0, "pauli_string": "Z Z"}])
+        layers = int(body.get("layers", 1))
+        max_iters = int(body.get("max_iterations", 15))
+
+        h = HamiltonianOperator()
+        for t in terms:
+            h.add_term(float(t["coefficient"]), str(t["pauli_string"]))
+
+        ansatz = AnsatzCircuit(num_qubits=num_qubits, num_layers=layers)
+        vqe = VQEProcessor(h, ansatz)
+        opt_res = vqe.optimize(max_iterations=max_iters)
+
+        quantum_ledger.append_event("VQE_CONVERGED", opt_res["final_state_digest"], 0, 0)
+        return JSONResponse({"ok": True, "vqe": opt_res})
+
+    @mcp.custom_route("/v1/quantum/qaoa/partition", methods=["POST"])
+    async def quantum_qaoa_partition_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 3))
+        edges_raw = body.get("edges", [[[0, 1], 1.0], [[1, 2], 1.0]])
+        gammas = [float(x) for x in body.get("gammas", [0.3])]
+        betas = [float(x) for x in body.get("betas", [0.4])]
+
+        weights = {(int(e[0][0]), int(e[0][1])): float(e[1]) for e in edges_raw}
+        qaoa = QAOAOptimizer(num_qubits=num_qubits, p_steps=len(gammas))
+        res = qaoa.solve_partition(weights, gammas, betas)
+        return JSONResponse({"ok": True, "qaoa": res})
+
+    @mcp.custom_route("/v1/quantum/schedule/dispatch", methods=["POST"])
+    async def quantum_schedule_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_name = body.get("task_name", "q-vqe-ground-state")
+        circuit_type = body.get("circuit_type", "ansatz-hea")
+        num_qubits = int(body.get("num_qubits", 2))
+        params = body.get("params", {})
+
+        task = quantum_scheduler.dispatch_quantum_task(task_name, circuit_type, num_qubits, params)
+        return JSONResponse({"ok": True, "task": task})
+
+    @mcp.custom_route("/v1/quantum/surface-code/syndrome", methods=["POST"])
+    async def quantum_surface_code_syndrome_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        distance = int(body.get("distance", 3))
+        errors = body.get("inject_errors", [{"row": 1, "col": 1, "error": "X"}])
+
+        lattice = SurfaceCodeLattice(distance=distance)
+        for err in errors:
+            lattice.inject_physical_error(int(err["row"]), int(err["col"]), str(err["error"]))
+
+        extractor = SyndromeExtractor(lattice)
+        syndromes = extractor.extract_syndrome()
+
+        decoder = MWPMDecoder(lattice)
+        corrections = decoder.decode_syndromes(syndromes)
+        post_syndromes = extractor.extract_syndrome()
+
+        rcpt = quantum_ledger.append_event(
+            "SURFACE_CODE_CORRECTION",
+            hashlib.sha256(json.dumps(lattice.to_dict()).encode("utf-8")).hexdigest(),
+            len([s for s in syndromes if s.syndrome_bit == -1]),
+            len(corrections),
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "lattice": lattice.to_dict(),
+            "defects_count": len([s for s in syndromes if s.syndrome_bit == -1]),
+            "corrections": [{"qubit_id": c.qubit_id, "correction": c.pauli_correction} for c in corrections],
+            "resolved": all(s.syndrome_bit == 1 for s in post_syndromes),
+            "receipt": rcpt.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/anchor/export", methods=["POST"])
+    async def quantum_anchor_export_route(_request: Request) -> Response:
+        commitment = quantum_anchor_exporter.export_commitment(quantum_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/drill/simulate", methods=["POST"])
+    async def quantum_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTopologicalDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.1 (Phases 68 & 69): Inter-Cluster Quantum Teleportation, QKD & Entangled Swarm Mesh
+    from desk_gateway.quantum_teleportation import (
+        BellPairPool,
+        BellStateType,
+        EntanglementPurifier,
+        EntanglementSwapper,
+        QuantumRepeaterMesh,
+        QuantumTeleportationProtocol,
+    )
+    from desk_gateway.quantum_qkd_mesh import (
+        EavesdropDetector,
+        QKDProtocolEngine,
+        QuantumTeleportationAnchorExporter,
+        QuantumTeleportationDrillSimulator,
+        QuantumTeleportationReceiptLedger,
+    )
+
+    qteleport_pool = BellPairPool()
+    qteleport_mesh = QuantumRepeaterMesh(qteleport_pool)
+    qteleport_proto = QuantumTeleportationProtocol(qteleport_mesh)
+    qkd_engine = QKDProtocolEngine(qteleport_mesh)
+    qteleport_ledger = QuantumTeleportationReceiptLedger()
+    qteleport_exporter = QuantumTeleportationAnchorExporter()
+
+    mcp._qteleport_pool = qteleport_pool  # type: ignore[attr-defined]
+    mcp._qteleport_mesh = qteleport_mesh  # type: ignore[attr-defined]
+    mcp._qteleport_proto = qteleport_proto  # type: ignore[attr-defined]
+    mcp._qkd_engine = qkd_engine  # type: ignore[attr-defined]
+    mcp._qteleport_ledger = qteleport_ledger  # type: ignore[attr-defined]
+    mcp._qteleport_exporter = qteleport_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/teleportation/bell-pair/create", methods=["POST"])
+    async def quantum_bell_pair_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        node_b = body.get("node_b", "desk-beta")
+        stype_raw = body.get("state_type", "PHI_PLUS")
+        try:
+            stype = BellStateType(stype_raw)
+        except ValueError:
+            stype = BellStateType.PHI_PLUS
+        fidelity = float(body.get("initial_fidelity", 0.99))
+        pair = qteleport_pool.create_pair(node_a, node_b, stype, fidelity)
+        return JSONResponse({"ok": True, "bell_pair": pair.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/purify", methods=["POST"])
+    async def quantum_teleportation_purify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pair_id_1 = body.get("pair_id_1", "")
+        pair_id_2 = body.get("pair_id_2", "")
+        p1 = qteleport_pool.get_pair(pair_id_1)
+        p2 = qteleport_pool.get_pair(pair_id_2)
+        if not p1 or not p2:
+            return JSONResponse({"ok": False, "error": "Bell pairs not found"}, status_code=404)
+        ok, purified, p_succ = EntanglementPurifier.purify(p1, p2)
+        if ok and purified:
+            qteleport_pool.pairs[purified.pair_id] = purified
+            return JSONResponse({"ok": True, "purified_pair": purified.to_dict(), "p_succ": p_succ})
+        return JSONResponse({"ok": False, "error": "Purification distillation failed"}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/repeater/route", methods=["POST"])
+    async def quantum_repeater_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_path = body.get("node_path", ["desk-alpha", "repeater-1", "desk-beta"])
+        base_fidelity = float(body.get("base_fidelity", 0.98))
+        purify = bool(body.get("purify", True))
+        ok, pair, logs = qteleport_mesh.establish_multi_hop_entanglement(node_path, base_fidelity, purify)
+        return JSONResponse({
+            "ok": ok,
+            "bell_pair": pair.to_dict() if pair else None,
+            "logs": logs,
+        })
+
+    @mcp.custom_route("/v1/quantum/teleportation/teleport", methods=["POST"])
+    async def quantum_teleportation_teleport_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source_node = body.get("source_node", "desk-alpha")
+        target_node = body.get("target_node", "desk-beta")
+        alpha_val = body.get("alpha", {"real": 1.0, "imag": 0.0})
+        beta_val = body.get("beta", {"real": 0.0, "imag": 0.0})
+        alpha = complex(float(alpha_val.get("real", 1.0)), float(alpha_val.get("imag", 0.0)))
+        beta = complex(float(beta_val.get("real", 0.0)), float(beta_val.get("imag", 0.0)))
+        intermediate_hops = body.get("intermediate_hops")
+
+        res = qteleport_proto.teleport_qubit(
+            source_node=source_node,
+            target_node=target_node,
+            alpha=alpha,
+            beta=beta,
+            intermediate_hops=intermediate_hops,
+        )
+        rcpt = qteleport_ledger.append_event(
+            "QUANTUM_TELEPORTATION",
+            [source_node, target_node],
+            res.session_id,
+            res.fidelity,
+            res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/bb84", methods=["POST"])
+    async def quantum_qkd_bb84_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        bit_length = int(body.get("bit_length", 128))
+        intercept_ratio = float(body.get("intercept_ratio", 0.0))
+
+        session = qkd_engine.run_bb84_exchange(sender, receiver, bit_length, intercept_ratio)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_BB84_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/qkd/e91", methods=["POST"])
+    async def quantum_qkd_e91_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        sender = body.get("sender", "desk-alpha")
+        receiver = body.get("receiver", "desk-beta")
+        pair_count = int(body.get("pair_count", 100))
+        noise_level = float(body.get("noise_level", 0.01))
+
+        session = qkd_engine.run_e91_exchange(sender, receiver, pair_count, noise_level)
+        rcpt = qteleport_ledger.append_event(
+            "QKD_E91_SESSION",
+            [sender, receiver],
+            session.session_id,
+            session.qber,
+            session.to_dict(),
+        )
+        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/anchor/export", methods=["POST"])
+    async def quantum_teleportation_anchor_export_route(_request: Request) -> Response:
+        commitment = qteleport_exporter.export_commitment(qteleport_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/teleportation/drill/simulate", methods=["POST"])
+    async def quantum_teleportation_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTeleportationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.2 (Phases 70 & 71): Quantum Memory Node Storage & Continuous-Variable Optical Mesh
+    from desk_gateway.quantum_memory_mesh import (
+        CVHomodyneMeasurementType,
+        CVOpticalRouter,
+        CVSqueezedState,
+        QuantumMemoryBufferType,
+        QuantumMemoryCell,
+        QuantumMemoryNode,
+    )
+    from desk_gateway.quantum_cv_anchoring import (
+        CVEntanglementSwapper,
+        QuantumMemoryAnchorExporter,
+        QuantumMemoryDrillSimulator,
+        QuantumMemoryLedger,
+        QuantumMemoryReceipt,
+    )
+
+    qmem_node_alpha = QuantumMemoryNode("desk-alpha", QuantumMemoryBufferType.AFC)
+    qmem_node_beta = QuantumMemoryNode("desk-beta", QuantumMemoryBufferType.EIT)
+    cv_router = CVOpticalRouter()
+    cv_swapper = CVEntanglementSwapper(cv_router)
+    qmem_ledger = QuantumMemoryLedger()
+    qmem_exporter = QuantumMemoryAnchorExporter()
+
+    mcp._qmem_node_alpha = qmem_node_alpha  # type: ignore[attr-defined]
+    mcp._qmem_node_beta = qmem_node_beta  # type: ignore[attr-defined]
+    mcp._cv_router = cv_router  # type: ignore[attr-defined]
+    mcp._cv_swapper = cv_swapper  # type: ignore[attr-defined]
+    mcp._qmem_ledger = qmem_ledger  # type: ignore[attr-defined]
+    mcp._qmem_exporter = qmem_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/memory/store", methods=["POST"])
+    async def quantum_memory_store_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        btype_str = body.get("buffer_type", "AFC")
+        try:
+            btype = QuantumMemoryBufferType(btype_str)
+        except ValueError:
+            btype = QuantumMemoryBufferType.AFC
+        t1 = float(body.get("t1_relaxation_us", 5000.0))
+        t2 = float(body.get("t2_dephasing_us", 2500.0))
+        peak_eff = float(body.get("peak_efficiency", 0.95))
+        state_repr = body.get("state_repr", {"type": "polarization_qubit", "fidelity": 0.99})
+
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        cell = target_node.store_state(
+            state_repr=state_repr,
+            buffer_type=btype,
+            t1_relaxation_us=t1,
+            t2_dephasing_us=t2,
+            peak_efficiency=peak_eff,
+        )
+        rcpt = qmem_ledger.append_event(
+            "MEMORY_STORE",
+            node_id,
+            [node_id],
+            float(state_repr.get("fidelity", 0.99)),
+            cell.to_dict(),
+        )
+        return JSONResponse({"ok": True, "cell": cell.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/retrieve", methods=["POST"])
+    async def quantum_memory_retrieve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        cell_id = body.get("cell_id", "")
+
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        ok, fid, retrieved_state = target_node.retrieve_state(cell_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": retrieved_state.get("error", "Retrieval failed")}, status_code=400)
+
+        rcpt = qmem_ledger.append_event(
+            "MEMORY_RETRIEVAL",
+            node_id,
+            [node_id],
+            fid,
+            retrieved_state,
+        )
+        return JSONResponse({"ok": True, "fidelity": fid, "state": retrieved_state, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/cells", methods=["GET"])
+    async def quantum_memory_cells_list_route(request: Request) -> Response:
+        node_id = request.query_params.get("node_id", "desk-alpha")
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        cells = target_node.list_cells(include_retrieved=True)
+        return JSONResponse({"ok": True, "node_id": node_id, "cells": cells})
+
+    @mcp.custom_route("/v1/quantum/cv/squeezed/create", methods=["POST"])
+    async def quantum_cv_squeezed_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        squeezing_r = float(body.get("squeezing_r", 1.0))
+        squeezing_phi = float(body.get("squeezing_phi", 0.0))
+        mean_q = float(body.get("mean_q", 0.0))
+        mean_p = float(body.get("mean_p", 0.0))
+
+        state = cv_router.generate_squeezed_state(
+            node_id=node_id,
+            squeezing_r=squeezing_r,
+            squeezing_phi=squeezing_phi,
+            mean_q=mean_q,
+            mean_p=mean_p,
+        )
+        return JSONResponse({"ok": True, "squeezed_state": state.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cv/beam-splitter", methods=["POST"])
+    async def quantum_cv_beam_splitter_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        state_id_1 = body.get("state_id_1", "")
+        state_id_2 = body.get("state_id_2", "")
+        transmissivity = float(body.get("transmissivity", 0.5))
+
+        s1 = cv_router.states.get(state_id_1)
+        s2 = cv_router.states.get(state_id_2)
+        if not s1 or not s2:
+            return JSONResponse({"ok": False, "error": "State(s) not found in CV router pool"}, status_code=404)
+
+        out1, out2 = cv_router.beam_splitter(s1, s2, transmissivity=transmissivity)
+        return JSONResponse({
+            "ok": True,
+            "out_state_1": out1.to_dict(),
+            "out_state_2": out2.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/cv/homodyne", methods=["POST"])
+    async def quantum_cv_homodyne_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        state_id = body.get("state_id", "")
+        mtype_str = body.get("measurement_type", "POSITION")
+        det_eff = float(body.get("detector_efficiency", 0.98))
+
+        state = cv_router.states.get(state_id)
+        if not state:
+            return JSONResponse({"ok": False, "error": f"State {state_id} not found"}, status_code=404)
+
+        try:
+            mtype = CVHomodyneMeasurementType(mtype_str)
+        except ValueError:
+            mtype = CVHomodyneMeasurementType.POSITION
+
+        meas = cv_router.measure_homodyne(state, measurement_type=mtype, detector_efficiency=det_eff)
+        rcpt = qmem_ledger.append_event(
+            "CV_HOMODYNE_MEASUREMENT",
+            state.origin_node,
+            [state.origin_node],
+            1.0 - min(1.0, meas.get("variance", 0.5) / 5.0),
+            meas,
+        )
+        return JSONResponse({"ok": True, "measurement": meas, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cv/swap", methods=["POST"])
+    async def quantum_cv_swap_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        repeater_node = body.get("repeater_node", "repeater-1")
+        node_b = body.get("node_b", "desk-beta")
+        squeezing_r = float(body.get("squeezing_r", 1.2))
+        detector_eff = float(body.get("detector_efficiency", 0.98))
+
+        res = cv_swapper.swap_cv_entanglement(
+            node_a=node_a,
+            repeater_node=repeater_node,
+            node_b=node_b,
+            squeezing_r=squeezing_r,
+            detector_efficiency=detector_eff,
+        )
+        rcpt = qmem_ledger.append_event(
+            "CV_ENTANGLEMENT_SWAP",
+            repeater_node,
+            [node_a, node_b],
+            res["swapped_fidelity"],
+            res,
+        )
+        return JSONResponse({"ok": True, "swap_result": res, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/anchor/export", methods=["POST"])
+    async def quantum_memory_anchor_export_route(_request: Request) -> Response:
+        commitment = qmem_exporter.export_commitment(qmem_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/memory/drill/simulate", methods=["POST"])
+    async def quantum_memory_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumMemoryDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.3 (Phases 72 & 73): Blind Quantum Computing & Verifiable QSS Mesh
+    from desk_gateway.quantum_bqc_mesh import (
+        BlindAngleSpecification,
+        BlindQuantumComputingEngine,
+        BrickworkClusterState,
+    )
+    from desk_gateway.quantum_bqc_anchoring import (
+        BQCAnchorExporter,
+        BQCDrillSimulator,
+        BQCLedger,
+        BQCReceipt,
+        QuantumSecretSharing,
+        TrapQubitVerifier,
+    )
+
+    bqc_engine = BlindQuantumComputingEngine()
+    bqc_trap_verifier = TrapQubitVerifier(trap_ratio=0.25)
+    bqc_ledger = BQCLedger()
+    bqc_exporter = BQCAnchorExporter()
+
+    mcp._bqc_engine = bqc_engine  # type: ignore[attr-defined]
+    mcp._bqc_trap_verifier = bqc_trap_verifier  # type: ignore[attr-defined]
+    mcp._bqc_ledger = bqc_ledger  # type: ignore[attr-defined]
+    mcp._bqc_exporter = bqc_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/bqc/session/init", methods=["POST"])
+    async def quantum_bqc_session_init_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        client_node = body.get("client_node", "desk-alpha")
+        server_node = body.get("server_node", "untrusted-server")
+        layers = int(body.get("layers", 3))
+        qubits_per_layer = int(body.get("qubits_per_layer", 4))
+
+        session_info = bqc_engine.init_bqc_session(
+            client_node=client_node,
+            server_node=server_node,
+            layers=layers,
+            qubits_per_layer=qubits_per_layer,
+        )
+        bqc_trap_verifier.designate_traps(layers * qubits_per_layer)
+        rcpt = bqc_ledger.append_event(
+            "BQC_SESSION_INIT",
+            session_info["session_id"],
+            [client_node, server_node],
+            1.0,
+            session_info,
+        )
+        return JSONResponse({"ok": True, "session": session_info, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/bqc/step/execute", methods=["POST"])
+    async def quantum_bqc_step_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        target_qubit = int(body.get("target_qubit", 0))
+        target_angle_rad = float(body.get("target_angle_rad", 0.0))
+
+        try:
+            step_res = bqc_engine.execute_blind_measurement_step(
+                session_id=session_id,
+                target_qubit=target_qubit,
+                target_angle_rad=target_angle_rad,
+            )
+            trap_verified = bqc_trap_verifier.verify_measurement(target_qubit, step_res["client_unblinded_outcome"])
+            step_res["trap_verified"] = trap_verified
+            rcpt = bqc_ledger.append_event(
+                "BQC_MEASUREMENT_STEP",
+                session_id,
+                [session_id],
+                1.0 if trap_verified else 0.0,
+                step_res,
+            )
+            return JSONResponse({"ok": True, "step": step_res, "receipt": rcpt.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/bqc/qss/split", methods=["POST"])
+    async def quantum_bqc_qss_split_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        secret = int(body.get("secret", 42))
+        threshold_t = int(body.get("threshold_t", 3))
+        num_shares_n = int(body.get("num_shares_n", 5))
+
+        try:
+            shares = QuantumSecretSharing.split_secret(secret, threshold_t, num_shares_n)
+            return JSONResponse({"ok": True, "shares": shares, "threshold_t": threshold_t, "num_shares_n": num_shares_n})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/bqc/qss/reconstruct", methods=["POST"])
+    async def quantum_bqc_qss_reconstruct_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_shares = body.get("shares", [])
+        shares = [(int(s[0]), int(s[1])) for s in raw_shares if len(s) == 2]
+
+        secret = QuantumSecretSharing.reconstruct_secret(shares)
+        return JSONResponse({"ok": True, "reconstructed_secret": secret})
+
+    @mcp.custom_route("/v1/quantum/bqc/anchor/export", methods=["POST"])
+    async def quantum_bqc_anchor_export_route(_request: Request) -> Response:
+        commitment = bqc_exporter.export_commitment(bqc_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/bqc/drill/simulate", methods=["POST"])
+    async def quantum_bqc_drill_simulate_route(_request: Request) -> Response:
+        drill_results = BQCDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.4 (Phases 74 & 75): Quantum Internet Protocol Stack & Slicing Mesh
+    from desk_gateway.quantum_internet_mesh import (
+        EntanglementRoutingEngine,
+        QuantumConnectionManager,
+        QuantumNetworkLink,
+        QuantumPacket,
+    )
+    from desk_gateway.quantum_internet_anchoring import (
+        QuantumInternetAnchorExporter,
+        QuantumInternetDrillSimulator,
+        QuantumInternetLedger,
+        QuantumVirtualNetworkSlice,
+    )
+
+    qnet_routing_engine = EntanglementRoutingEngine()
+    # Add initial standard desk cluster link topology
+    qnet_routing_engine.add_link("desk-alpha", "q-router-1", raw_fidelity=0.98, latency_ms=1.5, bandwidth_ebits=2000)
+    qnet_routing_engine.add_link("q-router-1", "q-router-2", raw_fidelity=0.97, latency_ms=2.0, bandwidth_ebits=1500)
+    qnet_routing_engine.add_link("q-router-2", "desk-beta", raw_fidelity=0.98, latency_ms=1.5, bandwidth_ebits=2000)
+    qnet_conn_mgr = QuantumConnectionManager(qnet_routing_engine)
+    qnet_ledger = QuantumInternetLedger()
+    qnet_exporter = QuantumInternetAnchorExporter()
+    qnet_slices: Dict[str, QuantumVirtualNetworkSlice] = {}
+
+    mcp._qnet_routing_engine = qnet_routing_engine  # type: ignore[attr-defined]
+    mcp._qnet_conn_mgr = qnet_conn_mgr  # type: ignore[attr-defined]
+    mcp._qnet_ledger = qnet_ledger  # type: ignore[attr-defined]
+    mcp._qnet_exporter = qnet_exporter  # type: ignore[attr-defined]
+    mcp._qnet_slices = qnet_slices  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/internet/link/add", methods=["POST"])
+    async def quantum_internet_link_add_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_u = body.get("node_u", "desk-alpha")
+        node_v = body.get("node_v", "desk-beta")
+        raw_fidelity = float(body.get("raw_fidelity", 0.96))
+        latency_ms = float(body.get("latency_ms", 2.5))
+        bandwidth = int(body.get("bandwidth_ebits", 1000))
+
+        link = qnet_routing_engine.add_link(node_u, node_v, raw_fidelity, latency_ms, bandwidth)
+        return JSONResponse({"ok": True, "link": link.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/internet/route/compute", methods=["POST"])
+    async def quantum_internet_route_compute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source = body.get("source", "desk-alpha")
+        destination = body.get("destination", "desk-beta")
+
+        path, est_fidelity, total_latency = qnet_routing_engine.compute_shortest_entanglement_path(source, destination)
+        return JSONResponse({
+            "ok": bool(path),
+            "source": source,
+            "destination": destination,
+            "path": path,
+            "estimated_fidelity": round(est_fidelity, 6),
+            "total_latency_ms": round(total_latency, 2),
+        })
+
+    @mcp.custom_route("/v1/quantum/internet/packet/send", methods=["POST"])
+    async def quantum_internet_packet_send_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source = body.get("source", "desk-alpha")
+        destination = body.get("destination", "desk-beta")
+        target_fidelity = float(body.get("target_fidelity", 0.85))
+
+        try:
+            pkt = qnet_conn_mgr.route_quantum_packet(source, destination, target_fidelity)
+            rcpt = qnet_ledger.append_event(
+                "QUANTUM_PACKET_DELIVERY",
+                source,
+                destination,
+                pkt.achieved_fidelity,
+                pkt.to_dict(),
+            )
+            return JSONResponse({"ok": True, "packet": pkt.to_dict(), "receipt": rcpt.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/internet/slice/allocate", methods=["POST"])
+    async def quantum_internet_slice_allocate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id", "default")
+        allocated_ebits = int(body.get("allocated_ebits_sec", 500))
+        min_fidelity = float(body.get("min_fidelity_guarantee", 0.90))
+        nodes = body.get("nodes_included", ["desk-alpha", "desk-beta"])
+
+        slice_id = f"qslice-{secrets.token_hex(4)}"
+        q_slice = QuantumVirtualNetworkSlice(
+            slice_id=slice_id,
+            tenant_id=tenant_id,
+            allocated_ebits_sec=allocated_ebits,
+            min_fidelity_guarantee=min_fidelity,
+            nodes_included=nodes,
+        )
+        qnet_slices[slice_id] = q_slice
+        rcpt = qnet_ledger.append_event(
+            "QUANTUM_SLICE_ALLOCATE",
+            nodes[0] if nodes else "desk-alpha",
+            nodes[-1] if len(nodes) > 1 else "desk-beta",
+            min_fidelity,
+            q_slice.to_dict(),
+        )
+        return JSONResponse({"ok": True, "slice": q_slice.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/internet/anchor/export", methods=["POST"])
+    async def quantum_internet_anchor_export_route(_request: Request) -> Response:
+        commitment = qnet_exporter.export_commitment(qnet_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/internet/drill/simulate", methods=["POST"])
+    async def quantum_internet_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumInternetDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.5 (Phases 76 & 77): Distributed Quantum Consensus & Arbitration Mesh
+    from desk_gateway.quantum_consensus_mesh import (
+        QuantumByzantineAgreementEngine,
+        QuantumCoinFlipper,
+        QuantumConsensusRound,
+    )
+    from desk_gateway.quantum_consensus_anchoring import (
+        EntanglementArbitrationEngine,
+        QuantumConsensusAnchorExporter,
+        QuantumConsensusDrillSimulator,
+        QuantumConsensusLedger,
+    )
+
+    qconsensus_flipper = QuantumCoinFlipper()
+    qconsensus_engine = QuantumByzantineAgreementEngine(qconsensus_flipper)
+    qconsensus_arbitrator = EntanglementArbitrationEngine(qconsensus_flipper)
+    qconsensus_ledger = QuantumConsensusLedger()
+    qconsensus_exporter = QuantumConsensusAnchorExporter()
+
+    mcp._qconsensus_flipper = qconsensus_flipper  # type: ignore[attr-defined]
+    mcp._qconsensus_engine = qconsensus_engine  # type: ignore[attr-defined]
+    mcp._qconsensus_arbitrator = qconsensus_arbitrator  # type: ignore[attr-defined]
+    mcp._qconsensus_ledger = qconsensus_ledger  # type: ignore[attr-defined]
+    mcp._qconsensus_exporter = qconsensus_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/consensus/coin/flip", methods=["POST"])
+    async def quantum_consensus_coin_flip_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", f"coin-{secrets.token_hex(4)}")
+        nodes = body.get("nodes", ["desk-alpha", "desk-beta", "desk-gamma"])
+        try:
+            coin = qconsensus_flipper.flip_quantum_coin(round_id, nodes)
+            return JSONResponse({"ok": True, "coin": coin.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/round/start", methods=["POST"])
+    async def quantum_consensus_round_start_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        nodes = body.get("nodes", ["desk-alpha", "desk-beta", "desk-gamma", "desk-delta"])
+        try:
+            rnd = qconsensus_engine.start_round(nodes)
+            return JSONResponse({"ok": True, "round": rnd.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/proposal/submit", methods=["POST"])
+    async def quantum_consensus_proposal_submit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        node = body.get("node", "")
+        proposal = body.get("proposal", "")
+        try:
+            qconsensus_engine.submit_proposal(round_id, node, proposal)
+            return JSONResponse({"ok": True, "round_id": round_id, "node": node, "proposal": proposal})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/agreement/execute", methods=["POST"])
+    async def quantum_consensus_agreement_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = body.get("round_id", "")
+        try:
+            resolved_rnd = qconsensus_engine.execute_agreement_step(round_id)
+            rcpt = qconsensus_ledger.append_event(
+                round_id,
+                resolved_rnd.decision,
+                resolved_rnd.nodes,
+                resolved_rnd.quantum_coin.coin_value if resolved_rnd.quantum_coin else 0,
+                resolved_rnd.to_dict(),
+            )
+            return JSONResponse({"ok": True, "round": resolved_rnd.to_dict(), "receipt": rcpt.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/arbitrate", methods=["POST"])
+    async def quantum_consensus_arbitrate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        conflicting_seats = body.get("conflicting_seats", ["desk-alpha", "desk-beta"])
+        resource_id = body.get("resource_id", "default-resource")
+        try:
+            arb = qconsensus_arbitrator.arbitrate_seats(conflicting_seats, resource_id)
+            rcpt = qconsensus_ledger.append_event(
+                arb["arbitration_id"],
+                arb["awarded_seat"],
+                conflicting_seats,
+                arb["quantum_coin"]["coin_value"] if "quantum_coin" in arb else 0,
+                arb,
+            )
+            return JSONResponse({"ok": True, "arbitration": arb, "receipt": rcpt.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/consensus/anchor/export", methods=["POST"])
+    async def quantum_consensus_anchor_export_route(_request: Request) -> Response:
+        commitment = qconsensus_exporter.export_commitment(qconsensus_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/consensus/drill/simulate", methods=["POST"])
+    async def quantum_consensus_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumConsensusDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.6 (Phases 78 & 79): Distributed Quantum Sensing & Clock Synchronization Mesh
+    from desk_gateway.quantum_sensing_mesh import (
+        NOONStateMetrologyResult,
+        QuantumClockSyncResult,
+        QuantumClockSynchronizer,
+        QuantumMetrologyEstimator,
+        QuantumSensorTelemetry,
+        SensorType,
+    )
+    from desk_gateway.quantum_sensing_anchoring import (
+        QuantumSensingAnchorExporter,
+        QuantumSensingDrillSimulator,
+        QuantumSensingLedger,
+        QuantumSensingReceipt,
+    )
+
+    qsensing_clock_sync = QuantumClockSynchronizer(base_fidelity=0.99)
+    qsensing_ledger = QuantumSensingLedger()
+    qsensing_exporter = QuantumSensingAnchorExporter()
+
+    mcp._qsensing_clock_sync = qsensing_clock_sync  # type: ignore[attr-defined]
+    mcp._qsensing_ledger = qsensing_ledger  # type: ignore[attr-defined]
+    mcp._qsensing_exporter = qsensing_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/sensing/noon/estimate", methods=["POST"])
+    async def quantum_sensing_noon_estimate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        true_phase = float(body.get("true_phase", 1.570796))
+        n_photons = int(body.get("n_photons", 10))
+        noise = float(body.get("detector_noise", 0.01))
+
+        res = QuantumMetrologyEstimator.estimate_phase_with_noon(true_phase, n_photons, noise)
+        rcpt = qsensing_ledger.append_event(
+            "NOON_PHASE_ESTIMATION",
+            "desk-alpha",
+            res.entanglement_advantage_factor,
+            res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/sensing/clock/sync", methods=["POST"])
+    async def quantum_sensing_clock_sync_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        node_b = body.get("node_b", "desk-beta")
+        skew_ps = float(body.get("initial_skew_ps", 100.0))
+
+        sync_res = qsensing_clock_sync.synchronize_clocks(node_a, node_b, skew_ps)
+        rcpt = qsensing_ledger.append_event(
+            "QUANTUM_CLOCK_SYNCHRONIZATION",
+            node_b,
+            10.0,
+            sync_res.to_dict(),
+        )
+        return JSONResponse({"ok": True, "sync": sync_res.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/sensing/anchor/export", methods=["POST"])
+    async def quantum_sensing_anchor_export_route(_request: Request) -> Response:
+        commitment = qsensing_exporter.export_commitment(qsensing_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/sensing/drill/simulate", methods=["POST"])
+    async def quantum_sensing_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumSensingDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.7 (Phases 80 & 81): Quantum Machine Learning (QML) & Parameterized Quantum Circuits
+    from desk_gateway.quantum_ml_mesh import (
+        ParameterizedQuantumCircuit,
+        ParameterShiftOptimizer,
+        QuantumNeuralNetworkClassifier,
+    )
+    from desk_gateway.quantum_ml_anchoring import (
+        QuantumMLDrillSimulator,
+        QuantumModelAnchorExporter,
+        QuantumModelLedger,
+        QuantumModelReceipt,
+    )
+
+    qml_classifier = QuantumNeuralNetworkClassifier()
+    qml_ledger = QuantumModelLedger()
+    qml_exporter = QuantumModelAnchorExporter()
+
+    mcp._qml_classifier = qml_classifier  # type: ignore[attr-defined]
+    mcp._qml_ledger = qml_ledger  # type: ignore[attr-defined]
+    mcp._qml_exporter = qml_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/ml/train/step", methods=["POST"])
+    async def quantum_ml_train_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        features = [float(x) for x in body.get("features", [0.5, -0.2])]
+        target_label = float(body.get("target_label", 1.0))
+        learning_rate = float(body.get("learning_rate", 0.1))
+
+        epoch = qml_classifier.train_step(features, target_label, learning_rate)
+        rcpt = qml_ledger.append_event(
+            "QNN_TRAIN_STEP",
+            "qnn-vqc-default",
+            epoch.loss,
+            epoch.weights,
+            epoch.to_dict(),
+        )
+        return JSONResponse({"ok": True, "epoch": epoch.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/ml/predict", methods=["POST"])
+    async def quantum_ml_predict_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        features = [float(x) for x in body.get("features", [0.5, -0.2])]
+
+        prediction = qml_classifier.predict(features)
+        return JSONResponse({"ok": True, "prediction": round(prediction, 6), "weights": [round(w, 4) for w in qml_classifier.weights]})
+
+    @mcp.custom_route("/v1/quantum/ml/anchor/export", methods=["POST"])
+    async def quantum_ml_anchor_export_route(_request: Request) -> Response:
+        commitment = qml_exporter.export_commitment(qml_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/ml/drill/simulate", methods=["POST"])
+    async def quantum_ml_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumMLDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v5.8 (Phases 82 & 83): Quantum Zero-Knowledge Proofs & Verifiable Witness Mesh
+    from desk_gateway.quantum_zkp_mesh import (
+        PauliBasis,
+        QZKPProofResponse,
+        QuantumWitnessState,
+        QuantumZKPEngine,
+    )
+    from desk_gateway.quantum_zkp_anchoring import (
+        QuantumZKPAnchorExporter,
+        QuantumZKPDrillSimulator,
+        QuantumZKPLedger,
+        QuantumZKPReceipt,
+    )
+
+    qzkp_engine = QuantumZKPEngine()
+    qzkp_ledger = QuantumZKPLedger()
+    qzkp_exporter = QuantumZKPAnchorExporter()
+
+    mcp._qzkp_engine = qzkp_engine  # type: ignore[attr-defined]
+    mcp._qzkp_ledger = qzkp_ledger  # type: ignore[attr-defined]
+    mcp._qzkp_exporter = qzkp_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/zkp/session/init", methods=["POST"])
+    async def quantum_zkp_session_init_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        prover = body.get("prover_node", "desk-alpha")
+        verifier = body.get("verifier_node", "verifier-node")
+        qubits = int(body.get("qubits_count", 3))
+        stabilizers = body.get("stabilizers", ["+XXX", "+ZZI", "+IZZ"])
+        angles = [float(a) for a in body.get("phase_angles", [0.0, 1.570796, 3.141592])]
+        fidelity = float(body.get("fidelity", 0.99))
+
+        witness = QuantumWitnessState(
+            witness_id=f"witness-{secrets.token_hex(4)}",
+            qubits_count=qubits,
+            stabilizers=stabilizers,
+            phase_angles=angles,
+            fidelity=fidelity,
+        )
+        session_info = qzkp_engine.init_proof_session(prover, verifier, witness)
+        rcpt = qzkp_ledger.append_event(
+            session_info["session_id"],
+            "QZKP_SESSION_INIT",
+            prover,
+            verifier,
+            fidelity,
+            session_info,
+        )
+        return JSONResponse({"ok": True, "session": session_info, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/zkp/challenge/generate", methods=["POST"])
+    async def quantum_zkp_challenge_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        try:
+            challenge = qzkp_engine.generate_verifier_challenge(session_id)
+            return JSONResponse({"ok": True, "session_id": session_id, "challenge_basis": challenge.value})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/zkp/proof/verify", methods=["POST"])
+    async def quantum_zkp_proof_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        basis_str = body.get("challenge_basis", "X")
+        try:
+            challenge_basis = PauliBasis(basis_str)
+        except ValueError:
+            challenge_basis = PauliBasis.X
+
+        try:
+            proof_resp = qzkp_engine.evaluate_prover_response(session_id, challenge_basis)
+            rcpt = qzkp_ledger.append_event(
+                session_id,
+                "QZKP_PROOF_VERIFIED",
+                "prover",
+                "verifier",
+                proof_resp.projector_expectation,
+                proof_resp.to_dict(),
+            )
+            return JSONResponse({"ok": True, "proof": proof_resp.to_dict(), "receipt": rcpt.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/zkp/anchor/export", methods=["POST"])
+    async def quantum_zkp_anchor_export_route(_request: Request) -> Response:
+        commitment = qzkp_exporter.export_commitment(qzkp_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/zkp/drill/simulate", methods=["POST"])
+    async def quantum_zkp_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumZKPDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7497,6 +8645,51 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "depin_orchestrator": getattr(mcp, "_depin_orchestrator", None),
         "depin_ledger": getattr(mcp, "_depin_ledger", None),
         "depin_anchor_exporter": getattr(mcp, "_depin_anchor_exporter", None),
+        "sagin_cgr": getattr(mcp, "_sagin_cgr", None),
+        "sagin_custody": getattr(mcp, "_sagin_custody", None),
+        "sagin_downlink_mgr": getattr(mcp, "_sagin_downlink_mgr", None),
+        "sagin_consensus": getattr(mcp, "_sagin_consensus", None),
+        "sagin_ledger": getattr(mcp, "_sagin_ledger", None),
+        "sagin_anchor_exporter": getattr(mcp, "_sagin_anchor_exporter", None),
+        "quantum_scheduler": getattr(mcp, "_quantum_scheduler", None),
+        "quantum_decoherence": getattr(mcp, "_quantum_decoherence", None),
+        "quantum_ledger": getattr(mcp, "_quantum_ledger", None),
+        "quantum_anchor_exporter": getattr(mcp, "_quantum_anchor_exporter", None),
+        "qteleport_pool": getattr(mcp, "_qteleport_pool", None),
+        "qteleport_mesh": getattr(mcp, "_qteleport_mesh", None),
+        "qteleport_proto": getattr(mcp, "_qteleport_proto", None),
+        "qkd_engine": getattr(mcp, "_qkd_engine", None),
+        "qteleport_ledger": getattr(mcp, "_qteleport_ledger", None),
+        "qteleport_exporter": getattr(mcp, "_qteleport_exporter", None),
+        "qmem_node_alpha": getattr(mcp, "_qmem_node_alpha", None),
+        "qmem_node_beta": getattr(mcp, "_qmem_node_beta", None),
+        "cv_router": getattr(mcp, "_cv_router", None),
+        "cv_swapper": getattr(mcp, "_cv_swapper", None),
+        "qmem_ledger": getattr(mcp, "_qmem_ledger", None),
+        "qmem_exporter": getattr(mcp, "_qmem_exporter", None),
+        "bqc_engine": getattr(mcp, "_bqc_engine", None),
+        "bqc_trap_verifier": getattr(mcp, "_bqc_trap_verifier", None),
+        "bqc_ledger": getattr(mcp, "_bqc_ledger", None),
+        "bqc_exporter": getattr(mcp, "_bqc_exporter", None),
+        "qnet_routing_engine": getattr(mcp, "_qnet_routing_engine", None),
+        "qnet_conn_mgr": getattr(mcp, "_qnet_conn_mgr", None),
+        "qnet_ledger": getattr(mcp, "_qnet_ledger", None),
+        "qnet_exporter": getattr(mcp, "_qnet_exporter", None),
+        "qnet_slices": getattr(mcp, "_qnet_slices", None),
+        "qconsensus_flipper": getattr(mcp, "_qconsensus_flipper", None),
+        "qconsensus_engine": getattr(mcp, "_qconsensus_engine", None),
+        "qconsensus_arbitrator": getattr(mcp, "_qconsensus_arbitrator", None),
+        "qconsensus_ledger": getattr(mcp, "_qconsensus_ledger", None),
+        "qconsensus_exporter": getattr(mcp, "_qconsensus_exporter", None),
+        "qsensing_clock_sync": getattr(mcp, "_qsensing_clock_sync", None),
+        "qsensing_ledger": getattr(mcp, "_qsensing_ledger", None),
+        "qsensing_exporter": getattr(mcp, "_qsensing_exporter", None),
+        "qml_classifier": getattr(mcp, "_qml_classifier", None),
+        "qml_ledger": getattr(mcp, "_qml_ledger", None),
+        "qml_exporter": getattr(mcp, "_qml_exporter", None),
+        "qzkp_engine": getattr(mcp, "_qzkp_engine", None),
+        "qzkp_ledger": getattr(mcp, "_qzkp_ledger", None),
+        "qzkp_exporter": getattr(mcp, "_qzkp_exporter", None),
     }
     return app, settings
 

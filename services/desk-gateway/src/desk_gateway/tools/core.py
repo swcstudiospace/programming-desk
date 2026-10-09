@@ -109,7 +109,19 @@ def _is_ragflow_budget(result: dict[str, Any]) -> bool:
     return result.get("plane") == "ragflow" and result.get("results") == [] and "exceeded" in str(result.get("reason") or "")
 
 
-async def _within(deadline: float, coro: Any, phase: str, budget: float) -> dict[str, Any]:
+def _record_budget_failure(http: Any) -> None:
+    """A budget that cancels an in-flight call is an upstream failure.
+
+    Caller cancellation is a CancelledError and does not come through here, so it
+    does not trip the breaker.
+    """
+    breaker = getattr(http, "circuit_breaker", None)
+    record = getattr(breaker, "record_failure", None)
+    if record is not None:
+        record()
+
+
+async def _within(deadline: float, coro: Any, phase: str, budget: float, http: Any = None) -> dict[str, Any]:
     left = deadline - asyncio.get_running_loop().time()
     if left <= 0:
         if asyncio.iscoroutine(coro):
@@ -118,6 +130,7 @@ async def _within(deadline: float, coro: Any, phase: str, budget: float) -> dict
     try:
         return await asyncio.wait_for(coro, left)
     except TimeoutError:
+        _record_budget_failure(http)
         return _ragflow_timeout(phase, budget)
 
 
@@ -157,7 +170,9 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     lookup_started = loop.time()
     lookup_deadline = min(lookup_started + lookup_budget, outer_end)
 
-    resolved = await _within(lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget)
+    resolved = await _within(
+        lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget, svc.ragflow.http
+    )
     unused_lookup = max(0.0, lookup_budget - (loop.time() - lookup_started))
     if _is_ragflow_budget(resolved):
         return resolved
@@ -181,7 +196,9 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     limit = args.get("limit", 8)
     retrieval_started = loop.time()
     retrieval_deadline = min(retrieval_started + retrieval_budget, outer_end)
-    hit = await _within(retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget)
+    hit = await _within(
+        retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget, svc.ragflow.http
+    )
     unused_retrieval = max(0.0, retrieval_budget - (loop.time() - retrieval_started))
     if not _is_ragflow_budget(hit) and is_unknown_dataset(hit):
         # Retrieval time does not consume the lookup allowance. The refresh gets
@@ -192,6 +209,7 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             svc.ragflow.resolve_dataset_ids(names, refresh=True),
             "dataset lookup",
             lookup_budget,
+            svc.ragflow.http,
         )
         if _is_ragflow_budget(resolved):
             return resolved
@@ -207,6 +225,7 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             svc.ragflow.retrieve(args["query"], ids, limit),
             "retrieval",
             retrieval_budget,
+            svc.ragflow.http,
         )
     if _is_ragflow_budget(hit):
         return hit
@@ -320,6 +339,7 @@ async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
                     timeout,
                 )
             except TimeoutError:
+                _record_budget_failure(svc.hindsight.http)
                 return {
                     "bank": bank,
                     "status": "timeout",

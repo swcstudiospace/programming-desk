@@ -6,6 +6,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 import errno
+import fcntl
 import hashlib
 import json
 import os
@@ -119,23 +120,35 @@ def _confine_log_path(
         sandbox = PolicySandbox(workspace_root=anchor)
         return sandbox.validate_path(raw), sandbox
 
-    # Resolve ancestor symlinks, then validate the leaf so a symlink leaf fails
-    # and a lexical mismatch with PolicySandbox.resolve() does not.
-    parent = raw.parent.resolve()
-    sandbox = PolicySandbox(workspace_root=parent)
-    return sandbox.validate_path(parent / raw.name), sandbox
+    # Resolve ancestors only. The parent directory itself must stay a real
+    # directory; following it would retarget the log into the link target.
+    parent = raw.parent
+    if parent.is_symlink():
+        raise BoundarySecurityError(
+            f"Symlink rejected inside workspace: '{parent}'"
+        )
+    resolved_parent = parent.parent.resolve() / parent.name
+    sandbox = PolicySandbox(workspace_root=resolved_parent)
+    return sandbox.validate_path(resolved_parent / raw.name), sandbox
 
 
 @contextmanager
-def _open_nofollow(path: Path, flags: int, mode: str) -> Iterator[Any]:
+def _open_nofollow(
+    path: Path,
+    flags: int,
+    mode: str,
+    dir_fd: int | None = None,
+) -> Iterator[Any]:
     """Open ``path`` without following a symlink leaf.
 
-    ``O_NOFOLLOW`` applies to the final component. Callers still confine every
-    ancestor through ``PolicySandbox`` before they reach this helper.
+    ``O_NOFOLLOW`` applies to the final component. When ``dir_fd`` is set, the
+    leaf is opened under that already-pinned directory so a swapped parent
+    cannot redirect the open.
     """
     nofollow = getattr(os, "O_NOFOLLOW", 0)
+    target: str | Path = path.name if dir_fd is not None else path
     try:
-        fd = os.open(path, flags | nofollow, 0o600)
+        fd = os.open(target, flags | nofollow, 0o600, dir_fd=dir_fd)
     except OSError as err:
         if nofollow and err.errno == errno.ELOOP:
             raise BoundarySecurityError(
@@ -154,6 +167,21 @@ def _open_nofollow(path: Path, flags: int, mode: str) -> Iterator[Any]:
         yield handle
     finally:
         handle.close()
+
+
+def _directory_identity(directory: Path) -> tuple[int, int]:
+    """Inode of a real directory. A symlink parent is rejected."""
+    try:
+        info = directory.lstat()
+    except FileNotFoundError as err:
+        raise BoundarySecurityError(
+            f"Symlink rejected inside workspace: '{directory}'"
+        ) from err
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):
+        raise BoundarySecurityError(
+            f"Symlink rejected inside workspace: '{directory}'"
+        )
+    return info.st_dev, info.st_ino
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -219,14 +247,79 @@ class AuditTracer:
         self.max_log_bytes = max_log_bytes
         self._lock = threading.Lock()
 
-        # Ensure directory exists
+        # Ensure directory exists, then pin that directory inode.
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._parent_pin = _directory_identity(self.log_path.parent)
 
     def _checked_log_path(self) -> Path:
-        """Re-confine the log path so a swapped symlink leaf is rejected."""
+        """Re-confine the log path so a swapped symlink leaf or parent is rejected."""
+        parent = self.log_path.parent
+        try:
+            info = parent.lstat()
+        except FileNotFoundError as err:
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{parent}'"
+            ) from err
+        if (
+            stat.S_ISLNK(info.st_mode)
+            or not stat.S_ISDIR(info.st_mode)
+            or (info.st_dev, info.st_ino) != self._parent_pin
+        ):
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{parent}'"
+            )
         checked = self._path_sandbox.validate_path(self.log_path)
         self.log_path = checked
         return checked
+
+    @contextmanager
+    def _pinned_dir(self) -> Iterator[int]:
+        """Directory fd for the pinned log parent. Does not follow a swapped link."""
+        parent = self.log_path.parent
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        try:
+            dir_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY | nofollow)
+        except OSError as err:
+            if nofollow and err.errno == errno.ELOOP:
+                raise BoundarySecurityError(
+                    f"Symlink rejected inside workspace: '{parent}'"
+                ) from err
+            raise
+        try:
+            info = os.fstat(dir_fd)
+            if (info.st_dev, info.st_ino) != self._parent_pin:
+                raise BoundarySecurityError(
+                    f"Symlink rejected inside workspace: '{parent}'"
+                )
+            yield dir_fd
+        finally:
+            os.close(dir_fd)
+
+    @contextmanager
+    def _hold_log_lock(self, dir_fd: int, log_name: str) -> Iterator[None]:
+        """Exclusive lock shared by every process appending or reading this log."""
+        nofollow = getattr(os, "O_NOFOLLOW", 0)
+        try:
+            fd = os.open(
+                log_name + ".lock",
+                os.O_CREAT | os.O_RDWR | nofollow,
+                0o600,
+                dir_fd=dir_fd,
+            )
+        except OSError as err:
+            if nofollow and err.errno == errno.ELOOP:
+                raise BoundarySecurityError(
+                    f"Symlink rejected inside workspace: '{log_name}.lock'"
+                ) from err
+            raise
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
     def _sanitize_value(self, val: Any, key_name: str | None = None) -> Any:
         """Recursively redact sensitive keys and credential values."""
@@ -242,14 +335,25 @@ class AuditTracer:
             return [self._sanitize_value(item, key_name=key_name) for item in val]
         return val
 
-    def _last_link(self, path: Path) -> tuple[str, int]:
+    def _lstat_leaf(self, path: Path, dir_fd: int | None) -> os.stat_result:
+        if dir_fd is None:
+            return path.lstat()
+        return os.lstat(path.name, dir_fd=dir_fd)
+
+    def _last_link(self, path: Path, *, dir_fd: int | None = None) -> tuple[str, int]:
         """Return the last valid line's ``(record_hash, seq)`` inside the write lock."""
         prev_hash = _GENESIS_PREV_HASH
         seq = 0
-        if not path.exists():
+        try:
+            info = self._lstat_leaf(path, dir_fd)
+        except FileNotFoundError:
             return prev_hash, seq
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{path}'"
+            )
 
-        with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
+        with _open_nofollow(path, os.O_RDONLY, "rb", dir_fd=dir_fd) as handle:
             for raw_line in handle:
                 if not raw_line.strip():
                     continue
@@ -278,7 +382,7 @@ class AuditTracer:
         """Sibling that holds the previous active segment. Same directory, ``name.1``."""
         return path.with_name(path.name + ".1")
 
-    def _rotate_active(self, path: Path, line: str) -> bool:
+    def _rotate_active(self, path: Path, line: str, *, dir_fd: int | None = None) -> bool:
         """Rename the active log when appending ``line`` would exceed the cap.
 
         ``None`` never rotates. The threshold uses the UTF-8 byte length of
@@ -291,7 +395,7 @@ class AuditTracer:
         if self.max_log_bytes is None:
             return False
         try:
-            info = path.lstat()
+            info = self._lstat_leaf(path, dir_fd)
         except FileNotFoundError:
             return False
         if stat.S_ISLNK(info.st_mode):
@@ -305,18 +409,28 @@ class AuditTracer:
             return False
         sibling = self._rotated_segment(path)
         try:
-            mode = sibling.lstat().st_mode
+            mode = self._lstat_leaf(sibling, dir_fd).st_mode
         except FileNotFoundError:
-            os.replace(path, sibling)
-            _fsync_directory(sibling.parent)
+            self._replace_leaf(path, sibling, dir_fd)
             return True
         if stat.S_ISDIR(mode):
             return False
         if not (stat.S_ISLNK(mode) or stat.S_ISREG(mode)):
             return False
-        os.replace(path, sibling)
-        _fsync_directory(sibling.parent)
+        self._replace_leaf(path, sibling, dir_fd)
         return True
+
+    def _replace_leaf(self, source: Path, dest: Path, dir_fd: int | None) -> None:
+        """Atomically replace ``dest`` with ``source`` inside the pinned directory."""
+        if dir_fd is None:
+            os.replace(source, dest)
+            _fsync_directory(dest.parent)
+            return
+        os.replace(source.name, dest.name, src_dir_fd=dir_fd, dst_dir_fd=dir_fd)
+        try:
+            os.fsync(dir_fd)
+        except OSError:
+            pass
 
     def _segment_anchor(self, prev_hash: str, seq: int) -> tuple[dict[str, Any], str]:
         """Hashed record that opens a fresh segment after rotation.
@@ -349,6 +463,7 @@ class AuditTracer:
         expected_seq: int,
         *,
         relaxed_head: bool = False,
+        dir_fd: int | None = None,
     ) -> tuple[bool, str, str, int]:
         """Verify ``path`` from the given cursor.
 
@@ -356,10 +471,14 @@ class AuditTracer:
         With ``relaxed_head``, the first record may be genesis seq 1 or a
         ``segment_anchor``; every following line must link from that head.
         """
-        if not path.exists():
+        try:
+            info = self._lstat_leaf(path, dir_fd)
+        except FileNotFoundError:
             return True, "ok", expected_prev, expected_seq
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            return False, "truncated JSON", expected_prev, expected_seq
         saw_record = False
-        with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
+        with _open_nofollow(path, os.O_RDONLY, "rb", dir_fd=dir_fd) as handle:
             for raw_line in handle:
                 if not raw_line.strip():
                     continue
@@ -382,7 +501,9 @@ class AuditTracer:
                 expected_seq += 1
         return True, "ok", expected_prev, expected_seq
 
-    def _active_chain_start(self, path: Path) -> tuple[bool, str, str, int]:
+    def _active_chain_start(
+        self, path: Path, *, dir_fd: int | None = None
+    ) -> tuple[bool, str, str, int]:
         """Cursor for the active file after a verified rotated segment, if any.
 
         No regular sibling starts at genesis / seq 1. A symlink sibling fails.
@@ -394,7 +515,7 @@ class AuditTracer:
         expected_seq = 1
         sibling = self._rotated_segment(path)
         try:
-            mode = sibling.lstat().st_mode
+            mode = self._lstat_leaf(sibling, dir_fd).st_mode
         except FileNotFoundError:
             return True, "ok", expected_prev, expected_seq
         if stat.S_ISLNK(mode):
@@ -402,7 +523,7 @@ class AuditTracer:
         if not stat.S_ISREG(mode):
             return True, "ok", expected_prev, expected_seq
         return self._verify_segment(
-            sibling, expected_prev, expected_seq, relaxed_head=True
+            sibling, expected_prev, expected_seq, relaxed_head=True, dir_fd=dir_fd
         )
 
     def record_event(self, event: AuditEvent) -> AuditEvent:
@@ -418,34 +539,35 @@ class AuditTracer:
 
         with self._lock:
             path = self._checked_log_path()
-            prev_hash, last_seq = self._last_link(path)
-            data["seq"] = last_seq + 1
-            data["prev_hash"] = prev_hash
-            data["record_hash"] = _record_hash(data)
-            line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
-            # Rotation is decided from the pre-rotation link. After the
-            # rename, the fresh file opens with an anchor that keeps that
-            # link, and the user record is rebuilt from the anchor.
-            anchor_line = ""
-            if self._rotate_active(path, line):
-                anchor, anchor_line = self._segment_anchor(prev_hash, last_seq + 1)
-                data["seq"] = anchor["seq"] + 1
-                data["prev_hash"] = anchor["record_hash"]
+            with self._pinned_dir() as dir_fd, self._hold_log_lock(dir_fd, path.name):
+                prev_hash, last_seq = self._last_link(path, dir_fd=dir_fd)
+                data["seq"] = last_seq + 1
+                data["prev_hash"] = prev_hash
                 data["record_hash"] = _record_hash(data)
                 line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
-            with _open_nofollow(
-                path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, "a"
-            ) as handle:
-                if anchor_line:
-                    handle.write(anchor_line)
-                handle.write(line)
-                if self.auto_flush:
-                    handle.flush()
-                    try:
-                        os.fsync(handle.fileno())
-                    except OSError:
-                        # Some filesystems or mock pipes do not support fsync
-                        pass
+                # Rotation is decided from the pre-rotation link. After the
+                # rename, the fresh file opens with an anchor that keeps that
+                # link, and the user record is rebuilt from the anchor.
+                anchor_line = ""
+                if self._rotate_active(path, line, dir_fd=dir_fd):
+                    anchor, anchor_line = self._segment_anchor(prev_hash, last_seq + 1)
+                    data["seq"] = anchor["seq"] + 1
+                    data["prev_hash"] = anchor["record_hash"]
+                    data["record_hash"] = _record_hash(data)
+                    line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
+                with _open_nofollow(
+                    path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, "a", dir_fd=dir_fd
+                ) as handle:
+                    if anchor_line:
+                        handle.write(anchor_line)
+                    handle.write(line)
+                    if self.auto_flush:
+                        handle.flush()
+                        try:
+                            os.fsync(handle.fileno())
+                        except OSError:
+                            # Some filesystems or mock pipes do not support fsync
+                            pass
 
         return replace(
             event,
@@ -492,14 +614,17 @@ class AuditTracer:
         """
         with self._lock:
             path = self._checked_log_path()
-            ok, reason, expected_prev, expected_seq = self._active_chain_start(path)
-            if not ok:
-                return False, reason
-            ok, reason, _last_hash, _next_seq = self._verify_segment(
-                path, expected_prev, expected_seq
-            )
-            if not ok:
-                return False, reason
+            with self._pinned_dir() as dir_fd, self._hold_log_lock(dir_fd, path.name):
+                ok, reason, expected_prev, expected_seq = self._active_chain_start(
+                    path, dir_fd=dir_fd
+                )
+                if not ok:
+                    return False, reason
+                ok, reason, _last_hash, _next_seq = self._verify_segment(
+                    path, expected_prev, expected_seq, dir_fd=dir_fd
+                )
+                if not ok:
+                    return False, reason
         return True, "ok"
 
     def _collect_user_events(
@@ -513,6 +638,7 @@ class AuditTracer:
         phase: str | None,
         actor: str | None,
         action: str | None,
+        dir_fd: int | None = None,
     ) -> bool:
         """Append linked user records from ``path``.
 
@@ -522,11 +648,15 @@ class AuditTracer:
         the cursor and are not appended. Phase, actor, and action filters run
         after the link check.
         """
-        if not path.exists():
+        try:
+            info = self._lstat_leaf(path, dir_fd)
+        except FileNotFoundError:
             return True
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+            return False
         saw_record = False
         try:
-            with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
+            with _open_nofollow(path, os.O_RDONLY, "rb", dir_fd=dir_fd) as handle:
                 for raw_line in handle:
                     if not raw_line.strip():
                         continue
@@ -585,39 +715,44 @@ class AuditTracer:
 
         with self._lock:
             path = self._checked_log_path()
-            ok, _reason, expected_prev, expected_seq = self._active_chain_start(path)
-            if not ok:
-                return []
-            sibling = self._rotated_segment(path)
-            try:
-                sibling_mode = sibling.lstat().st_mode
-            except FileNotFoundError:
-                sibling_mode = 0
-            if stat.S_ISREG(sibling_mode):
-                retained: list[dict[str, Any]] = []
-                whole = self._collect_user_events(
-                    sibling,
-                    _GENESIS_PREV_HASH,
-                    1,
-                    retained,
-                    relaxed_head=True,
+            with self._pinned_dir() as dir_fd, self._hold_log_lock(dir_fd, path.name):
+                ok, _reason, expected_prev, expected_seq = self._active_chain_start(
+                    path, dir_fd=dir_fd
+                )
+                if not ok:
+                    return []
+                sibling = self._rotated_segment(path)
+                try:
+                    sibling_mode = self._lstat_leaf(sibling, dir_fd).st_mode
+                except FileNotFoundError:
+                    sibling_mode = 0
+                if stat.S_ISREG(sibling_mode):
+                    retained: list[dict[str, Any]] = []
+                    whole = self._collect_user_events(
+                        sibling,
+                        _GENESIS_PREV_HASH,
+                        1,
+                        retained,
+                        relaxed_head=True,
+                        phase=phase,
+                        actor=actor,
+                        action=action,
+                        dir_fd=dir_fd,
+                    )
+                    if not whole:
+                        return []
+                    matched.extend(retained)
+                self._collect_user_events(
+                    path,
+                    expected_prev,
+                    expected_seq,
+                    matched,
+                    relaxed_head=False,
                     phase=phase,
                     actor=actor,
                     action=action,
+                    dir_fd=dir_fd,
                 )
-                if not whole:
-                    return []
-                matched.extend(retained)
-            self._collect_user_events(
-                path,
-                expected_prev,
-                expected_seq,
-                matched,
-                relaxed_head=False,
-                phase=phase,
-                actor=actor,
-                action=action,
-            )
 
         if use_bounded:
             return matched[-limit:]

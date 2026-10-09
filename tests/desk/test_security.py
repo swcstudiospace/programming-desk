@@ -37,6 +37,16 @@ def test_sanitize_tokens() -> None:
     assert anthropic not in extra
     assert "BEGIN PRIVATE KEY" not in extra
 
+    header = "-----BEGIN " + "PRIVATE KEY-----"
+    footer = "-----END " + "PRIVATE KEY-----"
+    body = "bm90LWEtcmVhbC1rZXk="
+    pem = f"note {header}\n{body}\n{footer}\n tail"
+    redacted = sandbox.sanitize(pem)
+    assert body not in redacted
+    assert "BEGIN" not in redacted
+    assert "END" not in redacted
+    assert "tail" in redacted
+
 
 def test_sanitize_env() -> None:
     sandbox = PolicySandbox()

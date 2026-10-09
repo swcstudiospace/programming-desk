@@ -30,6 +30,10 @@ class PolicySandbox:
         re.compile(r"Bearer\s+[A-Za-z0-9\-\._~\+\/]+=*"),
         re.compile(r"\bAKIA[0-9A-Z]{16}\b"),
         re.compile(r"\bxox[baprs]-[A-Za-z0-9\-]{10,}\b"),
+        # Whole PEM block first, then a bare header if the footer is missing.
+        re.compile(
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----"
+        ),
         re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     ]
 

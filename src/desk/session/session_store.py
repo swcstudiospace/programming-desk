@@ -185,10 +185,12 @@ class SessionStore:
     def load_session(self) -> SessionFrame | None:
         """Hydrate session frame from disk if present.
 
-        JSON decode failures, read errors, and unsupported payloads are moved
-        aside to ``<name>.corrupt.<pid>`` in the same directory. The live path
-        is left absent so a later save can write a new file. A path that fails
-        confinement raises and is not quarantined.
+        JSON decode failures, undecodable bytes, read errors, and unsupported
+        payloads are moved aside to ``<name>.corrupt.<pid>`` in the same
+        directory. A later bad file in the same process gets a unique suffix
+        so the first copy is kept. The live path is left absent so a later
+        save can write a new file. A path that fails confinement raises and
+        is not quarantined.
         """
         with self._lock:
             self._reconfine_storage()
@@ -198,7 +200,7 @@ class SessionStore:
                 raw = _read_text_nofollow(self.storage_path)
             except BoundarySecurityError:
                 raise
-            except OSError:
+            except (OSError, UnicodeDecodeError):
                 self._quarantine_corrupt_storage()
                 return None
             try:
@@ -216,6 +218,10 @@ class SessionStore:
         """Rename the bad session file aside. Never writes a replacement over it."""
         source = self.storage_path
         destination = source.with_name(f"{source.name}.corrupt.{os.getpid()}")
+        if destination.exists() or destination.is_symlink():
+            destination = source.with_name(
+                f"{source.name}.corrupt.{os.getpid()}.{uuid.uuid4().hex}"
+            )
         if destination == source:
             return
         try:
@@ -229,6 +235,8 @@ class SessionStore:
         A missing or empty file becomes one marked document. An existing
         document without the start marker keeps its text and gains one marked
         section. When both markers are present, only that span is replaced.
+        A start marker without an end marker raises ``ValueError`` and leaves
+        the file unchanged.
         """
         section = _marked_session_document(_render_state_markdown(frame))
         with self._lock:
@@ -251,7 +259,10 @@ class SessionStore:
             return existing + "\n" + section
         end_idx = existing.find(_STATE_REGION_END, start_idx + len(_STATE_REGION_START))
         if end_idx == -1:
-            return existing[:start_idx] + section
+            raise ValueError(
+                "session state has a start marker and no end marker; "
+                "refusing to rewrite the file"
+            )
         end_span = end_idx + len(_STATE_REGION_END)
         if end_span < len(existing) and existing[end_span] == "\n":
             end_span += 1

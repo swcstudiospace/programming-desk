@@ -2,7 +2,10 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import threading
 
@@ -447,3 +450,55 @@ def test_directory_sibling_skips_rotation() -> None:
         rows = _jsonl_records(log_file)
         assert [row["seq"] for row in rows] == [1, 2]
         assert rows[0]["prev_hash"] == _GENESIS_PREV_HASH
+
+
+def test_replaced_log_parent_is_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        parent = root / "logs"
+        parent.mkdir()
+        outside = root / "outside"
+        outside.mkdir()
+        leaked = outside / "audit.jsonl"
+        leaked.write_text("keep\n", encoding="utf-8")
+        log_file = parent / "audit.jsonl"
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=None)
+        tracer.emit(action="inside", phase="v8.2")
+        moved = root / "logs-real"
+        parent.rename(moved)
+        parent.symlink_to(outside)
+        with pytest.raises(BoundarySecurityError):
+            tracer.emit(action="escaped", phase="v8.2")
+        assert leaked.read_text(encoding="utf-8") == "keep\n"
+        assert (moved / "audit.jsonl").is_file()
+
+
+def test_two_processes_keep_one_audit_chain() -> None:
+    script = (
+        "import sys\n"
+        "from src.desk.telemetry import AuditTracer\n"
+        "path, ident, count = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])\n"
+        "tracer = AuditTracer(log_path=path, max_log_bytes=None)\n"
+        "for i in range(count):\n"
+        "    tracer.emit(action='proc', phase='v8.2', worker=ident, n=i)\n"
+    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        env = os.environ.copy()
+        env["PYTHONPATH"] = os.pathsep.join(
+            [str(Path.cwd()), env.get("PYTHONPATH", "")]
+        ).rstrip(os.pathsep)
+        procs = [
+            subprocess.Popen(
+                [sys.executable, "-c", script, str(log_file), str(ident), "20"],
+                env=env,
+            )
+            for ident in (1, 2)
+        ]
+        for proc in procs:
+            assert proc.wait(timeout=20) == 0
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=None)
+        assert tracer.verify_chain() == (True, "ok")
+        records = tracer.read_events()
+        assert len(records) == 40
+        assert [row["seq"] for row in records] == list(range(1, 41))

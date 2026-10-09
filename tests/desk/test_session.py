@@ -6,6 +6,8 @@ from pathlib import Path
 import tempfile
 import threading
 
+import pytest
+
 from src.desk.security.policy_sandbox import BoundarySecurityError
 from src.desk.session import SessionFrame, SessionStore
 
@@ -234,6 +236,70 @@ def test_sync_preserves_existing_state_markdown() -> None:
         marked_end = replaced.index("<!-- desk-session:end -->")
         assert "sess-next" in replaced[marked_start:marked_end]
         assert "sess-kept" not in replaced
+
+
+def test_sync_refuses_to_drop_tail_when_end_marker_missing() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        state_md = root / "STATE.md"
+        original = "# Kept\n\n<!-- desk-session:start -->\norphan notes\n"
+        state_md.write_text(original, encoding="utf-8")
+        store = SessionStore(storage_path=root / "session.json", state_md_path=state_md)
+        frame = SessionFrame(session_id="sess-keep-tail", correlation_id="keep-tail")
+        with pytest.raises(ValueError, match="end marker"):
+            store.sync_to_markdown_state(frame)
+        assert state_md.read_text(encoding="utf-8") == original
+
+
+def test_invalid_utf8_session_is_quarantined() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        storage = root / "session.json"
+        storage.write_bytes(b"\xff\xfe not utf8")
+        store = SessionStore(storage_path=storage, state_md_path=root / "STATE.md")
+        assert store.load_session() is None
+        assert not storage.exists()
+        copies = list(root.glob("session.json.corrupt.*"))
+        assert len(copies) == 1
+        assert copies[0].read_bytes() == b"\xff\xfe not utf8"
+
+
+def test_second_quarantine_keeps_the_first_copy() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        storage = root / "session.json"
+        store = SessionStore(storage_path=storage, state_md_path=root / "STATE.md")
+        storage.write_text("{not json", encoding="utf-8")
+        assert store.load_session() is None
+        storage.write_text("{still bad", encoding="utf-8")
+        assert store.load_session() is None
+        copies = sorted(path.read_text(encoding="utf-8") for path in root.glob("session.json.corrupt.*"))
+        assert copies == ["{not json", "{still bad"]
+
+
+def test_replaced_session_parent_is_rejected() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        parent = root / "planning"
+        parent.mkdir()
+        outside = root / "outside"
+        outside.mkdir()
+        leaked = outside / "session.json"
+        leaked.write_text('{"session_id": "stolen"}', encoding="utf-8")
+        store = SessionStore(
+            storage_path=parent / "session.json",
+            state_md_path=parent / "STATE.md",
+        )
+        store.save_session(SessionFrame(session_id="inside", correlation_id="inside01"))
+        moved = root / "planning-real"
+        parent.rename(moved)
+        parent.symlink_to(outside)
+        with pytest.raises(BoundarySecurityError):
+            store.load_session()
+        with pytest.raises(BoundarySecurityError):
+            store.save_session(SessionFrame(session_id="nope", correlation_id="nope-nope"))
+        assert leaked.read_text(encoding="utf-8") == '{"session_id": "stolen"}'
+        assert (moved / "session.json").is_file()
 
 
 def test_symlink_session_leaf_is_rejected() -> None:

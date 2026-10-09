@@ -4,7 +4,7 @@
   "branch": "bot-05-infrastructure/reload-script-no-pattern-signals",
   "graph_id": "ut-mv00tcgl-d8215d3e",
   "started_at": "2026-10-08T21:20:00Z",
-  "completed_at": "2026-10-09T04:10:09Z",
+  "completed_at": "2026-10-09T04:19:07Z",
   "commands": [
     {
       "cmd": "git worktree add --detach /tmp/r1-479d627 479d627 && cp infra/tests/test_staging_deployment.py infra/tests/conftest.py /tmp/r1-479d627/infra/tests/ && python3 -m pytest -q /tmp/r1-479d627/infra/tests/test_staging_deployment.py::test_reload_does_not_signal_decoy_desk_gateway --tb=short",
@@ -105,10 +105,10 @@
   ],
   "unverified": [
     "Ming authorized this receipt in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy",
-    "CI gates, Gitleaks, and Semgrep stay red while gates.yml fetches main at depth 1. That workflow fix is pull requests 140 and 139 and is not part of this change",
+    "Pull requests 140 and 139 are on main, and 139 merged as a35d70a. This branch merges that main so the depth-1 fetch can see a merge base. The check table for the merge head is not recorded yet",
     "desk_receipt_check did not read this file: it reported the path is not on origin/bot-06-quality-security/desk-v2-assembled-prompts",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite exits with FileNotFoundError because the uv binary is not installed on this VM; that test was not changed",
-    "Greptile review of 35f2c7c scored 4/5. A relative executable= with cwd still reached the host binary. This change resolves that path against cwd. The follow-up review of the new head is not recorded yet",
+    "Greptile review of 22e8961 scored 5/5 and left no unresolved threads. The review of the following origin/main merge head is not recorded yet",
     "The reload and deploy scripts were not executed on the shared VPS, and no unit was restarted there",
     "Moving production desk-gateway off the shared checkout onto the deploy-staging.sh release directory waits for Ming's separate approval",
     "Swarm session is advisory: SWARM_ED25519_KEY is unset, so orch_plan does not record an approval"

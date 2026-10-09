@@ -77,6 +77,16 @@ class Settings:
     greptime_db: str = "public"
     pg_url: str = ""
     dragonfly_url: str = ""
+    # Paid once at startup. A seat request never waits on this connect.
+    dragonfly_connect_timeout_ms: int = 500
+    # Warm command budget. Measured commands are about 240 ms.
+    dragonfly_command_timeout_ms: int = 250
+    # Hard cap on one rate-limit check. The local bucket answers when it expires.
+    dragonfly_rate_limit_budget_ms: int = 150
+    dragonfly_health_check_interval_sec: int = 30
+    dragonfly_socket_keepalive: bool = True
+    dragonfly_breaker_failures: int = 3
+    dragonfly_breaker_recovery_sec: float = 30.0
     hindsight_url: str = ""
     hindsight_api_key: str = ""
     ragflow_url: str = ""
@@ -211,6 +221,13 @@ class Settings:
             greptime_db=_env("GREPTIME_DB", "public"),
             pg_url=_env("SUBSTRATE_PG_URL"),
             dragonfly_url=_env("DRAGONFLY_URL"),
+            dragonfly_connect_timeout_ms=int(_env("DRAGONFLY_CONNECT_TIMEOUT_MS", "500")),
+            dragonfly_command_timeout_ms=int(_env("DRAGONFLY_COMMAND_TIMEOUT_MS", "250")),
+            dragonfly_rate_limit_budget_ms=int(_env("DRAGONFLY_RATE_LIMIT_BUDGET_MS", "150")),
+            dragonfly_health_check_interval_sec=int(_env("DRAGONFLY_HEALTH_CHECK_INTERVAL_SEC", "30")),
+            dragonfly_socket_keepalive=_env("DRAGONFLY_SOCKET_KEEPALIVE", "true").lower() in ("true", "1", "yes"),
+            dragonfly_breaker_failures=int(_env("DRAGONFLY_BREAKER_FAILURES", "3")),
+            dragonfly_breaker_recovery_sec=float(_env("DRAGONFLY_BREAKER_RECOVERY_SEC", "30")),
             hindsight_url=_env("HINDSIGHT_URL").rstrip("/"),
             hindsight_api_key=_env("HINDSIGHT_API_KEY"),
             ragflow_url=_env("RAGFLOW_URL").rstrip("/"),

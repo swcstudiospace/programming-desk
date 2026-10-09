@@ -731,6 +731,7 @@ def create_mcp(
                 "edge": {
                     "regions_count": len(edge_gw.router.list_regions()),
                     "default_region": edge_gw.router.default_region,
+                    "limiter": edge_gw.limiter.status(),
                 },
                 "wan_mesh": {
                     "local_region": wan_router.local_region_id,
@@ -2086,6 +2087,7 @@ def create_mcp(
                 "default_burst": edge_gw.limiter.default_burst,
                 "seats": configs,
                 "dragonfly_connected": bool(edge_gw.limiter.dragonfly and getattr(edge_gw.limiter.dragonfly, "configured", False)),
+                "limiter": edge_gw.limiter.status(),
             },
             status_code=200,
         )

@@ -7343,6 +7343,76 @@ def create_mcp(
         drill_results = QEMVerificationDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Quantum Annealing & QUBO Optimization Mesh (Milestone v6.2 - Phases 90 & 91)
+    from desk_gateway.quantum_annealing_mesh import (
+        ChimeraGraphTopology,
+        IsingHamiltonian,
+        QUBOProblem,
+        SimulatedQuantumAnnealer,
+    )
+    from desk_gateway.quantum_annealing_anchoring import (
+        QuantumAnnealingMerkleLedger,
+        QuantumAnnealingReceipt,
+        QuantumAnnealingSolanaAnchor,
+        SimulatedAnnealingVerificationDrill,
+    )
+
+    qanneal_ledger = QuantumAnnealingMerkleLedger()
+    mcp._qanneal_ledger = qanneal_ledger  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/annealing/solve", methods=["POST"])
+    async def quantum_annealing_solve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        q_dict_raw = body.get("Q_matrix", {"0,0": -1.0, "1,1": -1.0, "0,1": 2.0})
+        num_vars = int(body.get("num_variables", 2))
+        num_sweeps = int(body.get("num_sweeps", 50))
+        annealing_time_us = float(body.get("annealing_time_us", 20.0))
+
+        q_matrix = {}
+        for k_str, val in q_dict_raw.items():
+            parts = k_str.split(",")
+            if len(parts) == 2:
+                q_matrix[(int(parts[0]), int(parts[1]))] = float(val)
+
+        qubo = QUBOProblem(num_variables=num_vars, Q_matrix=q_matrix)
+        ising = qubo.to_ising()
+        annealer = SimulatedQuantumAnnealer(ising, num_trotter_slices=4)
+        solve_res = annealer.solve(num_sweeps=num_sweeps, annealing_time_us=annealing_time_us)
+
+        prob_hash = hashlib.sha256(json.dumps(str(qubo.Q_matrix)).encode("utf-8")).hexdigest()
+        receipt = QuantumAnnealingReceipt(
+            receipt_id=f"rcpt-anneal-{int(time.time()*1000)}",
+            problem_hash=prob_hash,
+            num_variables=num_vars,
+            num_spins=ising.num_spins,
+            best_energy=solve_res.best_energy,
+            best_binary=solve_res.best_binary,
+            num_sweeps=solve_res.num_sweeps,
+            annealing_time_us=solve_res.annealing_time_us,
+        )
+        qanneal_ledger.add_receipt(receipt)
+
+        return JSONResponse({
+            "ok": True,
+            "solution": solve_res.to_dict(),
+            "ising": ising.to_dict(),
+            "receipt": receipt.to_dict(),
+            "merkle_root": qanneal_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/annealing/anchor/export", methods=["POST"])
+    async def quantum_annealing_anchor_export_route(_request: Request) -> Response:
+        anchor_ix = QuantumAnnealingSolanaAnchor.export_anchor_instruction(
+            merkle_root=qanneal_ledger.get_merkle_root(),
+            total_receipts=len(qanneal_ledger.receipts),
+        )
+        return JSONResponse({"ok": True, "anchor": anchor_ix})
+
+    @mcp.custom_route("/v1/quantum/annealing/drill/simulate", methods=["POST"])
+    async def quantum_annealing_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SimulatedAnnealingVerificationDrill.run_5_stage_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
     @mcp.custom_route("/v1/quantum/cellular/walk/step", methods=["POST"])
     async def quantum_cellular_walk_step_route(_request: Request) -> Response:
         state = qca_walk_engine.step()
@@ -8956,6 +9026,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qem_pec": getattr(mcp, "_qem_pec", None),
         "qem_ledger": getattr(mcp, "_qem_ledger", None),
         "qem_exporter": getattr(mcp, "_qem_exporter", None),
+        "qanneal_ledger": getattr(mcp, "_qanneal_ledger", None),
     }
     return app, settings
 

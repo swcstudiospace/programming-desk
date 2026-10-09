@@ -338,6 +338,7 @@ class QuantumCounterfactualVerificationDrill:
         }
 
     def _stage4_merkle_ledger_proofs(self) -> Dict[str, Any]:
+        drill_ledger = QuantumCounterfactualMerkleLedger()
         # Create receipts for the stages
         r1 = QuantumCounterfactualReceipt(
             receipt_id="rcpt-ifm-test-1",
@@ -373,12 +374,12 @@ class QuantumCounterfactualVerificationDrill:
             extra_data_hash=hashlib.sha256(b"ghost_data").hexdigest(),
         )
 
-        self.ledger.append_receipt(r1)
-        self.ledger.append_receipt(r2)
-        self.ledger.append_receipt(r3)
+        drill_ledger.append_receipt(r1)
+        drill_ledger.append_receipt(r2)
+        drill_ledger.append_receipt(r3)
 
-        root = self.ledger.get_merkle_root()
-        proof_r2 = self.ledger.get_proof(1)
+        root = drill_ledger.get_merkle_root()
+        proof_r2 = drill_ledger.get_proof(1)
         valid = QuantumCounterfactualMerkleLedger.verify_proof(
             leaf_hash=r2.compute_hash(),
             proof=proof_r2,
@@ -386,6 +387,9 @@ class QuantumCounterfactualVerificationDrill:
         )
 
         passed = len(root) == 64 and valid
+
+        # Keep ledger in sync for stage 5
+        self.ledger = drill_ledger
 
         return {
             "passed": passed,

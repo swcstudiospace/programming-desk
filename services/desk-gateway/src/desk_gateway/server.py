@@ -7469,6 +7469,21 @@ def create_mcp(
         CVQKDSolanaAnchorExporter,
         CVQKDVerificationDrill,
     )
+    from desk_gateway.quantum_byzantine_mesh import (
+        ByzantineConsensusResult,
+        ConsensusStatus,
+        NodeType,
+        QuantumByzantineCoordinator,
+        QuantumPseudoSignatureEngine,
+        SAGINNode,
+        SAGINTopologyRouter,
+    )
+    from desk_gateway.quantum_byzantine_anchoring import (
+        QuantumByzantineMerkleLedger,
+        QuantumByzantineReceipt,
+        QuantumByzantineSolanaAnchorExporter,
+        QuantumByzantineVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -8081,6 +8096,103 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/cvqkd/drill/simulate", methods=["POST"])
     async def quantum_cvqkd_drill_simulate_route(_request: Request) -> Response:
         drill = CVQKDVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qbyzantine_router = SAGINTopologyRouter()
+    qbyzantine_coord = QuantumByzantineCoordinator(qbyzantine_router)
+    qbyzantine_ledger = QuantumByzantineMerkleLedger()
+    qbyzantine_exporter = QuantumByzantineSolanaAnchorExporter()
+    mcp._qbyzantine_router = qbyzantine_router  # type: ignore[attr-defined]
+    mcp._qbyzantine_coord = qbyzantine_coord  # type: ignore[attr-defined]
+    mcp._qbyzantine_ledger = qbyzantine_ledger  # type: ignore[attr-defined]
+    mcp._qbyzantine_exporter = qbyzantine_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/byzantine/route", methods=["POST"])
+    async def quantum_byzantine_route_find(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source = str(body.get("source", "ground-01"))
+        target = str(body.get("target", "ground-02"))
+        path, fidelity, latency = qbyzantine_router.compute_shortest_quantum_path(source, target)
+        return JSONResponse({
+            "ok": True,
+            "source": source,
+            "target": target,
+            "path": path,
+            "fidelity": round(fidelity, 4),
+            "latency_ms": round(latency, 2),
+        })
+
+    @mcp.custom_route("/v1/quantum/byzantine/consensus/run", methods=["POST"])
+    async def quantum_byzantine_consensus_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        round_id = str(body.get("round_id", f"byz-round-{int(time.time()*1000)}"))
+        nodes = list(body.get("nodes", ["ground-01", "ground-02", "haps-01", "leo-sat-01"]))
+        leader = str(body.get("leader", nodes[0]))
+        proposal = int(body.get("proposal", 1))
+        byzantine_nodes = list(body.get("byzantine_nodes", []))
+        inject_cheat = bool(body.get("inject_split_state_cheat", False))
+
+        res = qbyzantine_coord.run_consensus_round(
+            round_id=round_id,
+            node_ids=nodes,
+            leader_id=leader,
+            leader_proposed_value=proposal,
+            byzantine_node_ids=byzantine_nodes,
+            inject_split_state_cheat=inject_cheat,
+        )
+
+        rcpt = QuantumByzantineReceipt(
+            receipt_id=f"rcpt-byz-{int(time.time()*1000)}",
+            round_id=round_id,
+            status=res.status.value,
+            total_nodes=res.total_nodes,
+            quorum_size=res.quorum_size,
+            agreed_value=res.agreed_value,
+            byzantine_count=len(res.byzantine_nodes_detected),
+            quorum_fidelity=res.quorum_fidelity,
+            routing_hops=res.routing_hops,
+            fault_bound_satisfied=len(res.byzantine_nodes_detected) * 3 < res.total_nodes,
+        )
+        qbyzantine_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "consensus": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qbyzantine_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/byzantine/anchor/export", methods=["POST"])
+    async def quantum_byzantine_anchor_export_route(_request: Request) -> Response:
+        root = qbyzantine_ledger.get_merkle_root()
+        latest_rcpt = qbyzantine_ledger.receipts[-1] if qbyzantine_ledger.receipts else QuantumByzantineReceipt(
+            receipt_id="genesis-byzantine",
+            round_id="genesis",
+            status=ConsensusStatus.AGREED.value,
+            total_nodes=4,
+            quorum_size=4,
+            agreed_value=1,
+            byzantine_count=0,
+            quorum_fidelity=0.95,
+            routing_hops=2,
+            fault_bound_satisfied=True,
+        )
+        proof = qbyzantine_ledger.get_proof(len(qbyzantine_ledger.receipts) - 1) if qbyzantine_ledger.receipts else []
+        payload = QuantumByzantineSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": QuantumByzantineSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/byzantine/drill/simulate", methods=["POST"])
+    async def quantum_byzantine_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumByzantineVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 

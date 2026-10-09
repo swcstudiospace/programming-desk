@@ -8,6 +8,7 @@ import contextlib
 import contextvars
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
@@ -730,6 +731,7 @@ def create_mcp(
                 "edge": {
                     "regions_count": len(edge_gw.router.list_regions()),
                     "default_region": edge_gw.router.default_region,
+                    "limiter": edge_gw.limiter.status(),
                 },
                 "wan_mesh": {
                     "local_region": wan_router.local_region_id,
@@ -2085,6 +2087,7 @@ def create_mcp(
                 "default_burst": edge_gw.limiter.default_burst,
                 "seats": configs,
                 "dragonfly_connected": bool(edge_gw.limiter.dragonfly and getattr(edge_gw.limiter.dragonfly, "configured", False)),
+                "limiter": edge_gw.limiter.status(),
             },
             status_code=200,
         )
@@ -10323,6 +10326,13 @@ def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
 
     @contextlib.asynccontextmanager
     async def _close_upstreams_on_shutdown(app: Any):
+        dragonfly = getattr(services, "dragonfly", None)
+        opener = getattr(dragonfly, "open", None)
+        if inspect.iscoroutinefunction(opener):
+            try:
+                await opener()
+            except Exception as exc:
+                logger.warning("Dragonfly pool open failed (%s)", type(exc).__name__)
         try:
             async with previous(app) as state:
                 yield state

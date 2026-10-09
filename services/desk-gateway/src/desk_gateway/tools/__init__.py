@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import inspect
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
@@ -104,6 +105,10 @@ class Services:
                 continue
             seen.add(id(http))
             closers.append(close())
+        dragonfly = getattr(self, "dragonfly", None)
+        close_dragonfly = getattr(dragonfly, "aclose", None)
+        if inspect.iscoroutinefunction(close_dragonfly):
+            closers.append(close_dragonfly())
         if closers:
             await asyncio.gather(*closers)
 

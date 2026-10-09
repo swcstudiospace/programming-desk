@@ -8,6 +8,7 @@ synchronized via DragonflyDB/Redis with per-seat burst ceilings.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import threading
@@ -16,6 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from desk_gateway.config import SEATS, Settings
+from desk_gateway.upstreams import TOKEN_BUCKET_LUA, CircuitBreaker, PoolSaturated, _import_redis, parse_token_bucket
 
 logger = logging.getLogger("desk_gateway.edge")
 
@@ -312,6 +314,12 @@ class DistributedRateLimiter:
         self._seat_configs: dict[str, RateLimitConfig] = {}
         self._local_buckets: dict[str, TokenBucketPolicer] = {}
         self._lock = threading.Lock()
+        self.dragonfly_ok = 0
+        self.dragonfly_timeout = 0
+        self.dragonfly_error = 0
+        self.local_fallback = 0
+        self._last_source = "local"
+        self._logged_failure = False
 
         # Default per-seat rate ceilings
         self.configure_seat("lead", rate_per_min=120, burst_capacity=240)
@@ -350,6 +358,25 @@ class DistributedRateLimiter:
                 )
             return self._local_buckets[key]
 
+    def status(self) -> dict[str, Any]:
+        """Limiter mode for /health. Never includes a URL, host, or password."""
+        breaker = self._live_breaker()
+        state = breaker.state if breaker is not None else "absent"
+        if state == "open":
+            mode = "breaker_open"
+        elif self._last_source == "dragonfly":
+            mode = "dragonfly"
+        else:
+            mode = "local"
+        return {
+            "mode": mode,
+            "breaker_state": state,
+            "dragonfly_ok": self.dragonfly_ok,
+            "dragonfly_timeout": self.dragonfly_timeout,
+            "dragonfly_error": self.dragonfly_error,
+            "local_fallback": self.local_fallback,
+        }
+
     async def check_rate_limit(self, key: str, amount: int = 1) -> tuple[bool, float, int, float]:
         """Checks rate limit for `key` (seat or origin identifier).
 
@@ -361,20 +388,115 @@ class DistributedRateLimiter:
         fill_rate = cfg.rate_per_min / 60.0
 
         if self.dragonfly and getattr(self.dragonfly, "configured", False):
+            if self._uses_pool():
+                if not await self.dragonfly.nudge_warm():
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    return self._local(key, amount)
+                if not self.dragonfly.try_acquire():
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    return self._local(key, amount)
+                try:
+                    result = await asyncio.wait_for(
+                        self.dragonfly.eval_token_bucket(
+                            key=key,
+                            capacity=capacity,
+                            fill_rate=fill_rate,
+                            amount=amount,
+                        ),
+                        timeout=self._request_budget(),
+                    )
+                except asyncio.CancelledError:
+                    self.dragonfly.finish_neutral()
+                    raise
+                except PoolSaturated:
+                    self.dragonfly.finish_neutral()
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    return self._local(key, amount)
+                except TimeoutError:
+                    self.dragonfly.finish_attempt(ok=False)
+                    self.dragonfly_timeout += 1
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    self._note_once("timeout")
+                    return self._local(key, amount)
+                except Exception as exc:
+                    self.dragonfly.finish_attempt(ok=False)
+                    self.dragonfly_error += 1
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    self._note_once(type(exc).__name__)
+                    return self._local(key, amount)
+                self.dragonfly.finish_attempt(ok=True)
+                self.dragonfly_ok += 1
+                self._last_source = "dragonfly"
+                return result
+            breaker = self._live_breaker()
+            if breaker is not None and not breaker.allow_request():
+                self.local_fallback += 1
+                self._last_source = "local"
+                return self._local(key, amount)
             try:
-                allowed, retry_after, remaining, reset_epoch = await self._check_dragonfly(
-                    key=key,
-                    capacity=capacity,
-                    fill_rate=fill_rate,
-                    amount=amount,
+                result = await asyncio.wait_for(
+                    self._check_dragonfly(
+                        key=key,
+                        capacity=capacity,
+                        fill_rate=fill_rate,
+                        amount=amount,
+                    ),
+                    timeout=self._request_budget(),
                 )
-                return allowed, retry_after, remaining, reset_epoch
             except Exception as exc:
-                logger.warning("Dragonfly rate limiting failed (%s); falling back to local bucket", exc)
+                if breaker is not None:
+                    breaker.record_failure()
+                self.dragonfly_error += 1
+                self.local_fallback += 1
+                self._last_source = "local"
+                self._note_once(type(exc).__name__)
+                return self._local(key, amount)
+            if breaker is not None:
+                breaker.record_success()
+            self.dragonfly_ok += 1
+            self._last_source = "dragonfly"
+            return result
 
-        # In-memory policer fallback
-        policer = self._get_local_bucket(key)
-        return policer.consume(amount=amount)
+        return self._local(key, amount)
+
+    def _local(self, key: str, amount: int) -> tuple[bool, float, int, float]:
+        return self._get_local_bucket(key).consume(amount=amount)
+
+    def _request_budget(self) -> float:
+        raw = getattr(self.dragonfly, "request_budget_sec", None)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
+            return float(raw)
+        return 0.15
+
+    def _uses_pool(self) -> bool:
+        return inspect.iscoroutinefunction(getattr(self.dragonfly, "eval_token_bucket", None)) and inspect.ismethod(
+            getattr(self.dragonfly, "try_acquire", None)
+        )
+
+    def _live_breaker(self) -> Any:
+        """The shared CircuitBreaker. Test doubles that invent attributes are ignored."""
+        breaker = getattr(self.dragonfly, "circuit_breaker", None)
+        if isinstance(breaker, CircuitBreaker):
+            return breaker
+        return None
+
+    def _note_once(self, kind: str) -> None:
+        note = getattr(self.dragonfly, "note_failure", None)
+        if inspect.ismethod(note):
+            note(kind)
+            return
+        if self._logged_failure:
+            return
+        self._logged_failure = True
+        logger.warning(
+            "Dragonfly rate limiting failed (%s); local bucket answers until the circuit changes",
+            kind,
+        )
 
     async def _check_dragonfly(
         self,
@@ -383,68 +505,29 @@ class DistributedRateLimiter:
         fill_rate: float,
         amount: int,
     ) -> tuple[bool, float, int, float]:
-        """DragonflyDB token bucket lua/eval implementation or simulated atomic step."""
+        """One-shot path for stubs that are not the shared Dragonfly service."""
+        redis = _import_redis()
+        if redis is None:
+            raise RuntimeError("redis is not installed on the gateway (extra: dragonfly)")
+
         now = time.time()
-        redis_key = f"desk:ratelimit:tokenbucket:{key}"
-
-        import redis.asyncio as redis
-
         client = redis.from_url(
             self.dragonfly.url,
-            socket_timeout=2.0,
-            socket_connect_timeout=2.0,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.5,
             decode_responses=True,
         )
         try:
-            # Lua script to atomically refill and deduct token bucket
-            lua_script = """
-            local key = KEYS[1]
-            local capacity = tonumber(ARGV[1])
-            local fill_rate = tonumber(ARGV[2])
-            local amount = tonumber(ARGV[3])
-            local now = tonumber(ARGV[4])
-
-            local data = redis.call('HMGET', key, 'tokens', 'last_update')
-            local tokens = tonumber(data[1])
-            local last_update = tonumber(data[2])
-
-            if not tokens or not last_update then
-                tokens = capacity
-                last_update = now
-            else
-                local delta = math.max(0, now - last_update)
-                tokens = math.min(capacity, tokens + delta * fill_rate)
-                last_update = now
-            end
-
-            local allowed = 0
-            local retry_after = 0
-            if tokens >= amount then
-                tokens = tokens - amount
-                allowed = 1
-            else
-                retry_after = (amount - tokens) / fill_rate
-            end
-
-            redis.call('HMSET', key, 'tokens', tokens, 'last_update', last_update)
-            redis.call('EXPIRE', key, math.ceil(capacity / fill_rate) + 60)
-
-            return {allowed, tostring(retry_after), tostring(tokens)}
-            """
             result = await client.eval(
-                lua_script,
+                TOKEN_BUCKET_LUA,
                 1,
-                redis_key,
+                f"desk:ratelimit:tokenbucket:{key}",
                 str(capacity),
                 str(fill_rate),
                 str(amount),
                 str(now),
             )
-            allowed = bool(result[0])
-            retry_after = float(result[1])
-            remaining = int(math.floor(float(result[2])))
-            reset_epoch = now + (retry_after if not allowed else max(0.0, (capacity - remaining) / fill_rate))
-            return allowed, retry_after, remaining, reset_epoch
+            return parse_token_bucket(result, now, capacity, fill_rate)
         finally:
             await client.aclose()
 

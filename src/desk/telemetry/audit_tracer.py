@@ -2,22 +2,25 @@
 
 from __future__ import annotations
 
-from collections import deque
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
+import errno
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import threading
-from typing import Any
+from typing import Any, Iterator
 import uuid
 
-from ..security.policy_sandbox import PolicySandbox
+from ..security.policy_sandbox import BoundarySecurityError, PolicySandbox
 
 
 _GENESIS_PREV_HASH = "0" * 64
+_LOWER_HEX64 = re.compile(r"^[0-9a-f]{64}\Z")
 
 
 def _canonical_json(record: dict[str, Any]) -> str:
@@ -32,6 +35,60 @@ def _record_hash(record: dict[str, Any]) -> str:
     prefix = prev_hash if isinstance(prev_hash, str) else ""
     material = f"{prefix}\n{_canonical_json(record)}".encode("utf-8")
     return hashlib.sha256(material).hexdigest()
+
+
+def _parse_log_line(raw_line: bytes) -> tuple[Any, str | None]:
+    """Parse one non-empty log line. Callers skip blank lines themselves."""
+    try:
+        stripped = raw_line.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None, "truncated JSON"
+    try:
+        return json.loads(stripped), None
+    except json.JSONDecodeError:
+        return None, "truncated JSON"
+
+
+def _chain_failure(entry: Any, expected_prev: str, expected_seq: int) -> str | None:
+    """Return a short failure reason, or None when ``entry`` continues the chain.
+
+    Extra keys are part of the canonical payload. They do not reject a record
+    whose ``seq``, ``prev_hash``, and ``record_hash`` already link.
+    """
+    if not isinstance(entry, dict):
+        return "truncated JSON"
+    seq = entry.get("seq")
+    if type(seq) is not int or seq != expected_seq:
+        return "seq gap"
+    if entry.get("prev_hash") != expected_prev:
+        return "prev_hash mismatch"
+    stored_hash = entry.get("record_hash")
+    if not isinstance(stored_hash, str) or stored_hash != _record_hash(entry):
+        return "bad hash"
+    return None
+
+
+def _rotated_head_failure(entry: Any) -> str | None:
+    """Validate the first record of a rotated segment.
+
+    That record is either a genesis record (seq 1, zero prev_hash) or a
+    ``segment_anchor`` with a positive seq, any 64 lowercase-hex prev_hash,
+    and a matching record_hash. Later lines are checked by ``_chain_failure``.
+    """
+    if not isinstance(entry, dict):
+        return "truncated JSON"
+    if entry.get("action") == "segment_anchor":
+        seq = entry.get("seq")
+        prev_hash = entry.get("prev_hash")
+        stored_hash = entry.get("record_hash")
+        if type(seq) is not int or seq < 1:
+            return "seq gap"
+        if not isinstance(prev_hash, str) or _LOWER_HEX64.fullmatch(prev_hash) is None:
+            return "prev_hash mismatch"
+        if not isinstance(stored_hash, str) or stored_hash != _record_hash(entry):
+            return "bad hash"
+        return None
+    return _chain_failure(entry, _GENESIS_PREV_HASH, 1)
 
 
 def _confine_log_path(
@@ -69,6 +126,50 @@ def _confine_log_path(
     return sandbox.validate_path(parent / raw.name), sandbox
 
 
+@contextmanager
+def _open_nofollow(path: Path, flags: int, mode: str) -> Iterator[Any]:
+    """Open ``path`` without following a symlink leaf.
+
+    ``O_NOFOLLOW`` applies to the final component. Callers still confine every
+    ancestor through ``PolicySandbox`` before they reach this helper.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, flags | nofollow, 0o600)
+    except OSError as err:
+        if nofollow and err.errno == errno.ELOOP:
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{path}'"
+            ) from err
+        raise
+    try:
+        if "b" in mode:
+            handle = os.fdopen(fd, mode)
+        else:
+            handle = os.fdopen(fd, mode, encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+    try:
+        yield handle
+    finally:
+        handle.close()
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Flush a directory so a rename in it survives a crash. Best effort."""
+    try:
+        fd = os.open(directory, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
 @dataclass
 class AuditEvent:
     """Represents a structured audit record in the programming desk."""
@@ -103,6 +204,7 @@ class AuditTracer:
         sandbox: PolicySandbox | None = None,
         auto_flush: bool = True,
         workspace_root: str | Path | None = None,
+        max_log_bytes: int | None = 1_048_576,
     ) -> None:
         checked, path_sandbox = _confine_log_path(log_path, workspace_root)
         self._path_sandbox = path_sandbox
@@ -113,6 +215,8 @@ class AuditTracer:
             else PolicySandbox(workspace_root=workspace_root)
         )
         self.auto_flush = auto_flush
+        # None disables rotation. The default cap is 1 MiB.
+        self.max_log_bytes = max_log_bytes
         self._lock = threading.Lock()
 
         # Ensure directory exists
@@ -145,7 +249,7 @@ class AuditTracer:
         if not path.exists():
             return prev_hash, seq
 
-        with open(path, "rb") as handle:
+        with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
             for raw_line in handle:
                 if not raw_line.strip():
                     continue
@@ -170,6 +274,137 @@ class AuditTracer:
                     seq += 1
         return prev_hash, seq
 
+    def _rotated_segment(self, path: Path) -> Path:
+        """Sibling that holds the previous active segment. Same directory, ``name.1``."""
+        return path.with_name(path.name + ".1")
+
+    def _rotate_active(self, path: Path, line: str) -> bool:
+        """Rename the active log when appending ``line`` would exceed the cap.
+
+        ``None`` never rotates. The threshold uses the UTF-8 byte length of
+        ``line``, matching the size ``stat`` reports. A symlink or regular-file
+        sibling is replaced atomically with ``os.replace``, which on POSIX
+        replaces a symlink itself and does not follow it. A directory sibling
+        is left in place and this write is not rotated. The caller writes a
+        segment anchor into the fresh active file after a successful rename.
+        """
+        if self.max_log_bytes is None:
+            return False
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return False
+        if stat.S_ISLNK(info.st_mode):
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{path}'"
+            )
+        if not stat.S_ISREG(info.st_mode) or info.st_size <= 0:
+            return False
+        encoded_len = len(line.encode("utf-8"))
+        if info.st_size + encoded_len <= self.max_log_bytes:
+            return False
+        sibling = self._rotated_segment(path)
+        try:
+            mode = sibling.lstat().st_mode
+        except FileNotFoundError:
+            os.replace(path, sibling)
+            _fsync_directory(sibling.parent)
+            return True
+        if stat.S_ISDIR(mode):
+            return False
+        if not (stat.S_ISLNK(mode) or stat.S_ISREG(mode)):
+            return False
+        os.replace(path, sibling)
+        _fsync_directory(sibling.parent)
+        return True
+
+    def _segment_anchor(self, prev_hash: str, seq: int) -> tuple[dict[str, Any], str]:
+        """Hashed record that opens a fresh segment after rotation.
+
+        ``seq`` is the pre-rotation tail seq plus one, and ``prev_hash`` is
+        that tail's record_hash, so the anchor continues the chain that just
+        moved to ``.1``.
+        """
+        record: dict[str, Any] = {
+            "event_id": str(uuid.uuid4()),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "phase": "audit",
+            "actor": "audit-tracer",
+            "action": "segment_anchor",
+            "duration_ms": None,
+            "exit_code": None,
+            "correlation_id": str(uuid.uuid4())[:8],
+            "details": {"segment_anchor": True},
+            "seq": seq,
+            "prev_hash": prev_hash,
+        }
+        record["record_hash"] = _record_hash(record)
+        line = json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n"
+        return record, line
+
+    def _verify_segment(
+        self,
+        path: Path,
+        expected_prev: str,
+        expected_seq: int,
+        *,
+        relaxed_head: bool = False,
+    ) -> tuple[bool, str, str, int]:
+        """Verify ``path`` from the given cursor.
+
+        A missing or empty file succeeds and leaves the cursor unchanged.
+        With ``relaxed_head``, the first record may be genesis seq 1 or a
+        ``segment_anchor``; every following line must link from that head.
+        """
+        if not path.exists():
+            return True, "ok", expected_prev, expected_seq
+        saw_record = False
+        with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
+            for raw_line in handle:
+                if not raw_line.strip():
+                    continue
+                entry, reason = _parse_log_line(raw_line)
+                if reason is not None:
+                    return False, reason, expected_prev, expected_seq
+                if relaxed_head and not saw_record:
+                    reason = _rotated_head_failure(entry)
+                    if reason is not None:
+                        return False, reason, expected_prev, expected_seq
+                    expected_prev = entry["record_hash"]
+                    expected_seq = entry["seq"] + 1
+                    saw_record = True
+                    continue
+                saw_record = True
+                reason = _chain_failure(entry, expected_prev, expected_seq)
+                if reason is not None:
+                    return False, reason, expected_prev, expected_seq
+                expected_prev = entry["record_hash"]
+                expected_seq += 1
+        return True, "ok", expected_prev, expected_seq
+
+    def _active_chain_start(self, path: Path) -> tuple[bool, str, str, int]:
+        """Cursor for the active file after a verified rotated segment, if any.
+
+        No regular sibling starts at genesis / seq 1. A symlink sibling fails.
+        A regular sibling is walked first: its head is genesis seq 1 or a
+        ``segment_anchor``, and its tail hash and next seq are handed to the
+        active file.
+        """
+        expected_prev = _GENESIS_PREV_HASH
+        expected_seq = 1
+        sibling = self._rotated_segment(path)
+        try:
+            mode = sibling.lstat().st_mode
+        except FileNotFoundError:
+            return True, "ok", expected_prev, expected_seq
+        if stat.S_ISLNK(mode):
+            return False, "rotated segment is a symlink", expected_prev, expected_seq
+        if not stat.S_ISREG(mode):
+            return True, "ok", expected_prev, expected_seq
+        return self._verify_segment(
+            sibling, expected_prev, expected_seq, relaxed_head=True
+        )
+
     def record_event(self, event: AuditEvent) -> AuditEvent:
         """Record an audit event to the append-only JSONL log with credential redaction."""
         data = event.to_dict()
@@ -188,7 +423,21 @@ class AuditTracer:
             data["prev_hash"] = prev_hash
             data["record_hash"] = _record_hash(data)
             line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
-            with open(path, "a", encoding="utf-8") as handle:
+            # Rotation is decided from the pre-rotation link. After the
+            # rename, the fresh file opens with an anchor that keeps that
+            # link, and the user record is rebuilt from the anchor.
+            anchor_line = ""
+            if self._rotate_active(path, line):
+                anchor, anchor_line = self._segment_anchor(prev_hash, last_seq + 1)
+                data["seq"] = anchor["seq"] + 1
+                data["prev_hash"] = anchor["record_hash"]
+                data["record_hash"] = _record_hash(data)
+                line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
+            with _open_nofollow(
+                path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, "a"
+            ) as handle:
+                if anchor_line:
+                    handle.write(anchor_line)
                 handle.write(line)
                 if self.auto_flush:
                     handle.flush()
@@ -229,50 +478,87 @@ class AuditTracer:
         return self.record_event(event)
 
     def verify_chain(self) -> tuple[bool, str]:
-        """Verify the hash chain.
+        """Verify the hash chain, including one rotated ``<name>.1`` segment.
 
         Returns ``(True, "ok")`` for an empty log or a fully linked chain.
+        A regular rotated segment is walked first. Its first record is either
+        genesis seq 1 or a ``segment_anchor`` (positive seq, 64 lowercase-hex
+        prev_hash, valid record_hash); every following line must link. The
+        active file must then continue from that segment's tail. An empty
+        active file after a verified segment is ok. With no sibling, the
+        active file itself must start at genesis unless it is empty.
         Returns ``(False, reason)`` for a bad hash, a ``prev_hash`` mismatch,
-        a gap in ``seq``, or truncated JSON.
+        a gap in ``seq``, truncated JSON, or a symlink rotated segment.
         """
         with self._lock:
             path = self._checked_log_path()
-            if not path.exists():
-                return True, "ok"
+            ok, reason, expected_prev, expected_seq = self._active_chain_start(path)
+            if not ok:
+                return False, reason
+            ok, reason, _last_hash, _next_seq = self._verify_segment(
+                path, expected_prev, expected_seq
+            )
+            if not ok:
+                return False, reason
+        return True, "ok"
 
-            expected_prev = _GENESIS_PREV_HASH
-            expected_seq = 1
-            with open(path, "rb") as handle:
+    def _collect_user_events(
+        self,
+        path: Path,
+        expected_prev: str,
+        expected_seq: int,
+        sink: list[dict[str, Any]],
+        *,
+        relaxed_head: bool,
+        phase: str | None,
+        actor: str | None,
+        action: str | None,
+    ) -> bool:
+        """Append linked user records from ``path``.
+
+        Returns False when a line breaks the chain. Records already appended
+        stay in ``sink``. A missing or empty file returns True. A relaxed head
+        accepts genesis seq 1 or a ``segment_anchor``. Anchor records advance
+        the cursor and are not appended. Phase, actor, and action filters run
+        after the link check.
+        """
+        if not path.exists():
+            return True
+        saw_record = False
+        try:
+            with _open_nofollow(path, os.O_RDONLY, "rb") as handle:
                 for raw_line in handle:
                     if not raw_line.strip():
                         continue
-                    try:
-                        stripped = raw_line.decode("utf-8").strip()
-                    except UnicodeDecodeError:
-                        return False, "truncated JSON"
-                    try:
-                        entry = json.loads(stripped)
-                    except json.JSONDecodeError:
-                        return False, "truncated JSON"
-                    if not isinstance(entry, dict):
-                        return False, "truncated JSON"
+                    entry, reason = _parse_log_line(raw_line)
+                    if reason is not None:
+                        return False
+                    if relaxed_head and not saw_record:
+                        reason = _rotated_head_failure(entry)
+                        if reason is not None:
+                            return False
+                        expected_prev = entry["record_hash"]
+                        expected_seq = entry["seq"] + 1
+                        saw_record = True
+                    else:
+                        if _chain_failure(entry, expected_prev, expected_seq) is not None:
+                            return False
+                        expected_prev = entry["record_hash"]
+                        expected_seq += 1
+                        saw_record = True
 
-                    seq = entry.get("seq")
-                    if type(seq) is not int or seq != expected_seq:
-                        return False, "seq gap"
-
-                    prev_hash = entry.get("prev_hash")
-                    if prev_hash != expected_prev:
-                        return False, "prev_hash mismatch"
-
-                    stored_hash = entry.get("record_hash")
-                    if not isinstance(stored_hash, str) or stored_hash != _record_hash(entry):
-                        return False, "bad hash"
-
-                    expected_prev = stored_hash
-                    expected_seq += 1
-
-        return True, "ok"
+                    if entry.get("action") == "segment_anchor":
+                        continue
+                    if phase and entry.get("phase") != phase:
+                        continue
+                    if actor and entry.get("actor") != actor:
+                        continue
+                    if action and entry.get("action") != action:
+                        continue
+                    sink.append(entry)
+        except FileNotFoundError:
+            return False
+        return True
 
     def read_events(
         self,
@@ -281,37 +567,58 @@ class AuditTracer:
         action: str | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Read and filter structured events from the log using bounded memory."""
+        """Read linked user events from the retained segment and the active log.
+
+        The rotated segment uses the same head rule as ``verify_chain``. If
+        that segment does not verify, the result is empty. User events from a
+        verified segment are included. Blank lines are skipped. The first
+        active line that is not JSON, is not a dict, or breaks ``seq`` /
+        ``prev_hash`` / ``record_hash`` ends the walk; that line and everything
+        after it are omitted, and earlier linked user events are kept.
+        ``segment_anchor`` records are not returned. Phase, actor, action, and
+        ``limit`` apply only to the user records that linked. ``limit`` keeps
+        the newest matches across both files. Extra keys do not drop a record
+        whose hash still matches.
+        """
         use_bounded = limit is not None and limit > 0
-        bounded_queue: deque[dict[str, Any]] = deque(maxlen=limit if use_bounded else None)
-        unbounded_list: list[dict[str, Any]] = []
+        matched: list[dict[str, Any]] = []
 
         with self._lock:
             path = self._checked_log_path()
-            if not path.exists():
+            ok, _reason, expected_prev, expected_seq = self._active_chain_start(path)
+            if not ok:
                 return []
-            with open(path, "r", encoding="utf-8") as handle:
-                for line in handle:
-                    stripped = line.strip()
-                    if not stripped:
-                        continue
-                    try:
-                        entry = json.loads(stripped)
-                    except json.JSONDecodeError:
-                        continue
-
-                    if phase and entry.get("phase") != phase:
-                        continue
-                    if actor and entry.get("actor") != actor:
-                        continue
-                    if action and entry.get("action") != action:
-                        continue
-
-                    if use_bounded:
-                        bounded_queue.append(entry)
-                    else:
-                        unbounded_list.append(entry)
+            sibling = self._rotated_segment(path)
+            try:
+                sibling_mode = sibling.lstat().st_mode
+            except FileNotFoundError:
+                sibling_mode = 0
+            if stat.S_ISREG(sibling_mode):
+                retained: list[dict[str, Any]] = []
+                whole = self._collect_user_events(
+                    sibling,
+                    _GENESIS_PREV_HASH,
+                    1,
+                    retained,
+                    relaxed_head=True,
+                    phase=phase,
+                    actor=actor,
+                    action=action,
+                )
+                if not whole:
+                    return []
+                matched.extend(retained)
+            self._collect_user_events(
+                path,
+                expected_prev,
+                expected_seq,
+                matched,
+                relaxed_head=False,
+                phase=phase,
+                actor=actor,
+                action=action,
+            )
 
         if use_bounded:
-            return list(bounded_queue)
-        return unbounded_list
+            return matched[-limit:]
+        return matched

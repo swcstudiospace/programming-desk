@@ -343,6 +343,71 @@ def check_sandbox_roundtrip(root: Path) -> DiagnosticCheckResult:
     )
 
 
+def check_audit_chain(root: Path) -> DiagnosticCheckResult:
+    """Verify ``.planning/audit.jsonl`` when a log is present.
+
+    A workspace with no audit log passes. A symlink leaf or a broken hash
+    chain fails. Verification does not rotate or rewrite the log.
+    """
+    log_path = root / ".planning" / "audit.jsonl"
+    rotated = log_path.with_name(log_path.name + ".1")
+    try:
+        log_present = log_path.is_symlink() or log_path.exists()
+        rotated_present = rotated.is_symlink() or rotated.exists()
+    except OSError as exc:
+        return DiagnosticCheckResult(
+            name="audit_chain",
+            status=CheckStatus.FAIL,
+            message=f"Audit log could not be inspected: {exc}",
+            fix_hint="Restore .planning/audit.jsonl as a regular file",
+        )
+    if not log_present and not rotated_present:
+        return DiagnosticCheckResult(
+            name="audit_chain",
+            status=CheckStatus.PASS,
+            message="No audit log present",
+            details={"log_path": str(log_path)},
+        )
+    try:
+        from ..security.policy_sandbox import BoundarySecurityError
+        from ..telemetry.audit_tracer import AuditTracer
+
+        tracer = AuditTracer(
+            log_path=log_path,
+            workspace_root=root,
+            max_log_bytes=None,
+        )
+        ok, reason = tracer.verify_chain()
+    except BoundarySecurityError as exc:
+        return DiagnosticCheckResult(
+            name="audit_chain",
+            status=CheckStatus.FAIL,
+            message=str(exc),
+            fix_hint="Replace the audit log symlink with a regular file inside .planning",
+        )
+    except Exception as exc:
+        return DiagnosticCheckResult(
+            name="audit_chain",
+            status=CheckStatus.FAIL,
+            message=f"Audit chain check failed: {exc}",
+            fix_hint="Repair .planning/audit.jsonl and retry desk doctor",
+        )
+    if not ok:
+        return DiagnosticCheckResult(
+            name="audit_chain",
+            status=CheckStatus.FAIL,
+            message=f"Audit hash chain failed: {reason}",
+            fix_hint="Restore the audit log from a known-good copy",
+            details={"reason": reason},
+        )
+    return DiagnosticCheckResult(
+        name="audit_chain",
+        status=CheckStatus.PASS,
+        message="Audit hash chain verifies",
+        details={"log_path": str(log_path)},
+    )
+
+
 class DoctorEngine:
     """Extensible workspace diagnostic supervisor."""
 
@@ -360,6 +425,7 @@ class DoctorEngine:
             check_workspace_permissions,
             check_workbench_imports,
             check_sandbox_roundtrip,
+            check_audit_chain,
         ]
 
     def register_probe(self, probe: DiagnosticProbe) -> None:

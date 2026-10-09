@@ -4,15 +4,19 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
+import errno
 import json
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Any
+import uuid
 
-from ..security.policy_sandbox import PolicySandbox
+from ..security.policy_sandbox import BoundarySecurityError, PolicySandbox
 
 SESSION_SCHEMA_VERSION = 1
+_CORRELATION_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _STATE_REGION_START = "<!-- desk-session:start -->"
 _STATE_REGION_END = "<!-- desk-session:end -->"
 
@@ -30,11 +34,32 @@ def _confine_path(path: str | Path) -> Path:
     return PolicySandbox().validate_path(raw)
 
 
+def _read_text_nofollow(path: Path) -> str:
+    """Read UTF-8 text without following a symlink leaf."""
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(path, os.O_RDONLY | nofollow)
+    except OSError as err:
+        if nofollow and err.errno == errno.ELOOP:
+            raise BoundarySecurityError(
+                f"Symlink rejected inside workspace: '{path}'"
+            ) from err
+        raise
+    try:
+        handle = os.fdopen(fd, "r", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+    with handle:
+        return handle.read()
+
+
 @dataclass
 class SessionFrame:
     """Represents a discrete workbench execution context snapshot."""
 
     session_id: str
+    correlation_id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
     milestone: str = "v1.0"
     phase: str = "general"
     status: str = "in_progress"
@@ -65,6 +90,18 @@ class SessionFrame:
         if "session_id" not in data or not isinstance(data["session_id"], str):
             raise ValueError("SessionFrame requires a valid string 'session_id'")
 
+        if "correlation_id" not in data:
+            correlation_id = uuid.uuid4().hex[:8]
+        else:
+            correlation_id = data["correlation_id"]
+            if (
+                not isinstance(correlation_id, str)
+                or _CORRELATION_ID_RE.fullmatch(correlation_id) is None
+            ):
+                raise ValueError(
+                    "SessionFrame correlation_id must match ^[A-Za-z0-9_-]{8,64}$"
+                )
+
         raw_active = data.get("active_tasks")
         raw_completed = data.get("completed_tasks")
         raw_meta = data.get("metadata")
@@ -75,6 +112,7 @@ class SessionFrame:
 
         return cls(
             session_id=data["session_id"],
+            correlation_id=correlation_id,
             milestone=str(data.get("milestone", "v1.0")),
             phase=str(data.get("phase", "general")),
             status=str(data.get("status", "in_progress")),
@@ -126,6 +164,12 @@ class SessionStore:
                     pass
             raise
 
+    def _reconfine_storage(self) -> None:
+        self.storage_path = _confine_path(self.storage_path)
+
+    def _reconfine_state(self) -> None:
+        self.state_md_path = _confine_path(self.state_md_path)
+
     def save_session(self, frame: SessionFrame) -> SessionFrame:
         """Atomically persist session frame to JSON storage."""
         frame.updated_at = datetime.now(timezone.utc).isoformat()
@@ -133,6 +177,7 @@ class SessionStore:
         payload = json.dumps(frame.to_dict(), indent=2)
 
         with self._lock:
+            self._reconfine_storage()
             self.persist_atomic(self.storage_path, payload)
 
         return frame
@@ -142,14 +187,17 @@ class SessionStore:
 
         JSON decode failures, read errors, and unsupported payloads are moved
         aside to ``<name>.corrupt.<pid>`` in the same directory. The live path
-        is left absent so a later save can write a new file.
+        is left absent so a later save can write a new file. A path that fails
+        confinement raises and is not quarantined.
         """
         with self._lock:
+            self._reconfine_storage()
             if not self.storage_path.exists():
                 return None
             try:
-                with open(self.storage_path, "r", encoding="utf-8") as handle:
-                    raw = handle.read()
+                raw = _read_text_nofollow(self.storage_path)
+            except BoundarySecurityError:
+                raise
             except OSError:
                 self._quarantine_corrupt_storage()
                 return None
@@ -184,6 +232,7 @@ class SessionStore:
         """
         section = _marked_session_document(_render_state_markdown(frame))
         with self._lock:
+            self._reconfine_state()
             merged = self._merge_state_markdown(section)
             self.persist_atomic(self.state_md_path, merged)
         return merged
@@ -192,7 +241,7 @@ class SessionStore:
         path = self.state_md_path
         if not path.exists():
             return section
-        existing = path.read_text(encoding="utf-8")
+        existing = _read_text_nofollow(path)
         if existing == "":
             return section
         start_idx = existing.find(_STATE_REGION_START)
@@ -215,6 +264,7 @@ def _render_state_markdown(frame: SessionFrame) -> str:
         "",
         "## Current Status",
         f"- Session ID: `{frame.session_id}`",
+        f"- Correlation ID: `{frame.correlation_id}`",
         f"- Milestone: {frame.milestone}",
         f"- Phase: {frame.phase}",
         f"- Status: {frame.status}",

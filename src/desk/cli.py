@@ -10,6 +10,7 @@ from typing import Sequence
 
 from .assertions.milestone_verifier import MilestoneVerifier
 from .diagnostics.doctor_engine import CheckStatus, DoctorEngine
+from .security.policy_sandbox import PolicySandbox
 from .session.session_store import SessionFrame, SessionStore
 from .supervision.process_supervisor import ProcessSupervisor
 from .telemetry.audit_tracer import AuditTracer
@@ -73,14 +74,17 @@ def handle_session(args: argparse.Namespace) -> int:
         existing_frame = store.load_session()
         active_tasks = existing_frame.active_tasks if existing_frame else []
         completed_tasks = existing_frame.completed_tasks if existing_frame else []
-        frame = SessionFrame(
-            session_id=args.init,
-            milestone=args.milestone,
-            phase=args.phase,
-            status="active",
-            active_tasks=active_tasks,
-            completed_tasks=completed_tasks,
-        )
+        frame_fields: dict[str, object] = {
+            "session_id": args.init,
+            "milestone": args.milestone,
+            "phase": args.phase,
+            "status": "active",
+            "active_tasks": active_tasks,
+            "completed_tasks": completed_tasks,
+        }
+        if existing_frame is not None:
+            frame_fields["correlation_id"] = existing_frame.correlation_id
+        frame = SessionFrame(**frame_fields)
         store.save_session(frame)
         # Preserve existing STATE.md progress if already present
         if not store.state_md_path.exists() or store.state_md_path.stat().st_size == 0:
@@ -97,10 +101,33 @@ def handle_session(args: argparse.Namespace) -> int:
         print(json.dumps(frame.to_dict(), indent=2))
     else:
         print(f"Session ID: {frame.session_id}")
+        print(f"Correlation: {frame.correlation_id}")
         print(f"Milestone: {frame.milestone} | Phase: {frame.phase}")
         print(f"Status: {frame.status} | Updated: {frame.updated_at}")
         print(f"Active Tasks: {len(frame.active_tasks)} | Completed Tasks: {len(frame.completed_tasks)}")
     return 0
+
+
+def _desk_run_allowlist() -> list[str]:
+    return [
+        "python",
+        "python3",
+        "pytest",
+        "git",
+        Path(sys.executable).name,
+        sys.executable,
+    ]
+
+
+def _run_correlation_id() -> str | None:
+    """Load the session correlation, or leave it unset when no frame is available."""
+    try:
+        frame = SessionStore().load_session()
+        if frame is None:
+            return None
+        return frame.correlation_id
+    except Exception:
+        return None
 
 
 def handle_run(args: argparse.Namespace) -> int:
@@ -111,12 +138,20 @@ def handle_run(args: argparse.Namespace) -> int:
     if cmd and cmd[0] == "--":
         cmd = cmd[1:]
 
+    correlation_id = _run_correlation_id()
+
     if not cmd:
         print("Error: No command specified to run.", file=sys.stderr)
-        tracer.emit(action="run_error", error="No command specified", exit_code=2)
+        tracer.emit(
+            action="run_error",
+            error="No command specified",
+            exit_code=2,
+            correlation_id=correlation_id,
+        )
         return 2
 
     try:
+        PolicySandbox().validate_command(cmd, allowed_executables=_desk_run_allowlist())
         res = supervisor.run(cmd, timeout=args.timeout)
         tracer.emit(
             action="supervised_run",
@@ -124,6 +159,7 @@ def handle_run(args: argparse.Namespace) -> int:
             exit_code=res.exit_code,
             duration_ms=res.duration_ms,
             timed_out=res.timed_out,
+            correlation_id=correlation_id,
         )
 
         if res.stdout:
@@ -139,6 +175,7 @@ def handle_run(args: argparse.Namespace) -> int:
             cmd=cmd[0] if cmd else "unknown",
             error=str(exc),
             exit_code=1,
+            correlation_id=correlation_id,
         )
         return 1
 

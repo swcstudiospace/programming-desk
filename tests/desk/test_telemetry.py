@@ -140,6 +140,7 @@ def test_clean_chain_verifies() -> None:
         tracer.emit(action="three", phase="phase-a", actor="bot-lead", n=3)
 
         assert tracer.verify_chain() == (True, "ok")
+        assert not log_file.with_name(log_file.name + ".1").exists()
         records = tracer.read_events()
         assert [record["seq"] for record in records] == [1, 2, 3]
         assert records[0]["prev_hash"] == _GENESIS_PREV_HASH
@@ -245,3 +246,204 @@ def test_absolute_dotdot_cannot_escape_parent() -> None:
         escape = root / ".." / "audit.jsonl"
         with pytest.raises(BoundarySecurityError):
             AuditTracer(log_path=escape)
+
+
+def _jsonl_records(path: Path) -> list[dict]:
+    rows = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            rows.append(json.loads(line))
+    return rows
+
+
+def _emit_until_rotated(log_file: Path) -> tuple[AuditTracer, Path]:
+    """Emit with a 400-byte cap until the first ``.1`` sibling appears."""
+    tracer = AuditTracer(log_path=log_file, max_log_bytes=400)
+    rotated = log_file.with_name(log_file.name + ".1")
+    for n in range(1, 40):
+        tracer.emit(action=f"step-{n}", phase="phase-rot", actor="bot-lead", n=n)
+        if rotated.is_file() and not rotated.is_symlink():
+            return tracer, rotated
+    raise AssertionError("rotated segment was not created")
+
+
+def test_rotation_continues_sequence_across_segment() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        tracer, rotated = _emit_until_rotated(log_file)
+
+        assert tracer.verify_chain() == (True, "ok")
+        rotated_rows = _jsonl_records(rotated)
+        active_rows = _jsonl_records(log_file)
+        assert rotated_rows
+        assert active_rows
+        combined = rotated_rows + active_rows
+        assert [row["seq"] for row in combined] == list(range(1, len(combined) + 1))
+        assert rotated_rows[0]["prev_hash"] == _GENESIS_PREV_HASH
+        assert rotated_rows[0]["seq"] == 1
+        anchor = active_rows[0]
+        assert anchor["action"] == "segment_anchor"
+        assert anchor["phase"] == "audit"
+        assert anchor["actor"] == "audit-tracer"
+        assert anchor["details"] == {"segment_anchor": True}
+        assert anchor["seq"] == rotated_rows[-1]["seq"] + 1
+        assert anchor["prev_hash"] == rotated_rows[-1]["record_hash"]
+        assert anchor["record_hash"] == _expected_record_hash(anchor)
+        user_active = [row for row in active_rows if row.get("action") != "segment_anchor"]
+        assert user_active
+        assert user_active[0]["seq"] == anchor["seq"] + 1
+        assert user_active[0]["prev_hash"] == anchor["record_hash"]
+        for earlier, later in zip(combined, combined[1:]):
+            assert later["prev_hash"] == earlier["record_hash"]
+
+        read_back = tracer.read_events()
+        user_rows = [row for row in combined if row.get("action") != "segment_anchor"]
+        assert [row["seq"] for row in read_back] == [row["seq"] for row in user_rows]
+        assert all(row["action"] != "segment_anchor" for row in read_back)
+
+
+def test_rotated_segment_byte_flip_fails_verify() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        tracer, rotated = _emit_until_rotated(log_file)
+        assert tracer.verify_chain() == (True, "ok")
+
+        raw = bytearray(rotated.read_bytes())
+        raw[len(raw) // 2] ^= 0x01
+        rotated.write_bytes(raw)
+
+        ok, reason = tracer.verify_chain()
+        assert ok is False
+        assert reason
+
+
+def test_read_events_stops_at_flipped_second_line() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        tracer = AuditTracer(log_path=log_file)
+        tracer.emit(action="one", phase="phase-a", actor="bot-lead", n=1)
+        tracer.emit(action="two", phase="phase-a", actor="bot-lead", n=2)
+        tracer.emit(action="three", phase="phase-a", actor="bot-lead", n=3)
+
+        parts = log_file.read_bytes().split(b"\n")
+        assert parts[-1] == b""
+        lines = parts[:-1]
+        assert len(lines) == 3
+        flipped = bytearray(lines[1])
+        flipped[len(flipped) // 2] ^= 0x01
+        lines[1] = bytes(flipped)
+        log_file.write_bytes(b"\n".join(lines) + b"\n")
+
+        records = tracer.read_events()
+        assert len(records) == 1
+        assert records[0]["action"] == "one"
+        assert records[0]["seq"] == 1
+
+
+def test_read_events_keeps_record_with_extra_key() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        tracer = AuditTracer(log_path=log_file)
+        tracer.emit(action="annotated", phase="phase-a", actor="bot-lead", n=1)
+
+        record = json.loads(log_file.read_text(encoding="utf-8").strip())
+        record["extra"] = "kept"
+        record["record_hash"] = _expected_record_hash(record)
+        log_file.write_text(
+            json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+        records = tracer.read_events()
+        assert len(records) == 1
+        assert records[0]["action"] == "annotated"
+        assert records[0]["extra"] == "kept"
+        assert tracer.verify_chain() == (True, "ok")
+
+
+def test_repeated_rotation_keeps_a_verifiable_window() -> None:
+    """Eight events under a 320-byte cap still verify after ``.1`` is replaced."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=320)
+        for index in range(8):
+            tracer.emit(action="ops", phase="v8.2", n=index, correlation_id="abcd1234")
+
+        rotated = log_file.with_name(log_file.name + ".1")
+        assert rotated.is_file()
+        assert not rotated.is_symlink()
+        assert tracer.verify_chain() == (True, "ok")
+
+        rotated_rows = _jsonl_records(rotated)
+        active_rows = _jsonl_records(log_file)
+        assert rotated_rows[0]["action"] == "segment_anchor"
+        assert active_rows[0]["action"] == "segment_anchor"
+        assert active_rows[0]["phase"] == "audit"
+        assert active_rows[0]["actor"] == "audit-tracer"
+        assert active_rows[0]["details"] == {"segment_anchor": True}
+        assert active_rows[0]["seq"] == rotated_rows[-1]["seq"] + 1
+        assert active_rows[0]["prev_hash"] == rotated_rows[-1]["record_hash"]
+        assert active_rows[1]["action"] == "ops"
+        assert active_rows[1]["seq"] == active_rows[0]["seq"] + 1
+        assert active_rows[1]["prev_hash"] == active_rows[0]["record_hash"]
+        for earlier, later in zip(rotated_rows, rotated_rows[1:]):
+            assert later["prev_hash"] == earlier["record_hash"]
+            assert later["seq"] == earlier["seq"] + 1
+
+        read_back = tracer.read_events()
+        assert read_back
+        assert all(row["action"] != "segment_anchor" for row in read_back)
+        window = [
+            row
+            for row in rotated_rows + active_rows
+            if row.get("action") != "segment_anchor"
+        ]
+        assert [row["seq"] for row in read_back] == [row["seq"] for row in window]
+
+
+def test_rotation_uses_encoded_byte_length() -> None:
+    """A line that fits by character count still rotates when its UTF-8 size does not."""
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        log_file.write_bytes(b"1234567")
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=10)
+        # "ää\n" is 3 characters and 5 UTF-8 bytes: 7+3 <= 10, 7+5 > 10.
+        assert tracer._rotate_active(log_file, "ää\n") is True
+        rotated = log_file.with_name(log_file.name + ".1")
+        assert rotated.read_bytes() == b"1234567"
+        assert not log_file.exists()
+
+
+def test_rotation_replaces_symlink_sibling_without_following() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        log_file = root / "audit.jsonl"
+        secret = root / "secret.jsonl"
+        secret.write_text("keep-me\n", encoding="utf-8")
+        sibling = log_file.with_name(log_file.name + ".1")
+        sibling.symlink_to(secret)
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=1)
+        tracer.emit(action="first", phase="v8.2", n=1)
+        inode = log_file.stat().st_ino
+        tracer.emit(action="second", phase="v8.2", n=2)
+        assert secret.read_text(encoding="utf-8") == "keep-me\n"
+        assert sibling.is_file()
+        assert not sibling.is_symlink()
+        assert sibling.stat().st_ino == inode
+        assert tracer.verify_chain() == (True, "ok")
+
+
+def test_directory_sibling_skips_rotation() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        log_file = Path(tmp_dir) / "audit.jsonl"
+        sibling = log_file.with_name(log_file.name + ".1")
+        sibling.mkdir()
+        tracer = AuditTracer(log_path=log_file, max_log_bytes=1)
+        tracer.emit(action="first", phase="v8.2", n=1)
+        tracer.emit(action="second", phase="v8.2", n=2)
+        assert sibling.is_dir()
+        assert list(sibling.iterdir()) == []
+        assert tracer.verify_chain() == (True, "ok")
+        rows = _jsonl_records(log_file)
+        assert [row["seq"] for row in rows] == [1, 2]
+        assert rows[0]["prev_hash"] == _GENESIS_PREV_HASH

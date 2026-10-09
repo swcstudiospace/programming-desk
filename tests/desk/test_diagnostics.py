@@ -9,6 +9,7 @@ from src.desk.diagnostics import (
     CheckStatus,
     DiagnosticCheckResult,
     DoctorEngine,
+    check_audit_chain,
     check_git_installed,
     check_ownership_manifest,
     check_planning_directory,
@@ -138,3 +139,45 @@ def test_doctor_engine_custom_probe_and_failure() -> None:
     assert any(r.name == "broken_dependency" for r in results)
     assert engine.overall_status(results) == CheckStatus.FAIL
     assert engine.exit_code(results) == 1
+
+
+def test_audit_chain_missing_passes() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        result = check_audit_chain(Path(tmp_dir))
+    assert result.status == CheckStatus.PASS
+    assert result.name == "audit_chain"
+
+
+def test_audit_chain_verifies_and_detects_tamper() -> None:
+    from src.desk.telemetry import AuditTracer
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        planning = root / ".planning"
+        planning.mkdir()
+        log_path = planning / "audit.jsonl"
+        tracer = AuditTracer(log_path=log_path, workspace_root=root, max_log_bytes=None)
+        tracer.emit(action="doctor", phase="v8.2")
+        healthy = check_audit_chain(root)
+        assert healthy.status == CheckStatus.PASS
+
+        raw = bytearray(log_path.read_bytes())
+        raw[len(raw) // 2] ^= 0x01
+        log_path.write_bytes(raw)
+        broken = check_audit_chain(root)
+        assert broken.status == CheckStatus.FAIL
+        assert broken.details.get("reason") or "failed" in broken.message.lower()
+
+
+def test_audit_chain_rejects_symlink_log() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        planning = root / ".planning"
+        planning.mkdir()
+        outside = root / "outside.jsonl"
+        outside.write_text("{}\n", encoding="utf-8")
+        link = planning / "audit.jsonl"
+        link.symlink_to(outside)
+        result = check_audit_chain(root)
+        assert result.status == CheckStatus.FAIL
+        assert outside.read_text(encoding="utf-8") == "{}\n"

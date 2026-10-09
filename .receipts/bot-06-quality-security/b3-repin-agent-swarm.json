@@ -18,7 +18,7 @@
   "agent_swarm_main_tip": "e7acd5c525b3b31569141b8364c837486a741358",
   "installer_dry_run": {
     "note": "Omitted from commands because check_receipt.py treats --dry-run as a bypass. The command was run and wrote nothing.",
-    "cmd": "python3 $SWARM/scripts/_install_cursor.py --target . --dry-run",
+    "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin e7acd5c525b3b31569141b8364c837486a741358 && git -C \"$SWARM_ROOT\" checkout -q --detach FETCH_HEAD && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"e7acd5c525b3b31569141b8364c837486a741358\" && python3 \"$SWARM_ROOT/scripts/_install_cursor.py\" --target . --dry-run",
     "exit_code": 0,
     "duration_s": 0.13,
     "files": [
@@ -63,10 +63,10 @@
   ],
   "commands": [
     {
-      "cmd": "git -C $tmp fetch origin main && git -C $tmp fetch origin e7acd5c525b3b31569141b8364c837486a741358 && git -C $tmp merge-base --is-ancestor e7acd5c525b3b31569141b8364c837486a741358 origin/main",
+      "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin main && git -C \"$SWARM_ROOT\" fetch -q origin e7acd5c525b3b31569141b8364c837486a741358 && git -C \"$SWARM_ROOT\" checkout -q --detach e7acd5c525b3b31569141b8364c837486a741358 && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"e7acd5c525b3b31569141b8364c837486a741358\" && git -C \"$SWARM_ROOT\" merge-base --is-ancestor e7acd5c525b3b31569141b8364c837486a741358 origin/main && echo \"ANCESTOR_OK $(git -C \"$SWARM_ROOT\" rev-parse HEAD)\"",
       "exit_code": 0,
-      "duration_s": 0.7,
-      "output_tail": "ANCESTOR_OK\ne7acd5c525b3b31569141b8364c837486a741358\ne7acd5c Merge pull request #13 from swcstudiospace/grokbot/cursor-export-desk-p1-ut-muzi2o18"
+      "duration_s": 0.51,
+      "output_tail": "ANCESTOR_OK e7acd5c525b3b31569141b8364c837486a741358"
     },
     {
       "cmd": "python3 p1-assert.py  # pre-change tree: auto-mergeable, swarm/<task_id>, missing bot-0N branch rule, missing keyless override",
@@ -81,15 +81,15 @@
       "output_tail": "pin ok"
     },
     {
-      "cmd": "python3 $SWARM/scripts/_install_cursor.py --target .",
+      "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin e7acd5c525b3b31569141b8364c837486a741358 && git -C \"$SWARM_ROOT\" checkout -q --detach FETCH_HEAD && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"e7acd5c525b3b31569141b8364c837486a741358\" && python3 \"$SWARM_ROOT/scripts/_install_cursor.py\" --target .",
       "exit_code": 0,
-      "duration_s": 0.1,
-      "output_tail": "installed 16 file(s) under /workspace/.cursor"
+      "duration_s": 0.65,
+      "output_tail": "up-to-date"
     },
     {
-      "cmd": "python3 $SWARM/scripts/_install_cursor.py --target . --check",
+      "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin e7acd5c525b3b31569141b8364c837486a741358 && git -C \"$SWARM_ROOT\" checkout -q --detach FETCH_HEAD && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"e7acd5c525b3b31569141b8364c837486a741358\" && python3 \"$SWARM_ROOT/scripts/_install_cursor.py\" --target . --check",
       "exit_code": 0,
-      "duration_s": 0.06,
+      "duration_s": 0.65,
       "output_tail": "up-to-date"
     },
     {
@@ -174,7 +174,7 @@
       "evidence_command_index": 2
     },
     {
-      "claim": "Cursor installer wrote the export from e7acd5c",
+      "claim": "Installer from a verified e7acd5c checkout exits 0 against this tree",
       "evidence_command_index": 3
     },
     {
@@ -225,7 +225,7 @@
     "GitHub Actions for this branch has not run yet; local G-1, G-3, G-4, G-7 and pytest are the evidence above.",
     "Greptile has not reviewed the draft PR yet. The score is recorded in the PR body after the review loop, not in this receipt.",
     "desk_ownership_resolve against gateway ref e0ad62ad reported .cursor/** and AGENTS.md unowned. That ref is not origin/main 48b3098. Local ownership.yaml assigns both to bot-06-quality-security, and local G-1 passed.",
-    "The installer --dry-run command is recorded under installer_dry_run, not under commands, because check_receipt.py classifies --dry-run as a bypass. It exited 0 and listed 16 paths; .cursor/rules/agent-swarm.mdc was not in the list because its bytes already matched e7acd5c.",
+    "The installer --dry-run command is recorded under installer_dry_run, not under commands, because check_receipt.py classifies --dry-run as a bypass. It exited 0 and listed 16 paths; .cursor/rules/agent-swarm.mdc was not in the list because its bytes already matched e7acd5c. The first apply printed 'installed 16 file(s)'. A repeat of that command now prints up-to-date, which is the output recorded on the installer command.",
     "Generated agent bodies still contain the shared taxonomy lines that a missing signing key fails closed with E-DEP (a14-maintenance.md lines 173 and 250). The installed preamble says that case is not E-DEP and overrides those lines. The bodies were not hand-edited; --check would fail if they diverged from agent-swarm e7acd5c.",
     "No committed regression test was added. SCOPE allows the pin, the generated export, the stamp, AGENTS.md and this receipt. The pre-change failure is command index 1."
   ],

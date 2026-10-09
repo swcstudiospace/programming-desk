@@ -166,6 +166,7 @@ class ProcessSupervisor:
         backoff_base: float = 0.2,
         retry_on_exit_codes: list[int] | None = None,
         max_output_bytes: int | None = None,
+        deadline_s: float | None = None,
     ) -> SupervisedProcessResult:
         """Execute a command array with timeout traps, retries, and process group safety.
 
@@ -173,6 +174,11 @@ class ProcessSupervisor:
         first ``max_output_bytes`` (instance default when omitted). The child
         environment starts from ``os.environ`` with credential-like keys removed;
         ``env`` is applied after that, and sensitive overlay keys are dropped.
+        ``deadline_s=None`` leaves retries and backoff sleeps unchanged.
+        Otherwise a pending retry returns the current result immediately,
+        without sleeping, when time since the run started is already at the
+        deadline or the next backoff would run past it. An in-flight
+        communicate timeout is not shortened.
         """
         # Policy & sandbox validation
         validated_cmd = self.sandbox.validate_command(cmd)
@@ -190,6 +196,7 @@ class ProcessSupervisor:
         retry_codes = set(retry_on_exit_codes or [143, 137, 75])  # Common transient codes
 
         attempt = 0
+        run_started = time.monotonic()
         while attempt <= max_retries:
             start_time = time.monotonic()
             timed_out = False
@@ -295,6 +302,10 @@ class ProcessSupervisor:
             attempt += 1
             # Exponential backoff with jitter
             delay = (backoff_base * (2 ** (attempt - 1))) + (random.uniform(0.01, 0.05))
+            if deadline_s is not None:
+                elapsed = time.monotonic() - run_started
+                if elapsed >= deadline_s or elapsed + delay > deadline_s:
+                    return result
             time.sleep(delay)
 
         return result

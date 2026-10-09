@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import os
 from pathlib import Path
 import shutil
+import stat
 import tempfile
 import traceback
 from typing import Any, Callable
@@ -105,11 +106,16 @@ class TransactionContext:
 
         if self._backup_dir is None:
             self._backup_dir = Path(tempfile.mkdtemp(prefix="desk_tx_backup_"))
+            os.chmod(self._backup_dir, 0o700)
 
         backup_copy = self._backup_dir / f"{target.name}.bak.{len(self._file_backups)}"
         if target.is_symlink():
             raise BoundarySecurityError(f"Symlink rejected as backup target: '{target}'")
+        original_mode = stat.S_IMODE(target.stat().st_mode)
         shutil.copy2(target, backup_copy, follow_symlinks=False)
+        # The at-rest copy is private. Restore puts the caller's mode back;
+        # copy2 would otherwise stamp 0o600 onto the original file.
+        os.chmod(backup_copy, 0o600)
         self._file_backups[target] = backup_copy
 
         def _restore() -> None:
@@ -126,6 +132,7 @@ class TransactionContext:
             if target.is_symlink():
                 raise BoundarySecurityError(f"Refusing to restore through symlink: '{target}'")
             shutil.copy2(backup_copy, target, follow_symlinks=False)
+            os.chmod(target, original_mode)
 
         self.register_compensation(_restore, name=f"restore_{target.name}")
         return target

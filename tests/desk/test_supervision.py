@@ -58,6 +58,21 @@ def test_supervisor_retries_on_transient_exit() -> None:
     assert result.retries == 2
 
 
+def test_supervisor_deadline_stops_retries() -> None:
+    supervisor = ProcessSupervisor()
+    result = supervisor.run(
+        [sys.executable, "-c", "import sys; sys.exit(75)"],
+        max_retries=5,
+        backoff_base=0.4,
+        deadline_s=0.35,
+        retry_on_exit_codes=[75],
+    )
+
+    assert result.exit_code == 75
+    assert result.retries < 5
+    assert result.duration_ms < 2000
+
+
 def test_supervisor_rejection_of_unsafe_command() -> None:
     supervisor = ProcessSupervisor()
     with pytest.raises(BoundarySecurityError):

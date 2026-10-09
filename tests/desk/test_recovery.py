@@ -230,3 +230,41 @@ def test_failed_restore_keeps_backup_when_destination_is_symlink() -> None:
         assert tx.rollbacks_failed == 1
         assert mgr.history[0].rollbacks_failed == 1
         assert any("symlink" in item.lower() for item in tx.failed_restorations)
+
+
+def test_backup_file_private_modes_before_commit() -> None:
+    """Backup copies are 0o600 and the backup directory is 0o700 before commit."""
+    mgr = RecoveryManager()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        source = Path(tmp_dir) / "notes.txt"
+        source.write_text("keep-me", encoding="utf-8")
+        source.chmod(0o644)
+
+        with mgr.transaction("private-backup") as tx:
+            returned = tx.backup_file(source)
+            backup = tx._file_backups[returned]
+            assert tx._backup_dir is not None
+            assert (backup.stat().st_mode & 0o777) == 0o600
+            assert (tx._backup_dir.stat().st_mode & 0o777) == 0o700
+            assert (source.stat().st_mode & 0o777) == 0o644
+
+
+def test_backup_restore_preserves_source_mode() -> None:
+    """Rollback puts the original mode back. The private backup mode must not stick."""
+    mgr = RecoveryManager()
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        source = Path(tmp_dir) / "notes.txt"
+        source.write_text("keep-me", encoding="utf-8")
+        source.chmod(0o640)
+
+        with pytest.raises(RuntimeError):
+            with mgr.transaction("restore-mode") as tx:
+                tx.backup_file(source)
+                source.write_text("mutated", encoding="utf-8")
+                source.chmod(0o606)
+                raise RuntimeError("mutation failed")
+
+        assert source.read_text(encoding="utf-8") == "keep-me"
+        assert (source.stat().st_mode & 0o777) == 0o640

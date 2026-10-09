@@ -1,0 +1,141 @@
+{
+  "task_id": "b4-repin-agent-swarm-ea61db5",
+  "bot": "bot-06-quality-security",
+  "receipt_kind": "agent_install",
+  "started_at": "2026-10-09T21:30:25Z",
+  "completed_at": "2026-10-09T21:30:40Z",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Ming approved fixing the reported desk follow-ups in chat on 2026-10-10 at 08:07 AEDT (\"Yeah fix all 3 of those... Please program your fixes\"); the run's scope named this programming-desk swarm refresh PR. Prepared by Desk Lead (Grok Bot) under milestone VPS production hardening v1.",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "branch": "bot-06-quality-security/repin-agent-swarm-ea61db5",
+  "base": "main",
+  "base_sha": "22295709e7d2cc87a40a00b77a9e1a03e5a8d21c",
+  "runtime": "grok-bot-box (agentOS workspace)",
+  "issue": "SPE-9803",
+  "swarm": "not used: unit regenerates the export",
+  "old_swarm_sha": "e7acd5c525b3b31569141b8364c837486a741358",
+  "new_swarm_sha": "ea61db5f977add8d7242e09f5b39d6a0f7da6127",
+  "agent_swarm_repo": "https://github.com/swcstudiospace/agent-swarm",
+  "agent_swarm_main_tip": "ea61db5f977add8d7242e09f5b39d6a0f7da6127",
+  "files_changed": [
+    ".cursor/.agent-swarm-cursor.json",
+    ".cursor/agents/a01-orchestrator.md",
+    ".cursor/agents/a02-requirements.md",
+    ".cursor/agents/a03-architect.md",
+    ".cursor/agents/a04-ux-designer.md",
+    ".cursor/agents/a05-backend.md",
+    ".cursor/agents/a06-frontend.md",
+    ".cursor/agents/a07-data.md",
+    ".cursor/agents/a08-qa.md",
+    ".cursor/agents/a09-reviewer.md",
+    ".cursor/agents/a10-security.md",
+    ".cursor/agents/a11-devops.md",
+    ".cursor/agents/a12-release.md",
+    ".cursor/agents/a13-observability.md",
+    ".cursor/agents/a14-maintenance.md",
+    ".cursor/agents/a15-docs.md",
+    ".cursor/environment.json",
+    "AGENTS.md",
+    ".receipts/bot-06-quality-security/b4-repin-agent-swarm-ea61db5.json"
+  ],
+  "commands": [
+    {
+      "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin main && git -C \"$SWARM_ROOT\" fetch -q origin ea61db5f977add8d7242e09f5b39d6a0f7da6127 && git -C \"$SWARM_ROOT\" checkout -q --detach ea61db5f977add8d7242e09f5b39d6a0f7da6127 && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"ea61db5f977add8d7242e09f5b39d6a0f7da6127\" && git -C \"$SWARM_ROOT\" merge-base --is-ancestor ea61db5f977add8d7242e09f5b39d6a0f7da6127 origin/main && echo \"ANCESTOR_OK $(git -C \"$SWARM_ROOT\" rev-parse HEAD)\"",
+      "exit_code": 0,
+      "duration_s": 0.64,
+      "output_tail": "ANCESTOR_OK ea61db5f977add8d7242e09f5b39d6a0f7da6127"
+    },
+    {
+      "cmd": "python3 -c \"import pathlib; t=pathlib.Path('.cursor/environment.json').read_text(); assert 'SWARM_SHA=ea61db5f977add8d7242e09f5b39d6a0f7da6127' in t; assert 'e7acd5c525b3b31569141b8364c837486a741358' not in t; print('pin ok')\"",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "pin ok"
+    },
+    {
+      "cmd": "SWARM_ROOT=$(mktemp -d) && git -C \"$SWARM_ROOT\" init -q && git -C \"$SWARM_ROOT\" remote add origin https://github.com/swcstudiospace/agent-swarm.git && git -C \"$SWARM_ROOT\" fetch -q origin main && git -C \"$SWARM_ROOT\" fetch -q origin ea61db5f977add8d7242e09f5b39d6a0f7da6127 && git -C \"$SWARM_ROOT\" checkout -q --detach ea61db5f977add8d7242e09f5b39d6a0f7da6127 && test \"$(git -C \"$SWARM_ROOT\" rev-parse HEAD)\" = \"ea61db5f977add8d7242e09f5b39d6a0f7da6127\" && python3 \"$SWARM_ROOT/scripts/_install_cursor.py\" --target . --check",
+      "exit_code": 0,
+      "duration_s": 0.72,
+      "output_tail": "up-to-date"
+    },
+    {
+      "cmd": "grep -c 'ea61db5f977add8d7242e09f5b39d6a0f7da6127' AGENTS.md",
+      "exit_code": 0,
+      "duration_s": 0.0,
+      "output_tail": "1"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.08,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 18 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.15,
+      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.19,
+      "output_tail": "G-3 PASS \u2014 18 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 13.3,
+      "output_tail": "........................................................................ [ 96%]\n...........                                                              [100%]\n299 passed in 13.05s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "agent-swarm ea61db5 is an ancestor of origin/main (its tip)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "environment.json pins SWARM_SHA to ea61db5 and no longer names e7acd5c",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Installer --check from a verified ea61db5 checkout reports the export up to date",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "AGENTS.md names the new pin",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Ownership manifest valid and every changed file is bot-06's",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Desk integrity, secrets and contracts gates pass",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "ci/tests pass",
+      "evidence_command_index": 9
+    }
+  ],
+  "unverified": [
+    "The export was regenerated with scripts/_install_cursor.py from the box clone of agent-swarm at ea61db5 (verified equal to origin/main); command 2 re-checks it from a fresh clone.",
+    "Greptile and GitHub Actions results are not in this receipt; the PR checks are the record."
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

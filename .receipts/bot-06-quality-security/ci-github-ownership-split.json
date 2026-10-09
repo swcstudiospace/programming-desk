@@ -123,7 +123,7 @@
   "unverified": [
     "PR #140 (bot-05-infrastructure/gates-full-base-fetch) was not updated or rebased onto this rule. It stays blocked on G-1 until this change is on main.",
     "gates.yml itself was not edited. Template sync was not run against a paired gates.yml diff.",
-    "approved_by is empty until Programming Lead or Ming reviews. G-2 --strict fails on that field.",
+    "Ming authorized this stamp in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy. This commit stamps the receipt; Lead merges the pull request.",
     "Greptile re-review of the narrowed gates.yml exception has not completed. The review of 515951d reported one P2 and the gates job failed G-2, which is the empty approved_by."
   ],
   "files_changed": [
@@ -133,5 +133,6 @@
   ],
   "contract_changes": [],
   "rollback_plan": "Revert this commit with git revert. The next gate run picks the previous ownership.yaml up immediately. No data, schema, or migration is involved; the template path resolves to QUALITY again.",
-  "approvals": []
+  "approvals": [],
+  "approved_by": "human:SomeRandmGuyy"
 }

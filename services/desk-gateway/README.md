@@ -67,7 +67,7 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | `RAILWAY_*`, `VERCEL_*`, `GREPTILE_*`, `GITHUB_TOKEN`, `PLAY_ACCESS_TOKEN`, `ASC_*` | Seat platform tools |
 | `PACK_<APP>_API_BASE` | Product API base per tool pack |
 
-`DRAGONFLY_URL` unset leaves rate limits on the in-memory bucket. One process shares one pooled client, created at startup and closed on shutdown. The token-bucket script is loaded once. `/health` stays `ok` when Dragonfly is down and reports `edge.limiter.mode` as `dragonfly`, `local`, or `breaker_open`.
+`DRAGONFLY_URL` unset leaves rate limits on the in-memory bucket. One process shares one pooled client. Startup connect and ping run outside the request budget, and a failed warm-up is retried in the background until the breaker opens. A seat request never waits on that connect. The token-bucket script is loaded once. Eight commands can be in flight; a ninth answers locally and does not open the breaker. `/health` stays `ok` when Dragonfly is down and reports `edge.limiter.mode` as `dragonfly`, `local`, or `breaker_open`.
 
 ## Run locally
 

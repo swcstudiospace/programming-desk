@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from desk_gateway.config import SEATS, Settings
-from desk_gateway.upstreams import TOKEN_BUCKET_LUA, CircuitBreaker, parse_token_bucket
+from desk_gateway.upstreams import TOKEN_BUCKET_LUA, CircuitBreaker, PoolSaturated, _import_redis, parse_token_bucket
 
 logger = logging.getLogger("desk_gateway.edge")
 
@@ -389,6 +389,10 @@ class DistributedRateLimiter:
 
         if self.dragonfly and getattr(self.dragonfly, "configured", False):
             if self._uses_pool():
+                if not await self.dragonfly.nudge_warm():
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    return self._local(key, amount)
                 if not self.dragonfly.try_acquire():
                     self.local_fallback += 1
                     self._last_source = "local"
@@ -403,6 +407,11 @@ class DistributedRateLimiter:
                         ),
                         timeout=self._request_budget(),
                     )
+                except PoolSaturated:
+                    self.dragonfly.finish_neutral()
+                    self.local_fallback += 1
+                    self._last_source = "local"
+                    return self._local(key, amount)
                 except TimeoutError:
                     self.dragonfly.finish_attempt(ok=False)
                     self.dragonfly_timeout += 1
@@ -494,7 +503,9 @@ class DistributedRateLimiter:
         amount: int,
     ) -> tuple[bool, float, int, float]:
         """One-shot path for stubs that are not the shared Dragonfly service."""
-        import redis.asyncio as redis
+        redis = _import_redis()
+        if redis is None:
+            raise RuntimeError("redis is not installed on the gateway (extra: dragonfly)")
 
         now = time.time()
         client = redis.from_url(

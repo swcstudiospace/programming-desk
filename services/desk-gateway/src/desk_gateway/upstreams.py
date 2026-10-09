@@ -653,6 +653,20 @@ def _seconds(settings: Settings, name_ms: str, default_ms: int) -> float:
     return _int_setting(settings, name_ms, default_ms) / 1000.0
 
 
+class PoolSaturated(Exception):
+    """Every pooled connection is in use. This is not an upstream failure."""
+
+
+def _noscript_error() -> type[BaseException]:
+    try:
+        from redis.exceptions import NoScriptError
+    except ImportError:
+        class NoScriptError(Exception):
+            pass
+        return NoScriptError
+    return NoScriptError
+
+
 def _import_redis() -> Any:
     """Import redis.asyncio, or None when the optional dragonfly extra is absent."""
     try:
@@ -706,26 +720,76 @@ class Dragonfly:
         self._sha: str | None = None
         self._trial_in_flight = False
         self._logged_failure = False
+        self._inflight = 0
+        self._warm_task: asyncio.Task[None] | None = None
+
+    @property
+    def warm(self) -> bool:
+        return self._client is not None
 
     @property
     def configured(self) -> bool:
         return bool(self.url)
 
     async def open(self) -> None:
-        """Connect the shared pool. Failure leaves the gateway up; callers fall back."""
+        """Connect and ping outside any seat-request budget.
+
+        The wait covers the connect and the ping. A seat request never awaits this.
+        """
         if not self.configured or self._client is not None:
             return
         if _import_redis() is None:
             logger.warning("Dragonfly pool skipped; redis is not installed (extra: dragonfly)")
             return
-        try:
-            client = await self._connect()
-            await asyncio.wait_for(client.ping(), timeout=self.connect_timeout_sec)
-        except Exception as exc:
-            await self.aclose()
-            self._fail(type(exc).__name__)
+        if not self.try_acquire():
             return
-        self.circuit_breaker.record_success()
+        client = None
+        try:
+            client = self._new_client()
+            await asyncio.wait_for(
+                client.ping(),
+                timeout=self.connect_timeout_sec + self.command_timeout_sec,
+            )
+        except Exception as exc:
+            if client is not None:
+                await client.aclose()
+            self.finish_attempt(ok=False)
+            self.note_failure(type(exc).__name__)
+            return
+        async with self._client_lock:
+            if self._client is not None:
+                await client.aclose()
+            else:
+                self._client = client
+                self._script = None
+                self._script_client = None
+                self._sha = None
+        self.finish_attempt(ok=True)
+
+    def schedule_warm(self) -> None:
+        """Retry startup warming on the event loop, not on the request budget."""
+        if self._client is not None or not self.configured:
+            return
+        task = self._warm_task
+        if task is not None and not task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._warm_task = loop.create_task(self.open())
+
+    async def nudge_warm(self) -> bool:
+        """Start a warm-up if needed. Ready only when that warm-up is already done.
+
+        One event-loop turn lets an instant connect finish. A slow connect keeps
+        running in the background and this returns False.
+        """
+        if self._client is not None:
+            return True
+        self.schedule_warm()
+        await asyncio.sleep(0)
+        return self._client is not None
 
     def try_acquire(self) -> bool:
         """False when the breaker is open, or a half-open trial is already running."""
@@ -751,14 +815,21 @@ class Dragonfly:
         self._trial_in_flight = False
         self._log_transition(previous)
 
+    def finish_neutral(self) -> None:
+        """Release a half-open trial without counting a success or a failure."""
+        self._trial_in_flight = False
+
     def note_failure(self, kind: str) -> None:
         self._note_failure(kind)
 
-    def _fail(self, kind: str) -> None:
-        previous = self.circuit_breaker.state
-        self.circuit_breaker.record_failure()
-        self._log_transition(previous)
-        self._note_failure(kind)
+    def _reserve(self) -> None:
+        if self._inflight >= self.pool_max_connections:
+            raise PoolSaturated()
+        self._inflight += 1
+
+    def _release_slot(self) -> None:
+        if self._inflight:
+            self._inflight -= 1
 
     def _note_failure(self, kind: str) -> None:
         if self._logged_failure:
@@ -776,37 +847,37 @@ class Dragonfly:
         logger.warning("Dragonfly circuit %s -> %s", previous, current)
 
     async def pooled_client(self) -> Any:
-        """Return the shared client, connecting on first use when startup did not."""
+        """Return the shared client. Connecting happens in ``open``, not here."""
         if self._client is None:
-            await self._connect()
+            raise PoolSaturated()
         return self._client
 
-    async def _connect(self) -> Any:
-        async with self._client_lock:
-            if self._client is not None:
-                return self._client
-            redis = _import_redis()
-            if redis is None:
-                raise RuntimeError("redis is not installed on the gateway (extra: dragonfly)")
-
-            self._client = redis.from_url(
-                self.url,
-                socket_timeout=self.command_timeout_sec,
-                socket_connect_timeout=self.connect_timeout_sec,
-                socket_keepalive=self.socket_keepalive,
-                decode_responses=True,
-                max_connections=self.pool_max_connections,
-                health_check_interval=self.health_check_interval_sec,
-            )
-            self._script = None
-            self._script_client = None
-            self._sha = None
-            return self._client
+    def _new_client(self) -> Any:
+        redis = _import_redis()
+        if redis is None:
+            raise RuntimeError("redis is not installed on the gateway (extra: dragonfly)")
+        return redis.from_url(
+            self.url,
+            socket_timeout=self.command_timeout_sec,
+            socket_connect_timeout=self.connect_timeout_sec,
+            socket_keepalive=self.socket_keepalive,
+            decode_responses=True,
+            max_connections=self.pool_max_connections,
+            health_check_interval=self.health_check_interval_sec,
+        )
 
     async def aclose(self) -> None:
+        current = asyncio.current_task()
+        task = self._warm_task
+        self._warm_task = None
+        if task is not None and task is not current and not task.done():
+            task.cancel()
         async with self._client_lock:
             client = self._client
             self._client = None
+            self._script = None
+            self._script_client = None
+            self._sha = None
         if client is not None:
             await client.aclose()
 
@@ -817,6 +888,8 @@ class Dragonfly:
             return {"error": "invalid_action", "reason": action}
         if _import_redis() is None:
             return {"error": NOT_CONFIGURED, "reason": "redis is not installed on the gateway (extra: dragonfly)"}
+        if not await self.nudge_warm():
+            return {"error": UPSTREAM_ERROR, "reason": "dragonfly: warming"}
         if not self.try_acquire():
             return {
                 "error": "circuit_breaker_open",
@@ -832,6 +905,9 @@ class Dragonfly:
             self.finish_attempt(ok=False)
             self._note_failure("timeout")
             return {"error": UPSTREAM_ERROR, "reason": "dragonfly: request budget exceeded"}
+        except PoolSaturated:
+            self.finish_neutral()
+            return {"error": UPSTREAM_ERROR, "reason": "dragonfly: pool busy"}
         except Exception as exc:
             self.finish_attempt(ok=False)
             self._note_failure(type(exc).__name__)
@@ -840,15 +916,19 @@ class Dragonfly:
         return result
 
     async def _execute(self, action: str, key: str, value: str | None, ttl_sec: int) -> dict[str, Any]:
-        client = await self.pooled_client()
-        if action == "get":
-            return {"ok": True, "value": await client.get(key)}
-        if action == "set":
-            await client.set(key, value or "", ex=int(ttl_sec))
-            return {"ok": True}
-        if action == "del":
-            return {"ok": True, "deleted": int(await client.delete(key))}
-        return {"ok": bool(await client.ping())}
+        self._reserve()
+        try:
+            client = await self.pooled_client()
+            if action == "get":
+                return {"ok": True, "value": await client.get(key)}
+            if action == "set":
+                await client.set(key, value or "", ex=int(ttl_sec))
+                return {"ok": True}
+            if action == "del":
+                return {"ok": True, "deleted": int(await client.delete(key))}
+            return {"ok": bool(await client.ping())}
+        finally:
+            self._release_slot()
 
     async def eval_token_bucket(
         self,
@@ -860,21 +940,25 @@ class Dragonfly:
         """Run the shared token-bucket script. The body is loaded once; later calls are EVALSHA."""
         import time
 
-        client = await self.pooled_client()
-        now = time.time()
-        redis_key = f"desk:ratelimit:tokenbucket:{key}"
-        result = await self._evalsha(
-            client,
-            redis_key,
-            str(capacity),
-            str(fill_rate),
-            str(amount),
-            str(now),
-        )
-        return parse_token_bucket(result, now, capacity, fill_rate)
+        self._reserve()
+        try:
+            client = await self.pooled_client()
+            now = time.time()
+            redis_key = f"desk:ratelimit:tokenbucket:{key}"
+            result = await self._evalsha(
+                client,
+                redis_key,
+                str(capacity),
+                str(fill_rate),
+                str(amount),
+                str(now),
+            )
+            return parse_token_bucket(result, now, capacity, fill_rate)
+        finally:
+            self._release_slot()
 
     async def _evalsha(self, client: Any, redis_key: str, *args: str) -> Any:
-        from redis.exceptions import NoScriptError
+        NoScriptError = _noscript_error()
 
         if self._script is None or self._script_client is not client:
             self._script = client.register_script(TOKEN_BUCKET_LUA)

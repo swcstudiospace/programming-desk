@@ -28,8 +28,9 @@ class _Url:
 
 
 class _Client:
-    def __init__(self, *, delay: float = 0.0, fail: bool = False) -> None:
+    def __init__(self, *, delay: float = 0.0, ping_delay: float = 0.0, fail: bool = False) -> None:
         self.delay = delay
+        self.ping_delay = ping_delay
         self.fail = fail
         self.loads: list[str] = []
         self.shas = 0
@@ -38,13 +39,23 @@ class _Client:
         self.pings = 0
         self.evals = 0
         self.closed = False
+        self._busy = 0
+        self.max_inflight = 0
+
+    async def _hold(self) -> None:
+        self._busy += 1
+        self.max_inflight = max(self.max_inflight, self._busy)
+        try:
+            if self.delay:
+                await asyncio.sleep(self.delay)
+        finally:
+            self._busy -= 1
 
     async def eval(self, script: str, *_args: object) -> list[object]:
         """The pre-change limiter sent the script body this way on every call."""
         self.evals += 1
         self.loads.append(script)
-        if self.delay:
-            await asyncio.sleep(self.delay)
+        await self._hold()
         if self.fail:
             raise ConnectionError("refused")
         return [1, "0", "9"]
@@ -56,16 +67,14 @@ class _Client:
 
     async def script_load(self, script: str) -> str:
         self.loads.append(script)
-        if self.delay:
-            await asyncio.sleep(self.delay)
+        await self._hold()
         if self.fail:
             raise ConnectionError("refused")
         return "sha"
 
     async def evalsha(self, *_args: object) -> list[object]:
         self.shas += 1
-        if self.delay:
-            await asyncio.sleep(self.delay)
+        await self._hold()
         if self.fail:
             raise ConnectionError("refused")
         await asyncio.sleep(0)
@@ -73,12 +82,13 @@ class _Client:
 
     async def get(self, _key: str) -> str:
         self.gets += 1
-        if self.delay:
-            await asyncio.sleep(self.delay)
+        await self._hold()
         return "v"
 
     async def ping(self) -> bool:
         self.pings += 1
+        if self.ping_delay:
+            await asyncio.sleep(self.ping_delay)
         if self.fail:
             raise ConnectionError("refused")
         return True
@@ -97,9 +107,10 @@ def _patch_factory(monkeypatch: pytest.MonkeyPatch, client: _Client | None = Non
         assert client is not None
         return client
 
-    import redis.asyncio as redis_async
-
-    monkeypatch.setattr(redis_async, "from_url", from_url)
+    monkeypatch.setattr(
+        "desk_gateway.upstreams._import_redis",
+        lambda: SimpleNamespace(from_url=from_url),
+    )
     return created
 
 
@@ -171,9 +182,10 @@ async def test_refused_connections_open_the_breaker_and_then_one_trial_runs(
         created.append("factory")
         return healthy
 
-    import redis.asyncio as redis_async
-
-    monkeypatch.setattr(redis_async, "from_url", from_url)
+    monkeypatch.setattr(
+        "desk_gateway.upstreams._import_redis",
+        lambda: SimpleNamespace(from_url=from_url),
+    )
     allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
     assert allowed is True
     assert remaining == 9
@@ -188,7 +200,7 @@ async def test_half_open_allows_one_trial(monkeypatch: pytest.MonkeyPatch) -> No
     client = _Client(delay=0.05)
     _patch_factory(monkeypatch, client)
     dragonfly = Dragonfly(_Url())
-    await dragonfly.pooled_client()
+    await dragonfly.open()
     dragonfly.circuit_breaker.state = "half-open"
     dragonfly.circuit_breaker.last_failure_time = time.monotonic()
     limiter = _limiter(dragonfly)
@@ -258,6 +270,78 @@ async def test_hung_command_returns_inside_the_budget(monkeypatch: pytest.Monkey
     assert result["error"] == "upstream_error"
     assert "budget" in result["reason"]
     assert PLACEHOLDER not in result["reason"]
+
+
+@pytest.mark.asyncio
+async def test_slow_startup_warm_stays_off_the_request(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(ping_delay=0.4)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    limiter = _limiter(dragonfly)
+
+    started = time.monotonic()
+    await limiter.check_rate_limit("lead")
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.1
+    assert limiter.dragonfly_ok == 0
+    assert dragonfly.circuit_breaker.state == "closed"
+    assert dragonfly._warm_task is not None
+    await dragonfly._warm_task
+    assert dragonfly.warm is True
+
+    allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
+    assert allowed is True
+    assert remaining == 9
+    assert limiter.status()["mode"] == "dragonfly"
+    assert dragonfly.circuit_breaker.state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_startup_ping_gets_connect_plus_command_time(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(ping_delay=0.3)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    dragonfly.connect_timeout_sec = 0.2
+    dragonfly.command_timeout_sec = 0.2
+
+    await dragonfly.open()
+
+    assert dragonfly.warm is True
+    assert client.pings == 1
+    assert dragonfly.circuit_breaker.state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_pool_contention_does_not_open_the_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client(delay=0.02)
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    dragonfly.pool_max_connections = 1
+    limiter = _limiter(dragonfly)
+    await dragonfly.open()
+
+    async def rate() -> tuple[float, bool]:
+        started = time.monotonic()
+        allowed, _retry, _remaining, _reset = await limiter.check_rate_limit("lead")
+        return time.monotonic() - started, allowed
+
+    async def cache() -> tuple[float, str]:
+        started = time.monotonic()
+        result = await dragonfly.command("get", "desk:cache:a", None, 60)
+        return time.monotonic() - started, str(result.get("error") or result.get("ok"))
+
+    outcomes = await asyncio.gather(rate(), rate(), cache(), cache())
+    assert dragonfly.circuit_breaker.state == "closed"
+    assert client.max_inflight <= 1
+    assert limiter.local_fallback >= 1
+    assert limiter.dragonfly_ok + client.gets >= 1
+
+    allowed, _retry, remaining, _reset = await limiter.check_rate_limit("lead")
+    assert allowed is True
+    assert remaining == 9
+    assert dragonfly.circuit_breaker.state == "closed"
+    assert limiter.status()["mode"] == "dragonfly"
 
 
 @pytest.mark.asyncio

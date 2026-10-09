@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving** — Phases 40-41 (shipped 2026-10-11) — [Archive](milestones/v3.7-ROADMAP.md)
 - ✅ **v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves** — Phases 38-39 (shipped 2026-10-10) — [Archive](milestones/v3.6-ROADMAP.md)
 - ✅ **v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis** — Phases 36-37 (shipped 2026-10-10) — [Archive](milestones/v3.5-ROADMAP.md)
 - ✅ **v3.4 Autonomous Swarm Self-Healing & Active Immune Defense** — Phases 34-35 (shipped 2026-10-10) — [Archive](milestones/v3.4-ROADMAP.md)
@@ -22,14 +23,23 @@
 
 ## Phases
 
-### Active Milestone: v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves
+### Active Milestone: v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving
 
-- [x] **Phase 38: Cross-Desk Distributed Neural Routing & Semantic Dispatch** (1/1 plans completed)
-  - Plan 38-01: Neural intent vectorizer, capability embedding mesh, multi-attribute routing policy, cross-desk context forwarding, circuit-breaker failover mesh, and cryptographically attested routing decision receipts.
-- [x] **Phase 39: Multi-Tenant Sovereign Enclaves & Attested Data Fencing** (1/1 plans completed)
-  - Plan 39-01: Sovereign tenant enclave isolation, ephemeral PII redaction pipeline, tenant key encapsulation mechanism, attested data fencing engine, and boundary breach verification harness.
+- [x] **Phase 40: Formal Verification Pipeline & Automated Invariant Proving** (1/1 plans completed)
+  - Plan 40-01: Invariant specification contracts, static invariant AST prover, dynamic property test generator, counterexample triage analyzer, and HMAC formal verification certificates.
+- [x] **Phase 41: Multi-Seat Synthesis Consensus & Cryptographic Proof Receipt Ledger** (1/1 plans completed)
+  - Plan 41-01: Multi-seat review protocol, threshold verification voting, append-only Merkle proof ledger, WORM / Solana devnet export anchors, and end-to-end verification drill simulator.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving (Phases 40-41) — SHIPPED 2026-10-11</summary>
+
+- [x] Phase 40: Formal Verification Pipeline & Automated Invariant Proving (1/1 plan)
+- [x] Phase 41: Multi-Seat Synthesis Consensus & Cryptographic Proof Receipt Ledger (1/1 plan)
+
+See [milestones/v3.7-ROADMAP.md](milestones/v3.7-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves (Phases 38-39) — SHIPPED 2026-10-10</summary>

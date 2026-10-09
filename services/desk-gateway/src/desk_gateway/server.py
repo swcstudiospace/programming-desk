@@ -3575,16 +3575,44 @@ def create_mcp(
         AttestedDataFencingEngine,
         EnclaveBreachSimulator,
     )
+    from desk_gateway.formal_verification import (
+        FormalVerificationPipeline,
+        InvariantContract,
+        InvariantType,
+        VerificationVerdict,
+        CounterExample,
+        FormalVerificationCertificate,
+    )
+    from desk_gateway.synthesis_proving import (
+        MultiSeatConsensusEngine,
+        ProofReceiptLedger,
+        CrossDeskProofExporter,
+        FormalVerificationDrillSimulator,
+        ReviewVote,
+        PromotionState,
+        ConsensusReceipt,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
     prompt_rollout_orchestrator = PromptRolloutOrchestrator(signing_key=secret_key)
     neural_routing_engine = NeuralRoutingEngine(signing_secret=secret_key.decode("utf-8", errors="ignore"))
     sovereign_enclave_manager = SovereignEnclaveManager(master_seed=secret_key.decode("utf-8", errors="ignore"))
+    formal_verification_pipeline = FormalVerificationPipeline(secret_key=secret_key.decode("utf-8", errors="ignore"))
+    proof_receipt_ledger = ProofReceiptLedger()
+    synthesis_consensus_engine = MultiSeatConsensusEngine(
+        ledger=proof_receipt_ledger,
+        signing_secret=secret_key.decode("utf-8", errors="ignore"),
+    )
+    proof_exporter = CrossDeskProofExporter()
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
     setattr(mcp, "_sovereign_enclave_manager", sovereign_enclave_manager)
+    setattr(mcp, "_formal_verification_pipeline", formal_verification_pipeline)
+    setattr(mcp, "_synthesis_consensus_engine", synthesis_consensus_engine)
+    setattr(mcp, "_proof_receipt_ledger", proof_receipt_ledger)
+    setattr(mcp, "_proof_exporter", proof_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4046,6 +4074,158 @@ def create_mcp(
     async def enclaves_breach_test_run_route(_request: Request) -> Response:
         results = EnclaveBreachSimulator.run_benchmark(sovereign_enclave_manager)
         return JSONResponse({"ok": True, "benchmark": results})
+
+    # Milestone v3.7 (Phase 40): Autonomous Formal Verification Routes
+    @mcp.custom_route("/v1/verification/verify", methods=["POST"])
+    async def verification_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tool_name = body.get("tool_name")
+        version = body.get("version", "1.0.0")
+        author_seat_id = body.get("author_seat_id", "systems")
+        source_code = body.get("source_code")
+        param_types = body.get("param_types", {})
+        raw_contracts = body.get("contracts", [])
+        trials = int(body.get("trials", 50))
+
+        if not tool_name or not source_code:
+            return JSONResponse({"ok": False, "error": "tool_name and source_code are required"}, status_code=400)
+
+        contracts: List[InvariantContract] = []
+        for c in raw_contracts:
+            inv_type_str = c.get("invariant_type", "POST_CONDITION")
+            try:
+                inv_type = InvariantType(inv_type_str)
+            except ValueError:
+                inv_type = InvariantType.POST_CONDITION
+            contracts.append(
+                InvariantContract(
+                    contract_id=c.get("contract_id", f"contract-{len(contracts)+1}"),
+                    invariant_type=inv_type,
+                    expression=c.get("expression", "True"),
+                    description=c.get("description", ""),
+                    target_function=c.get("target_function", tool_name),
+                )
+            )
+
+        cert = formal_verification_pipeline.verify_tool_synthesis(
+            tool_name=tool_name,
+            version=version,
+            author_seat_id=author_seat_id,
+            source_code=source_code,
+            param_types=param_types,
+            contracts=contracts,
+            trials=trials,
+        )
+
+        return JSONResponse({"ok": True, "certificate": cert.to_dict()})
+
+    @mcp.custom_route("/v1/verification/certificate/{certificate_id}", methods=["GET"])
+    async def verification_certificate_get_route(request: Request) -> Response:
+        cert_id = request.path_params.get("certificate_id", "")
+        cert = formal_verification_pipeline.certificates.get(cert_id)
+        if not cert:
+            return JSONResponse({"ok": False, "error": f"Certificate '{cert_id}' not found"}, status_code=404)
+        valid = formal_verification_pipeline.verify_certificate(cert)
+        return JSONResponse({"ok": True, "valid": valid, "certificate": cert.to_dict()})
+
+    @mcp.custom_route("/v1/verification/triage", methods=["POST"])
+    async def verification_triage_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_ces = body.get("counterexamples", [])
+        ces: List[CounterExample] = []
+        for r in raw_ces:
+            inv_type = InvariantType(r.get("invariant_type", "POST_CONDITION")) if r.get("invariant_type") in [e.value for e in InvariantType] else InvariantType.POST_CONDITION
+            ces.append(
+                CounterExample(
+                    contract_id=r.get("contract_id", "ce-1"),
+                    invariant_type=inv_type,
+                    expression=r.get("expression", ""),
+                    inputs=r.get("inputs", {}),
+                    output=r.get("output"),
+                    error_message=r.get("error_message", ""),
+                    suggested_patch=r.get("suggested_patch", ""),
+                )
+            )
+        triage_report = formal_verification_pipeline.triage_analyzer.triage(ces)
+        return JSONResponse({"ok": True, "triage": triage_report})
+
+    # Milestone v3.7 (Phase 41): Multi-Seat Synthesis Consensus & Cryptographic Proof Ledger
+    @mcp.custom_route("/v1/synthesis/review/initiate", methods=["POST"])
+    async def synthesis_review_initiate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        cert_id = body.get("certificate_id")
+        if not cert_id:
+            return JSONResponse({"ok": False, "error": "certificate_id is required"}, status_code=400)
+        cert = formal_verification_pipeline.certificates.get(cert_id)
+        if not cert:
+            return JSONResponse({"ok": False, "error": f"Certificate '{cert_id}' not found"}, status_code=404)
+        threshold_ratio = float(body.get("threshold_ratio", 0.60))
+        consensus_id = synthesis_consensus_engine.initiate_review(cert, threshold_ratio=threshold_ratio)
+        return JSONResponse({"ok": True, "consensus_id": consensus_id, "status": "PENDING_REVIEW"})
+
+    @mcp.custom_route("/v1/synthesis/review/vote", methods=["POST"])
+    async def synthesis_review_vote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        reviewer_seat_id = body.get("reviewer_seat_id")
+        vote_str = body.get("vote", "APPROVE")
+        critique_notes = body.get("critique_notes", "")
+        if not consensus_id or not reviewer_seat_id:
+            return JSONResponse({"ok": False, "error": "consensus_id and reviewer_seat_id are required"}, status_code=400)
+        try:
+            vote = ReviewVote(vote_str)
+        except ValueError:
+            return JSONResponse({"ok": False, "error": f"Invalid vote: {vote_str}"}, status_code=400)
+        try:
+            ballot = synthesis_consensus_engine.cast_ballot(
+                consensus_id=consensus_id,
+                reviewer_seat_id=reviewer_seat_id,
+                vote=vote,
+                critique_notes=critique_notes,
+            )
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/synthesis/review/finalize", methods=["POST"])
+    async def synthesis_review_finalize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        if not consensus_id:
+            return JSONResponse({"ok": False, "error": "consensus_id is required"}, status_code=400)
+        try:
+            receipt = synthesis_consensus_engine.tally_and_finalize(consensus_id)
+            root = proof_receipt_ledger.compute_root()
+            return JSONResponse({"ok": True, "receipt": receipt.to_dict(), "ledger_root": root})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/synthesis/ledger/proof/{leaf_index}", methods=["GET"])
+    async def synthesis_ledger_proof_route(request: Request) -> Response:
+        leaf_idx_str = request.path_params.get("leaf_index", "0")
+        try:
+            leaf_idx = int(leaf_idx_str)
+            proof = proof_receipt_ledger.generate_proof(leaf_idx)
+            is_valid = ProofReceiptLedger.verify_proof(proof)
+            return JSONResponse({"ok": True, "valid": is_valid, "proof": proof.to_dict()})
+        except (IndexError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/synthesis/anchor/solana", methods=["POST"])
+    async def synthesis_anchor_solana_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        consensus_id = body.get("consensus_id")
+        receipt = next((r for r in proof_receipt_ledger.receipts if r.consensus_id == consensus_id), None)
+        if not receipt:
+            return JSONResponse({"ok": False, "error": f"Receipt '{consensus_id}' not found in ledger"}, status_code=404)
+        root = proof_receipt_ledger.compute_root()
+        anchor = proof_exporter.export_solana_anchor(receipt, root)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/synthesis/drill/simulate", methods=["POST"])
+    async def synthesis_drill_simulate_route(_request: Request) -> Response:
+        drill_results = FormalVerificationDrillSimulator.run_synthesis_consensus_drill(synthesis_consensus_engine)
+        return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -5493,6 +5673,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "prompt_rollout_orchestrator": getattr(mcp, "_prompt_rollout_orchestrator", None),
         "neural_routing_engine": getattr(mcp, "_neural_routing_engine", None),
         "sovereign_enclave_manager": getattr(mcp, "_sovereign_enclave_manager", None),
+        "formal_verification_pipeline": getattr(mcp, "_formal_verification_pipeline", None),
+        "synthesis_consensus_engine": getattr(mcp, "_synthesis_consensus_engine", None),
+        "proof_receipt_ledger": getattr(mcp, "_proof_receipt_ledger", None),
+        "proof_exporter": getattr(mcp, "_proof_exporter", None),
     }
     return app, settings
 

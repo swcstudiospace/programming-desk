@@ -758,6 +758,52 @@ def test_guard_rejects_executable_override(tmp_path, monkeypatch):
         )
 
 
+def test_guard_rejects_relative_executable_with_cwd(tmp_path, monkeypatch):
+    """A relative executable is run from cwd, not from the parent process directory."""
+    import conftest
+    from _pytest.outcomes import Failed
+
+    host_dir = tmp_path / "usr"
+    host_bin = host_dir / "bin" / "systemctl"
+    host_bin.parent.mkdir(parents=True)
+    marker = tmp_path / "ran"
+    _write_executable(
+        host_bin,
+        "#!/bin/sh\n"
+        f"printf ran > '{marker}'\n"
+        "exit 99\n",
+    )
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(host_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="executable"):
+        subprocess.run(
+            ["systemctl", "restart", "desk-gateway.service"],
+            executable="bin/systemctl",
+            cwd=str(host_dir),
+            check=False,
+        )
+    dot_dir = tmp_path / "dot"
+    dot_bin = dot_dir / "systemctl"
+    dot_dir.mkdir()
+    _write_executable(dot_bin, "#!/bin/sh\nexit 99\n")
+    monkeypatch.setattr(
+        conftest,
+        "HOST_SERVICE_BINS",
+        {"systemctl": (str(dot_bin),), "nginx": ()},
+    )
+    with pytest.raises(Failed, match="executable"):
+        subprocess.run(
+            ["systemctl", "restart", "desk-gateway.service"],
+            executable="./systemctl",
+            cwd=str(dot_dir),
+            check=False,
+        )
+    assert not marker.exists()
+
+
 def test_guard_rejects_bytes_systemctl_bin(tmp_path, monkeypatch):
     """A bytes-keyed environment can still name the host systemctl."""
     import conftest

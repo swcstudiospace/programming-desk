@@ -117,12 +117,18 @@ def _mapping_get(source: dict, key: str) -> object | None:
     return None
 
 
-def resolved_program(args: object, executable: object, env: dict | None) -> str | None:
+def resolved_program(
+    args: object,
+    executable: object,
+    env: dict | None,
+    cwd: object = None,
+) -> str | None:
     """Program Popen executes.
 
     Matches Popen._execute_child: an omitted executable is args[0]; a path
     with a directory component is used as given; a bare name is searched on
-    the child's PATH.
+    the child's PATH. The child chdirs to `cwd` before exec, so a relative
+    path is resolved there rather than in the parent process.
     """
     if executable is None:
         if not isinstance(args, (list, tuple)) or not args:
@@ -132,7 +138,12 @@ def resolved_program(args: object, executable: object, env: dict | None) -> str 
         program = _command_text(executable)
     if not program:
         return None
+    if os.path.isabs(program):
+        return program
     if os.path.dirname(program):
+        base = _command_text(cwd) if cwd is not None else None
+        if base:
+            return os.path.join(base, program)
         return program
     return shutil.which(program, path=_command_search_path(env)) or program
 
@@ -183,12 +194,13 @@ def executable_reaches_host_service(
     executable: object,
     env: dict | None,
     host: dict | None = None,
+    cwd: object = None,
 ) -> list[str]:
     """Popen `executable=` that is the host systemctl or nginx binary."""
     if executable is None:
         return []
     host_bins = HOST_SERVICE_BINS if host is None else host
-    program = resolved_program(args, executable, env)
+    program = resolved_program(args, executable, env, cwd)
     if not program:
         return []
     real = os.path.realpath(program)
@@ -226,12 +238,13 @@ def reject_host_service_bins(
     env: dict | None,
     host: dict | None = None,
     executable: object = None,
+    cwd: object = None,
 ) -> None:
     hits = (
         reachable_host_service_bins(env, host)
         + selected_service_bins(env, host)
         + argv_reaches_host_service(args, host)
-        + executable_reaches_host_service(args, executable, env, host)
+        + executable_reaches_host_service(args, executable, env, host, cwd)
     )
     if hits:
         pytest.fail(
@@ -267,7 +280,11 @@ def forbid_host_systemctl_and_nginx(monkeypatch, tmp_path_factory):
             env = kwargs.get("env")
             if env is None and len(popenargs) >= 10:
                 env = popenargs[9]
-            reject_host_service_bins(args, env, executable=executable)
+            # cwd sits just before env in the positional signature.
+            cwd = kwargs.get("cwd")
+            if cwd is None and len(popenargs) >= 9:
+                cwd = popenargs[8]
+            reject_host_service_bins(args, env, executable=executable, cwd=cwd)
             super().__init__(args, *popenargs, **kwargs)
 
     monkeypatch.setattr(subprocess, "Popen", GuardedPopen)

@@ -7529,6 +7529,21 @@ def create_mcp(
         QuantumScramblingSolanaAnchorExporter,
         QuantumScramblingVerificationDrill,
     )
+    from desk_gateway.quantum_tensor_network_mesh import (
+        DMRGVariationalEngine,
+        LatticeModelType,
+        MatrixProductState,
+        PEPS2DContractionEngine,
+        QuantumTensorNetworkMesh,
+        TensorNetworkConfig,
+        TensorNetworkSimulationResult,
+    )
+    from desk_gateway.quantum_tensor_network_anchoring import (
+        QuantumTensorMerkleLedger,
+        QuantumTensorReceipt,
+        QuantumTensorSolanaAnchorExporter,
+        QuantumTensorVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -8549,6 +8564,117 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/scrambling/drill/simulate", methods=["POST"])
     async def quantum_scrambling_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumScramblingVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qtensor_mesh = QuantumTensorNetworkMesh()
+    qtensor_ledger = QuantumTensorMerkleLedger()
+    qtensor_exporter = QuantumTensorSolanaAnchorExporter()
+    mcp._qtensor_mesh = qtensor_mesh  # type: ignore[attr-defined]
+    mcp._qtensor_ledger = qtensor_ledger  # type: ignore[attr-defined]
+    mcp._qtensor_exporter = qtensor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/tensor/dmrg/simulate", methods=["POST"])
+    async def quantum_tensor_dmrg_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        exp_id = str(body.get("experiment_id", f"dmrg-exp-{int(time.time()*1000)}"))
+        n_sites = int(body.get("n_sites", 8))
+        model_type = str(body.get("model_type", "TRANSVERSE_ISING"))
+        coupling_j = float(body.get("coupling_j", 1.0))
+        transverse_field_h = float(body.get("transverse_field_h", 1.0))
+        max_bond_dim_chi = int(body.get("max_bond_dim_chi", 16))
+        sweeps = int(body.get("sweeps", 4))
+
+        sim_res = qtensor_mesh.run_dmrg_simulation(
+            experiment_id=exp_id,
+            n_sites=n_sites,
+            model_type=model_type,
+            coupling_j=coupling_j,
+            transverse_field_h=transverse_field_h,
+            max_bond_dim_chi=max_bond_dim_chi,
+            sweeps=sweeps,
+        )
+        rcpt = QuantumTensorReceipt(
+            receipt_id=f"rcpt-dmrg-{int(time.time()*1000)}",
+            operation_type="DMRG_GROUND_STATE",
+            model_type=model_type,
+            ground_state_energy=sim_res.ground_state_energy,
+            energy_relative_error=sim_res.energy_relative_error,
+            max_bond_dim=sim_res.final_max_bond_dim,
+            entanglement_entropy=sim_res.entanglement_entropy_center,
+            area_law_satisfied=sim_res.area_law_satisfied,
+            status="GROUND_STATE_CONVERGED",
+            parameters_digest=hashlib.sha256(f"{exp_id}:{n_sites}:{model_type}:{coupling_j}:{transverse_field_h}".encode()).hexdigest(),
+        )
+        qtensor_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "simulation": sim_res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtensor_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tensor/peps/contract", methods=["POST"])
+    async def quantum_tensor_peps_contract_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        lx = int(body.get("lx", 4))
+        ly = int(body.get("ly", 4))
+        bond_dim = int(body.get("bond_dim", 2))
+        boundary_chi = int(body.get("boundary_chi", 8))
+
+        peps_res = qtensor_mesh.run_peps_2d_contraction(lx=lx, ly=ly, bond_dim=bond_dim, boundary_chi=boundary_chi)
+        rcpt = QuantumTensorReceipt(
+            receipt_id=f"rcpt-peps-{int(time.time()*1000)}",
+            operation_type="PEPS_2D_CONTRACTION",
+            model_type="PEPS_2D_LATTICE",
+            ground_state_energy=0.0,
+            energy_relative_error=0.0,
+            max_bond_dim=boundary_chi,
+            entanglement_entropy=peps_res["2d_boundary_entropy"],
+            area_law_satisfied=peps_res["2d_area_law_verified"],
+            status="PEPS_CONTRACTED",
+            parameters_digest=hashlib.sha256(f"{lx}x{ly}:{bond_dim}:{boundary_chi}".encode()).hexdigest(),
+        )
+        qtensor_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "contraction": peps_res,
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtensor_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tensor/anchor/export", methods=["POST"])
+    async def quantum_tensor_anchor_export_route(_request: Request) -> Response:
+        root = qtensor_ledger.get_merkle_root()
+        latest_rcpt = qtensor_ledger.receipts[-1] if qtensor_ledger.receipts else QuantumTensorReceipt(
+            receipt_id="genesis-tensor",
+            operation_type="DMRG_GROUND_STATE",
+            model_type="TRANSVERSE_ISING",
+            ground_state_energy=-10.1532,
+            energy_relative_error=0.0012,
+            max_bond_dim=16,
+            entanglement_entropy=0.552,
+            area_law_satisfied=True,
+            status="GROUND_STATE_CONVERGED",
+            parameters_digest="0" * 64,
+        )
+        proof = qtensor_ledger.get_proof(len(qtensor_ledger.receipts) - 1) if qtensor_ledger.receipts else []
+        payload = QuantumTensorSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": QuantumTensorSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tensor/drill/simulate", methods=["POST"])
+    async def quantum_tensor_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumTensorVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -10512,6 +10638,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qscramble_mesh": getattr(mcp, "_qscramble_mesh", None),
         "qscramble_ledger": getattr(mcp, "_qscramble_ledger", None),
         "qscramble_exporter": getattr(mcp, "_qscramble_exporter", None),
+        "qtensor_mesh": getattr(mcp, "_qtensor_mesh", None),
+        "qtensor_ledger": getattr(mcp, "_qtensor_ledger", None),
+        "qtensor_exporter": getattr(mcp, "_qtensor_exporter", None),
     }
     return app, settings
 

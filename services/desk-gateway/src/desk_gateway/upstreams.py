@@ -18,7 +18,7 @@ from typing import Any
 
 import httpx
 
-from desk_gateway.config import Settings
+from desk_gateway.config import RAGFLOW_DATASET_TTL_SEC, Settings
 from desk_gateway.problems import problem_details
 from desk_gateway.redact import redact_text, redact_value
 
@@ -133,10 +133,38 @@ class HttpUpstream:
             recovery_timeout_sec=recovery_timeout_sec,
         )
         self._etag_cache: dict[str, tuple[str, Any]] = {}
+        # One pooled client per upstream. Created on the first request so tests can
+        # still inject a transport by patching AsyncClient before that call.
+        self._client: httpx.AsyncClient | None = None
+        self._client_lock = asyncio.Lock()
 
     @property
     def configured(self) -> bool:
         return bool(self.base_url)
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        client = self._client
+        if client is not None and not client.is_closed:
+            return client
+        async with self._client_lock:
+            client = self._client
+            if client is None or client.is_closed:
+                self._client = httpx.AsyncClient(timeout=self.timeout, headers=self.headers)
+            return self._client
+
+    async def aclose(self) -> None:
+        async with self._client_lock:
+            client = self._client
+            self._client = None
+        if client is not None and not client.is_closed:
+            await client.aclose()
+
+    async def _drop_if_open(self) -> None:
+        # A tripped breaker drops the pooled connection. The next probe, once the
+        # breaker allows it, builds a fresh client. That is also what the recovery
+        # test relies on: it injects a new transport into the next construction.
+        if self.circuit_breaker.state == "open":
+            await self.aclose()
 
     async def request(self, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
         if not self.configured:
@@ -171,13 +199,15 @@ class HttpUpstream:
                 headers["If-None-Match"] = cached_etag
 
         try:
-            async with httpx.AsyncClient(timeout=self.timeout, headers=headers) as client:
-                resp = await client.request(method_upper, url, **kwargs)
+            client = await self._get_client()
+            resp = await client.request(method_upper, url, headers=headers, **kwargs)
         except httpx.TimeoutException:
             self.circuit_breaker.record_failure()
+            await self._drop_if_open()
             return {"error": UPSTREAM_TIMEOUT, "reason": f"{self.name} did not answer within {self.timeout:.0f}s"}
         except httpx.HTTPError as exc:
             self.circuit_breaker.record_failure()
+            await self._drop_if_open()
             return {"error": UPSTREAM_ERROR, "reason": f"{self.name}: {redact_text(str(exc))[:300]}"}
 
         # HTTP 304 Not Modified: return cached response body
@@ -190,6 +220,7 @@ class HttpUpstream:
         if resp.status_code >= 400:
             if resp.status_code >= 500:
                 self.circuit_breaker.record_failure()
+                await self._drop_if_open()
             else:
                 self.circuit_breaker.record_success()
 
@@ -544,8 +575,37 @@ class Hindsight:
         return await self.http.request("POST", f"/v1/default/banks/{bank}/memories/recall", json=body)
 
 
+_UNKNOWN_DATASET_MARKERS = (
+    "unknown dataset",
+    "dataset not found",
+    "dataset does not exist",
+    "invalid dataset",
+    "can't find the dataset",
+    "cannot find dataset",
+)
+
+
+def is_unknown_dataset(result: dict[str, Any]) -> bool:
+    """True when a retrieval failed because RAGflow does not know a dataset id."""
+    if not isinstance(result, dict) or not result.get("error"):
+        return False
+    parts = [str(result.get("reason") or ""), str(result.get("error") or "")]
+    body = result.get("body")
+    if isinstance(body, (dict, list)):
+        parts.append(json.dumps(body))
+    elif isinstance(body, str):
+        parts.append(body)
+    text = " ".join(parts).lower()
+    return any(marker in text for marker in _UNKNOWN_DATASET_MARKERS)
+
+
 class RAGFlow:
     def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self._dataset_ids: dict[str, str] = {}
+        self._dataset_absent: set[str] = set()
+        self._dataset_listed_at: float = 0.0
+        self._dataset_lock = asyncio.Lock()
         self.http = HttpUpstream(
             "ragflow",
             settings.ragflow_url if settings.ragflow_api_key else "",
@@ -562,6 +622,66 @@ class RAGFlow:
     async def retrieve(self, question: str, dataset_ids: list[str], top_k: int) -> dict[str, Any]:
         body = {"question": question, "dataset_ids": dataset_ids, "top_k": top_k, "page_size": top_k}
         return await self.http.request("POST", "/api/v1/retrieval", json=body)
+
+    def _dataset_ttl(self) -> float:
+        return float(getattr(self.settings, "ragflow_dataset_ttl_sec", RAGFLOW_DATASET_TTL_SEC))
+
+    def _dataset_cache_fresh(self) -> bool:
+        if self._dataset_listed_at <= 0:
+            return False
+        return (time.monotonic() - self._dataset_listed_at) < self._dataset_ttl()
+
+    def _clear_dataset_cache(self) -> None:
+        self._dataset_listed_at = 0.0
+        self._dataset_ids = {}
+        self._dataset_absent = set()
+
+    async def _reload_dataset_ids(self) -> dict[str, Any] | None:
+        listed = await self.datasets()
+        if listed.get("error"):
+            return listed
+        body = listed.get("body") or {}
+        data = body.get("data") if isinstance(body, dict) else None
+        ids: dict[str, str] = {}
+        if isinstance(data, list):
+            for row in data:
+                if not isinstance(row, dict):
+                    continue
+                name = row.get("name")
+                dataset_id = row.get("id")
+                if isinstance(name, str) and name and dataset_id:
+                    ids[name] = str(dataset_id)
+        self._dataset_ids = ids
+        self._dataset_absent -= set(ids)
+        self._dataset_listed_at = time.monotonic()
+        return None
+
+    async def resolve_dataset_ids(self, names: list[str], *, refresh: bool = False) -> dict[str, Any]:
+        """Map dataset names to ids. One list per TTL, plus one refresh on a miss.
+
+        A name that is still missing after that refresh is remembered until the TTL
+        expires, so a dataset RAGflow does not have is not listed on every call.
+        ``refresh=True`` drops the cache under the same lock before that lookup,
+        which is how an unknown-dataset retrieval forces exactly one new list.
+        """
+        async with self._dataset_lock:
+            if refresh:
+                self._clear_dataset_cache()
+            if not self._dataset_cache_fresh():
+                failed = await self._reload_dataset_ids()
+                if failed is not None:
+                    return failed
+            unseen = [name for name in names if name not in self._dataset_ids and name not in self._dataset_absent]
+            if unseen:
+                failed = await self._reload_dataset_ids()
+                if failed is not None:
+                    return failed
+                for name in names:
+                    if name not in self._dataset_ids:
+                        self._dataset_absent.add(name)
+            ids = [self._dataset_ids[name] for name in names if name in self._dataset_ids]
+            missing = [name for name in names if name not in self._dataset_ids]
+            return {"ok": True, "ids": ids, "missing": missing}
 
 
 RAILWAY_GRAPHQL = "https://backboard.railway.com/graphql/v2"

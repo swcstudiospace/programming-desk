@@ -75,10 +75,14 @@ jobs:
           BEFORE: ${{ github.event.before }}
           AFTER: ${{ github.sha }}
           REPO_NAME: ${{ inputs.repo != '' && inputs.repo || github.event.repository.name }}
+          REPO_SLUG: ${{ github.repository }}
+          BRANCH_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           python3 "$GITHUB_WORKSPACE/desk/infra/ragflow/ingest.py" \
             --repo "$REPO_NAME" \
+            --repo-slug "$REPO_SLUG" \
+            --branch "$BRANCH_NAME" \
             --root "$GITHUB_WORKSPACE/repo" \
             --before "${BEFORE:-}" \
             --after "${AFTER:-}"

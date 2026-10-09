@@ -30,56 +30,58 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Iterable
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-MAX_BYTES = 400 * 1024
-PARSE_BATCH = 16
-DOC_EXTENSIONS = {
-    ".md", ".mdx", ".markdown", ".txt", ".rst", ".adoc", ".asciidoc",
-    ".html", ".htm", ".pdf", ".docx", ".csv", ".org",
+# Selection, names and meta_fields are the VPS seeder's, so desk_docs_search
+# keeps resolving the same datasets. Caps from a full reseed are not applied
+# to a push diff.
+MAX_BYTES = 400_000
+UPLOAD_BATCH = 20
+PARSE_BATCH = 50
+DOC_EXT = {".md", ".mdx", ".markdown", ".rst"}
+TEXTLIKE_EXT = {".yaml", ".yml", ".json", ".xml", ".toml", ".txt", ".example"}
+EXCLUDE_DIRS = {
+    ".git", "node_modules", "vendor", "vendored", "third_party", "dist", "build",
+    "target", "out", ".venv", "venv", "__pycache__", ".next", ".turbo", "coverage",
+    ".cache", "fixtures", "__snapshots__", "site-packages", "bower_components",
+    ".pnpm-store", "__MACOSX", "generated",
 }
-TEXT_EXTENSIONS = {
-    ".py", ".pyi", ".yml", ".yaml", ".json", ".toml", ".xml", ".sh", ".bash",
-    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".rs", ".sql", ".tf",
-    ".hujson", ".css", ".ini", ".cfg", ".conf", ".service", ".timer",
-}
-BINARY_EXTENSIONS = {
-    ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".zip", ".gz", ".tgz",
-    ".woff", ".woff2", ".ttf", ".mp4", ".mp3", ".jar", ".apk", ".so", ".dylib",
-    ".dll", ".lock", ".pyc", ".wasm",
-}
-EXCLUDED_DIRS = {
-    ".git", "node_modules", ".receipts", "vendor", "dist", "build",
-    "__pycache__", ".venv", "venv", ".pytest_cache", "coverage", ".next",
-    "target", ".tox", ".gradle", "Pods", ".terraform", "transcripts",
-    ".idea", ".vscode",
-}
-EXCLUDED_FILES = {
-    "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "cargo.lock",
-    "go.sum", "poetry.lock",
-}
-SECRET_FILENAMES = {
-    ".env", ".netrc", ".npmrc", ".pypirc", ".pgpass",
-    "id_rsa", "id_ed25519", "id_ecdsa", "id_dsa",
-    "credentials.json", "secrets.json", "service-account.json",
-}
-SECRET_SUFFIXES = (".pem", ".key", ".p12", ".pfx", ".kdbx", ".keystore", ".jks", ".p8")
-PRODUCT_REPOS = {
-    "kanbanos", "kanban-os", "desklanes", "desk-lanes", "clippyos", "auctioning",
-}
+HIDDEN_DIR_OK = {".cursor", ".claude", ".receipts", ".github", ".agents", ".grok", ".planning"}
+EXCLUDE_NAME = re.compile(
+    r"(^\.env(?!\.example$)|secret|credential|private[-_]?key|\.pem$|\.key$|id_rsa|"
+    r"lock\.(json|yaml)$|\.lock$|-lock\.|^LICENSE|^CHANGELOG)",
+    re.I,
+)
+SECRET_PAT = re.compile(
+    r"(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bsk-[A-Za-z0-9_-]{20,}|\bghp_[A-Za-z0-9]{30,}|"
+    r"\bgithub_pat_[A-Za-z0-9_]{30,}|\bxox[abpr]-[A-Za-z0-9-]{10,}|\bAKIA[0-9A-Z]{16}\b|"
+    r"\bxai-[A-Za-z0-9]{20,}|\bragflow-[A-Za-z0-9]{20,}|"
+    r"postgres(ql)?://[^\s:@/]+:[^\s@/]{6,}@|redis://[^\s:@/]*:[^\s@/]{8,}@)"
+)
 AGENT_SKILLS = "agent-skills"
 PRODUCT_DOCS = "product-docs"
-# Extra include globs, assumed from the four repos' doc trees. uploads/seed.py
-# was not in this workspace, so these are the trees the use case names rather
-# than a byte copy of the VPS script.
-REPO_EXTRA_GLOBS = {
-    "programming-desk": ("prompts/**", "prompts-assembled/**", "contracts/**", "skills/**", "docs/**"),
-    "agent-substrate": ("docs/**", "packages/**", ".planning/**"),
-    "agent-swarm": (".cursor/agents/**", "skills/**", "docs/**", "swarm/**"),
-    "claude-ultrathink": ("docs/**", "plugins/**", "skills/**", ".claude/**"),
+# dataset -> (product, extra include globs), from the seeder REPOS table.
+REPO_RULES: dict[str, tuple[bool, tuple[str, ...]]] = {
+    "programming-desk": (False, (".receipts/**/*.json", "ownership.yaml", "openapi.yaml", "contracts/**", "prompts/**", "ci/**/*.yml", "ci/**/*.yaml")),
+    "agent-substrate": (False, (".env.example", "packages/*/README.md")),
+    "claude-ultrathink": (True, ("prompts/**", "commands/**/*.md", "agents/**/*.md")),
+    "agent-swarm": (True, ("prompts/**", "agents/**/*.md")),
+    "omes-bot": (True, ()),
+    "grok-cloud-sessions": (True, ()),
+    "hermes-bot": (True, ()),
+    "ultrathink": (True, ()),
+    "ship-desk": (True, ()),
+    "recruitment-desk": (True, ()),
+    "aimeecodes": (True, ()),
+    "spectrumwebco-marketing": (True, ()),
+    "grokrouter": (True, ()),
+    "motion-playbook": (True, ()),
+    "plugin": (True, ()),
+    "clippyos": (True, ()),
+    "desklanes": (True, ()),
+    "kanbanos": (True, ()),
 }
-SHARED_EXTRA_NAMES = {"Dockerfile", "Makefile", "LICENSE", "justfile", "Containerfile"}
 
 _SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
 _ZEROS = re.compile(r"^0+$")
@@ -99,128 +101,95 @@ class Action:
     sha256: str = ""
     nbytes: int = 0
     commit: str = ""
+    branch: str = ""
+    slug: str = ""
     url: str = ""
     content: bytes | None = field(default=None, repr=False)
-
-
-def _pem_prefix() -> bytes:
-    # Built in two parts so this source line is not itself a key block.
-    return b"-----BEGIN " + b"PRIVATE KEY-----"
-
-
-def credential_shaped(data: bytes) -> bool:
-    """True when the bytes look like a credential. The match is not returned."""
-    if _pem_prefix() in data:
-        return True
-    if re.search(br"(?:AKIA|ASIA)[0-9A-Z]{16}", data):
-        return True
-    if re.search(br"gh[pousr]_[A-Za-z0-9]{20,}", data):
-        return True
-    if re.search(br"github_pat_[A-Za-z0-9_]{20,}", data):
-        return True
-    if re.search(br"xox[baprs]-[A-Za-z0-9\-]{10,}", data):
-        return True
-    if re.search(br"sk-(?:proj-|ant-)?[A-Za-z0-9\-_]{20,}", data):
-        return True
-    if re.search(br"eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}", data):
-        return True
-    if re.search(br"(?i)\b(?:postgres|postgresql|mysql|mongodb|redis|amqp)://[^:\s/]+:[^@\s/]+@", data):
-        return True
-    return False
-
-
-def secret_filename(path: str) -> bool:
-    name = Path(path).name.lower()
-    if name in SECRET_FILENAMES:
-        return True
-    if name.startswith(".env.") and not name.endswith((".example", ".sample", ".template")):
-        return True
-    if name.endswith(SECRET_SUFFIXES):
-        return True
-    if any(part in name for part in ("secret", "credential", "password")) and name.endswith(
-        (".json", ".yml", ".yaml", ".txt", ".env", ".xml", ".ini")
-    ):
-        return True
-    return False
 
 
 def _parts(path: str) -> list[str]:
     return [part for part in path.replace("\\", "/").split("/") if part not in ("", ".")]
 
 
-def excluded_path(path: str) -> bool:
-    parts = _parts(path)
-    if not parts:
-        return True
-    if parts[-1].lower() in EXCLUDED_FILES:
-        return True
-    return any(part in EXCLUDED_DIRS for part in parts[:-1])
+def secret_filename(path: str) -> bool:
+    return bool(EXCLUDE_NAME.search(Path(path).name))
 
 
 def _extra_match(repo: str, path: str) -> bool:
-    name = Path(path).name
-    if name in SHARED_EXTRA_NAMES:
-        return True
-    for pattern in REPO_EXTRA_GLOBS.get(repo, ()):
-        if fnmatch(path, pattern):
-            return True
-    return False
+    _product, globs = REPO_RULES.get(repo, (False, ()))
+    return any(fnmatch(path, pattern) for pattern in globs)
 
 
 def selected_path(repo: str, path: str) -> bool:
-    """True when the seeder would consider this path a document."""
-    if excluded_path(path) or secret_filename(path):
+    """Seeder ``wanted()``: doc types, text-like files under docs/prompts/contracts, extra globs."""
+    parts = _parts(path)
+    if not parts:
+        return False
+    if any(part in EXCLUDE_DIRS for part in parts[:-1]) or secret_filename(path):
+        return False
+    if any(part.startswith(".") and part not in HIDDEN_DIR_OK for part in parts[:-1]):
         return False
     suffix = Path(path).suffix.lower()
-    if suffix in BINARY_EXTENSIONS:
-        return False
-    if suffix in DOC_EXTENSIONS or suffix in TEXT_EXTENSIONS:
+    if suffix in DOC_EXT:
         return True
-    return _extra_match(repo, path)
-
-
-def is_agent_file(path: str) -> bool:
-    if Path(path).name == "SKILL.md":
+    textlike = suffix in TEXTLIKE_EXT or Path(path).name == ".env.example"
+    if _extra_match(repo, path) and (textlike or suffix in DOC_EXT):
         return True
-    parts = _parts(path)
-    for index, part in enumerate(parts[:-1]):
-        nxt = parts[index + 1]
-        if part in {".cursor", ".claude", ".codex"} and nxt == "agents":
-            return True
+    if parts[0] in {"docs", "prompts", "contracts"} and suffix in TEXTLIKE_EXT:
+        return True
     return False
 
 
-def is_product_doc(path: str) -> bool:
-    name = Path(path).name.lower()
-    if name.startswith("readme."):
+def is_skill(path: str) -> bool:
+    parts = _parts(path)
+    name = parts[-1] if parts else ""
+    if name in {"SKILL.md", "AGENTS.md", "CLAUDE.md", "GROK.md"}:
         return True
-    return "docs" in _parts(path)
+    return (
+        len(parts) >= 2
+        and parts[-2] == "agents"
+        and Path(name).suffix == ".md"
+        and any(part in parts for part in (".cursor", ".claude", ".grok", "agents"))
+    )
+
+
+def is_product_doc(path: str) -> bool:
+    lowered = path.lower()
+    parts = _parts(path)
+    if lowered in {"readme.md", "architecture.md"}:
+        return True
+    return bool(parts) and parts[0] == "docs" and Path(path).suffix.lower() in DOC_EXT
 
 
 def datasets_for(repo: str, path: str) -> list[str]:
     names = [repo]
-    if is_agent_file(path):
+    if is_skill(path):
         names.append(AGENT_SKILLS)
-    if repo.lower() in PRODUCT_REPOS and is_product_doc(path):
+    product, _globs = REPO_RULES.get(repo, (False, ()))
+    if product and is_product_doc(path):
         names.append(PRODUCT_DOCS)
     return names
 
 
 def document_name(repo: str, path: str) -> str:
     normalized = "/".join(_parts(path))
-    stem = f"{repo}__{normalized.replace('/', '__')}"
-    suffix = Path(normalized).suffix.lower()
-    if suffix in DOC_EXTENSIONS:
-        return stem
-    return stem + ".txt"
+    name = f"{repo}__{normalized.replace('/', '__')}"
+    if Path(normalized).suffix.lower() not in DOC_EXT | {".txt"}:
+        name += ".txt"
+    return name
 
 
-def blob_url(github_base: str, repo: str, commit: str, path: str) -> str:
-    quoted = "/".join(quote(part) for part in _parts(path))
-    if "/" in repo:
-        return f"https://github.com/{repo}/blob/{commit}/{quoted}"
-    base = github_base.rstrip("/")
-    return f"{base}/{repo}/blob/{commit}/{quoted}"
+def content_token(data: bytes) -> str:
+    """First 16 hex chars, the width the seeder stores in meta_fields."""
+    return hashlib.sha256(data).hexdigest()[:16]
+
+
+def short_commit(sha: str) -> str:
+    return sha[:12]
+
+
+def blob_url(slug: str, commit: str, path: str) -> str:
+    return f"https://github.com/{slug}/blob/{short_commit(commit)}/{path}"
 
 
 def parse_name_status(text: str) -> list[tuple[str, str]]:
@@ -335,19 +304,25 @@ def _blob_bytes(root: Path, rev: str, path: str) -> bytes:
     return raw
 
 
+def credential_shaped(data: bytes) -> bool:
+    """True when the bytes match the seeder's credential pattern. The match is not returned."""
+    return SECRET_PAT.search(data.decode("utf-8", errors="ignore")) is not None
+
+
 def build_plan(
     root: Path,
     repo: str,
     before: str,
     after: str,
     *,
-    github_base: str,
+    slug: str,
+    branch: str,
 ) -> list[Action]:
     rev = after if _usable_rev(after) else "HEAD"
     commit = _git(root, ["rev-parse", "--verify", f"{rev}^{{commit}}"], text=True)
     if isinstance(commit, bytes):
         commit = commit.decode()
-    commit = str(commit).strip()
+    commit = short_commit(str(commit).strip())
     actions: list[Action] = []
     for status, path in changed_paths(root, before, after):
         if status == "D":
@@ -355,7 +330,7 @@ def build_plan(
                 continue
             name = document_name(repo, path)
             for dataset in datasets_for(repo, path):
-                actions.append(Action("delete", path, dataset, name, commit=commit))
+                actions.append(Action("delete", path, dataset, name, commit=commit, branch=branch, slug=slug))
             continue
         if secret_filename(path):
             actions.append(Action("skip-secret", path))
@@ -368,6 +343,9 @@ def build_plan(
         except IngestError:
             actions.append(Action("skip-missing", path))
             continue
+        if nbytes == 0:
+            actions.append(Action("skip-empty", path))
+            continue
         if nbytes > MAX_BYTES:
             actions.append(Action("skip-size", path, nbytes=nbytes))
             continue
@@ -376,16 +354,19 @@ def build_plan(
         except IngestError:
             actions.append(Action("skip-missing", path))
             continue
+        if b"\x00" in content[:4096]:
+            actions.append(Action("skip-binary", path, nbytes=nbytes))
+            continue
         if credential_shaped(content):
             actions.append(Action("skip-credential", path, nbytes=nbytes))
             continue
-        digest = hashlib.sha256(content).hexdigest()
+        digest = content_token(content)
         name = document_name(repo, path)
-        url = blob_url(github_base, repo, commit, path)
+        url = blob_url(slug, commit, path)
         for dataset in datasets_for(repo, path):
             actions.append(
                 Action(
-                    "upsert", path, dataset, name, digest, nbytes, commit, url, content,
+                    "upsert", path, dataset, name, digest, nbytes, commit, branch, slug, url, content,
                 )
             )
     return actions
@@ -411,9 +392,10 @@ def format_plan(actions: Iterable[Action]) -> str:
     return "\n".join(lines)
 
 
-def _redact(text: str, secret: str) -> str:
-    if secret:
-        text = text.replace(secret, "[redacted]")
+def _redact(text: str, *secrets: str) -> str:
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "[redacted]")
     return text[:300]
 
 
@@ -439,10 +421,12 @@ class RagflowClient:
         except HTTPError as exc:
             body = exc.read().decode("utf-8", "replace")
             raise IngestError(
-                f"RAGFlow {method} {path} returned HTTP {exc.code}: {_redact(body, self.api_key)}"
+                f"RAGFlow {method} {path} returned HTTP {exc.code}: "
+                f"{_redact(body, self.api_key, self.base_url)}"
             ) from exc
         except URLError as exc:
-            raise IngestError(f"RAGFlow {method} {path} failed: {exc.reason}") from exc
+            reason = _redact(str(exc.reason), self.api_key, self.base_url)
+            raise IngestError(f"RAGFlow {method} {path} failed: {reason}") from exc
         if not raw:
             return {}
         try:
@@ -451,7 +435,10 @@ class RagflowClient:
             raise IngestError(f"RAGFlow {method} {path} returned non-JSON") from exc
         if isinstance(body, dict) and body.get("code") not in (None, 0):
             message = body.get("message") or body.get("msg") or "error"
-            raise IngestError(f"RAGFlow {method} {path} code {body.get('code')}: {_redact(str(message), self.api_key)}")
+            raise IngestError(
+                f"RAGFlow {method} {path} code {body.get('code')}: "
+                f"{_redact(str(message), self.api_key, self.base_url)}"
+            )
         return body if isinstance(body, dict) else {}
 
     def dataset_id(self, name: str) -> str:
@@ -529,11 +516,11 @@ class RagflowClient:
             return str(data["id"])
         raise IngestError("RAGFlow upload returned no document id")
 
-    def set_meta(self, dataset_id: str, document_id: str, name: str, meta: dict) -> None:
+    def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
         self._request(
             "PUT",
             f"/api/v1/datasets/{dataset_id}/documents/{document_id}",
-            payload=json.dumps({"name": name, "meta_fields": meta}).encode(),
+            payload=json.dumps({"meta_fields": meta}).encode(),
             headers={"Content-Type": "application/json"},
         )
 
@@ -558,19 +545,25 @@ class RagflowClient:
         )
 
 
-def _matches(docs: list[dict], name: str, path: str, repo: str) -> list[dict]:
-    hits = []
-    for doc in docs:
-        meta = doc.get("meta_fields") or {}
-        if not isinstance(meta, dict):
-            meta = {}
-        if doc.get("name") == name or (meta.get("path") == path and meta.get("repo") == repo):
-            hits.append(doc)
-    return hits
+def _matches(docs: list[dict], name: str) -> list[dict]:
+    return [doc for doc in docs if doc.get("name") == name]
 
 
-def execute(actions: list[Action], client: RagflowClient, repo: str, batch_size: int = PARSE_BATCH) -> None:
+def _meta(action: Action) -> dict:
+    return {
+        "repo": action.slug,
+        "path": action.path,
+        "commit": action.commit,
+        "branch": action.branch,
+        "url": action.url,
+        "content_sha256": action.sha256,
+    }
+
+
+def execute(actions: list[Action], client: RagflowClient, batch_size: int = PARSE_BATCH) -> None:
     pending: dict[str, list[str]] = {}
+    upserts = [action for action in actions if action.kind == "upsert"]
+    deletes = [action for action in actions if action.kind == "delete"]
 
     def flush(dataset: str, force: bool = False) -> None:
         ids = pending.get(dataset) or []
@@ -578,47 +571,35 @@ def execute(actions: list[Action], client: RagflowClient, repo: str, batch_size:
             return
         if not force and len(ids) < batch_size:
             return
-        dataset_id = client.dataset_id(dataset)
-        client.parse(dataset_id, ids)
+        client.parse(client.dataset_id(dataset), ids)
         pending[dataset] = []
 
-    for action in actions:
-        if action.kind == "delete":
-            dataset_id = client.dataset_id(action.dataset)
-            docs = _matches(client.documents(dataset_id, action.document), action.document, action.path, repo)
-            client.delete(dataset_id, [str(doc["id"]) for doc in docs if doc.get("id")])
-            continue
-        if action.kind != "upsert":
-            continue
+    for action in deletes:
         dataset_id = client.dataset_id(action.dataset)
-        existing = _matches(client.documents(dataset_id, action.document), action.document, action.path, repo)
+        docs = _matches(client.documents(dataset_id, action.document), action.document)
+        client.delete(dataset_id, [str(doc["id"]) for doc in docs if doc.get("id")])
+
+    # Canary of one upload, then groups of UPLOAD_BATCH. Old ids are deleted
+    # only after that file's upload and meta_fields call succeed.
+    for action in upserts:
+        dataset_id = client.dataset_id(action.dataset)
+        existing = _matches(client.documents(dataset_id, action.document), action.document)
         if any(str((doc.get("meta_fields") or {}).get("content_sha256")) == action.sha256 for doc in existing):
             print(
-                f"plan skip-unchanged dataset={action.dataset} document={action.document} path={action.path}",
+                f"plan skip-unchanged dataset={action.dataset} document={action.document}",
                 flush=True,
             )
             continue
         if action.content is None:
-            raise IngestError(f"missing content for {action.path}")
+            raise IngestError(f"missing content for {action.document}")
         new_id = client.upload(dataset_id, action.document, action.content)
-        client.set_meta(
-            dataset_id,
-            new_id,
-            action.document,
-            {
-                "repo": repo,
-                "path": action.path,
-                "commit": action.commit,
-                "url": action.url,
-                "content_sha256": action.sha256,
-            },
-        )
+        client.set_meta(dataset_id, new_id, _meta(action))
         old_ids = [str(doc["id"]) for doc in existing if doc.get("id") and str(doc["id"]) != new_id]
         client.delete(dataset_id, old_ids)
         pending.setdefault(action.dataset, []).append(new_id)
         flush(action.dataset)
         print(
-            f"plan upsert dataset={action.dataset} document={action.document} path={action.path} sha256={action.sha256}",
+            f"plan upsert dataset={action.dataset} document={action.document}",
             flush=True,
         )
     for dataset in list(pending):
@@ -636,8 +617,14 @@ def run(argv: list[str] | None = None, *, client_factory=RagflowClient) -> int:
     parser.add_argument("--before", default="", help="Push before SHA. All zeros lists the whole tree.")
     parser.add_argument("--after", default="", help="Push after SHA")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan and do not call RAGFlow")
-    parser.add_argument("--github-base", default="https://github.com/swcstudiospace")
-    parser.add_argument("--batch-size", type=int, default=PARSE_BATCH)
+    parser.add_argument("--repo-slug", default="", help="owner/name stored in meta_fields.repo and the blob url")
+    parser.add_argument("--branch", default="", help="Branch stored in meta_fields. Defaults to GITHUB_REF_NAME or HEAD")
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=PARSE_BATCH,
+        help=f"documents per parse call (seeder reseed uploads in groups of {UPLOAD_BATCH}; this job uploads one file so the previous version is deleted only after that file succeeds)",
+    )
     args = parser.parse_args(argv)
 
     if os.environ.get("GITHUB_EVENT_NAME") == "pull_request":
@@ -645,10 +632,16 @@ def run(argv: list[str] | None = None, *, client_factory=RagflowClient) -> int:
         return 0
 
     root = Path(args.root).resolve()
+    slug = args.repo_slug.strip() or f"swcstudiospace/{args.repo}"
+    branch = args.branch.strip() or os.environ.get("GITHUB_REF_NAME", "").strip()
+    if not branch:
+        try:
+            detected = _git(root, ["rev-parse", "--abbrev-ref", "HEAD"], text=True)
+            branch = str(detected).strip() if not isinstance(detected, bytes) else detected.decode().strip()
+        except IngestError:
+            branch = "main"
     try:
-        actions = build_plan(
-            root, args.repo, args.before, args.after, github_base=args.github_base,
-        )
+        actions = build_plan(root, args.repo, args.before, args.after, slug=slug, branch=branch)
     except IngestError as exc:
         print(f"ragflow-ingest: {exc}", file=sys.stderr)
         return 1
@@ -672,7 +665,7 @@ def run(argv: list[str] | None = None, *, client_factory=RagflowClient) -> int:
         return 0
 
     try:
-        execute(actions, client_factory(url, key), args.repo, batch_size=max(1, args.batch_size))
+        execute(actions, client_factory(url, key), batch_size=max(1, args.batch_size))
     except IngestError as exc:
         print(f"ragflow-ingest: {exc}", file=sys.stderr)
         return 1

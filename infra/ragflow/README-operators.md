@@ -14,12 +14,12 @@ programming-desk is public, so another repository in the org can call that file.
 
 ## Secrets
 
-Set these on each repository that runs the job. Name them exactly:
+One organisation secret pair, limited to programming-desk, agent-substrate, agent-swarm and claude-ultrathink:
 
 - `RAGFLOW_URL` — key-protected public RAGFlow API origin, no path
 - `RAGFLOW_API_KEY` — bearer token for that API
 
-Pass both from the caller template. When either value is empty, the script prints `RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest` and exits 0. Pull requests and forks do not need the secrets. The script never prints the key or file contents.
+Caller templates pass `secrets: inherit`. When either value is empty, the script prints `RAGFLOW_URL or RAGFLOW_API_KEY is empty; skipping ingest` and exits 0. Pull requests and forks do not need the secrets. Logs print counts and document names. They do not print the URL, the key, headers, or file contents.
 
 Do not put the values in the workflow file, the caller template, or a receipt.
 
@@ -33,11 +33,15 @@ Hosted Actions minutes on this org have been blocked before. If the job sits que
 
 ## What gets stored
 
-The dataset name is the repo name (`programming-desk`, and `agent-skills` for `SKILL.md` and agent files). Product repos (`kanbanos`, `desklanes`, `clippyos`, `auctioning`, plus the hyphenated aliases) also copy README and `docs/` into `product-docs`.
+Names match the VPS seeder, which `desk_docs_search` resolves by dataset name.
 
-The document name is `repo__path` with slashes written as `__`. Doc types keep their suffix. Other text types get `.txt` appended. `meta_fields` are `repo`, `path`, `commit`, `url`, and `content_sha256`.
+The dataset name is the repo name. `SKILL.md`, `AGENTS.md`, `CLAUDE.md`, `GROK.md` and agent markdown also go to `agent-skills`. Of the four repos this job runs, `claude-ultrathink` and `agent-swarm` are product repos: their `README.md`, `ARCHITECTURE.md` and `docs/**` markdown also go to `product-docs`. programming-desk and agent-substrate do not.
 
-A file is skipped when it sits in an excluded directory (including `.receipts` and `transcripts`), has a secret-like name, is over 400 KB, or its bytes match a credential shape. A matching `content_sha256` is left in place. A changed file is uploaded, tagged, and only then the previous document id is deleted. Removed paths are deleted. Parsing is requested in batches of 16.
+The document name is `<repo>__<path>` with slashes written as `__`. `.md`, `.mdx`, `.markdown`, `.rst` and `.txt` keep that name. Every other selected type gets `.txt` appended. `meta_fields` are `repo` (`owner/name`), `path`, `commit` (12 hex characters), `branch`, `url`, and `content_sha256` (16 hex characters).
+
+Selected files are doc types, text-like files (`.yaml`, `.yml`, `.json`, `.xml`, `.toml`, `.txt`, `.example`) under `docs/`, `prompts/` or `contracts/`, and each repo's extra globs from the seeder. programming-desk's extras include `.receipts/**/*.json`, `ownership.yaml`, `openapi.yaml`, `contracts/**`, `prompts/**` and `ci/**/*.{yml,yaml}`. A source file such as `infra/ragflow/ingest.py` is not selected.
+
+A file is skipped when a directory is excluded, a parent directory is hidden and not in the seeder's allow list, the filename matches the seeder's secret-name pattern, the file is empty, it is over 400000 bytes, the first 4096 bytes contain a NUL, or the text matches the seeder's credential pattern. The match itself is not logged. A matching `content_sha256` is left in place. A changed file is uploaded, tagged, and only then the previous document id is deleted. Removed paths are deleted. Parsing is requested in batches of 50. The seeder's full-reseed caps are not applied to a push diff.
 
 ## Dry run
 

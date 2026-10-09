@@ -219,25 +219,29 @@ def test_document_names_and_dataset_mapping():
     assert ingest.document_name("programming-desk", "skills/ragflow-docs/SKILL.md") == (
         "programming-desk__skills__ragflow-docs__SKILL.md"
     )
-    assert ingest.document_name("programming-desk", "infra/ragflow/ingest.py") == (
-        "programming-desk__infra__ragflow__ingest.py.txt"
-    )
+    assert ingest.document_name("programming-desk", "ownership.yaml") == "programming-desk__ownership.yaml.txt"
     assert ingest.datasets_for("programming-desk", "skills/ragflow-docs/SKILL.md") == [
         "programming-desk", "agent-skills",
     ]
+    assert ingest.datasets_for("programming-desk", "AGENTS.md") == ["programming-desk", "agent-skills"]
     assert ingest.datasets_for("programming-desk", ".cursor/agents/a01.md") == [
         "programming-desk", "agent-skills",
     ]
     assert ingest.datasets_for("programming-desk", "README.md") == ["programming-desk"]
-    assert ingest.datasets_for("auctioning", "README.md") == ["auctioning", "product-docs"]
+    assert ingest.datasets_for("programming-desk", "docs/guide.md") == ["programming-desk"]
+    assert ingest.datasets_for("agent-substrate", "README.md") == ["agent-substrate"]
+    assert ingest.datasets_for("claude-ultrathink", "README.md") == ["claude-ultrathink", "product-docs"]
+    assert ingest.datasets_for("claude-ultrathink", "docs/guide.md") == ["claude-ultrathink", "product-docs"]
+    assert ingest.datasets_for("agent-swarm", "docs/guide.md") == ["agent-swarm", "product-docs"]
+    assert ingest.datasets_for("kanbanos", "README.md") == ["kanbanos", "product-docs"]
     assert ingest.datasets_for("clippyos", "docs/guide.md") == ["clippyos", "product-docs"]
-    assert ingest.datasets_for("agent-swarm", "docs/guide.md") == ["agent-swarm"]
-    meta_keys = ("repo", "path", "commit", "url", "content_sha256")
-    sample = ingest.blob_url(
-        "https://github.com/swcstudiospace", "programming-desk", "abc", "docs/guide.md",
-    )
-    assert sample == "https://github.com/swcstudiospace/programming-desk/blob/abc/docs/guide.md"
-    assert set(meta_keys) == {"repo", "path", "commit", "url", "content_sha256"}
+    sample = ingest.blob_url("swcstudiospace/programming-desk", "abc123abc123ffff", "docs/guide.md")
+    assert sample == "https://github.com/swcstudiospace/programming-desk/blob/abc123abc123/docs/guide.md"
+    assert ingest.selected_path("programming-desk", "ownership.yaml") is True
+    assert ingest.selected_path("programming-desk", "infra/ragflow/ingest.py") is False
+    assert ingest.selected_path("agent-substrate", ".env.example") is True
+    assert ingest.selected_path("programming-desk", ".env") is False
+    assert len(ingest.content_token(b"hello")) == 16
 
 
 def test_secret_name_size_and_credential_skips_do_not_print_contents(tmp_path, capsys, monkeypatch):
@@ -350,11 +354,12 @@ def test_upsert_replaces_only_after_upload_then_parses(tmp_path, monkeypatch):
     new_docs = state.docs["ds-programming-desk"]
     assert len(new_docs) == 1
     meta = new_docs[0]["meta_fields"]
-    assert meta["content_sha256"] == hashlib.sha256(body).hexdigest()
+    assert meta["content_sha256"] == hashlib.sha256(body).hexdigest()[:16]
     assert meta["path"] == "docs/ok.md"
-    assert meta["repo"] == "programming-desk"
-    assert meta["commit"] == head
-    assert meta["url"].endswith(f"/programming-desk/blob/{head}/docs/ok.md")
+    assert meta["repo"] == "swcstudiospace/programming-desk"
+    assert meta["commit"] == head[:12]
+    assert meta["branch"] == "main"
+    assert meta["url"] == f"https://github.com/swcstudiospace/programming-desk/blob/{head[:12]}/docs/ok.md"
     assert "old-1" not in methods[parse_at][2]["document_ids"]
     assert new_docs[0]["id"] in methods[parse_at][2]["document_ids"]
 
@@ -369,7 +374,7 @@ def test_matching_sha_skips_upload(tmp_path, monkeypatch):
     state.docs["ds-programming-desk"] = [{
         "id": "keep",
         "name": name,
-        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest(), "path": "docs/ok.md", "repo": "programming-desk"},
+        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest()[:16], "path": "docs/ok.md", "repo": "swcstudiospace/programming-desk"},
     }]
     httpd = _server(state)
     port = httpd.server_address[1]
@@ -487,11 +492,15 @@ def test_workflow_and_callers_parse_and_stay_off_pull_requests():
         assert "pull_request" not in _triggers(doc)
         uses = doc["jobs"]["ingest"]["uses"]
         assert uses == "swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main"
-        assert set(doc["jobs"]["ingest"]["secrets"]) == {"RAGFLOW_URL", "RAGFLOW_API_KEY"}
+        assert doc["jobs"]["ingest"]["secrets"] == "inherit"
         assert doc["permissions"] == {"contents": "read"}
 
 
-def test_receipts_and_transcripts_are_not_selected():
-    assert ingest.selected_path("programming-desk", ".receipts/bot-05-infrastructure/task.json") is False
+def test_seeder_globs_keep_receipts_json_and_drop_other_trees():
+    # The seeder's programming-desk extra globs include .receipts/**/*.json.
+    # A credential-shaped receipt is still dropped by the content scan, and
+    # trees the seeder does not name stay out.
+    assert ingest.selected_path("programming-desk", ".receipts/bot-05-infrastructure/task.json") is True
     assert ingest.selected_path("programming-desk", "transcripts/session.json") is False
+    assert ingest.selected_path("programming-desk", "node_modules/pkg/README.md") is False
     assert ingest.selected_path("programming-desk", "docs/guide.md") is True

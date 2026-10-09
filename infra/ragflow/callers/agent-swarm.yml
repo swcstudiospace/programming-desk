@@ -1,6 +1,6 @@
 # Copy to .github/workflows/ragflow-ingest.yml in swcstudiospace/agent-swarm.
-# Callers need permission to use this public reusable workflow, and the two
-# secrets below on the caller repository. Empty secrets make the job a no-op.
+# Organisation secrets RAGFLOW_URL and RAGFLOW_API_KEY, limited to this repo.
+# secrets: inherit passes them. Empty values make the job a no-op.
 
 name: RAGFlow ingest
 
@@ -14,8 +14,6 @@ permissions:
 jobs:
   ingest:
     uses: swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main
-    secrets:
-      RAGFLOW_URL: ${{ secrets.RAGFLOW_URL }}
-      RAGFLOW_API_KEY: ${{ secrets.RAGFLOW_API_KEY }}
+    secrets: inherit
     with:
       repo: agent-swarm

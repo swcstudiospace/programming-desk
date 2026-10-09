@@ -3663,6 +3663,21 @@ def create_mcp(
         CrossChainOracleDrillSimulator,
         OracleReport,
     )
+    from desk_gateway.model_distillation import (
+        EnsembleDistillationEngine,
+        QuantizationCompressor,
+        DistillationBenchmarker,
+        ModelArtifactRegistry,
+        TeacherPrediction,
+    )
+    from desk_gateway.edge_mesh import (
+        EdgeNode,
+        EdgeComputeScheduler,
+        InferenceProofEngine,
+        EdgeClusterMonitor,
+        EdgeCommitmentExporter,
+        DistillationEdgeDrillSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3739,6 +3754,19 @@ def create_mcp(
     oracle_aggregator = OracleAggregator()
     oracle_anchor_exporter = OracleAnchorExporter()
 
+    # Milestone v4.3: Model Distillation & Edge Compute Mesh
+    distillation_engine = EnsembleDistillationEngine()
+    quantization_compressor = QuantizationCompressor()
+    distillation_benchmarker = DistillationBenchmarker()
+    model_artifact_registry = ModelArtifactRegistry()
+    edge_compute_scheduler = EdgeComputeScheduler()
+    # Register default edge nodes
+    edge_compute_scheduler.register_node(EdgeNode(node_id="edge-desk-us-west", region="us-west", vram_mb=8192))
+    edge_compute_scheduler.register_node(EdgeNode(node_id="edge-desk-eu-central", region="eu-central", vram_mb=4096))
+    inference_proof_engine = InferenceProofEngine(secret_key=secret_key.decode("utf-8", errors="ignore"))
+    edge_cluster_monitor = EdgeClusterMonitor(scheduler=edge_compute_scheduler)
+    edge_commitment_exporter = EdgeCommitmentExporter()
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3778,6 +3806,14 @@ def create_mcp(
     setattr(mcp, "_cross_chain_relay_engine", cross_chain_relay_engine)
     setattr(mcp, "_oracle_aggregator", oracle_aggregator)
     setattr(mcp, "_oracle_anchor_exporter", oracle_anchor_exporter)
+    setattr(mcp, "_distillation_engine", distillation_engine)
+    setattr(mcp, "_quantization_compressor", quantization_compressor)
+    setattr(mcp, "_distillation_benchmarker", distillation_benchmarker)
+    setattr(mcp, "_model_artifact_registry", model_artifact_registry)
+    setattr(mcp, "_edge_compute_scheduler", edge_compute_scheduler)
+    setattr(mcp, "_inference_proof_engine", inference_proof_engine)
+    setattr(mcp, "_edge_cluster_monitor", edge_cluster_monitor)
+    setattr(mcp, "_edge_commitment_exporter", edge_commitment_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4829,6 +4865,200 @@ def create_mcp(
     @mcp.custom_route("/v1/bridge/drill/simulate", methods=["POST"])
     async def bridge_drill_simulate_route(_request: Request) -> Response:
         drill_results = CrossChainOracleDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.3: Model Distillation & Edge Compute Routes
+    @mcp.custom_route("/v1/distillation/jobs", methods=["POST"])
+    async def distillation_job_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        student_model = body.get("student_model", "student-desk-v1")
+        teacher_models = body.get("teacher_models", ["teacher-llama-70b", "teacher-qwen-72b"])
+        temperature = float(body.get("temperature", 2.0))
+        alpha = float(body.get("alpha", 0.5))
+        target_quant = body.get("target_quantization", "INT8")
+
+        job = model_artifact_registry.register_job(
+            student_model_name=student_model,
+            teacher_models=teacher_models,
+            temperature=temperature,
+            alpha=alpha,
+            target_quantization=target_quant,
+        )
+        return JSONResponse({"ok": True, "job_id": job.job_id, "status": job.status, "student_model": job.student_model_name})
+
+    @mcp.custom_route("/v1/distillation/step", methods=["POST"])
+    async def distillation_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        student_logits = body.get("student_logits", [1.0, 0.0, 0.0])
+        teachers_data = body.get("teacher_predictions", [])
+        ground_truth = int(body.get("ground_truth_label", 0))
+        temp = body.get("temperature")
+        alpha = body.get("alpha")
+
+        predictions = [
+            TeacherPrediction(
+                model_id=t.get("model_id", "teacher"),
+                weight=float(t.get("weight", 1.0)),
+                logits=t.get("logits", [1.0, 0.0, 0.0]),
+            )
+            for t in teachers_data
+        ]
+        metrics = distillation_engine.compute_distillation_step(
+            student_logits=student_logits,
+            teacher_predictions=predictions,
+            ground_truth_label=ground_truth,
+            temperature=temp,
+            alpha=alpha,
+        )
+        return JSONResponse({"ok": True, "metrics": metrics})
+
+    @mcp.custom_route("/v1/distillation/artifacts", methods=["POST"])
+    async def distillation_artifact_store_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        model_name = body.get("model_name", "student-desk-v1")
+        quant_type = body.get("quantization_type", "INT8")
+        weights = body.get("weights", [0.1, -0.2, 0.5, -0.8])
+        metadata = body.get("metadata", {})
+
+        art = model_artifact_registry.store_artifact(
+            model_name=model_name,
+            quantization_type=quant_type,
+            weights=weights,
+            metadata=metadata,
+        )
+        return JSONResponse({
+            "ok": True,
+            "artifact_id": art.artifact_id,
+            "digest": art.sha256_digest,
+            "parameter_count": art.parameter_count,
+            "compressed_size_bytes": art.compressed_size_bytes,
+        })
+
+    @mcp.custom_route("/v1/distillation/artifacts/{artifact_id}", methods=["GET"])
+    async def distillation_artifact_get_route(request: Request) -> Response:
+        artifact_id = request.path_params.get("artifact_id", "")
+        art = model_artifact_registry.get_artifact(artifact_id)
+        if not art:
+            return JSONResponse({"ok": False, "error": f"Artifact not found: {artifact_id}"}, status_code=404)
+        return JSONResponse({
+            "ok": True,
+            "artifact": {
+                "artifact_id": art.artifact_id,
+                "model_name": art.model_name,
+                "quantization_type": art.quantization_type,
+                "parameter_count": art.parameter_count,
+                "compressed_size_bytes": art.compressed_size_bytes,
+                "sha256_digest": art.sha256_digest,
+                "scales": art.scales,
+                "zero_points": art.zero_points,
+            }
+        })
+
+    @mcp.custom_route("/v1/distillation/benchmark/retention", methods=["POST"])
+    async def distillation_benchmark_retention_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        t_acc = float(body.get("teacher_accuracy", 0.85))
+        s_acc = float(body.get("student_accuracy", 0.82))
+        res = distillation_benchmarker.evaluate_retention(t_acc, s_acc)
+        return JSONResponse({"ok": True, "evaluation": res})
+
+    @mcp.custom_route("/v1/edge/nodes", methods=["GET"])
+    async def edge_nodes_list_route(_request: Request) -> Response:
+        nodes = edge_compute_scheduler.list_nodes()
+        return JSONResponse({
+            "ok": True,
+            "nodes": [
+                {
+                    "node_id": n.node_id,
+                    "region": n.region,
+                    "vram_mb": n.vram_mb,
+                    "used_vram_mb": n.used_vram_mb,
+                    "active_tasks": n.active_tasks,
+                    "is_healthy": n.is_healthy,
+                    "latency_ms": n.latency_ms,
+                    "supported_quantizations": n.supported_quantizations,
+                }
+                for n in nodes
+            ]
+        })
+
+    @mcp.custom_route("/v1/edge/schedule", methods=["POST"])
+    async def edge_schedule_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        art_id = body.get("artifact_id", "art-default")
+        vram = int(body.get("required_vram_mb", 1024))
+        quant = body.get("quantization", "INT8")
+
+        node = edge_compute_scheduler.schedule_inference(art_id, vram, quant)
+        if not node:
+            return JSONResponse({"ok": False, "error": "No available edge node satisfying constraints"}, status_code=503)
+        return JSONResponse({
+            "ok": True,
+            "scheduled_node": {
+                "node_id": node.node_id,
+                "region": node.region,
+                "used_vram_mb": node.used_vram_mb,
+                "active_tasks": node.active_tasks,
+            }
+        })
+
+    @mcp.custom_route("/v1/edge/inference/prove", methods=["POST"])
+    async def edge_inference_prove_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        node_id = body.get("node_id", "edge-desk-us-west")
+        art_id = body.get("artifact_id", "art-default")
+        prompt = body.get("prompt", "")
+        completion = body.get("completion", "")
+        latency = float(body.get("latency_ms", 12.5))
+
+        receipt = inference_proof_engine.generate_receipt(
+            task_id=task_id,
+            node_id=node_id,
+            artifact_id=art_id,
+            prompt_text=prompt,
+            completion_text=completion,
+            latency_ms=latency,
+        )
+        return JSONResponse({
+            "ok": True,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "task_id": receipt.task_id,
+                "node_id": receipt.node_id,
+                "artifact_id": receipt.artifact_id,
+                "input_hash": receipt.input_hash,
+                "output_hash": receipt.output_hash,
+                "signature_proof": receipt.signature_proof,
+                "timestamp": receipt.timestamp,
+            }
+        })
+
+    @mcp.custom_route("/v1/edge/commitments/export", methods=["POST"])
+    async def edge_commitments_export_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipts_data = body.get("receipts", [])
+        from desk_gateway.edge_mesh import InferenceProofReceipt
+        receipts = [
+            InferenceProofReceipt(
+                receipt_id=r.get("receipt_id", ""),
+                task_id=r.get("task_id", ""),
+                node_id=r.get("node_id", ""),
+                artifact_id=r.get("artifact_id", ""),
+                input_hash=r.get("input_hash", ""),
+                output_hash=r.get("output_hash", ""),
+                timestamp=float(r.get("timestamp", time.time())),
+                signature_proof=r.get("signature_proof", ""),
+            )
+            for r in receipts_data
+        ]
+        commitment = edge_commitment_exporter.export_batch_commitment(receipts)
+        return JSONResponse({"ok": True, "commitment": commitment})
+
+    @mcp.custom_route("/v1/distillation/drill/simulate", methods=["POST"])
+    async def distillation_drill_simulate_route(_request: Request) -> Response:
+        simulator = DistillationEdgeDrillSimulator()
+        drill_results = simulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -6312,6 +6542,14 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "cross_chain_relay_engine": getattr(mcp, "_cross_chain_relay_engine", None),
         "oracle_aggregator": getattr(mcp, "_oracle_aggregator", None),
         "oracle_anchor_exporter": getattr(mcp, "_oracle_anchor_exporter", None),
+        "distillation_engine": getattr(mcp, "_distillation_engine", None),
+        "quantization_compressor": getattr(mcp, "_quantization_compressor", None),
+        "distillation_benchmarker": getattr(mcp, "_distillation_benchmarker", None),
+        "model_artifact_registry": getattr(mcp, "_model_artifact_registry", None),
+        "edge_compute_scheduler": getattr(mcp, "_edge_compute_scheduler", None),
+        "inference_proof_engine": getattr(mcp, "_inference_proof_engine", None),
+        "edge_cluster_monitor": getattr(mcp, "_edge_cluster_monitor", None),
+        "edge_commitment_exporter": getattr(mcp, "_edge_commitment_exporter", None),
     }
     return app, settings
 

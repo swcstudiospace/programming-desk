@@ -1,19 +1,22 @@
-# Requirements: Milestone v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery
+# Requirements: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
 
-This document defines the requirements for Milestone v2.4 of Programming Desk.
+This document defines the requirements for Milestone v4.8 of Programming Desk.
 
-## 1. Multi-Region Edge Federation & WAN Inter-Seat Routing (Phase 14)
+## 1. Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh (Phase 62)
 
-- [x] **REQ-EDGE-001**: Edge ingress gateway proxying and load balancing across multi-region VPS desk instances with latency-based geo-steering and health-aware failover.
-- [x] **REQ-EDGE-002**: Distributed edge rate limiting and token-bucket traffic policing synchronized via DragonflyDB cache cluster with per-seat burst ceilings.
-- [x] **REQ-EDGE-003**: Cross-region WAN inter-seat routing protocol enforcing cryptographic seat identity attestation and mutual TLS over Tailnet mesh.
-- [x] **REQ-EDGE-004**: Vector clock conflict convergence with multi-master partitioned task graphs under high-latency WAN transit (>250ms).
-- [x] **REQ-EDGE-005**: Dynamic edge route revocation and instantaneous session evacuation upon region-wide impairment detection.
+- [x] **REQ-IMM-001**: Threat Pattern & Signature Representation (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) defining structured models for Byzantine injection, latency poisoning, memory corruption, AST escape, and entropy bursts.
+- [x] **REQ-IMM-002**: Immune Antibody & Cryptographic Attestation (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) providing HMAC-SHA256 authenticated mitigation antibodies with peer-to-peer anti-entropy catalog digest synchronization.
+- [x] **REQ-IMM-003**: Genetic Antibody Mutator (`GeneticAntibodyMutator`) mutating indicators, entropy thresholds, and latency bounds across generations to counter zero-day attack variants.
+- [x] **REQ-IMM-004**: Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) applying controlled stress perturbations, evaluating payload threats, scoring post-stress resilience gains, and evolving novel antibodies.
+- [x] **REQ-IMM-005**: Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) managing golden state checkpoint snapshots, clean runtime resets, and post-quarantine rehabilitation graduation.
+- [x] **REQ-IMM-006**: Swarm Immune REST API endpoints under `/v1/immune/mesh/*` exposing antibody listing, antibody creation, perturbation drills, and runtime reconstitution.
 
-## 2. Autonomous Chaos Recovery & Self-Healing Resilience (Phase 15)
+## 2. Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh (Phase 63)
 
-- [x] **REQ-CHAOS-001**: Synthetic chaos injection harness simulating intermittent upstream network partitions, packet loss, and latency spikes across Railway dependencies.
-- [x] **REQ-CHAOS-002**: Automated self-healing supervisor detecting corrupted or partitioned seat instances and triggering zero-downtime hot reconstitution.
-- [x] **REQ-CHAOS-003**: Autonomous task graph rebalancing algorithm dynamically redistributing unacknowledged seat workloads upon seat crash or unresponsiveness.
-- [x] **REQ-CHAOS-004**: Automated dead-letter queue (DLQ) replay orchestrator with exponential backoff, jitter, and poisonous payload quarantine.
-- [x] **REQ-CHAOS-005**: Continuous resilience verification suite validating system-wide RPO (Recovery Point Objective = 0) and RTO (Recovery Time Objective < 3s) during chaos drills.
+- [x] **REQ-DEP-001**: Physical Resource Node Modeling (`PhysicalResourceNode`, `PhysicalResourceType`) tracking heterogeneous hardware capacity (GPU cluster, neuromorphic crossbar, high-bandwidth storage, edge compute) across geographical regions with reputation scoring.
+- [x] **REQ-DEP-002**: Verifiable Resource Orchestration & Leasing (`VerifiableResourceOrchestrator`, `ResourceLease`) dynamically matching consumer reservations to highest-reputation physical nodes with capacity tracking.
+- [x] **REQ-DEP-003**: Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) synthesizing and verifying HMAC-SHA256 attestation proofs binding completed compute units, workload digests, and execution latency.
+- [x] **REQ-DEP-004**: DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) recording immutable lease allocations, PoPW verification events, and capacity settlements with Merkle root computation.
+- [x] **REQ-DEP-005**: Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) anchoring batch Merkle roots and lease proofs to Solana devnet targets.
+- [x] **REQ-DEP-006**: Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`) verifying peer antibody distribution, genetic antibody mutation, runtime reconstitution, physical resource leasing, PoPW verification, and Solana devnet anchoring.
+- [x] **REQ-DEP-007**: DePIN REST API endpoints under `/v1/depin/*` and `/v1/immune/drill/simulate` exposing resource nodes, leasing, PoPW generation, Solana anchor exports, and resilience drills.

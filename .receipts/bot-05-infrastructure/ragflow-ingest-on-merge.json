@@ -3,14 +3,14 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/ragflow-ingest-on-merge",
   "started_at": "2026-10-09T14:54:00Z",
-  "completed_at": "2026-10-09T16:30:53Z",
+  "completed_at": "2026-10-09T16:44:06Z",
   "repo": "swcstudiospace/programming-desk",
   "summary": "Incremental RAGFlow ingest on push to main. Selection, names and meta_fields match the VPS seeder. The reusable workflow no-ops without RAGFLOW_URL or RAGFLOW_API_KEY. Caller templates pass organisation secrets with inherit. Draft PR only.",
   "commands": [
     {
       "cmd": "python3 -m pytest infra/tests/test_ragflow_ingest.py -q --tb=line",
       "exit_code": 0,
-      "observed": "22 passed in 32.40s"
+      "observed": "23 passed in 32.37s"
     },
     {
       "cmd": "python3 -m pytest ci/tests -q --tb=line",
@@ -50,7 +50,7 @@
   ],
   "claims": [
     {
-      "claim": "Fake RAGFlow server tests cover diff parsing, naming, secret skip, upsert, delete, quoted-name round trip, sibling-path safety in both directions, named parse states, empty-file deletion, parse resume, missing secrets and dataset mapping; 22 passed",
+      "claim": "Fake RAGFlow server tests cover diff parsing, naming, secret skip, upsert, delete, quoted-name round trip, sibling-path safety, cross-repo path collisions, named parse states, empty-file deletion, parse resume, missing secrets and dataset mapping; 23 passed",
       "evidence_command_index": 0
     },
     {

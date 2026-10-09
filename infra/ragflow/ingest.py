@@ -579,20 +579,22 @@ def _needs_parse(doc: dict) -> bool:
 
 
 def _matches(docs: list[dict], name: str, path: str) -> list[dict]:
-    """Match a document by its stored path, or by exact name when no path was stored.
+    """Match a document by stored path and document name.
 
-    A quote-stripped legacy name is the same string as the unquoted sibling's
-    document name. The stored path decides which file it belongs to. An exact
-    name match is used only when the document has no path.
+    Keyword search can return another repo's document whose name merely
+    contains this one, and both can store the same relative path. The stored
+    path and the expected name, or its quote-stripped legacy form, must both
+    match. When no path was stored, only the exact document name matches.
     """
     hits = []
+    candidates = _candidate_names(name)
     for doc in docs:
         meta = doc.get("meta_fields") or {}
         if not isinstance(meta, dict):
             meta = {}
         stored = meta.get("path")
         if stored:
-            if stored == path:
+            if stored == path and doc.get("name") in candidates:
                 hits.append(doc)
             continue
         if doc.get("name") == name:

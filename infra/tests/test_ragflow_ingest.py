@@ -791,6 +791,52 @@ def test_plain_path_delete_keeps_the_quoted_sibling_legacy_document():
     assert client.deleted == ["plain"]
 
 
+def test_same_path_in_another_repo_is_not_deleted():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds-product-docs"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "short",
+                    "name": "ultrathink__README.md",
+                    "meta_fields": {"path": "README.md"},
+                },
+                {
+                    "id": "long",
+                    "name": "claude-ultrathink__README.md",
+                    "meta_fields": {"path": "README.md"},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", "README.md", "product-docs", "ultrathink__README.md",
+            )
+        ],
+        client,
+    )
+    assert client.deleted == ["short"]
+
+
 def test_named_run_states_are_not_parsed_again(tmp_path, monkeypatch):
     repo = _repo(tmp_path / "repo")
     body = b"# same\n"

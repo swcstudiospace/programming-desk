@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 from typing import Any
 
-from src.desk.supervision.process_supervisor import ProcessSupervisor, SupervisedProcessResult
+from ..supervision.process_supervisor import ProcessSupervisor, SupervisedProcessResult
 
 
 @dataclass
@@ -81,6 +81,12 @@ class MilestoneVerifier:
         phases: list[MilestonePhase] = []
         current_phase: MilestonePhase | None = None
 
+        # Check if the roadmap uses ### Phase ... headings under a container like ## Phase Details
+        has_subphase_headings = any(
+            re.match(r"^###\s+Phase\s+\d+", line.strip(), re.IGNORECASE)
+            for line in text.splitlines()
+        )
+
         for line in text.splitlines():
             line_str = line.strip()
 
@@ -89,12 +95,25 @@ class MilestoneVerifier:
                 milestone_name = line_str[2:].strip()
                 continue
 
-            # Heading 2 indicates a Phase
-            if line_str.startswith("## "):
-                phase_title = line_str[3:].strip()
-                current_phase = MilestonePhase(phase_name=phase_title)
-                phases.append(current_phase)
-                continue
+            if has_subphase_headings:
+                if line_str.startswith("### "):
+                    phase_title = line_str[4:].strip()
+                    current_phase = MilestonePhase(phase_name=phase_title)
+                    phases.append(current_phase)
+                    continue
+                elif line_str.startswith("## "):
+                    # Overview sections like ## Phases or ## Phase Details should not collect tasks
+                    current_phase = None
+                    continue
+            else:
+                if line_str.startswith("## "):
+                    phase_title = line_str[3:].strip()
+                    if phase_title.lower() in ("phases", "phase details", "overview", "progress"):
+                        current_phase = None
+                        continue
+                    current_phase = MilestonePhase(phase_name=phase_title)
+                    phases.append(current_phase)
+                    continue
 
             # Checkbox item
             if current_phase is not None:
@@ -151,14 +170,14 @@ class MilestoneVerifier:
 
         for p in report.phases:
             mark = "[✓]" if p.is_complete else "[ ]"
-            lines.append(f"  {mark} {p.phase_name}: {p.completed_tasks}/{p.total_tasks} completed")
+            pct = f"{p.completion_pct:.0f}%"
+            lines.append(f"  {mark} {p.phase_name}: {p.completed_tasks}/{p.total_tasks} ({pct})")
 
         if report.test_result:
             lines.append("")
-            lines.append("Automated Test Suite Execution:")
-            lines.append(f"  Command: {report.test_result.cmd} {' '.join(report.test_result.args)}")
-            lines.append(f"  Exit Code: {report.test_result.exit_code}")
-            lines.append(f"  Duration: {report.test_result.duration_ms:.2f}ms")
-            lines.append(f"  Outcome: {'PASSED' if report.test_result.succeeded else 'FAILED'}")
+            t_status = "PASSED" if report.test_result.succeeded else "FAILED"
+            lines.append(
+                f"Automated Test Run: {t_status} (exit code {report.test_result.exit_code}, {report.test_result.duration_ms:.0f}ms)"
+            )
 
         return "\n".join(lines)

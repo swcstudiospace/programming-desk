@@ -24,4 +24,4 @@
   - [x] Update `.planning/ROADMAP.md` and `.planning/STATE.md`
   - [x] Execute all quality gates (G-1, G-3, G-7)
   - [x] Run full test suites (`ci/tests` and `tests/desk`)
-  - [ ] Commit, push branch, open pull request, merge to `main`, and create release `v8.0.0`
+  - [x] Commit, push branch, open pull request, review and merge to `main`

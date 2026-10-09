@@ -47,6 +47,7 @@ class TransactionContext:
         self._backup_dir: Path | None = None
         self.is_committed: bool = False
         self.is_rolled_back: bool = False
+        self.failed_restorations: list[str] = []
 
     def register_compensation(
         self,
@@ -80,6 +81,7 @@ class TransactionContext:
 
         def _restore() -> None:
             if backup_copy.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(backup_copy, target)
 
         self.register_compensation(_restore, name=f"restore_{target.name}")
@@ -99,10 +101,13 @@ class TransactionContext:
             try:
                 comp.action(*comp.args, **comp.kwargs)
                 executed += 1
-            except Exception:
+            except Exception as err:
                 failed += 1
+                self.failed_restorations.append(f"{comp.name}: {err}")
 
-        self.cleanup()
+        # Retain backups if any restoration failed so original copies are preserved for recovery
+        if failed == 0:
+            self.cleanup()
         return executed, failed
 
     def commit(self) -> None:
@@ -153,6 +158,19 @@ class RecoveryManager:
                     )
                     mgr.history.append(report)
                     return not reraise  # Suppress exception if reraise is False
+                elif self.tx.is_rolled_back:
+                    # Transaction was explicitly rolled back inside the block
+                    report = TransactionReport(
+                        name=name,
+                        succeeded=False,
+                        started_at=self.started_at,
+                        finished_at=finished_at,
+                        error_message="Transaction explicitly rolled back",
+                        rollbacks_executed=len(self.tx._compensations),
+                        rollbacks_failed=len(self.tx.failed_restorations),
+                    )
+                    mgr.history.append(report)
+                    return False
                 else:
                     self.tx.commit()
                     report = TransactionReport(

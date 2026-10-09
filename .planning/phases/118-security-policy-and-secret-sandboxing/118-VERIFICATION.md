@@ -1,5 +1,5 @@
 ---
-phase: "118-security-policy-and-secret-sandboxing"
+phase: "118-security-policy-and-secret-sandboxing"  # pragma: allowlist secret - phase directory name
 verified: "2026-10-09T07:35:00Z"
 status: passed
 score: "100% must-haves verified"

@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import re
 import threading
 from typing import Any
 import uuid
 
-from src.desk.security.policy_sandbox import PolicySandbox
+from ..security.policy_sandbox import PolicySandbox
 
 
 @dataclass
@@ -37,6 +39,11 @@ class AuditEvent:
 class AuditTracer:
     """Thread-safe, append-only JSONL audit event recorder with integrated credential redaction."""
 
+    SENSITIVE_KEY_RE = re.compile(
+        r"(password|passwd|secret|token|credential|api_key|auth|bearer|passphrase)",
+        re.IGNORECASE,
+    )
+
     def __init__(
         self,
         log_path: str | Path = ".planning/audit.jsonl",
@@ -51,14 +58,18 @@ class AuditTracer:
         # Ensure directory exists
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _sanitize_value(self, val: Any) -> Any:
-        """Recursively redact sensitive values."""
+    def _sanitize_value(self, val: Any, key_name: str | None = None) -> Any:
+        """Recursively redact sensitive keys and credential values."""
+        # Check sensitive key names
+        if key_name and self.SENSITIVE_KEY_RE.search(key_name):
+            return "[REDACTED]"
+
         if isinstance(val, str):
             return self.sandbox.sanitize(val)
         if isinstance(val, dict):
-            return {k: self._sanitize_value(v) for k, v in val.items()}
-        if isinstance(val, list):
-            return [self._sanitize_value(item) for item in val]
+            return {k: self._sanitize_value(v, key_name=str(k)) for k, v in val.items()}
+        if isinstance(val, (list, tuple, set)):
+            return [self._sanitize_value(item, key_name=key_name) for item in val]
         return val
 
     def record_event(self, event: AuditEvent) -> AuditEvent:
@@ -116,11 +127,14 @@ class AuditTracer:
         action: str | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Read and filter structured events from the log."""
+        """Read and filter structured events from the log using bounded memory."""
         if not self.log_path.exists():
             return []
 
-        events: list[dict[str, Any]] = []
+        use_bounded = limit is not None and limit > 0
+        bounded_queue: deque[dict[str, Any]] = deque(maxlen=limit if use_bounded else None)
+        unbounded_list: list[dict[str, Any]] = []
+
         with self._lock:
             with open(self.log_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -139,8 +153,11 @@ class AuditTracer:
                     if action and entry.get("action") != action:
                         continue
 
-                    events.append(entry)
+                    if use_bounded:
+                        bounded_queue.append(entry)
+                    else:
+                        unbounded_list.append(entry)
 
-        if limit is not None and limit > 0:
-            return events[-limit:]
-        return events
+        if use_bounded:
+            return list(bounded_queue)
+        return unbounded_list

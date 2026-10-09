@@ -8,10 +8,11 @@ from pathlib import Path
 import random
 import signal
 import subprocess
+import threading
 import time
 from typing import Any, Mapping
 
-from src.desk.security.policy_sandbox import PolicySandbox
+from ..security.policy_sandbox import PolicySandbox
 
 
 @dataclass
@@ -46,44 +47,66 @@ class ProcessSupervisor:
         self.sandbox = sandbox or PolicySandbox(workspace_root=workspace_root)
         self.workspace_root = self.sandbox.workspace_root
         self._active_processes: dict[int, subprocess.Popen[str]] = {}
+        self._lock = threading.Lock()
 
     def _terminate_process_tree(self, proc: subprocess.Popen[str], grace_period: float = 1.0) -> None:
         """Kill the process and all of its spawned child processes cleanly via process group."""
         pid = proc.pid
-        if pid is None or proc.poll() is not None:
+        if pid is None:
             return
 
+        pgid: int | None = None
         try:
             pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGTERM)
-        except (ProcessLookupError, PermissionError):
+        except (ProcessLookupError, PermissionError, OSError):
+            pgid = None
+
+        # 1. Send SIGTERM to process group or direct process
+        if pgid is not None:
+            try:
+                os.killpg(pgid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError, OSError):
+                pass
+        else:
             try:
                 proc.terminate()
-            except (ProcessLookupError, PermissionError):
+            except (ProcessLookupError, PermissionError, OSError):
                 pass
 
-        # Wait for grace period
+        # 2. Wait for grace period, checking if any processes remain in the group
         start_wait = time.monotonic()
         while time.monotonic() - start_wait < grace_period:
-            if proc.poll() is not None:
+            parent_alive = proc.poll() is None
+            group_alive = False
+            if pgid is not None:
+                try:
+                    os.killpg(pgid, 0)
+                    group_alive = True
+                except (ProcessLookupError, PermissionError, OSError):
+                    group_alive = False
+            if not parent_alive and not group_alive:
                 return
             time.sleep(0.05)
 
-        # Force escalate to SIGKILL if still running
-        try:
-            pgid = os.getpgid(pid)
-            os.killpg(pgid, signal.SIGKILL)
-        except (ProcessLookupError, PermissionError):
+        # 3. Force escalate to SIGKILL against entire process group and parent
+        if pgid is not None:
             try:
-                proc.kill()
-            except (ProcessLookupError, PermissionError):
+                os.killpg(pgid, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError, OSError):
                 pass
+        try:
+            proc.kill()
+        except (ProcessLookupError, PermissionError, OSError):
+            pass
 
     def shutdown_all(self, grace_period: float = 1.0) -> None:
         """Terminate all currently tracked active processes."""
-        for pid, proc in list(self._active_processes.items()):
+        with self._lock:
+            procs = list(self._active_processes.items())
+        for pid, proc in procs:
             self._terminate_process_tree(proc, grace_period=grace_period)
-        self._active_processes.clear()
+            with self._lock:
+                self._active_processes.pop(pid, None)
 
     def run(
         self,
@@ -115,7 +138,10 @@ class ProcessSupervisor:
         while attempt <= max_retries:
             start_time = time.monotonic()
             timed_out = False
-            last_pid = None
+            last_pid: int | None = None
+            proc: subprocess.Popen[str] | None = None
+            stdout_data = ""
+            stderr_data = ""
 
             try:
                 # Use start_new_session=True to create a new POSIX process group for clean tree termination
@@ -129,18 +155,34 @@ class ProcessSupervisor:
                     start_new_session=True,
                 )
                 last_pid = proc.pid
-                self._active_processes[proc.pid] = proc
+                with self._lock:
+                    self._active_processes[proc.pid] = proc
 
                 stdout_data, stderr_data = proc.communicate(timeout=timeout_sec)
                 exit_code = proc.returncode
             except subprocess.TimeoutExpired:
                 timed_out = True
-                self._terminate_process_tree(proc)
-                stdout_data, stderr_data = proc.communicate()
+                if proc is not None:
+                    self._terminate_process_tree(proc)
+                    try:
+                        # Bounded read to prevent hanging on surviving children keeping pipes open
+                        stdout_data, stderr_data = proc.communicate(timeout=1.0)
+                    except (subprocess.TimeoutExpired, Exception):
+                        stdout_data, stderr_data = "", ""
                 exit_code = -signal.SIGKILL
+            except (KeyboardInterrupt, BaseException):
+                # Cleanly reap and stop process on interrupt/cancellation before propagating
+                if proc is not None and proc.poll() is None:
+                    self._terminate_process_tree(proc)
+                    try:
+                        proc.communicate(timeout=0.5)
+                    except Exception:
+                        pass
+                raise
             finally:
-                if last_pid in self._active_processes:
-                    del self._active_processes[last_pid]
+                if last_pid is not None:
+                    with self._lock:
+                        self._active_processes.pop(last_pid, None)
 
             duration_ms = (time.monotonic() - start_time) * 1000.0
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import re
+import shutil
 from typing import Mapping
 
 
@@ -33,7 +34,8 @@ class PolicySandbox:
         re.compile(r"^(API_KEY|AUTH_TOKEN|SECRET_KEY|ACCESS_TOKEN|PASSWORD)$", re.IGNORECASE),
     ]
 
-    DANGEROUS_SHELL_TOKENS = {"&&", "||", "|", "`", "$(", "${"}
+    # Dangerous command substitution / injection tokens in array args
+    DANGEROUS_SHELL_TOKENS = ["`", "$(", "${", "\x00"]
 
     def __init__(self, workspace_root: str | Path | None = None) -> None:
         if workspace_root is None:
@@ -113,11 +115,35 @@ class PolicySandbox:
         if not cmd:
             raise BoundarySecurityError("Command array cannot be empty")
 
-        executable = Path(cmd[0]).name
-        if allowed_executables is not None and executable not in allowed_executables:
-            raise BoundarySecurityError(
-                f"Executable '{executable}' is not in allowed list: {allowed_executables}"
-            )
+        raw_exe = cmd[0]
+        exe_path = Path(raw_exe)
+        exe_name = exe_path.name
+
+        if allowed_executables is not None:
+            allowed_names = set(allowed_executables)
+            allowed_resolved: set[str] = set()
+            for item in allowed_executables:
+                p = Path(item)
+                if p.is_absolute() and p.exists():
+                    allowed_resolved.add(str(p.resolve()))
+                else:
+                    found = shutil.which(item)
+                    if found:
+                        allowed_resolved.add(str(Path(found).resolve()))
+
+            if exe_name not in allowed_names and str(exe_path) not in allowed_resolved:
+                raise BoundarySecurityError(
+                    f"Executable '{raw_exe}' is not in allowed list: {allowed_executables}"
+                )
+
+            # If an explicit path (e.g. /tmp/untrusted/git) was supplied,
+            # verify it resolves to one of the trusted resolved executable paths
+            if "/" in raw_exe:
+                resolved_target = str(exe_path.resolve())
+                if resolved_target not in allowed_resolved:
+                    raise BoundarySecurityError(
+                        f"Executable path '{raw_exe}' resolves to untrusted location '{resolved_target}'"
+                    )
 
         # Inspect individual argument strings for shell injection sequences
         for i, arg in enumerate(cmd):
@@ -128,11 +154,13 @@ class PolicySandbox:
                     raise BoundarySecurityError(
                         f"Potentially dangerous shell metacharacter '{token}' detected in command argument: {arg}"
                     )
-            # Check for command chaining semicolon outside language code arguments (-c, -e)
+
+            # Check for command chaining semicolon, &&, || outside language code arguments (-c, -e, --command)
             is_inline_code = i > 0 and cmd[i - 1] in ("-c", "-e", "--command")
-            if not is_inline_code and (";" in arg or "\n" in arg or "\r" in arg):
-                raise BoundarySecurityError(
-                    f"Command chaining sequence or newline detected in non-code argument: {arg}"
-                )
+            if not is_inline_code:
+                if ";" in arg or "\n" in arg or "\r" in arg or "&&" in arg or "||" in arg:
+                    raise BoundarySecurityError(
+                        f"Command chaining sequence or newline detected in non-code argument: {arg}"
+                    )
 
         return list(cmd)

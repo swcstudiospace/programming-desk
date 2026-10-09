@@ -30,16 +30,29 @@ class SessionFrame:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> SessionFrame:
+    def from_dict(cls, data: Any) -> SessionFrame:
+        if not isinstance(data, dict):
+            raise TypeError(f"SessionFrame payload must be a dict, got: {type(data)}")
+        if "session_id" not in data or not isinstance(data["session_id"], str):
+            raise ValueError("SessionFrame requires a valid string 'session_id'")
+
+        raw_active = data.get("active_tasks")
+        raw_completed = data.get("completed_tasks")
+        raw_meta = data.get("metadata")
+
+        active_tasks = [str(t) for t in raw_active if t is not None] if isinstance(raw_active, list) else []
+        completed_tasks = [str(t) for t in raw_completed if t is not None] if isinstance(raw_completed, list) else []
+        metadata = raw_meta if isinstance(raw_meta, dict) else {}
+
         return cls(
             session_id=data["session_id"],
-            milestone=data.get("milestone", "v1.0"),
-            phase=data.get("phase", "general"),
-            status=data.get("status", "in_progress"),
-            active_tasks=data.get("active_tasks", []),
-            completed_tasks=data.get("completed_tasks", []),
-            metadata=data.get("metadata", {}),
-            updated_at=data.get("updated_at", datetime.now(timezone.utc).isoformat()),
+            milestone=str(data.get("milestone", "v1.0")),
+            phase=str(data.get("phase", "general")),
+            status=str(data.get("status", "in_progress")),
+            active_tasks=active_tasks,
+            completed_tasks=completed_tasks,
+            metadata=metadata,
+            updated_at=str(data.get("updated_at", datetime.now(timezone.utc).isoformat())),
         )
 
 
@@ -102,7 +115,7 @@ class SessionStore:
                 with open(self.storage_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 return SessionFrame.from_dict(data)
-            except (json.JSONDecodeError, KeyError):
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError, AttributeError):
                 return None
 
     def sync_to_markdown_state(self, frame: SessionFrame) -> str:

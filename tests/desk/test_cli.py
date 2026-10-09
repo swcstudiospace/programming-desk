@@ -49,7 +49,15 @@ def test_cli_session_lifecycle(capsys) -> None:
             SessionStore.__init__ = old_storage
 
 
-def test_cli_run(capsys) -> None:
+def test_cli_run(capsys, monkeypatch, tmp_path) -> None:
+    # Ensure audit log writes to temporary location
+    from src.desk.telemetry.audit_tracer import AuditTracer
+    orig_init = AuditTracer.__init__
+    monkeypatch.setattr(
+        AuditTracer,
+        "__init__",
+        lambda self, log_path=None: orig_init(self, log_path=log_path or (tmp_path / "audit.jsonl")),
+    )
     code = cli.main(["run", sys.executable, "-c", "print('desk_run_success')"])
     assert code == 0
     captured = capsys.readouterr()

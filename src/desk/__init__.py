@@ -10,18 +10,18 @@ Provides 7 cohesive runtime capabilities:
 7. Milestone Assertion Pipeline
 """
 
-from src.desk.assertions import MilestonePhase, MilestoneVerifier, VerificationReport
-from src.desk.diagnostics import CheckStatus, DiagnosticCheckResult, DoctorEngine
-from src.desk.recovery import (
+from .assertions import MilestonePhase, MilestoneVerifier, VerificationReport
+from .diagnostics import CheckStatus, DiagnosticCheckResult, DoctorEngine
+from .recovery import (
     CompensationAction,
     RecoveryManager,
     TransactionContext,
     TransactionReport,
 )
-from src.desk.security import BoundarySecurityError, PolicySandbox
-from src.desk.session import SessionFrame, SessionStore
-from src.desk.supervision import ProcessSupervisor, SupervisedProcessResult
-from src.desk.telemetry import AuditEvent, AuditTracer
+from .security import BoundarySecurityError, PolicySandbox
+from .session import SessionFrame, SessionStore
+from .supervision import ProcessSupervisor, SupervisedProcessResult
+from .telemetry import AuditEvent, AuditTracer
 
 __version__ = "1.0.0"
 

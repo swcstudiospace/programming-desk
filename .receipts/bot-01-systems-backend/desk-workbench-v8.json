@@ -1,0 +1,61 @@
+{
+  "task_id": "desk-v8-workbench-runtime",
+  "bot": "bot-01-systems-backend",
+  "branch": "feat/v8.0-enterprise-workbench-runtime",
+  "started_at": "2026-04-18T10:00:00Z",
+  "completed_at": "2026-04-18T11:00:00Z",
+  "commands": [
+    {
+      "cmd": "pytest tests/desk -v",
+      "exit_code": 0,
+      "duration_s": 1.1,
+      "output_tail": "36 passed in 1.10s"
+    },
+    {
+      "cmd": "python3 desk.py doctor --json",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "\"overall_status\": \"PASS\""
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Test suite passes across all 7 capabilities",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Diagnostic doctor check passes in CLI execution",
+      "evidence_command_index": 1
+    }
+  ],
+  "unverified": [
+    "Long-running supervisor processes under multi-hour execution stress not verified in CI",
+    "Windows and macOS process group termination behaviors not tested on Linux host"
+  ],
+  "files_changed": [
+    "src/desk/__init__.py",
+    "src/desk/__main__.py",
+    "src/desk/cli.py",
+    "src/desk/assertions/milestone_verifier.py",
+    "src/desk/diagnostics/__init__.py",
+    "src/desk/diagnostics/doctor_engine.py",
+    "src/desk/recovery/__init__.py",
+    "src/desk/recovery/recovery_manager.py",
+    "src/desk/security/__init__.py",
+    "src/desk/security/policy_sandbox.py",
+    "src/desk/session/__init__.py",
+    "src/desk/session/session_store.py",
+    "src/desk/supervision/__init__.py",
+    "src/desk/supervision/process_supervisor.py",
+    "src/desk/telemetry/__init__.py",
+    "src/desk/telemetry/audit_tracer.py",
+    "tests/desk/test_cli.py",
+    "tests/desk/test_security.py",
+    "desk.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "approved_by": "bot-06-quality-security"
+}

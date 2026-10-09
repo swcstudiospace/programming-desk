@@ -1,6 +1,6 @@
 """Diagnostics and Doctor engine for Programming Desk."""
 
-from src.desk.diagnostics.doctor_engine import (
+from .doctor_engine import (
     CheckStatus,
     DiagnosticCheckResult,
     DoctorEngine,

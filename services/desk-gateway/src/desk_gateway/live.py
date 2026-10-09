@@ -20,6 +20,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from desk_gateway.config import SEAT_BY_BOT, SEAT_LABEL, SEATS, Settings
 from desk_gateway.redact import redact_text
 from desk_gateway.store import Store
+from desk_gateway.telemetry import get_current_trace_context
 
 logger = logging.getLogger("desk_gateway.live")
 
@@ -107,6 +108,9 @@ class LiveDesk:
     def emit(self, type_: str, data: dict[str, Any]) -> dict[str, Any]:
         self._seq += 1
         event = {"v": EVENT_VERSION, "type": type_, "ts": round(time.time(), 3), "seq": self._seq, "data": data}
+        trace_ctx = get_current_trace_context()
+        if trace_ctx:
+            event["trace"] = trace_ctx
         self.recent.append(event)
         for queue in list(self.viewers):
             try:

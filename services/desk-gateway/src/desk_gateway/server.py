@@ -3437,6 +3437,20 @@ def create_mcp(
     zero_trust_mgr = ZeroTrustEnclaveManager()
     setattr(mcp, "_zero_trust_mgr", zero_trust_mgr)
 
+    # Milestone v3.0 (Phase 27): Continuous Merkle Proof Verification & Immutable Audit Export
+    from desk_gateway.merkle_audit import (
+        IncrementalMerkleTree,
+        ImmutableAuditExporter,
+        AuditLogScrubber,
+        ZeroTrustComplianceVerifier,
+    )
+    merkle_tree = IncrementalMerkleTree()
+    audit_exporter = ImmutableAuditExporter()
+    compliance_verifier = ZeroTrustComplianceVerifier(tree=merkle_tree)
+    setattr(mcp, "_merkle_tree", merkle_tree)
+    setattr(mcp, "_audit_exporter", audit_exporter)
+    setattr(mcp, "_compliance_verifier", compliance_verifier)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3819,6 +3833,105 @@ def create_mcp(
     async def zt_crl_route(request: Request) -> Response:
         return JSONResponse({"ok": True, **zero_trust_mgr.get_crl()})
 
+    # Merkle Proof Verification & Immutable Audit Export (Phase 27)
+    @mcp.custom_route("/v1/audit/merkle/append", methods=["POST"])
+    async def audit_merkle_append_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        operation = body.get("operation", "system_event")
+        payload = body.get("payload", {})
+        leaf = merkle_tree.append_leaf(seat_id=seat_id, operation=operation, payload=payload)
+        return JSONResponse({
+            "ok": True,
+            "leaf_index": leaf.index,
+            "leaf_hash": leaf.leaf_hash,
+            "merkle_root": merkle_tree.get_root_hash(),
+            "total_leaves": len(merkle_tree.leaves),
+        })
+
+    @mcp.custom_route("/v1/audit/merkle/root", methods=["GET"])
+    async def audit_merkle_root_route(request: Request) -> Response:
+        return JSONResponse({
+            "ok": True,
+            "merkle_root": merkle_tree.get_root_hash(),
+            "total_leaves": len(merkle_tree.leaves),
+        })
+
+    @mcp.custom_route("/v1/audit/merkle/proof", methods=["POST"])
+    async def audit_merkle_proof_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        leaf_index = int(body.get("leaf_index", 0))
+        try:
+            target_hash, proof_path = merkle_tree.generate_inclusion_proof(leaf_index)
+            return JSONResponse({
+                "ok": True,
+                "leaf_index": leaf_index,
+                "target_hash": target_hash,
+                "proof_path": proof_path,
+                "merkle_root": merkle_tree.get_root_hash(),
+            })
+        except IndexError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/audit/merkle/verify", methods=["POST"])
+    async def audit_merkle_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        leaf_hash = body.get("leaf_hash", "")
+        proof_path = body.get("proof_path", [])
+        expected_root = body.get("expected_root", "")
+        valid = IncrementalMerkleTree.verify_inclusion_proof(leaf_hash, proof_path, expected_root)
+        return JSONResponse({"ok": True, "valid": valid})
+
+    @mcp.custom_route("/v1/audit/export/anchor", methods=["POST"])
+    async def audit_export_anchor_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        batch_id = body.get("batch_id", f"batch-{secrets.token_hex(4)}")
+        target = body.get("anchor_target", "solana_devnet")
+        root = merkle_tree.get_root_hash()
+        count = len(merkle_tree.leaves)
+        start_t = merkle_tree.leaves[0].timestamp if merkle_tree.leaves else time.time()
+        end_t = merkle_tree.leaves[-1].timestamp if merkle_tree.leaves else time.time()
+        batch = audit_exporter.export_anchor(
+            batch_id=batch_id,
+            merkle_root=root,
+            leaf_count=count,
+            start_t=start_t,
+            end_t=end_t,
+            anchor_target=target,
+        )
+        return JSONResponse({
+            "ok": True,
+            "batch_id": batch.batch_id,
+            "merkle_root": batch.merkle_root,
+            "leaf_count": batch.leaf_count,
+            "anchor_target": batch.anchor_target,
+            "signature": batch.signature,
+        })
+
+    @mcp.custom_route("/v1/audit/scrub", methods=["POST"])
+    async def audit_scrub_route(request: Request) -> Response:
+        passed, anomalies = AuditLogScrubber.scrub(merkle_tree.leaves)
+        return JSONResponse({"ok": True, "passed": passed, "anomalies": anomalies})
+
+    @mcp.custom_route("/v1/audit/compliance/drill", methods=["POST"])
+    async def audit_compliance_drill_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        receipt_id = body.get("receipt_id", f"receipt-{secrets.token_hex(4)}")
+        receipt = compliance_verifier.run_compliance_drill(receipt_id=receipt_id)
+        valid = compliance_verifier.verify_compliance_receipt(receipt)
+        return JSONResponse({
+            "ok": True,
+            "valid": valid,
+            "receipt": {
+                "receipt_id": receipt.receipt_id,
+                "merkle_root": receipt.merkle_root,
+                "total_leaves": receipt.total_leaves,
+                "scrub_passed": receipt.scrub_passed,
+                "signature": receipt.signature,
+                "timestamp": receipt.timestamp,
+            }
+        })
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4052,6 +4165,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "failover_orchestrator": getattr(mcp, "_failover_orchestrator", None),
         "drill_verifier": getattr(mcp, "_drill_verifier", None),
         "zero_trust_mgr": getattr(mcp, "_zero_trust_mgr", None),
+        "merkle_tree": getattr(mcp, "_merkle_tree", None),
+        "audit_exporter": getattr(mcp, "_audit_exporter", None),
+        "compliance_verifier": getattr(mcp, "_compliance_verifier", None),
     }
     return app, settings
 

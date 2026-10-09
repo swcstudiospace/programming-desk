@@ -40,7 +40,7 @@
       "exit_code": 0,
       "duration_s": 0.057,
       "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 2 file(s) within owned paths",
-      "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
+      "note": "Historical result reports two scope files. Its exact execution order relative to creation of this receipt is not independently established. Commands 14 to 17 record the later two-file state."
     },
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
@@ -53,14 +53,14 @@
       "exit_code": 0,
       "duration_s": 0.041,
       "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected",
-      "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
+      "note": "Historical result reports two scanned files. Its exact execution order relative to creation of this receipt is not independently established. Commands 14 to 17 record the later two-file state."
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.051,
       "output_tail": "G-4 PASS \u2014 no contract surfaces touched",
-      "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records the two-file diff."
+      "note": "Historical contract-check result. Its exact execution order relative to creation of this receipt is not independently established. Commands 14 to 17 record the later two-file state."
     },
     {
       "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
@@ -92,7 +92,7 @@
       "exit_code": 0,
       "duration_s": 0.002,
       "output_tail": ".receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json\n.receipts/bot-06-quality-security/grokbot-swarm-agents-ut-muzi2o18-f2bb8a88.json",
-      "note": "Run after the corrected #71 receipt was committed and before this receipt existed. A later command records both scope files."
+      "note": "This historical output lists both receipts. It does not support the former note that this receipt did not yet exist. Command 17 records the later two-file scope."
     },
     {
       "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json",
@@ -200,7 +200,8 @@
     "The appended stale-history line says command notes 17 to 24 describe merging c110ca1. Edit 6 then replaced note 24, so notes 17 to 23 still carry that sentence and note 24 does not. The mandated sentence was left unchanged.",
     "pip install pyyaml pytest used the user site because system site-packages is not writable. python3 -m pytest still reported 230 passed in 9.01s.",
     "desk_receipt_check on the LEAD endpoint returned error not_found: .receipts/bot-06-quality-security/grokbot-receipt-approver-71-ut-muzi2o18-f2bb8a88.json is not on origin/bot-06-quality-security/desk-v2-assembled-prompts. It did not evaluate this branch. Local check_receipt.py --strict is the G-2 evidence.",
-    "FX1: the #71 receipt's unverified[1] said the merged head 344709a was never reviewed. That was false. Greptile check run 113353737939 reviewed 344709a (2026-10-08T14:06:35Z to 14:16:20Z, 0 comments added, still 2/5). The sentence was corrected; the F1b spec had supplied the wrong fact."
+    "FX1: the #71 receipt's unverified[1] said the merged head 344709a was never reviewed. That was false. Greptile check run 113353737939 reviewed 344709a (2026-10-08T14:06:35Z to 14:16:20Z, 0 comments added, still 2/5). The sentence was corrected; the F1b spec had supplied the wrong fact.",
+    "Review correction 294716401: removed unsupported receipt-creation timing assertions from commands 3, 5, 6 and 11. Historical command order cannot be reconstructed from these records; no historical exit code, duration or output was replaced."
   ],
   "contract_changes": [],
   "rollback_plan": null,

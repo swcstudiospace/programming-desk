@@ -1,0 +1,84 @@
+# Incremental RAGFlow ingest.
+#
+# programming-desk runs this on every push to main. agent-substrate, agent-swarm
+# and claude-ultrathink call it (templates in infra/ragflow/callers/). The job
+# needs contents: read only. RAGFLOW_URL and RAGFLOW_API_KEY are optional: when
+# either is empty, infra/ragflow/ingest.py prints a notice and exits 0, so a
+# pull request and a fork never need the secrets.
+#
+# pull_request is not a trigger. The script also refuses that event.
+
+name: RAGFlow ingest
+
+on:
+  workflow_call:
+    inputs:
+      repo:
+        description: Dataset name. Defaults to the calling repository's name.
+        required: false
+        type: string
+        default: ""
+    secrets:
+      RAGFLOW_URL:
+        required: false
+      RAGFLOW_API_KEY:
+        required: false
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ragflow-ingest-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the repository to ingest
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          path: repo
+
+      - name: Checkout the ingest script
+        uses: actions/checkout@v4
+        with:
+          repository: swcstudiospace/programming-desk
+          ref: ${{ github.workflow_sha }}
+          path: desk
+          persist-credentials: false
+
+      - name: Fetch the before commit
+        working-directory: repo
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${BEFORE}" || "$BEFORE" =~ ^0+$ ]]; then
+            echo "before is missing or all zeros; ingest will list the tree"
+            exit 0
+          fi
+          if [[ ! "$BEFORE" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "before is not a 40-character sha; ingest will list the tree"
+            exit 0
+          fi
+          git fetch --no-tags origin "$BEFORE"
+
+      - name: Ingest changed documents
+        env:
+          RAGFLOW_URL: ${{ secrets.RAGFLOW_URL }}
+          RAGFLOW_API_KEY: ${{ secrets.RAGFLOW_API_KEY }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.sha }}
+          REPO_NAME: ${{ inputs.repo != '' && inputs.repo || github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          python3 "$GITHUB_WORKSPACE/desk/infra/ragflow/ingest.py" \
+            --repo "$REPO_NAME" \
+            --root "$GITHUB_WORKSPACE/repo" \
+            --before "${BEFORE:-}" \
+            --after "${AFTER:-}"

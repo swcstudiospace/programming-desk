@@ -1,18 +1,18 @@
-# Roadmap: Milestone v4.9 — Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh
+# Roadmap: Milestone v5.0 — Autonomous Multi-Agent Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
 
-## Phase 64: Delay-Tolerant Bundle Protocol & Orbital Ephemeris Routing
-- [x] Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) tracking semi-major axis, inclination, true anomaly, slant range, elevation angles, and contact pass duration.
-- [x] Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 inspired bundle structures with TTL enforcement, hops, and SHA-256 payload digests.
-- [x] Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) finding earliest arrival paths across scheduled orbital pass topologies.
-- [x] Resilient Custodial Storage Management (`CustodialStorageManager`) managing store-and-forward retention queues, capacity enforcement, custody release, and HMAC-SHA256 custody receipts.
-- [x] Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) computing relative velocity frequency shifts, Doppler PPM, and link SNR margins.
-- [x] REST API routes under `/v1/sagin/ephemeris/*`, `/v1/sagin/doppler/*`, `/v1/sagin/bundle/*`, and `/v1/sagin/custody/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 66: Quantum-Classical Hybrid Algorithmic Orchestration & VQE/QAOA Swarm Co-Processing
+- [x] Quantum Circuit & State Vector Representation (`QuantumCircuitState`, `QuantumGateType`, `QuantumGate`) supporting arbitrary n-qubit unitary operations (Hadamard, Pauli-X/Y/Z, CNOT, Phase, Rotation-Z) and state vector evolution with normalization.
+- [x] Swarm Variational Quantum Eigensolver (`VQEProcessor`, `HamiltonianOperator`, `AnsatzCircuit`) executing parameter optimization loops for ground state energy estimation.
+- [x] Quantum Approximate Optimization Algorithm (`QAOAOptimizer`) executing cost and mixer Hamiltonian layering for combinatorial scheduling and partition optimization across desk nodes.
+- [x] Noise & Decoherence Simulator (`QuantumDecoherenceSimulator`, `NoiseModel`) modeling depolarizing channel noise, amplitude damping, phase damping, and gate infidelity.
+- [x] Quantum-Classical Hybrid Workload Scheduler (`QuantumWorkloadScheduler`) dynamically routing hybrid computational steps between classical CPU/GPU nodes and simulated Quantum Processing Units (QPUs).
+- [x] REST API routes under `/v1/quantum/circuit/*`, `/v1/quantum/vqe/*`, `/v1/quantum/qaoa/*`, and `/v1/quantum/schedule/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## Phase 65: Ground Station Downlink Consensus & Multi-Constellation State Anchoring
-- [x] Earth Ground Station Terminal Representation (`GroundStationNode`) tracking terminal coordinates, antenna gain, slew rates, and concurrent passes.
-- [x] Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating concurrent passes across Starlink, Kuiper, and Iridium constellations with Doppler compensation.
-- [x] Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent satellite downlinks.
-- [x] Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) calculating binary Merkle roots over verified orbital telemetry events.
-- [x] Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) publishing Merkle roots and orbital downlink proofs to Solana devnet targets.
-- [x] End-to-End SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
-- [x] REST API routes under `/v1/sagin/downlink/*`, `/v1/sagin/consensus/*`, `/v1/sagin/anchor/*`, and `/v1/sagin/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 67: Topological Qubit Surface Code Error Correction, Syndrome Extraction & Solana Devnet Quantum State Anchoring
+- [x] Topological Qubit & Rotated Surface Code Lattice (`SurfaceCodeLattice`, `QubitNode`, `QubitType`) modeling data qubits and measure qubits on a 2D planar square lattice with code distance \(d\).
+- [x] Quantum Error Syndrome Extractor (`SyndromeExtractor`, `StabilizerMeasurement`) measuring \(X\)-type (star) and \(Z\)-type (plaquette) stabilizers detecting bit-flip and phase-flip error chains.
+- [x] Minimum-Weight Perfect Matching (MWPM) Syndrome Decoder (`MWPMDecoder`, `CorrectionOperator`) matching error defect pairs and applying Pauli corrections to preserve logical qubit fidelity.
+- [x] Cryptographic Quantum State & Syndrome Receipt Ledger (`QuantumStateReceiptLedger`, `QuantumStateReceipt`) maintaining an append-only binary Merkle tree of verified syndrome extractions and logical state transitions.
+- [x] External Solana Devnet Quantum State Exporter (`QuantumAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] End-to-End Quantum-Classical & Topological Verification Drill Simulator (`QuantumTopologicalDrillSimulator`) verifying circuit simulation, VQE convergence, QAOA partitioning, surface code syndrome extraction, MWPM error recovery, and Solana anchoring.
+- [x] REST API routes under `/v1/quantum/surface-code/*`, `/v1/quantum/syndrome/*`, `/v1/quantum/anchor/*`, and `/v1/quantum/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

@@ -6113,6 +6113,141 @@ def create_mcp(
         drill_results = SAGINOrbitalVerificationDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.0 (Phases 66 & 67): Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration
+    from desk_gateway.quantum_hybrid_mesh import (
+        AnsatzCircuit,
+        HamiltonianOperator,
+        NoiseModel,
+        QAOAOptimizer,
+        QuantumCircuitState,
+        QuantumDecoherenceSimulator,
+        QuantumGate,
+        QuantumGateType,
+        QuantumWorkloadScheduler,
+        VQEProcessor,
+    )
+    from desk_gateway.quantum_topological_mesh import (
+        MWPMDecoder,
+        QuantumAnchorExporter,
+        QuantumStateReceiptLedger,
+        QuantumTopologicalDrillSimulator,
+        SurfaceCodeLattice,
+        SyndromeExtractor,
+    )
+
+    quantum_scheduler = QuantumWorkloadScheduler()
+    quantum_decoherence = QuantumDecoherenceSimulator()
+    quantum_ledger = QuantumStateReceiptLedger()
+    quantum_anchor_exporter = QuantumAnchorExporter()
+
+    mcp._quantum_scheduler = quantum_scheduler  # type: ignore[attr-defined]
+    mcp._quantum_decoherence = quantum_decoherence  # type: ignore[attr-defined]
+    mcp._quantum_ledger = quantum_ledger  # type: ignore[attr-defined]
+    mcp._quantum_anchor_exporter = quantum_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/circuit/simulate", methods=["POST"])
+    async def quantum_circuit_simulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        gates_data = body.get("gates", [])
+
+        circuit = QuantumCircuitState(num_qubits=num_qubits)
+        for g_dict in gates_data:
+            gtype = QuantumGateType(g_dict.get("gate_type", "H"))
+            targets = g_dict.get("target_qubits", [0])
+            controls = g_dict.get("control_qubits", [])
+            params = g_dict.get("parameters", [])
+            gate = QuantumGate(gtype, targets, controls, params)
+            circuit.apply_gate(gate)
+
+        return JSONResponse({"ok": True, "circuit": circuit.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/vqe/solve", methods=["POST"])
+    async def quantum_vqe_solve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 2))
+        terms = body.get("hamiltonian_terms", [{"coefficient": -1.0, "pauli_string": "Z Z"}])
+        layers = int(body.get("layers", 1))
+        max_iters = int(body.get("max_iterations", 15))
+
+        h = HamiltonianOperator()
+        for t in terms:
+            h.add_term(float(t["coefficient"]), str(t["pauli_string"]))
+
+        ansatz = AnsatzCircuit(num_qubits=num_qubits, num_layers=layers)
+        vqe = VQEProcessor(h, ansatz)
+        opt_res = vqe.optimize(max_iterations=max_iters)
+
+        quantum_ledger.append_event("VQE_CONVERGED", opt_res["final_state_digest"], 0, 0)
+        return JSONResponse({"ok": True, "vqe": opt_res})
+
+    @mcp.custom_route("/v1/quantum/qaoa/partition", methods=["POST"])
+    async def quantum_qaoa_partition_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        num_qubits = int(body.get("num_qubits", 3))
+        edges_raw = body.get("edges", [[[0, 1], 1.0], [[1, 2], 1.0]])
+        gammas = [float(x) for x in body.get("gammas", [0.3])]
+        betas = [float(x) for x in body.get("betas", [0.4])]
+
+        weights = {(int(e[0][0]), int(e[0][1])): float(e[1]) for e in edges_raw}
+        qaoa = QAOAOptimizer(num_qubits=num_qubits, p_steps=len(gammas))
+        res = qaoa.solve_partition(weights, gammas, betas)
+        return JSONResponse({"ok": True, "qaoa": res})
+
+    @mcp.custom_route("/v1/quantum/schedule/dispatch", methods=["POST"])
+    async def quantum_schedule_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_name = body.get("task_name", "q-vqe-ground-state")
+        circuit_type = body.get("circuit_type", "ansatz-hea")
+        num_qubits = int(body.get("num_qubits", 2))
+        params = body.get("params", {})
+
+        task = quantum_scheduler.dispatch_quantum_task(task_name, circuit_type, num_qubits, params)
+        return JSONResponse({"ok": True, "task": task})
+
+    @mcp.custom_route("/v1/quantum/surface-code/syndrome", methods=["POST"])
+    async def quantum_surface_code_syndrome_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        distance = int(body.get("distance", 3))
+        errors = body.get("inject_errors", [{"row": 1, "col": 1, "error": "X"}])
+
+        lattice = SurfaceCodeLattice(distance=distance)
+        for err in errors:
+            lattice.inject_physical_error(int(err["row"]), int(err["col"]), str(err["error"]))
+
+        extractor = SyndromeExtractor(lattice)
+        syndromes = extractor.extract_syndrome()
+
+        decoder = MWPMDecoder(lattice)
+        corrections = decoder.decode_syndromes(syndromes)
+        post_syndromes = extractor.extract_syndrome()
+
+        rcpt = quantum_ledger.append_event(
+            "SURFACE_CODE_CORRECTION",
+            hashlib.sha256(json.dumps(lattice.to_dict()).encode("utf-8")).hexdigest(),
+            len([s for s in syndromes if s.syndrome_bit == -1]),
+            len(corrections),
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "lattice": lattice.to_dict(),
+            "defects_count": len([s for s in syndromes if s.syndrome_bit == -1]),
+            "corrections": [{"qubit_id": c.qubit_id, "correction": c.pauli_correction} for c in corrections],
+            "resolved": all(s.syndrome_bit == 1 for s in post_syndromes),
+            "receipt": rcpt.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/anchor/export", methods=["POST"])
+    async def quantum_anchor_export_route(_request: Request) -> Response:
+        commitment = quantum_anchor_exporter.export_commitment(quantum_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/drill/simulate", methods=["POST"])
+    async def quantum_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumTopologicalDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7643,6 +7778,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "sagin_consensus": getattr(mcp, "_sagin_consensus", None),
         "sagin_ledger": getattr(mcp, "_sagin_ledger", None),
         "sagin_anchor_exporter": getattr(mcp, "_sagin_anchor_exporter", None),
+        "quantum_scheduler": getattr(mcp, "_quantum_scheduler", None),
+        "quantum_decoherence": getattr(mcp, "_quantum_decoherence", None),
+        "quantum_ledger": getattr(mcp, "_quantum_ledger", None),
+        "quantum_anchor_exporter": getattr(mcp, "_quantum_anchor_exporter", None),
     }
     return app, settings
 

@@ -3,8 +3,9 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/gates-full-base-fetch",
   "started_at": "2026-10-08T23:24:00Z",
-  "completed_at": "2026-10-08T23:46:30Z",
-  "approved_by": null,
+  "completed_at": "2026-10-09T03:30:23Z",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Ming authorized fixing and merging #140 in chat on 2026-10-09 at 14:19 AEDT.",
   "commands": [
     {
       "cmd": "bash scripts/dev/repro_shallow_base_fetch.sh --old-only",
@@ -125,6 +126,18 @@
       "exit_code": 1,
       "duration_s": 0.06,
       "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.066,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/CI1.json --bot bot-05-infrastructure --strict",
+      "exit_code": 0,
+      "duration_s": 0.027,
+      "output_tail": "G-2 PASS — CI1: 22 command(s), 17 substantiated claim(s), 4 unverified item(s)"
     }
   ],
   "claims": [
@@ -194,13 +207,21 @@
       "claim": "The foreign path left on this diff is ci/.github/workflows/gates.yml",
       "evidence_command_index": 19,
       "expects_failure": true
+    },
+    {
+      "claim": "After merging a76e4e5, path ownership passes for this diff against origin/main",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Strict G-2 passes with approved_by set to human:SomeRandmGuyy",
+      "evidence_command_index": 21
     }
   ],
   "unverified": [
     "The self-hosted GitHub Actions runner has not executed this branch yet. Local git is 2.43.0, the version logged on run 37854476144, but the reproduction uses a temporary local remote rather than that runner's persistent work directory.",
-    "G-1 path ownership still fails on ci/.github/workflows/gates.yml until Quality PR 142 lands on main. That PR moves ci/.github/workflows/** after ci/.github/** so last match gives the template to bot-05-infrastructure. This seat does not merge 142. After Ming merges it, this branch needs a merge commit from main before path ownership can pass.",
+    "GitHub Actions has not executed the merge of a76e4e5 or this stamped receipt. Local G-1 against origin/main passed after that merge (5 files, including ci/.github/workflows/gates.yml).",
     "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite and infra/tests/test_staging_deployment.py::test_reload_nginx_gateway_execution failed when the Infra suite was run (2 failed, 13 passed). This change does not edit those files.",
-    "approved_by is empty pending Lead or Ming. Greptile has not reviewed this head yet."
+    "Gitleaks and Semgrep inside security-pr.yml may stay red until #139 lands. That workflow still fetches the base ref with --depth=1 and is outside this change."
   ],
   "files_changed": [
     ".github/workflows/gates.yml",

@@ -7388,6 +7388,148 @@ def create_mcp(
         QuantumTimelockSolanaAnchorExporter,
         QuantumTimelockVerificationDrill,
     )
+    from desk_gateway.quantum_thermodynamics_mesh import (
+        DemonFeedbackResult,
+        HeatEngineCycleResult,
+        LandauerErasureEngine,
+        LandauerErasureResult,
+        MaxwellQuantumDemon,
+        QuantumHeatEngineCycle,
+        QuantumThermalReservoir,
+        QuantumThermodynamicMesh,
+        QuantumWorkExtractionEngine,
+        WorkExtractionResult,
+    )
+    from desk_gateway.quantum_thermodynamics_anchoring import (
+        QuantumThermodynamicMerkleLedger,
+        QuantumThermodynamicReceipt,
+        QuantumThermodynamicSolanaAnchorExporter,
+        QuantumThermodynamicVerificationDrill,
+    )
+
+    qthermo_mesh = QuantumThermodynamicMesh()
+    qthermo_ledger = QuantumThermodynamicMerkleLedger()
+    qthermo_exporter = QuantumThermodynamicSolanaAnchorExporter()
+    mcp._qthermo_mesh = qthermo_mesh  # type: ignore[attr-defined]
+    mcp._qthermo_ledger = qthermo_ledger  # type: ignore[attr-defined]
+    mcp._qthermo_exporter = qthermo_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/thermo/thermalize", methods=["POST"])
+    async def quantum_thermo_thermalize_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        energy_levels = [float(e) for e in body.get("energy_levels", [0.0, 1.0, 2.0])]
+        temp = float(body.get("temperature", 1.0))
+        st = qthermo_mesh.thermalize(energy_levels, temperature=temp)
+        return JSONResponse({"ok": True, "thermal_state": st.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/thermo/ergotropy/extract", methods=["POST"])
+    async def quantum_thermo_ergotropy_extract_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        energy_levels = [float(e) for e in body.get("energy_levels", [0.0, 1.0, 2.0])]
+        probs = [float(p) for p in body.get("probabilities", [0.1, 0.3, 0.6])]
+        temp = float(body.get("temperature", 1.0))
+        res = qthermo_mesh.extract_ergotropy(energy_levels, probs, temperature=temp)
+
+        rcpt = QuantumThermodynamicReceipt(
+            receipt_id=f"rcpt-ergotropy-{int(time.time()*1000)}",
+            cycle_type="ERGOTROPY_EXTRACTION",
+            temperature=temp,
+            work_extracted=res.extractable_ergotropy,
+            heat_dissipated=0.0,
+            entropy_delta=0.0,
+            efficiency=1.0 if res.initial_energy > 0 else 0.0,
+            second_law_satisfied=True,
+            landauer_bound_satisfied=True,
+        )
+        qthermo_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "ergotropy": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qthermo_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/thermo/demon/cycle", methods=["POST"])
+    async def quantum_thermo_demon_cycle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        p0 = float(body.get("p0", 0.85))
+        p1 = float(body.get("p1", 0.15))
+        temp = float(body.get("temperature", 1.0))
+        demon_res, erasure_res = qthermo_mesh.run_demon_cycle(p0, p1, temperature=temp)
+
+        rcpt = QuantumThermodynamicReceipt(
+            receipt_id=f"rcpt-demon-{int(time.time()*1000)}",
+            cycle_type="MAXWELL_DEMON_SZILARD",
+            temperature=temp,
+            work_extracted=demon_res.work_extracted,
+            heat_dissipated=erasure_res.actual_heat_dissipated,
+            entropy_delta=erasure_res.entropy_increase_reservoir - demon_res.entropy_reduction,
+            efficiency=demon_res.work_extracted / max(1e-6, erasure_res.actual_heat_dissipated),
+            second_law_satisfied=erasure_res.actual_heat_dissipated >= demon_res.work_extracted,
+            landauer_bound_satisfied=erasure_res.landauer_bound_satisfied,
+        )
+        qthermo_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "demon": demon_res.to_dict(),
+            "erasure": erasure_res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qthermo_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/thermo/heat_engine/cycle", methods=["POST"])
+    async def quantum_thermo_heat_engine_cycle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        th_cold = float(body.get("th_cold", 1.0))
+        th_hot = float(body.get("th_hot", 3.0))
+        omega_cold = float(body.get("omega_cold", 1.0))
+        omega_hot = float(body.get("omega_hot", 2.0))
+
+        engine_res = qthermo_mesh.run_heat_engine(th_cold, th_hot, omega_cold, omega_hot)
+        rcpt = QuantumThermodynamicReceipt(
+            receipt_id=f"rcpt-otto-{int(time.time()*1000)}",
+            cycle_type="QUANTUM_OTTO_CYCLE",
+            temperature=th_hot,
+            work_extracted=engine_res.net_work_extracted,
+            heat_dissipated=engine_res.heat_rejected_qc,
+            entropy_delta=engine_res.heat_rejected_qc / th_cold - engine_res.heat_absorbed_qh / th_hot,
+            efficiency=engine_res.otto_efficiency,
+            second_law_satisfied=engine_res.second_law_satisfied,
+            landauer_bound_satisfied=True,
+        )
+        qthermo_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "cycle": engine_res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qthermo_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/thermo/anchor/export", methods=["POST"])
+    async def quantum_thermo_anchor_export_route(_request: Request) -> Response:
+        tot_work = sum(r.work_extracted for r in qthermo_ledger.receipts)
+        tot_heat = sum(r.heat_dissipated for r in qthermo_ledger.receipts)
+        anchor_payload = qthermo_exporter.generate_instruction_payload(
+            merkle_root=qthermo_ledger.get_merkle_root(),
+            num_receipts=len(qthermo_ledger.receipts),
+            mean_temperature=qthermo_mesh.default_reservoir.temperature,
+            total_work_extracted=tot_work,
+            total_heat_dissipated=tot_heat,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": qthermo_exporter.export_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/thermo/drill/simulate", methods=["POST"])
+    async def quantum_thermo_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumThermodynamicVerificationDrill()
+        res = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": res})
 
     qtimelock_mesh = QuantumTimelockMesh()
     qtimelock_ledger = QuantumTimelockMerkleLedger()
@@ -9326,6 +9468,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qtimelock_mesh": getattr(mcp, "_qtimelock_mesh", None),
         "qtimelock_ledger": getattr(mcp, "_qtimelock_ledger", None),
         "qtimelock_exporter": getattr(mcp, "_qtimelock_exporter", None),
+        "qthermo_mesh": getattr(mcp, "_qthermo_mesh", None),
+        "qthermo_ledger": getattr(mcp, "_qthermo_ledger", None),
+        "qthermo_exporter": getattr(mcp, "_qthermo_exporter", None),
     }
     return app, settings
 

@@ -1,0 +1,138 @@
+{
+  "task_id": "ci-github-ownership-split",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/ci-github-ownership-split",
+  "started_at": "2026-10-08T23:35:00Z",
+  "completed_at": "2026-10-08T23:46:48Z",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=short",
+      "exit_code": 1,
+      "duration_s": 0.18,
+      "output_tail": "AssertionError: ci/.github/workflows/gates.yml resolved to bot-06-quality-security\n1 failed, 2 passed"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=short",
+      "exit_code": 0,
+      "duration_s": 0.17,
+      "output_tail": "3 passed in 0.17s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 8.98,
+      "output_tail": "294 passed in 8.98s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --files ownership.yaml ci/tests/test_gates.py .receipts/bot-06-quality-security/ci-github-ownership-split.json",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS \u2014 bot-06-quality-security: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files ownership.yaml ci/tests/test_gates.py",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-3 PASS \u2014 2 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=line",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "AssertionError: ci/.github/workflows/other.yml resolved to bot-05-infrastructure\n1 failed, 3 passed"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestGateWorkflowCopiesShareOneOwner -v --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.11,
+      "output_tail": "4 passed in 0.11s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.08,
+      "output_tail": "295 passed in 9.08s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Before the rule move, ci/.github/workflows/gates.yml resolves to bot-06-quality-security",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "After the rule move, both gates workflow copies resolve to bot-05-infrastructure and a non-workflow path under ci/.github/ stays with bot-06-quality-security",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ci/tests suite passes",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Ownership manifest validates with the template pattern stated once",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ownership.yaml, the gate test, and this receipt resolve to bot-06-quality-security",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Secret scan of ownership.yaml and the gate test exits 0",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Desk integrity check exits 0",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "With a workflows folder glob, ci/.github/workflows/other.yml resolves to bot-05-infrastructure",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    },
+    {
+      "claim": "Naming only ci/.github/workflows/gates.yml keeps that file with Infrastructure and leaves ci/.github/workflows/other.yml with Quality",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Ownership manifest still validates after the pattern is narrowed to one file",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "ci/tests suite passes after the Greptile P2 narrowing",
+      "evidence_command_index": 10
+    }
+  ],
+  "unverified": [
+    "PR #140 (bot-05-infrastructure/gates-full-base-fetch) was not updated or rebased onto this rule. It stays blocked on G-1 until this change is on main.",
+    "gates.yml itself was not edited. Template sync was not run against a paired gates.yml diff.",
+    "Ming authorized this stamp in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy. This commit stamps the receipt; Lead merges the pull request.",
+    "Greptile re-review of the narrowed gates.yml exception has not completed. The review of 515951d reported one P2 and the gates job failed G-2, which is the empty approved_by."
+  ],
+  "files_changed": [
+    "ownership.yaml",
+    "ci/tests/test_gates.py",
+    ".receipts/bot-06-quality-security/ci-github-ownership-split.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this commit with git revert. The next gate run picks the previous ownership.yaml up immediately. No data, schema, or migration is involved; the template path resolves to QUALITY again.",
+  "approvals": [],
+  "approved_by": "human:SomeRandmGuyy"
+}

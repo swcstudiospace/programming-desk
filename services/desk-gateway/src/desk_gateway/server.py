@@ -3592,6 +3592,21 @@ def create_mcp(
         PromotionState,
         ConsensusReceipt,
     )
+    from desk_gateway.sharding import (
+        ConsistentHashRing,
+        CRDTStore,
+        GeoReplicationEngine,
+        ShardRouter,
+        ShardNode,
+        ConsistencyLevel,
+    )
+    from desk_gateway.mesh_consensus import (
+        AntiEntropyGossip,
+        SplitBrainDetector,
+        EpochCoordinator,
+        PartitionHealingOrchestrator,
+        GeoPartitionDrillSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3605,6 +3620,37 @@ def create_mcp(
         signing_secret=secret_key.decode("utf-8", errors="ignore"),
     )
     proof_exporter = CrossDeskProofExporter()
+    shard_ring = ConsistentHashRing()
+    shard_ring.add_node(ShardNode(node_id="desk-primary-local", region_id=settings.edge_default_region))
+    shard_crdt_store = CRDTStore(region_id=settings.edge_default_region, node_id="desk-primary-local")
+    geo_replication_engine = GeoReplicationEngine(
+        region_id=settings.edge_default_region,
+        signing_secret=secret_key.decode("utf-8", errors="ignore"),
+    )
+    shard_router = ShardRouter(
+        ring=shard_ring,
+        store=shard_crdt_store,
+        replicator=geo_replication_engine,
+    )
+    anti_entropy_gossip = AntiEntropyGossip(
+        region_id=settings.edge_default_region,
+        store=shard_crdt_store,
+    )
+    split_brain_detector = SplitBrainDetector(
+        local_region=settings.edge_default_region,
+        total_regions=[settings.edge_default_region, "us-west", "eu-central"],
+    )
+    epoch_coordinator = EpochCoordinator(
+        node_id="desk-primary-local",
+        region_id=settings.edge_default_region,
+        split_detector=split_brain_detector,
+    )
+    partition_healing_orchestrator = PartitionHealingOrchestrator(
+        store=shard_crdt_store,
+        replicator=geo_replication_engine,
+        split_detector=split_brain_detector,
+    )
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3613,6 +3659,14 @@ def create_mcp(
     setattr(mcp, "_synthesis_consensus_engine", synthesis_consensus_engine)
     setattr(mcp, "_proof_receipt_ledger", proof_receipt_ledger)
     setattr(mcp, "_proof_exporter", proof_exporter)
+    setattr(mcp, "_shard_ring", shard_ring)
+    setattr(mcp, "_shard_crdt_store", shard_crdt_store)
+    setattr(mcp, "_geo_replication_engine", geo_replication_engine)
+    setattr(mcp, "_shard_router", shard_router)
+    setattr(mcp, "_anti_entropy_gossip", anti_entropy_gossip)
+    setattr(mcp, "_split_brain_detector", split_brain_detector)
+    setattr(mcp, "_epoch_coordinator", epoch_coordinator)
+    setattr(mcp, "_partition_healing_orchestrator", partition_healing_orchestrator)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4225,6 +4279,119 @@ def create_mcp(
     @mcp.custom_route("/v1/synthesis/drill/simulate", methods=["POST"])
     async def synthesis_drill_simulate_route(_request: Request) -> Response:
         drill_results = FormalVerificationDrillSimulator.run_synthesis_consensus_drill(synthesis_consensus_engine)
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v3.8 (Phases 42 & 43): Dynamic Sharding & Sovereign Mesh Consensus
+    @mcp.custom_route("/v1/sharding/nodes/register", methods=["POST"])
+    async def sharding_node_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id")
+        region_id = body.get("region_id", settings.edge_default_region)
+        weight = int(body.get("weight", 1))
+        if not node_id:
+            return JSONResponse({"ok": False, "error": "node_id is required"}, status_code=400)
+        node = ShardNode(node_id=node_id, region_id=region_id, weight=weight)
+        shard_ring.add_node(node)
+        return JSONResponse({"ok": True, "node": node.to_dict(), "total_nodes": len(shard_ring.nodes)})
+
+    @mcp.custom_route("/v1/sharding/nodes", methods=["GET"])
+    async def sharding_nodes_list_route(_request: Request) -> Response:
+        return JSONResponse({"ok": True, "nodes": shard_ring.list_nodes()})
+
+    @mcp.custom_route("/v1/sharding/route/{key}", methods=["GET"])
+    async def sharding_route_key_route(request: Request) -> Response:
+        key = request.path_params.get("key", "")
+        routing = shard_router.route_key(key)
+        return JSONResponse({"ok": True, "routing": routing})
+
+    @mcp.custom_route("/v1/sharding/crdt/write", methods=["POST"])
+    async def sharding_crdt_write_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key = body.get("key")
+        crdt_type = body.get("crdt_type", "lww")
+        if not key:
+            return JSONResponse({"ok": False, "error": "key is required"}, status_code=400)
+
+        if crdt_type == "lww":
+            val = body.get("value")
+            res = shard_router.write_lww(key, val)
+            return JSONResponse({"ok": True, **res})
+        elif crdt_type == "pn_counter":
+            delta = int(body.get("delta", 1))
+            res = shard_router.update_counter(key, delta)
+            return JSONResponse({"ok": True, **res})
+        elif crdt_type == "or_set":
+            elem = body.get("element", "")
+            action = body.get("action", "add")
+            if action == "remove":
+                s = shard_crdt_store.remove_set(key, elem)
+            else:
+                s = shard_crdt_store.add_set(key, elem)
+            routing = shard_router.route_key(key)
+            delta_obj = geo_replication_engine.create_delta(
+                key=key,
+                crdt_type="or_set",
+                payload=s.to_dict(),
+                vector_clock=shard_crdt_store.vector_clock,
+            )
+            return JSONResponse({
+                "ok": True,
+                "key": key,
+                "elements": sorted(list(s.read())),
+                "delta_id": delta_obj.delta_id,
+                "routing": routing,
+            })
+        else:
+            return JSONResponse({"ok": False, "error": f"Unsupported crdt_type: {crdt_type}"}, status_code=400)
+
+    @mcp.custom_route("/v1/sharding/crdt/read/{key}", methods=["GET"])
+    async def sharding_crdt_read_route(request: Request) -> Response:
+        key = request.path_params.get("key", "")
+        crdt_type = request.query_params.get("crdt_type", "lww")
+        routing = shard_router.route_key(key)
+
+        if crdt_type == "lww":
+            val = shard_crdt_store.read_lww(key)
+            return JSONResponse({"ok": True, "key": key, "value": val, "crdt_type": "lww", "routing": routing})
+        elif crdt_type == "pn_counter":
+            val = shard_crdt_store.read_counter(key)
+            return JSONResponse({"ok": True, "key": key, "value": val, "crdt_type": "pn_counter", "routing": routing})
+        elif crdt_type == "or_set":
+            elems = shard_crdt_store.read_set(key)
+            return JSONResponse({"ok": True, "key": key, "elements": sorted(list(elems)), "crdt_type": "or_set", "routing": routing})
+        return JSONResponse({"ok": False, "error": f"Unknown crdt_type: {crdt_type}"}, status_code=400)
+
+    @mcp.custom_route("/v1/mesh/consensus/gossip/digest", methods=["POST"])
+    async def mesh_consensus_gossip_digest_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        peer_digest_dict = body.get("digest")
+        if not peer_digest_dict:
+            # return local digest
+            local_digest = anti_entropy_gossip.generate_digest()
+            return JSONResponse({"ok": True, "digest": local_digest.to_dict()})
+
+        from desk_gateway.mesh_consensus import GossipDigest
+        remote_digest = GossipDigest(
+            region_id=peer_digest_dict["region_id"],
+            vector_clock=peer_digest_dict["vector_clock"],
+            known_keys_hash=peer_digest_dict["known_keys_hash"],
+            timestamp=peer_digest_dict.get("timestamp", time.time()),
+        )
+        res = anti_entropy_gossip.receive_digest(remote_digest)
+        return JSONResponse({"ok": True, "comparison": res})
+
+    @mcp.custom_route("/v1/mesh/consensus/lease/acquire", methods=["POST"])
+    async def mesh_consensus_lease_acquire_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        ttl = float(body.get("ttl_seconds", 30.0))
+        lease = epoch_coordinator.acquire_lease(ttl_seconds=ttl)
+        if not lease:
+            return JSONResponse({"ok": False, "error": "Split-brain partition fencing active: quorum unavailable"}, status_code=503)
+        return JSONResponse({"ok": True, "lease": lease.to_dict()})
+
+    @mcp.custom_route("/v1/mesh/consensus/drill/simulate", methods=["POST"])
+    async def mesh_consensus_drill_simulate_route(_request: Request) -> Response:
+        drill_results = GeoPartitionDrillSimulator.run_partition_and_healing_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -5677,6 +5844,14 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "synthesis_consensus_engine": getattr(mcp, "_synthesis_consensus_engine", None),
         "proof_receipt_ledger": getattr(mcp, "_proof_receipt_ledger", None),
         "proof_exporter": getattr(mcp, "_proof_exporter", None),
+        "shard_ring": getattr(mcp, "_shard_ring", None),
+        "shard_crdt_store": getattr(mcp, "_shard_crdt_store", None),
+        "geo_replication_engine": getattr(mcp, "_geo_replication_engine", None),
+        "shard_router": getattr(mcp, "_shard_router", None),
+        "anti_entropy_gossip": getattr(mcp, "_anti_entropy_gossip", None),
+        "split_brain_detector": getattr(mcp, "_split_brain_detector", None),
+        "epoch_coordinator": getattr(mcp, "_epoch_coordinator", None),
+        "partition_healing_orchestrator": getattr(mcp, "_partition_healing_orchestrator", None),
     }
     return app, settings
 

@@ -7121,6 +7121,91 @@ def create_mcp(
         drill_results = QuantumZKPDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.9 (Phases 84 & 85): Quantum Homomorphic Encryption (QHE) & Encrypted Circuit Mesh
+    from desk_gateway.quantum_homomorphic_mesh import (
+        QHEExecutionEngine,
+        QHEGateType,
+        QHEQubitState,
+    )
+    from desk_gateway.quantum_homomorphic_anchoring import (
+        QuantumHomomorphicAnchorExporter,
+        QuantumHomomorphicDrillSimulator,
+        QuantumHomomorphicLedger,
+        QuantumHomomorphicReceipt,
+    )
+
+    qhe_engine = QHEExecutionEngine()
+    qhe_ledger = QuantumHomomorphicLedger()
+    qhe_exporter = QuantumHomomorphicAnchorExporter()
+
+    mcp._qhe_engine = qhe_engine  # type: ignore[attr-defined]
+    mcp._qhe_ledger = qhe_ledger  # type: ignore[attr-defined]
+    mcp._qhe_exporter = qhe_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/homomorphic/qubit/encrypt", methods=["POST"])
+    async def quantum_homomorphic_qubit_encrypt_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        qubit_index = int(body.get("qubit_index", 0))
+        alpha_val = body.get("alpha", {"real": 1.0, "imag": 0.0})
+        beta_val = body.get("beta", {"real": 0.0, "imag": 0.0})
+        alpha = complex(float(alpha_val.get("real", 1.0)), float(alpha_val.get("imag", 0.0)))
+        beta = complex(float(beta_val.get("real", 0.0)), float(beta_val.get("imag", 0.0)))
+
+        qstate = qhe_engine.encrypt_qubit(qubit_index, alpha, beta)
+        rcpt = qhe_ledger.append_event(
+            f"circ-init-{qubit_index}",
+            "QHE_QUBIT_ENCRYPT",
+            1,
+            0,
+            qstate.to_dict(),
+        )
+        return JSONResponse({"ok": True, "qubit": qstate.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/homomorphic/gate/apply", methods=["POST"])
+    async def quantum_homomorphic_gate_apply_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        gate_type = body.get("gate_type", "H").upper()
+        qubit_index = int(body.get("qubit_index", 0))
+        target_index = body.get("target_index")
+
+        try:
+            if gate_type == "H":
+                q, a, b = qhe_engine.apply_hadamard(qubit_index)
+                res = {"gate": "H", "qubit": qubit_index, "new_keys": [a, b]}
+            elif gate_type == "S":
+                q, a, b = qhe_engine.apply_phase_s(qubit_index)
+                res = {"gate": "S", "qubit": qubit_index, "new_keys": [a, b]}
+            elif gate_type == "CNOT":
+                t_idx = int(target_index if target_index is not None else 1)
+                ca, cb, ta, tb = qhe_engine.apply_cnot(qubit_index, t_idx)
+                res = {"gate": "CNOT", "control": qubit_index, "target": t_idx, "control_keys": [ca, cb], "target_keys": [ta, tb]}
+            elif gate_type == "T":
+                q, a, b, corr = qhe_engine.apply_t_gate(qubit_index)
+                res = {"gate": "T", "qubit": qubit_index, "new_keys": [a, b], "correction": corr}
+            else:
+                return JSONResponse({"ok": False, "error": f"Unsupported QHE gate: {gate_type}"}, status_code=400)
+
+            rcpt = qhe_ledger.append_event(
+                f"circ-gate-{qubit_index}",
+                f"QHE_GATE_{gate_type}",
+                2 if gate_type == "CNOT" else 1,
+                1,
+                res,
+            )
+            return JSONResponse({"ok": True, "evaluation": res, "receipt": rcpt.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/homomorphic/anchor/export", methods=["POST"])
+    async def quantum_homomorphic_anchor_export_route(_request: Request) -> Response:
+        commitment = qhe_exporter.export_commitment(qhe_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/homomorphic/drill/simulate", methods=["POST"])
+    async def quantum_homomorphic_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumHomomorphicDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8690,6 +8775,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qzkp_engine": getattr(mcp, "_qzkp_engine", None),
         "qzkp_ledger": getattr(mcp, "_qzkp_ledger", None),
         "qzkp_exporter": getattr(mcp, "_qzkp_exporter", None),
+        "qhe_engine": getattr(mcp, "_qhe_engine", None),
+        "qhe_ledger": getattr(mcp, "_qhe_ledger", None),
+        "qhe_exporter": getattr(mcp, "_qhe_exporter", None),
     }
     return app, settings
 

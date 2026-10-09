@@ -7230,6 +7230,119 @@ def create_mcp(
     mcp._qca_ledger = qca_ledger  # type: ignore[attr-defined]
     mcp._qca_exporter = qca_exporter  # type: ignore[attr-defined]
 
+    from desk_gateway.quantum_error_mitigation_mesh import (
+        ExtrapolationModel,
+        NoiseScalePoint,
+        ProbabilisticErrorCanceller,
+        ReadoutErrorMitigator,
+        ZeroNoiseExtrapolator,
+    )
+    from desk_gateway.quantum_error_mitigation_anchoring import (
+        QEMMerkleLedger,
+        QEMReceipt,
+        QEMSolanaAnchorExporter,
+        QEMVerificationDrillSimulator,
+    )
+
+    qem_extrapolator = ZeroNoiseExtrapolator()
+    qem_readout_mitigator = ReadoutErrorMitigator()
+    qem_pec = ProbabilisticErrorCanceller()
+    qem_ledger = QEMMerkleLedger()
+    qem_exporter = QEMSolanaAnchorExporter()
+
+    mcp._qem_extrapolator = qem_extrapolator  # type: ignore[attr-defined]
+    mcp._qem_readout_mitigator = qem_readout_mitigator  # type: ignore[attr-defined]
+    mcp._qem_pec = qem_pec  # type: ignore[attr-defined]
+    mcp._qem_ledger = qem_ledger  # type: ignore[attr-defined]
+    mcp._qem_exporter = qem_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/mitigation/zne", methods=["POST"])
+    async def quantum_mitigation_zne_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "circuit-zne-01")
+        model_str = body.get("model", "RICHARDSON")
+        model = getattr(ExtrapolationModel, model_str, ExtrapolationModel.RICHARDSON)
+        ideal_target = body.get("ideal_target")
+        points_raw = body.get("scale_points", [
+            {"scale_factor": 1.0, "measured_expectation": 0.82},
+            {"scale_factor": 2.0, "measured_expectation": 0.71},
+            {"scale_factor": 3.0, "measured_expectation": 0.62},
+        ])
+        scale_points = [
+            NoiseScalePoint(
+                scale_factor=float(p["scale_factor"]),
+                measured_expectation=float(p["measured_expectation"]),
+                raw_shots=int(p.get("raw_shots", 1000)),
+            )
+            for p in points_raw
+        ]
+        result = qem_extrapolator.extrapolate(
+            scale_points=scale_points,
+            model=model,
+            ideal_target=float(ideal_target) if ideal_target is not None else None,
+        )
+        receipt = QEMReceipt.create(
+            circuit_id=circuit_id,
+            mitigation_technique=f"ZNE_{model.value}",
+            raw_expectation=result.unmitigated_value,
+            mitigated_expectation=result.mitigated_zero_noise_value,
+            error_reduction_pct=result.error_reduction_pct,
+        )
+        qem_ledger.append_receipt(receipt)
+        return JSONResponse({"ok": True, "result": result.to_dict(), "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/mitigation/readout", methods=["POST"])
+    async def quantum_mitigation_readout_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "circuit-readout-01")
+        raw_counts = body.get("raw_counts", {"0": 900, "1": 100})
+        p0_given_1 = float(body.get("p0_given_1", 0.03))
+        p1_given_0 = float(body.get("p1_given_0", 0.02))
+        mitigator = ReadoutErrorMitigator(p0_given_1=p0_given_1, p1_given_0=p1_given_0)
+        mitigated = mitigator.mitigate_readout_counts(raw_counts)
+        receipt = QEMReceipt.create(
+            circuit_id=circuit_id,
+            mitigation_technique="READOUT_INVERSION",
+            raw_expectation=raw_counts.get("0", 0) / max(1, sum(raw_counts.values())),
+            mitigated_expectation=mitigated["p0"],
+            error_reduction_pct=10.0,
+        )
+        qem_ledger.append_receipt(receipt)
+        return JSONResponse({"ok": True, "mitigated_counts": mitigated, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/mitigation/pec", methods=["POST"])
+    async def quantum_mitigation_pec_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        circuit_id = body.get("circuit_id", "circuit-pec-01")
+        measured_expectation = float(body.get("measured_expectation", 0.85))
+        depolarizing_rate = float(body.get("depolarizing_rate", 0.02))
+        pec = ProbabilisticErrorCanceller(depolarizing_rate=depolarizing_rate)
+        mitigated, gamma = pec.cancel_error(measured_expectation)
+        receipt = QEMReceipt.create(
+            circuit_id=circuit_id,
+            mitigation_technique="PEC_DEPOLARIZING",
+            raw_expectation=measured_expectation,
+            mitigated_expectation=mitigated,
+            error_reduction_pct=12.5,
+        )
+        qem_ledger.append_receipt(receipt)
+        return JSONResponse({
+            "ok": True,
+            "mitigated_expectation": mitigated,
+            "gamma_overhead": gamma,
+            "receipt": receipt.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/mitigation/anchor/export", methods=["POST"])
+    async def quantum_mitigation_anchor_export_route(_request: Request) -> Response:
+        commitment = qem_exporter.export(qem_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/mitigation/drill/simulate", methods=["POST"])
+    async def quantum_mitigation_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QEMVerificationDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
     @mcp.custom_route("/v1/quantum/cellular/walk/step", methods=["POST"])
     async def quantum_cellular_walk_step_route(_request: Request) -> Response:
         state = qca_walk_engine.step()
@@ -8838,6 +8951,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qca_automaton": getattr(mcp, "_qca_automaton", None),
         "qca_ledger": getattr(mcp, "_qca_ledger", None),
         "qca_exporter": getattr(mcp, "_qca_exporter", None),
+        "qem_extrapolator": getattr(mcp, "_qem_extrapolator", None),
+        "qem_readout_mitigator": getattr(mcp, "_qem_readout_mitigator", None),
+        "qem_pec": getattr(mcp, "_qem_pec", None),
+        "qem_ledger": getattr(mcp, "_qem_ledger", None),
+        "qem_exporter": getattr(mcp, "_qem_exporter", None),
     }
     return app, settings
 

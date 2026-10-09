@@ -2,7 +2,7 @@
   "task_id": "g2-breaker-timeouts",
   "bot": "bot-01-systems-backend",
   "started_at": "2026-10-09T09:28:00Z",
-  "completed_at": "2026-10-09T09:33:00Z",
+  "completed_at": "2026-10-09T09:49:12Z",
   "commands": [
     {
       "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py::test_docs_budget_timeout_opens_the_circuit_breaker tests/test_plane_budgets.py::test_recall_budget_timeout_opens_the_circuit_breaker tests/test_plane_budgets.py::test_caller_cancel_does_not_record_an_upstream_failure --tb=line",
@@ -32,13 +32,13 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
       "exit_code": 0,
       "duration_s": 0.06,
-      "output_tail": "G-1 PASS — bot-01-systems-backend: 3 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 4 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.1,
-      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
@@ -51,6 +51,24 @@
       "exit_code": 0,
       "duration_s": 0.12,
       "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py::test_lock_wait_budget_timeout_does_not_open_the_breaker tests/test_plane_budgets.py::test_caller_cancel_does_not_record_an_upstream_failure --tb=short",
+      "exit_code": 1,
+      "duration_s": 0.69,
+      "output_tail": "1 failed, 1 passed in 0.27s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py tests/test_memory_retain.py tests/test_server.py::test_upstream_circuit_breaker_and_recovery --tb=line",
+      "exit_code": 0,
+      "duration_s": 5.58,
+      "output_tail": "39 passed in 5.10s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DESK_REPO_DIR=/workspace DATA_DIR=/tmp/desk-gateway-data uv run pytest -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 34.96,
+      "output_tail": "672 passed in 34.38s"
     }
   ],
   "claims": [
@@ -86,6 +104,19 @@
     {
       "claim": "Desk integrity check passes",
       "evidence_command_index": 7
+    },
+    {
+      "claim": "Before counting only an HTTP cancel, five searches queued on the dataset lock recorded five upstream failures",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "A lock-wait budget timeout leaves the breaker closed, an HTTP budget timeout still opens it, and cancelling docs_search or memory_recall does not record a failure",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "The desk-gateway pytest suite passes after the HTTP-only failure count",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [
@@ -95,6 +126,7 @@
   ],
   "files_changed": [
     "services/desk-gateway/src/desk_gateway/tools/core.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
     "services/desk-gateway/tests/test_plane_budgets.py",
     ".receipts/bot-01-systems-backend/g2-breaker-timeouts.json"
   ],

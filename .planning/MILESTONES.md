@@ -1,5 +1,21 @@
 # Milestones
 
+## v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases (Phases 42-43), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Consistent hash ring partitioner with virtual vnodes (`ConsistentHashRing`), replica factor lookups, and deterministic key routing (`ShardRouter`).
+- Multi-master Conflict-Free Replicated Data Types (`CRDTStore`) supporting Last-Write-Wins (LWW) registers, PN-Counters, and OR-Sets with deterministic commutative convergence.
+- Cross-region delta replication pipeline (`GeoReplicationEngine`) propagating delta updates across regional peers with vector clocks and HMAC-SHA256 attestation receipts.
+- WAN anti-entropy gossip protocol (`AntiEntropyGossip`) performing peer digest exchanges and detecting divergence across geographically dispersed desks.
+- Dynamic split-brain quorum monitor (`SplitBrainDetector`) fencing disconnected partitions and preventing split-brain writes during WAN disruptions.
+- Epoch-fenced partition lease coordinator (`EpochCoordinator`) issuing monotonically increasing epoch leases to active regional masters.
+- Automated cross-region partition self-healing orchestrator (`PartitionHealingOrchestrator`) reconciling divergent CRDT state and resynchronizing missing deltas upon WAN recovery.
+- End-to-end multi-region partition and healing drill simulator (`GeoPartitionDrillSimulator`) verifying partition survival, split-brain isolation, and post-healing convergence.
+
+---
+
 ## v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases (Phases 40-41), 2 plans, 0 tasks

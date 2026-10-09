@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus** — Phases 42-43 (shipped 2026-10-11) — [Archive](milestones/v3.8-ROADMAP.md)
 - ✅ **v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving** — Phases 40-41 (shipped 2026-10-11) — [Archive](milestones/v3.7-ROADMAP.md)
 - ✅ **v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves** — Phases 38-39 (shipped 2026-10-10) — [Archive](milestones/v3.6-ROADMAP.md)
 - ✅ **v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis** — Phases 36-37 (shipped 2026-10-10) — [Archive](milestones/v3.5-ROADMAP.md)
@@ -23,14 +24,23 @@
 
 ## Phases
 
-### Active Milestone: v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving
+### Active Milestone: v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus
 
-- [x] **Phase 40: Formal Verification Pipeline & Automated Invariant Proving** (1/1 plans completed)
-  - Plan 40-01: Invariant specification contracts, static invariant AST prover, dynamic property test generator, counterexample triage analyzer, and HMAC formal verification certificates.
-- [x] **Phase 41: Multi-Seat Synthesis Consensus & Cryptographic Proof Receipt Ledger** (1/1 plans completed)
-  - Plan 41-01: Multi-seat review protocol, threshold verification voting, append-only Merkle proof ledger, WORM / Solana devnet export anchors, and end-to-end verification drill simulator.
+- [x] **Phase 42: Dynamic Partition Sharding & Multi-Master Geo-Replication** (1/1 plans completed)
+  - Plan 42-01: Consistent hash ring partitioning, multi-master CRDT state stores (LWW, PN-Counter, OR-Set), cross-region delta replication pipeline, and deterministic key routing.
+- [x] **Phase 43: Sovereign Mesh Consensus & Cross-Region Quorum Healing** (1/1 plans completed)
+  - Plan 43-01: WAN anti-entropy gossip, dynamic split-brain quorum detection, epoch-fenced coordinator leases, automated partition healing resync, and multi-region partition drill simulator.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus (Phases 42-43) — SHIPPED 2026-10-11</summary>
+
+- [x] Phase 42: Dynamic Partition Sharding & Multi-Master Geo-Replication (1/1 plan)
+- [x] Phase 43: Sovereign Mesh Consensus & Cross-Region Quorum Healing (1/1 plan)
+
+See [milestones/v3.8-ROADMAP.md](milestones/v3.8-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving (Phases 40-41) — SHIPPED 2026-10-11</summary>

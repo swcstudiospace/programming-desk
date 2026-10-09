@@ -567,29 +567,40 @@ def _candidate_names(name: str) -> set[str]:
     return {name, stripped}
 
 
-# RAGFlow `run`: 1 is parsing, 3 is done. 0, 2 and 4 still need a parse request.
-_PARSED_RUN = {"1", "3"}
+# List responses use names (DONE, RUNNING) and older payloads use "3" and "1".
+_PARSED_RUN = {"1", "3", "RUNNING", "DONE"}
 
 
 def _needs_parse(doc: dict) -> bool:
     run = doc.get("run")
     if run is None:
         return False
-    return str(run) not in _PARSED_RUN
+    return str(run).strip().upper() not in _PARSED_RUN
 
 
-def _matches(docs: list[dict], name: str) -> list[dict]:
-    names = _candidate_names(name)
-    return [doc for doc in docs if doc.get("name") in names]
+def _matches(docs: list[dict], name: str, path: str) -> list[dict]:
+    """Exact document names match. A quote-stripped legacy name matches only the same path."""
+    stripped = name.replace('"', "").replace("\r", "").replace("\n", "")
+    hits = []
+    for doc in docs:
+        doc_name = doc.get("name")
+        if doc_name == name:
+            hits.append(doc)
+            continue
+        if stripped != name and doc_name == stripped:
+            meta = doc.get("meta_fields") or {}
+            if isinstance(meta, dict) and meta.get("path") == path:
+                hits.append(doc)
+    return hits
 
 
-def _find_docs(client: RagflowClient, dataset_id: str, name: str) -> list[dict]:
+def _find_docs(client: RagflowClient, dataset_id: str, name: str, path: str) -> list[dict]:
     found: dict[str, dict] = {}
     for keyword in _candidate_names(name):
         for doc in client.documents(dataset_id, keyword):
             if doc.get("id"):
                 found[str(doc["id"])] = doc
-    return _matches(list(found.values()), name)
+    return _matches(list(found.values()), name, path)
 
 
 def _meta(action: Action) -> dict:
@@ -619,7 +630,7 @@ def execute(actions: list[Action], client: RagflowClient, batch_size: int = PARS
 
     for action in deletes:
         dataset_id = client.dataset_id(action.dataset)
-        docs = _find_docs(client, dataset_id, action.document)
+        docs = _find_docs(client, dataset_id, action.document, action.path)
         client.delete(dataset_id, [str(doc["id"]) for doc in docs if doc.get("id")])
 
     # Uploads stay one file at a time so the previous version is deleted only
@@ -628,7 +639,7 @@ def execute(actions: list[Action], client: RagflowClient, batch_size: int = PARS
     try:
         for action in upserts:
             dataset_id = client.dataset_id(action.dataset)
-            existing = _find_docs(client, dataset_id, action.document)
+            existing = _find_docs(client, dataset_id, action.document, action.path)
             matched = [
                 doc for doc in existing
                 if str((doc.get("meta_fields") or {}).get("content_sha256")) == action.sha256

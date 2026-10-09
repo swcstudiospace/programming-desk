@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   ingest:
+    permissions:
+      contents: read
+      actions: read
     uses: swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main
     secrets: inherit
     with:

@@ -135,7 +135,7 @@ def _server(state: _State):
                         "id": document_id,
                         "name": filename,
                         "meta_fields": {},
-                        "run": "0",
+                        "run": "UNSTART",
                         "_bytes": len(raw),
                     }
                 )
@@ -148,7 +148,7 @@ def _server(state: _State):
                 dataset_id = parts[3]
                 for doc in state.docs.get(dataset_id, []):
                     if doc["id"] in ids:
-                        doc["run"] = "3"
+                        doc["run"] = "DONE"
                 self._record("POST", parsed.path, {"document_ids": body.get("document_ids")})
                 self._send({"code": 0, "data": {}})
                 return
@@ -523,6 +523,8 @@ def test_workflow_and_callers_parse_and_stay_off_pull_requests():
     assert "actions/checkout@v4" not in rendered
     assert "actions/checkout@11d5960a326750d5838078e36cf38b85af677262" in rendered
     assert "merge-base --is-ancestor" in rendered
+    assert "0000000000000000000000000000000000000000" not in rendered
+    assert "before commit is unavailable; failing so deletions are not dropped" in rendered
     assert rendered.index("RAGFLOW_API_KEY is empty") < rendered.index("gh api")
     assert "infra/ragflow/ingest.py" in rendered
     for caller in sorted(CALLERS.glob("*.yml")):
@@ -531,6 +533,7 @@ def test_workflow_and_callers_parse_and_stay_off_pull_requests():
         uses = doc["jobs"]["ingest"]["uses"]
         assert uses == "swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main"
         assert doc["jobs"]["ingest"]["secrets"] == "inherit"
+        assert doc["jobs"]["ingest"]["permissions"] == {"contents": "read", "actions": "read"}
         assert doc["permissions"] == {"contents": "read"}
 
 
@@ -589,7 +592,7 @@ def test_quoted_name_round_trips_then_skips_and_deletes(tmp_path, monkeypatch):
         stored = state.docs["ds-programming-desk"]
         assert first == 0
         assert stored[0]["name"] == name
-        assert stored[0]["run"] == "3"
+        assert stored[0]["run"] == "DONE"
         uploads = [event for event in state.events if event[0] == "POST" and event[1].endswith("/documents")]
         state.events.clear()
         second = _run(
@@ -641,7 +644,7 @@ def test_unparsed_match_is_parsed_again(tmp_path, monkeypatch):
     assert not any(event[0] == "POST" and event[1].endswith("/documents") for event in state.events)
     parses = [event for event in state.events if str(event[1]).endswith("/chunks")]
     assert parses and parses[0][2]["document_ids"] == ["stuck"]
-    assert state.docs["ds-programming-desk"][0]["run"] == "3"
+    assert state.docs["ds-programming-desk"][0]["run"] == "DONE"
 
 
 def test_later_upload_failure_still_parses_the_earlier_document():
@@ -687,6 +690,92 @@ def test_later_upload_failure_still_parses_the_earlier_document():
     with pytest.raises(ingest.IngestError):
         ingest.execute(actions, client, batch_size=50)
     assert client.parsed == ["doc-1"]
+
+
+def test_quote_stripped_name_does_not_delete_a_different_path():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "quoted",
+                    "name": 'programming-desk__docs__"guide".md',
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+                {
+                    "id": "plain",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": "docs/guide.md"},
+                },
+                {
+                    "id": "legacy",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", 'docs/"guide".md', "programming-desk",
+                'programming-desk__docs__"guide".md',
+            )
+        ],
+        client,
+    )
+    assert set(client.deleted) == {"quoted", "legacy"}
+
+
+def test_named_run_states_are_not_parsed_again(tmp_path, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    body = b"# same\n"
+    head = _commit(repo, "docs/ok.md", body, "ok")
+    name = ingest.document_name("programming-desk", "docs/ok.md")
+    state = _State()
+    state.datasets["programming-desk"] = "ds-programming-desk"
+    state.docs["ds-programming-desk"] = [{
+        "id": "done",
+        "name": name,
+        "run": "DONE",
+        "meta_fields": {"content_sha256": hashlib.sha256(body).hexdigest()[:16], "path": "docs/ok.md"},
+    }]
+    httpd = _server(state)
+    port = httpd.server_address[1]
+    try:
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+        assert code == 0
+        assert not any(str(event[1]).endswith("/chunks") for event in state.events)
+        state.docs["ds-programming-desk"][0]["run"] = "RUNNING"
+        state.events.clear()
+        code = _run(
+            monkeypatch, repo, "--before", "0" * 40, "--after", head,
+            url=f"http://127.0.0.1:{port}", key="test-key",
+        )
+    finally:
+        httpd.shutdown()
+    assert code == 0
+    assert not any(str(event[1]).endswith("/chunks") for event in state.events)
 
 
 def test_seeder_globs_keep_receipts_json_and_drop_other_trees():

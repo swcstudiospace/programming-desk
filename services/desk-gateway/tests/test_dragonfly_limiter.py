@@ -44,6 +44,9 @@ class _Client:
         self.sha_seen: list[object] = []
         self.fail_loads = 0
         self.flush = False
+        self.noscripts = 0
+        self.reload_noscripts: int | None = None
+        self.noscript_barrier: asyncio.Barrier | None = None
         self.ping_started = asyncio.Event()
 
     async def _hold(self) -> None:
@@ -71,6 +74,8 @@ class _Client:
 
     async def script_load(self, script: str) -> str:
         self.loads.append(script)
+        if len(self.loads) > 1 and self.reload_noscripts is None:
+            self.reload_noscripts = self.noscripts
         await self._hold()
         if self.fail_loads:
             self.fail_loads -= 1
@@ -86,6 +91,9 @@ class _Client:
         if self.flush:
             from redis.exceptions import NoScriptError
 
+            self.noscripts += 1
+            if self.noscript_barrier is not None:
+                await self.noscript_barrier.wait()
             raise NoScriptError()
         await self._hold()
         if self.fail:
@@ -365,12 +373,22 @@ async def test_one_reload_serves_a_noscript_burst(monkeypatch: pytest.MonkeyPatc
 
     client.delay = 0.05
     client.flush = True
+    client.noscript_barrier = asyncio.Barrier(8)
+    seen_generation: list[int] = []
+
+    async def one() -> tuple[bool, float, int, float]:
+        seen_generation.append(dragonfly._sha_generation)
+        return await limiter.check_rate_limit("lead")
+
     started = time.monotonic()
-    results = await asyncio.gather(*(limiter.check_rate_limit("lead") for _ in range(8)))
+    results = await asyncio.gather(*(one() for _ in range(8)))
     elapsed = time.monotonic() - started
 
     assert elapsed < 0.2
     assert all(item[2] == 9 for item in results)
+    assert client.noscripts == 8
+    assert client.reload_noscripts == 8
+    assert seen_generation == [1] * 8
     assert len(client.loads) == 2
     assert dragonfly.circuit_breaker.state == "closed"
 

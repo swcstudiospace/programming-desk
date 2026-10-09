@@ -92,7 +92,7 @@
     "Pre-change failure was observed once in this session against edge.py at 81a6d3e: one slow check did not return within 0.4 s, and five checks opened five clients. That check replaced the file briefly and is not a re-runnable receipt command.",
     "The full desk-gateway suite is not green in this VM: many tests mkdir /var/lib/desk-gateway and raise PermissionError. That failure is environmental and is not evidence about this change.",
     "approved_by is absent until bot-00-programming-lead or a human stamps this receipt. The authoring seat does not self-approve. check_receipt.py --strict is expected to fail on that missing stamp and on nothing else.",
-    "Greptile's review of 5bd7d48 added one comment and no numeric score: a NoScript burst reloaded the script once per caller. This revision shares that reload. It is not a 5/5 merge claim."
+    "Greptile's review of 0cc47c1 said the NoScript burst test let only one caller raise. The test now barriers all eight on the old script generation before the reload finishes. There is still no numeric score and this is not a 5/5 merge claim."
   ],
   "files_changed": [
     "services/desk-gateway/README.md",

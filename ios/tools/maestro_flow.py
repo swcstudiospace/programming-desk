@@ -1,9 +1,9 @@
 """Run ``maestro test`` and count passed and failed cases from its JUnit XML.
 
-The argv is ``maestro test --format junit --test-output-dir <out> <flow>``.
+The argv includes ``--format junit --test-output-dir <out> --output <fresh.xml>``.
 A JUnit ``<failure>`` or ``<error>`` makes the command exit 1. On Linux, or when
 ``maestro`` is missing, the command skips with exit 3. ``--dry-run`` prints the
-argv and spawns nothing. A skip is not a pass.
+argv and spawns nothing. A skip is not a pass. Unsafe XML is an error (exit 2).
 
 Maestro itself rejects physical iPhones. This wrapper does not add a device
 flag and does not call App Store Connect.
@@ -15,8 +15,11 @@ import os
 import platform
 import shutil
 import subprocess
-import xml.etree.ElementTree as ET
 from pathlib import Path
+from uuid import uuid4
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 SKIP = 3
 MAX_JUNIT_BYTES = 20 * 1024 * 1024
@@ -36,20 +39,19 @@ def _output_tail(proc) -> str:
     return (stdout + stderr)[-2000:]
 
 
-def build_argv(flow: Path, out: Path) -> list[str]:
-    return ["maestro", "test", "--format", "junit", "--test-output-dir", str(out), str(flow)]
-
-
-def _junit_files(out: Path) -> list[Path]:
-    direct = sorted(path for path in out.glob("*.xml") if path.is_file())
-    if direct:
-        return direct
-    return sorted(path for path in out.rglob("*.xml") if path.is_file())
+def build_argv(flow: Path, out: Path, report: Path) -> list[str]:
+    return [
+        "maestro", "test", "--format", "junit",
+        "--test-output-dir", str(out), "--output", str(report), str(flow),
+    ]
 
 
 def parse_junit_dir(out: Path) -> dict | None:
-    """Return passed/failed/skipped counts, or None when no JUnit cases were found."""
-    files = _junit_files(out)
+    """Count all reports recursively; any unsafe XML makes the result an error."""
+    return _parse_junit_files(sorted(path for path in out.rglob("*.xml") if path.is_file()))
+
+
+def _parse_junit_files(files: list[Path]) -> dict | None:
     if not files:
         return None
     passed = failed = skipped = 0
@@ -64,8 +66,20 @@ def parse_junit_dir(out: Path) -> dict | None:
                 "skipped": 0,
             }
         try:
-            root = ET.parse(path).getroot()
+            root = ET.parse(
+                path, forbid_dtd=True, forbid_entities=True, forbid_external=True,
+            ).getroot()
+        except DefusedXmlException:
+            return {
+                "status": "error",
+                "reason": f"Unsafe JUnit XML (DTD, entity or external reference): {path.name}",
+                "passed": 0,
+                "failed": 0,
+                "skipped": 0,
+            }
         except ET.ParseError:
+            continue
+        if root is None:
             continue
         for case in root.iter("testcase"):
             seen = True
@@ -92,7 +106,8 @@ def maestro_flow(
     out = Path(out)
     if out.exists() and not out.is_dir():
         return {"status": "error", "reason": f"--out is not a directory: {out}", "exit_code": 2, "invoked": False}
-    argv = build_argv(flow, out)
+    report = out / f"junit-{uuid4().hex}.xml"
+    argv = build_argv(flow, out, report)
     if dry_run:
         return {"status": "dry-run", "argv": argv, "exit_code": 0, "invoked": False}
     system_name = _system(system_name)
@@ -123,13 +138,13 @@ def maestro_flow(
     resolved = [binary, *argv[1:]]
     out.mkdir(parents=True, exist_ok=True)
     proc = runner(resolved, capture_output=True, text=True, check=False, env=os.environ.copy())
-    counts = parse_junit_dir(out)
+    counts = _parse_junit_files([report] if report.is_file() else [])
     tail = _output_tail(proc)
     if counts is None:
         exit_code = 1 if proc.returncode != 0 else 2
         return {
             "status": "failed" if proc.returncode != 0 else "error",
-            "reason": "maestro produced no JUnit XML under --out",
+            "reason": "maestro produced no JUnit XML at the current run's --output path",
             "argv": resolved,
             "exit_code": exit_code,
             "invoked": True,
@@ -152,9 +167,21 @@ def maestro_flow(
             "output_tail": tail,
         }
     failed = int(counts["failed"])
+    if not counts["passed"] and not failed and proc.returncode == 0:
+        return {
+            "status": "skipped",
+            "reason": "skipped: all JUnit cases were skipped; no case executed",
+            "argv": resolved,
+            "exit_code": SKIP,
+            "invoked": True,
+            "passed": 0,
+            "failed": 0,
+            "skipped": counts["skipped"],
+            "tool_exit_code": proc.returncode,
+            "output_tail": tail,
+        }
     # A JUnit failure is exit 1 even when maestro itself exited 0.
-    # A clean report is a pass only when maestro also exited 0, so a crash
-    # that left a stale green report is not reported as a pass.
+    # A clean current-run report is a pass only when maestro also exited 0.
     if failed:
         exit_code = 1
         status = "failed"

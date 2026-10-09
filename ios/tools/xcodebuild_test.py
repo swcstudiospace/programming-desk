@@ -16,8 +16,9 @@ import platform
 import shutil
 import subprocess
 from pathlib import Path
+from uuid import uuid4
 
-from ios.tools.xcodebuild_receipt import parse_file
+from ios.tools.xcodebuild_receipt import parse_log
 
 SKIP = 3
 SIGNING_OFF = "CODE_SIGNING_ALLOWED=NO"
@@ -84,7 +85,7 @@ def xcodebuild_test(
     log = Path(log)
     if out.exists() and not out.is_dir():
         return {"status": "error", "reason": f"--out is not a directory: {out}", "exit_code": 2, "invoked": False}
-    bundle = out / "TestResults.xcresult"
+    bundle = out / f"TestResults-{uuid4().hex}.xcresult"
     if not _contained(out, log):
         return {
             "status": "error",
@@ -139,11 +140,29 @@ def xcodebuild_test(
     if is_simulator_destination(destination):
         env["CODE_SIGNING_ALLOWED"] = "NO"
     proc = runner(resolved, capture_output=True, text=True, check=False, env=env)
-    log.write_text(_tail_full(proc), encoding="utf-8")
-    parsed = parse_file(log)
+    text = _tail_full(proc)
+    log.write_text(text, encoding="utf-8")
+    parsed = parse_log(text, str(log))
+    parsed["artifact_format"] = "text-log"
+    if parsed.get("status") == "passed":
+        parsed["exit_code"] = 0
+    elif parsed.get("status") == "failed":
+        parsed["exit_code"] = 1
+    else:
+        parsed["exit_code"] = 2
+    status = parsed["status"]
+    exit_code = parsed["exit_code"]
+    reason = parsed.get("reason")
+    if proc.returncode != 0:
+        status = "failed"
+        exit_code = 1
+        reason = f"xcodebuild exited with code {proc.returncode}"
+        if parsed.get("reason"):
+            reason += f"; {parsed['reason']}"
     return {
-        "status": parsed.get("status"),
-        "exit_code": parsed.get("exit_code", 1),
+        "status": status,
+        "exit_code": exit_code,
+        **({"reason": reason} if reason else {}),
         "argv": resolved,
         "log": str(log),
         "result_bundle": str(bundle),

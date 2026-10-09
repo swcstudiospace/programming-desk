@@ -143,6 +143,71 @@ class XcodebuildTestTests(unittest.TestCase):
         self.assertEqual(result["exit_code"], 0, result)
         self.assertEqual(result["status"], "passed")
 
+    def test_captured_text_is_parsed_regardless_of_log_suffix(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_exe(root / "xcodebuild", xcodebuild_script(root / "calls", "** TEST SUCCEEDED **"))
+            out = root / "out"
+            with prepend_path(root):
+                for name in ("captured", "captured.json", "captured.bin"):
+                    result = xcodebuild_test("Desk", "platform=iOS Simulator", out, out / name, system_name="Darwin")
+                    self.assertEqual(result["status"], "passed", result)
+                    self.assertEqual(result["exit_code"], 0)
+                    self.assertEqual(result["receipt"]["artifact_format"], "text-log")
+                    self.assertIn("** TEST SUCCEEDED **", (out / name).read_text())
+
+    def test_nonzero_process_exit_cannot_be_masked_by_success_banner(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = xcodebuild_script(root / "calls", "** TEST SUCCEEDED **\nerror: simulator disconnected")
+            write_exe(root / "xcodebuild", script.replace("exit 0", "exit 65"))
+            out = root / "out"
+            with prepend_path(root):
+                result = xcodebuild_test("Desk", "platform=iOS Simulator", out, out / "captured", system_name="Darwin")
+            self.assertEqual(result["status"], "failed", result)
+            self.assertEqual(result["exit_code"], 1)
+            self.assertEqual(result["tool_exit_code"], 65)
+            self.assertIn("65", result["reason"])
+            self.assertEqual(result["receipt"]["error_lines"], ["simulator disconnected"])
+
+    def test_missing_banner_keeps_parser_reason_even_when_process_failed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_exe(root / "xcodebuild", xcodebuild_script(root / "calls", "error: destination missing").replace("exit 0", "exit 70"))
+            out = root / "out"
+            with prepend_path(root):
+                result = xcodebuild_test("Desk", "platform=iOS Simulator", out, out / "captured", system_name="Darwin")
+            self.assertEqual(result["exit_code"], 1)
+            self.assertEqual(result["receipt"]["status"], "unverified")
+            self.assertIn(result["receipt"]["reason"], result["reason"])
+            self.assertEqual(result["receipt"]["error_lines"], ["destination missing"])
+
+    def test_repeated_runs_use_fresh_bundles_and_preserve_old_results(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            out = root / "out"
+            old = out / "TestResults.xcresult"
+            old.mkdir(parents=True)
+            (old / "evidence").write_text("old result")
+            write_exe(root / "xcodebuild", f"""#!{sys.executable}
+import pathlib, sys
+bundle = pathlib.Path(sys.argv[sys.argv.index("-resultBundlePath") + 1])
+bundle.mkdir()
+(bundle / "evidence").write_text("new result")
+print("** TEST SUCCEEDED **")
+""")
+            with prepend_path(root):
+                first = xcodebuild_test("Desk", "platform=iOS Simulator", out, out / "first", system_name="Darwin")
+                second = xcodebuild_test("Desk", "platform=iOS Simulator", out, out / "second", system_name="Darwin")
+            self.assertEqual(first["exit_code"], 0, first)
+            self.assertEqual(second["exit_code"], 0, second)
+            self.assertNotEqual(first["result_bundle"], second["result_bundle"])
+            self.assertEqual((old / "evidence").read_text(), "old result")
+            for result in (first, second):
+                bundle = Path(result["result_bundle"])
+                self.assertEqual(bundle.parent, out)
+                self.assertEqual((bundle / "evidence").read_text(), "new result")
+
     def test_cli_dry_run(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)

@@ -1,19 +1,19 @@
-# Requirements: Milestone v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
+# Requirements: Milestone v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
 
-This document defines the requirements for Milestone v3.0 of Programming Desk.
+This document defines the requirements for Milestone v3.1 of Programming Desk.
 
-## 1. Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS (Phase 26)
+## 1. Dynamic MCP Tool Mesh Registry & Capability Scopes (Phase 28)
 
-- [x] **REQ-ZERO-001**: Ephemeral per-seat session credential issuer with micro-TTL token expiry.
-- [x] **REQ-ZERO-002**: Dynamic mutual TLS (mTLS) certificate authority for inter-seat and inter-desk communication.
-- [x] **REQ-ZERO-003**: Hardware/enclave attestation evidence verifier evaluating cryptographic measurement claims.
-- [x] **REQ-ZERO-004**: Zero-trust continuous authentication policy engine re-verifying seat posture on sensitive tool calls.
-- [x] **REQ-ZERO-005**: Instantaneous session revocation & certificate revocation list (CRL) distribution across edge nodes.
+- [x] **REQ-MCP-001**: Dynamic MCP server capability discovery and registration across federated desks.
+- [x] **REQ-MCP-002**: Fine-grained per-seat tool permission schemas and capability scoping.
+- [x] **REQ-MCP-003**: Dynamic schema translation and validation for foreign tool descriptors.
+- [x] **REQ-MCP-004**: Rate-limiting and concurrent tool execution quotas per MCP server connection.
+- [x] **REQ-MCP-005**: Health monitoring and automatic circuit breaker for degraded remote MCP endpoints.
 
-## 2. Continuous Merkle Proof Verification & Immutable Audit Export (Phase 27)
+## 2. Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts (Phase 29)
 
-- [x] **REQ-ZERO-006**: Continuous incremental Merkle tree aggregator over all desk operations.
-- [x] **REQ-ZERO-007**: Cryptographic inclusion & consistency proof generator for arbitrary time windows.
-- [x] **REQ-ZERO-008**: External immutable audit log export adapter supporting WORM/Solana devnet anchoring.
-- [x] **REQ-ZERO-009**: Automated tamper-detection audit scrubber identifying manipulated log entries.
-- [x] **REQ-ZERO-010**: End-to-end zero-trust compliance verification suite with signed attestation receipts.
+- [ ] **REQ-MCP-006**: Asynchronous RPC transport for cross-desk tool invocations over private WAN mesh.
+- [ ] **REQ-MCP-007**: Cryptographic request-response signing with seat identity attestation.
+- [ ] **REQ-MCP-008**: Streaming execution proxy supporting real-time progress and telemetry relay.
+- [ ] **REQ-MCP-009**: Distributed tool execution timeout supervision and zombie process reclamation.
+- [ ] **REQ-MCP-010**: Non-repudiable tool execution receipts with input/output content hashing and audit logging.

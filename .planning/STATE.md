@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3.0
-milestone_name: Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
-status: completed
-stopped_at: Completed Phase 27 (Plan 27-01). Milestone v3.0 fully delivered.
-last_updated: "2026-10-10T13:00:00.000Z"
+milestone: v3.1
+milestone_name: Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
+status: in_progress
+stopped_at: Completed Phase 28, advancing to Phase 29.
+last_updated: "2026-10-10T14:30:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 27 (Continuous Merkle Proof Verification & Immutable Audit Export).
+last_activity_desc: Completed Phase 28 (Dynamic MCP Tool Mesh Registry & Capability Scopes).
 progress:
-  total_phases: 27
-  completed_phases: 27
-  total_plans: 71
-  completed_plans: 71
-  percent: 100.0
-current_phase: 27
-current_phase_name: Continuous Merkle Proof Verification & Immutable Audit Export
+  total_phases: 29
+  completed_phases: 28
+  total_plans: 73
+  completed_plans: 72
+  percent: 98.6
+current_phase: 29
+current_phase_name: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts
 ---
 
 # Project State
@@ -24,25 +24,27 @@ current_phase_name: Continuous Merkle Proof Verification & Immutable Audit Expor
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation
-**Milestone:** v3.0 — Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation (Completed)
+**Current focus:** Milestone v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
+**Milestone:** v3.1 — Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation (In Progress)
 
 ## Current Position
 
-Phase: Phase 27 (Continuous Merkle Proof Verification & Immutable Audit Export) - Completed (1/1 plan).
-Milestone: Milestone v3.0 (Phases 26 & 27) - 100% Complete.
-Status: Completed.
-Last activity: 2026-10-10 — Completed Phase 27 (`REQ-ZERO-006` through `REQ-ZERO-010`).
+Phase: Phase 29 (Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts) - Ready to Plan.
+Milestone: Milestone v3.1 (Phases 28 & 29) - In Progress.
+Status: In Progress.
+Last activity: 2026-10-10 — Completed Phase 28 (`REQ-MCP-001` through `REQ-MCP-005`). Passing all tests and quality gates.
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v2.0 through v2.9 (Phases 1-25, 69 plans) 100% completed, tagged (`v2.0.0` through `v2.9.0`), and archived.
-- Milestone v3.0 covers Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS (Phase 26) and Continuous Merkle Proof Verification & Immutable Audit Export (Phase 27).
-- Plan 26-01 implemented `ZeroTrustEnclaveManager`, ephemeral micro-TTL credentials, dynamic mTLS cert issuer, hardware enclave measurement verifier, continuous posture check, and instant CRL revocation.
-- Plan 27-01 implemented `IncrementalMerkleTree`, cryptographic inclusion and consistency proofs, `ImmutableAuditExporter` for WORM/Solana anchoring, `AuditLogScrubber`, and `ZeroTrustComplianceVerifier`.
+- Milestone v2.0 through v3.0 (Phases 1-27, 71 plans) 100% completed, tagged (`v2.0.0` through `v3.0.0`), and archived.
+- Milestone v3.1 covers Dynamic MCP Tool Mesh Registry & Capability Scopes (Phase 28) and Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts (Phase 29).
+- Plan 28-01 implements `DynamicMCPToolMeshRegistry`, capability discovery, seat permission scoping, foreign schema translation, execution rate-limiting, and circuit breakers.
 
 ### Pending Todos
 
-- None. Milestone v3.0 is complete. Ready to merge PR and tag `v3.0.0`.
+- Implement Plan 28-01 in `services/desk-gateway/src/desk_gateway/mcp_mesh.py`.
+- Expose endpoints in `services/desk-gateway/src/desk_gateway/server.py`.
+- Add test coverage in `services/desk-gateway/tests/test_mcp_mesh.py`.
+- Verify gates, test suites, commit, push, create PR, and merge.

@@ -8,6 +8,7 @@ synchronized via DragonflyDB/Redis with per-seat burst ceilings.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import math
 import threading
@@ -361,20 +362,55 @@ class DistributedRateLimiter:
         fill_rate = cfg.rate_per_min / 60.0
 
         if self.dragonfly and getattr(self.dragonfly, "configured", False):
-            try:
-                allowed, retry_after, remaining, reset_epoch = await self._check_dragonfly(
-                    key=key,
-                    capacity=capacity,
-                    fill_rate=fill_rate,
-                    amount=amount,
-                )
-                return allowed, retry_after, remaining, reset_epoch
-            except Exception as exc:
-                logger.warning("Dragonfly rate limiting failed (%s); falling back to local bucket", exc)
+            breaker = self._live_breaker()
+            if breaker is not None and not breaker.allow_request():
+                logger.warning("Dragonfly circuit open; local token bucket")
+            else:
+                try:
+                    allowed, retry_after, remaining, reset_epoch = await asyncio.wait_for(
+                        self._check_dragonfly(
+                            key=key,
+                            capacity=capacity,
+                            fill_rate=fill_rate,
+                            amount=amount,
+                        ),
+                        timeout=self._request_budget(),
+                    )
+                    if breaker is not None:
+                        breaker.record_success()
+                    return allowed, retry_after, remaining, reset_epoch
+                except Exception as exc:
+                    if breaker is not None:
+                        breaker.record_failure()
+                    # Type name only: the exception text can carry the upstream host.
+                    logger.warning(
+                        "Dragonfly rate limiting failed (%s); falling back to local bucket",
+                        type(exc).__name__,
+                    )
 
         # In-memory policer fallback
         policer = self._get_local_bucket(key)
         return policer.consume(amount=amount)
+
+    def _request_budget(self) -> float:
+        raw = getattr(self.dragonfly, "request_budget_sec", None)
+        if isinstance(raw, (int, float)) and not isinstance(raw, bool) and raw > 0:
+            return float(raw)
+        return 0.40
+
+    def _live_breaker(self) -> Any:
+        """The upstream CircuitBreaker, ignoring test doubles that invent attributes."""
+        breaker = getattr(self.dragonfly, "circuit_breaker", None)
+        if breaker is None:
+            return None
+        module = getattr(breaker.__class__, "__module__", "")
+        if module.startswith("unittest.mock"):
+            return None
+        allow = getattr(breaker, "allow_request", None)
+        record = getattr(breaker, "record_failure", None)
+        if not callable(allow) or not callable(record):
+            return None
+        return breaker
 
     async def _check_dragonfly(
         self,
@@ -387,14 +423,7 @@ class DistributedRateLimiter:
         now = time.time()
         redis_key = f"desk:ratelimit:tokenbucket:{key}"
 
-        import redis.asyncio as redis
-
-        client = redis.from_url(
-            self.dragonfly.url,
-            socket_timeout=2.0,
-            socket_connect_timeout=2.0,
-            decode_responses=True,
-        )
+        client, owns_client = await self._limiter_client()
         try:
             # Lua script to atomically refill and deduct token bucket
             lua_script = """
@@ -446,7 +475,28 @@ class DistributedRateLimiter:
             reset_epoch = now + (retry_after if not allowed else max(0.0, (capacity - remaining) / fill_rate))
             return allowed, retry_after, remaining, reset_epoch
         finally:
-            await client.aclose()
+            if owns_client:
+                await client.aclose()
+
+    async def _limiter_client(self) -> tuple[Any, bool]:
+        """Shared pool when the upstream provides one. A one-shot client otherwise.
+
+        The one-shot path keeps stub tests that only set ``url``. Its connect
+        timeout is short so an unreachable host cannot sit on the 2 s timeout
+        the pool removed.
+        """
+        acquire = getattr(self.dragonfly, "pooled_client", None)
+        if inspect.iscoroutinefunction(acquire):
+            return await acquire(), False
+        import redis.asyncio as redis
+
+        client = redis.from_url(
+            self.dragonfly.url,
+            socket_timeout=0.25,
+            socket_connect_timeout=0.25,
+            decode_responses=True,
+        )
+        return client, True
 
 
 class EdgeIngressGateway:

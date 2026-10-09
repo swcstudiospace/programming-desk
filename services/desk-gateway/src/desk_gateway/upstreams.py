@@ -584,38 +584,128 @@ class Timescale:
         return {"ok": bool(result.get("ok")), **({} if result.get("ok") else result)}
 
 
+def _import_redis() -> Any:
+    """Import redis.asyncio, or None when the optional dragonfly extra is absent."""
+    try:
+        import redis.asyncio as redis
+    except ImportError:
+        return None
+    return redis
+
+
 class Dragonfly:
+    """One shared Redis client for desk_cache and the edge rate limiter.
+
+    A fresh client per call paid the TCP handshake on the request path (about a
+    second from the desk host) and then hit a multi-second socket timeout, so
+    every seat request waited that out and the local token bucket answered.
+    The pool connects once at startup. Commands use a short socket timeout.
+    ``request_budget_sec`` is the longest a rate-limit check may wait; the
+    caller answers from the local bucket when that budget runs out.
+    """
+
+    pool_max_connections = 8
+    # First connect from the desk host is about a second. That cost belongs to
+    # startup, not to the request.
+    connect_timeout_sec = 1.0
+    # A warm command is about 240 ms. Stay under the old 2 s socket timeout.
+    command_timeout_sec = 0.35
+    request_budget_sec = 0.40
+    breaker_failure_threshold = 3
+    breaker_recovery_sec = 15.0
+
     def __init__(self, settings: Settings) -> None:
         self.url = settings.dragonfly_url
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=self.breaker_failure_threshold,
+            recovery_timeout_sec=self.breaker_recovery_sec,
+        )
+        self._client: Any = None
+        self._client_lock = asyncio.Lock()
 
     @property
     def configured(self) -> bool:
         return bool(self.url)
 
+    async def open(self) -> None:
+        """Connect the shared pool. Failure leaves the gateway up; callers fall back."""
+        if not self.configured or self._client is not None:
+            return
+        try:
+            client = await self._connect()
+            await asyncio.wait_for(client.ping(), timeout=self.connect_timeout_sec)
+        except Exception as exc:
+            if _import_redis() is None:
+                logger.warning("Dragonfly pool skipped; redis is not installed (extra: dragonfly)")
+                return
+            self.circuit_breaker.record_failure()
+            logger.warning(
+                "Dragonfly pool open failed (%s); cache and rate limits use the local path",
+                type(exc).__name__,
+            )
+            return
+        self.circuit_breaker.record_success()
+
+    async def pooled_client(self) -> Any:
+        """Return the shared client, connecting on first use when startup did not."""
+        if self._client is None:
+            await self._connect()
+        return self._client
+
+    async def _connect(self) -> Any:
+        async with self._client_lock:
+            if self._client is not None:
+                return self._client
+            redis = _import_redis()
+            if redis is None:
+                raise RuntimeError("redis is not installed on the gateway (extra: dragonfly)")
+
+            self._client = redis.from_url(
+                self.url,
+                socket_timeout=self.command_timeout_sec,
+                socket_connect_timeout=self.connect_timeout_sec,
+                decode_responses=True,
+                max_connections=self.pool_max_connections,
+                health_check_interval=30,
+            )
+            return self._client
+
+    async def aclose(self) -> None:
+        async with self._client_lock:
+            client = self._client
+            self._client = None
+        if client is not None:
+            await client.aclose()
+
     async def command(self, action: str, key: str, value: str | None, ttl_sec: int) -> dict[str, Any]:
         if not self.configured:
             return not_configured("dragonfly")
-        try:
-            import redis.asyncio as redis
-        except ImportError:
+        if action not in {"get", "set", "del", "ping"}:
+            return {"error": "invalid_action", "reason": action}
+        if not self.circuit_breaker.allow_request():
+            return {
+                "error": "circuit_breaker_open",
+                "reason": "dragonfly circuit breaker is open (cooling down)",
+                "circuit_breaker": "open",
+            }
+        if _import_redis() is None:
             return {"error": NOT_CONFIGURED, "reason": "redis is not installed on the gateway (extra: dragonfly)"}
         try:
-            client = redis.from_url(self.url, socket_timeout=4, socket_connect_timeout=4, decode_responses=True)
-            try:
-                if action == "get":
-                    return {"ok": True, "value": await client.get(key)}
-                if action == "set":
-                    await client.set(key, value or "", ex=int(ttl_sec))
-                    return {"ok": True}
-                if action == "del":
-                    return {"ok": True, "deleted": int(await client.delete(key))}
-                if action == "ping":
-                    return {"ok": bool(await client.ping())}
-            finally:
-                await client.aclose()
+            client = await self.pooled_client()
+            if action == "get":
+                result = {"ok": True, "value": await client.get(key)}
+            elif action == "set":
+                await client.set(key, value or "", ex=int(ttl_sec))
+                result = {"ok": True}
+            elif action == "del":
+                result = {"ok": True, "deleted": int(await client.delete(key))}
+            else:
+                result = {"ok": bool(await client.ping())}
         except Exception as exc:
+            self.circuit_breaker.record_failure()
             return {"error": UPSTREAM_ERROR, "reason": f"dragonfly: {redact_text(str(exc))[:300]}"}
-        return {"error": "invalid_action", "reason": action}
+        self.circuit_breaker.record_success()
+        return result
 
     async def health(self) -> dict[str, Any]:
         return await self.command("ping", "health", None, 1)

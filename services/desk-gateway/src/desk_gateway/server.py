@@ -8,6 +8,7 @@ import contextlib
 import contextvars
 import hashlib
 import hmac
+import inspect
 import json
 import logging
 import os
@@ -10323,6 +10324,13 @@ def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
 
     @contextlib.asynccontextmanager
     async def _close_upstreams_on_shutdown(app: Any):
+        dragonfly = getattr(services, "dragonfly", None)
+        opener = getattr(dragonfly, "open", None)
+        if inspect.iscoroutinefunction(opener):
+            try:
+                await opener()
+            except Exception as exc:
+                logger.warning("Dragonfly pool open failed (%s)", type(exc).__name__)
         try:
             async with previous(app) as state:
                 yield state

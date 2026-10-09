@@ -6394,6 +6394,193 @@ def create_mcp(
         drill_results = QuantumTeleportationDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.2 (Phases 70 & 71): Quantum Memory Node Storage & Continuous-Variable Optical Mesh
+    from desk_gateway.quantum_memory_mesh import (
+        CVHomodyneMeasurementType,
+        CVOpticalRouter,
+        CVSqueezedState,
+        QuantumMemoryBufferType,
+        QuantumMemoryCell,
+        QuantumMemoryNode,
+    )
+    from desk_gateway.quantum_cv_anchoring import (
+        CVEntanglementSwapper,
+        QuantumMemoryAnchorExporter,
+        QuantumMemoryDrillSimulator,
+        QuantumMemoryLedger,
+        QuantumMemoryReceipt,
+    )
+
+    qmem_node_alpha = QuantumMemoryNode("desk-alpha", QuantumMemoryBufferType.AFC)
+    qmem_node_beta = QuantumMemoryNode("desk-beta", QuantumMemoryBufferType.EIT)
+    cv_router = CVOpticalRouter()
+    cv_swapper = CVEntanglementSwapper(cv_router)
+    qmem_ledger = QuantumMemoryLedger()
+    qmem_exporter = QuantumMemoryAnchorExporter()
+
+    mcp._qmem_node_alpha = qmem_node_alpha  # type: ignore[attr-defined]
+    mcp._qmem_node_beta = qmem_node_beta  # type: ignore[attr-defined]
+    mcp._cv_router = cv_router  # type: ignore[attr-defined]
+    mcp._cv_swapper = cv_swapper  # type: ignore[attr-defined]
+    mcp._qmem_ledger = qmem_ledger  # type: ignore[attr-defined]
+    mcp._qmem_exporter = qmem_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/memory/store", methods=["POST"])
+    async def quantum_memory_store_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        btype_str = body.get("buffer_type", "AFC")
+        try:
+            btype = QuantumMemoryBufferType(btype_str)
+        except ValueError:
+            btype = QuantumMemoryBufferType.AFC
+        t1 = float(body.get("t1_relaxation_us", 5000.0))
+        t2 = float(body.get("t2_dephasing_us", 2500.0))
+        peak_eff = float(body.get("peak_efficiency", 0.95))
+        state_repr = body.get("state_repr", {"type": "polarization_qubit", "fidelity": 0.99})
+
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        cell = target_node.store_state(
+            state_repr=state_repr,
+            buffer_type=btype,
+            t1_relaxation_us=t1,
+            t2_dephasing_us=t2,
+            peak_efficiency=peak_eff,
+        )
+        rcpt = qmem_ledger.append_event(
+            "MEMORY_STORE",
+            node_id,
+            [node_id],
+            float(state_repr.get("fidelity", 0.99)),
+            cell.to_dict(),
+        )
+        return JSONResponse({"ok": True, "cell": cell.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/retrieve", methods=["POST"])
+    async def quantum_memory_retrieve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        cell_id = body.get("cell_id", "")
+
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        ok, fid, retrieved_state = target_node.retrieve_state(cell_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": retrieved_state.get("error", "Retrieval failed")}, status_code=400)
+
+        rcpt = qmem_ledger.append_event(
+            "MEMORY_RETRIEVAL",
+            node_id,
+            [node_id],
+            fid,
+            retrieved_state,
+        )
+        return JSONResponse({"ok": True, "fidelity": fid, "state": retrieved_state, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/cells", methods=["GET"])
+    async def quantum_memory_cells_list_route(request: Request) -> Response:
+        node_id = request.query_params.get("node_id", "desk-alpha")
+        target_node = qmem_node_alpha if node_id == "desk-alpha" else qmem_node_beta
+        cells = target_node.list_cells(include_retrieved=True)
+        return JSONResponse({"ok": True, "node_id": node_id, "cells": cells})
+
+    @mcp.custom_route("/v1/quantum/cv/squeezed/create", methods=["POST"])
+    async def quantum_cv_squeezed_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "desk-alpha")
+        squeezing_r = float(body.get("squeezing_r", 1.0))
+        squeezing_phi = float(body.get("squeezing_phi", 0.0))
+        mean_q = float(body.get("mean_q", 0.0))
+        mean_p = float(body.get("mean_p", 0.0))
+
+        state = cv_router.generate_squeezed_state(
+            node_id=node_id,
+            squeezing_r=squeezing_r,
+            squeezing_phi=squeezing_phi,
+            mean_q=mean_q,
+            mean_p=mean_p,
+        )
+        return JSONResponse({"ok": True, "squeezed_state": state.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cv/beam-splitter", methods=["POST"])
+    async def quantum_cv_beam_splitter_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        state_id_1 = body.get("state_id_1", "")
+        state_id_2 = body.get("state_id_2", "")
+        transmissivity = float(body.get("transmissivity", 0.5))
+
+        s1 = cv_router.states.get(state_id_1)
+        s2 = cv_router.states.get(state_id_2)
+        if not s1 or not s2:
+            return JSONResponse({"ok": False, "error": "State(s) not found in CV router pool"}, status_code=404)
+
+        out1, out2 = cv_router.beam_splitter(s1, s2, transmissivity=transmissivity)
+        return JSONResponse({
+            "ok": True,
+            "out_state_1": out1.to_dict(),
+            "out_state_2": out2.to_dict(),
+        })
+
+    @mcp.custom_route("/v1/quantum/cv/homodyne", methods=["POST"])
+    async def quantum_cv_homodyne_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        state_id = body.get("state_id", "")
+        mtype_str = body.get("measurement_type", "POSITION")
+        det_eff = float(body.get("detector_efficiency", 0.98))
+
+        state = cv_router.states.get(state_id)
+        if not state:
+            return JSONResponse({"ok": False, "error": f"State {state_id} not found"}, status_code=404)
+
+        try:
+            mtype = CVHomodyneMeasurementType(mtype_str)
+        except ValueError:
+            mtype = CVHomodyneMeasurementType.POSITION
+
+        meas = cv_router.measure_homodyne(state, measurement_type=mtype, detector_efficiency=det_eff)
+        rcpt = qmem_ledger.append_event(
+            "CV_HOMODYNE_MEASUREMENT",
+            state.origin_node,
+            [state.origin_node],
+            1.0 - min(1.0, meas.get("variance", 0.5) / 5.0),
+            meas,
+        )
+        return JSONResponse({"ok": True, "measurement": meas, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/cv/swap", methods=["POST"])
+    async def quantum_cv_swap_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_a = body.get("node_a", "desk-alpha")
+        repeater_node = body.get("repeater_node", "repeater-1")
+        node_b = body.get("node_b", "desk-beta")
+        squeezing_r = float(body.get("squeezing_r", 1.2))
+        detector_eff = float(body.get("detector_efficiency", 0.98))
+
+        res = cv_swapper.swap_cv_entanglement(
+            node_a=node_a,
+            repeater_node=repeater_node,
+            node_b=node_b,
+            squeezing_r=squeezing_r,
+            detector_efficiency=detector_eff,
+        )
+        rcpt = qmem_ledger.append_event(
+            "CV_ENTANGLEMENT_SWAP",
+            repeater_node,
+            [node_a, node_b],
+            res["swapped_fidelity"],
+            res,
+        )
+        return JSONResponse({"ok": True, "swap_result": res, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/memory/anchor/export", methods=["POST"])
+    async def quantum_memory_anchor_export_route(_request: Request) -> Response:
+        commitment = qmem_exporter.export_commitment(qmem_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/memory/drill/simulate", methods=["POST"])
+    async def quantum_memory_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumMemoryDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7934,6 +8121,12 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qkd_engine": getattr(mcp, "_qkd_engine", None),
         "qteleport_ledger": getattr(mcp, "_qteleport_ledger", None),
         "qteleport_exporter": getattr(mcp, "_qteleport_exporter", None),
+        "qmem_node_alpha": getattr(mcp, "_qmem_node_alpha", None),
+        "qmem_node_beta": getattr(mcp, "_qmem_node_beta", None),
+        "cv_router": getattr(mcp, "_cv_router", None),
+        "cv_swapper": getattr(mcp, "_cv_swapper", None),
+        "qmem_ledger": getattr(mcp, "_qmem_ledger", None),
+        "qmem_exporter": getattr(mcp, "_qmem_exporter", None),
     }
     return app, settings
 

@@ -317,6 +317,23 @@ class MaestroFlowTests(IsolatedCase):
                     code, _ = maestro_flow.run(serial=SERIAL, flow=str(self.flow), out=self.out)
                 self.assertEqual(code, 1)
 
+    def test_unsafe_junit_is_rejected_from_cli(self) -> None:
+        reports = (
+            '<!DOCTYPE testsuite><testsuite><testcase name="executed"/></testsuite>',
+            '<!DOCTYPE testsuite [<!ENTITY x "expanded">]>'
+            '<testsuite><testcase name="&x;"/></testsuite>',
+        )
+        for report in reports:
+            with self.subTest(report=report):
+                with mock.patch.dict(os.environ, self.path_env({"MAESTRO_FAKE_XML": report})):
+                    with mock.patch("sys.stdout", new_callable=io.StringIO) as output:
+                        code = main([
+                            "maestro_flow", "--serial", SERIAL,
+                            "--flow", str(self.flow), "--out", str(self.out),
+                        ])
+                self.assertEqual(code, 1)
+                self.assertIn("not safe readable XML", output.getvalue())
+
     def test_unremovable_previous_report_is_a_cli_usage_error(self) -> None:
         self.out.mkdir()
         report = self.out / "maestro-junit.xml"
@@ -373,6 +390,17 @@ class MaestroFlowTests(IsolatedCase):
             )
         self.assertEqual(code, 2)
         self.assertIn("flow not found", message)
+
+    def test_looping_flow_is_a_cli_usage_error_before_output_creation(self) -> None:
+        loop = self.root / "loop.yaml"
+        loop.symlink_to(loop)
+        with mock.patch("sys.stdout", new_callable=io.StringIO):
+            code = main([
+                "maestro_flow", "--serial", SERIAL,
+                "--flow", str(loop), "--out", str(self.out),
+            ])
+        self.assertEqual(code, 2)
+        self.assertFalse(self.out.exists())
 
     def test_refuses_debug_symlink_outside_out(self) -> None:
         elsewhere = self.root / "elsewhere"

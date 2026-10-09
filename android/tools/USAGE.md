@@ -8,6 +8,16 @@ Entry (from repo root):
 python -m android.tools <cmd>
 ```
 
+Install the pinned Python dependency in your active virtual environment before invoking the tools:
+
+```sh
+python -m pip install -r android/tools/requirements.txt
+```
+
+JUnit reports are parsed with `defusedxml`; DTDs, entity declarations and external references are rejected with exit 1, never accepted as passing verification.
+
+Unresolvable `--flow` paths, including symlink loops, are usage errors with exit 2; no device command runs.
+
 ## Commands
 
 | cmd | flags | notes |

@@ -5,8 +5,10 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
-import xml.etree.ElementTree as ET
 from pathlib import Path
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from . import adb
 
@@ -56,10 +58,12 @@ def output_path(root: Path, name: str) -> Path:
 def junit_has_failure(path: Path) -> tuple[bool, str]:
     """True for failures/errors, unreadable JUnit, or no executed test cases."""
     try:
-        root = ET.parse(path).getroot()
-    except (ET.ParseError, OSError) as exc:
-        return True, f"junit report is not readable XML: {exc}"
-    if root.tag.rsplit("}", 1)[-1] not in {"testsuite", "testsuites"}:
+        root = ET.parse(
+            path, forbid_dtd=True, forbid_entities=True, forbid_external=True,
+        ).getroot()
+    except (DefusedXmlException, ET.ParseError, OSError) as exc:
+        return True, f"junit report is not safe readable XML: {exc}"
+    if root is None or root.tag.rsplit("}", 1)[-1] not in {"testsuite", "testsuites"}:
         return True, "junit report has no test suite"
     failures = 0
     errors = 0
@@ -149,7 +153,10 @@ def run(*, serial: str, flow: str, out: str | Path) -> tuple[int, str]:
     """
     if not _serial_ok(serial):
         return 2, f"error: invalid serial {serial!r}"
-    flow_path = Path(flow).resolve()
+    try:
+        flow_path = Path(flow).resolve()
+    except (OSError, RuntimeError) as exc:
+        return 2, f"error: flow path is not usable: {exc}"
     if not flow_path.exists() or not (flow_path.is_file() or flow_path.is_dir()):
         return 2, f"error: flow not found: {flow}"
     try:

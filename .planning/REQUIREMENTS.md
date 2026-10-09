@@ -12,8 +12,8 @@ This document defines the requirements for Milestone v3.2 of Programming Desk.
 
 ## 2. Dynamic Context Window Compression & Semantic Pruning (Phase 31)
 
-- [ ] **REQ-GRAPH-006**: Lossless token compression and context-window compaction pipeline.
-- [ ] **REQ-GRAPH-007**: Semantic relevance pruning removing low-salience tokens while preserving syntactic validity.
-- [ ] **REQ-GRAPH-008**: Hierarchical summary rollups and long-context eviction proofs.
-- [ ] **REQ-GRAPH-009**: Dynamic context window adaptation based on model tier and budget ceilings.
-- [ ] **REQ-GRAPH-010**: End-to-end context fidelity and reconstruction verification suite.
+- [x] **REQ-GRAPH-006**: Lossless token compression and context-window compaction pipeline.
+- [x] **REQ-GRAPH-007**: Semantic relevance pruning removing low-salience tokens while preserving syntactic validity.
+- [x] **REQ-GRAPH-008**: Hierarchical summary rollups and long-context eviction proofs.
+- [x] **REQ-GRAPH-009**: Dynamic context window adaptation based on model tier and budget ceilings.
+- [x] **REQ-GRAPH-010**: End-to-end context fidelity and reconstruction verification suite.

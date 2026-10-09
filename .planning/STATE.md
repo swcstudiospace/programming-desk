@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v2.8
-milestone_name: Autonomous Swarm Self-Balancing & Work Distribution Mesh
-status: completed
-stopped_at: Completed Phase 23 (Plan 23-01). Milestone v2.8 fully delivered.
-last_updated: "2026-10-10T07:00:00.000Z"
+milestone: v2.9
+milestone_name: Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+status: in_progress
+stopped_at: Completed Phase 24 (Plan 24-01). Advancing to Phase 25.
+last_updated: "2026-10-10T09:00:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 23 (Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts).
+last_activity_desc: Completed Phase 24 (Cross-Substrate Continuous State Mirroring & Fast RPO Sync).
 progress:
-  total_phases: 23
-  completed_phases: 23
-  total_plans: 67
-  completed_plans: 67
-  percent: 100.0
-current_phase: 23
-current_phase_name: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts
+  total_phases: 25
+  completed_phases: 24
+  total_plans: 69
+  completed_plans: 68
+  percent: 98.5
+current_phase: 25
+current_phase_name: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery
 ---
 
 # Project State
@@ -24,25 +24,24 @@ current_phase_name: Autonomous Hierarchical Subagent Delegation & Byzantine Cons
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v2.8 — Autonomous Swarm Self-Balancing & Work Distribution Mesh
-**Milestone:** v2.8 — Autonomous Swarm Self-Balancing & Work Distribution Mesh (Completed)
+**Current focus:** Milestone v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication
+**Milestone:** v2.9 — Cross-Cloud Disaster Recovery & Multi-Substrate Replication (In Progress)
 
 ## Current Position
 
-Phase: Phase 23 (Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts) - Completed (1/1 plan).
-Milestone: Milestone v2.8 (Phases 22 & 23) - 100% Complete.
-Status: Completed.
-Last activity: 2026-10-10 — Completed Phase 23 (`REQ-SWARM-006` through `REQ-SWARM-010`).
+Phase: Phase 24 (Cross-Substrate Continuous State Mirroring & Fast RPO Sync) - Completed (1/1 plan).
+Milestone: Milestone v2.9 (Phases 24 & 25) - In Progress.
+Status: In Progress.
+Last activity: 2026-10-10 — Completed Phase 24 (`REQ-DR-001` through `REQ-DR-005`).
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v2.0 through v2.7 (Phases 1-21, 65 plans) 100% completed, tagged (`v2.0.0` through `v2.7.0`), and archived.
-- Milestone v2.8 covers Dynamic Seat Load Balancing & Swarm Backpressure Management (Phase 22) and Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts (Phase 23).
-- Plan 22-01 implemented `SwarmSeatLoadBalancer`, seat telemetry tracking, backpressure spillover, priority preemption, and worker health circuit breakers.
-- Plan 23-01 implemented `SwarmDelegationMesh`, recursive subagent task decomposition, dual-party HMAC signature handoffs, Byzantine dispute arbitration, timeout reclamation, and Merkle tree receipt aggregation.
+- Milestone v2.0 through v2.8 (Phases 1-23, 67 plans) 100% completed, tagged (`v2.0.0` through `v2.8.0`), and archived.
+- Milestone v2.9 covers Cross-Substrate Continuous State Mirroring & Fast RPO Sync (Phase 24) and Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery (Phase 25).
+- Plan 24-01 implemented `SubstrateStateMirrorEngine`, delta snapshots with block checksum chaining, dynamic WAN lag throttling, zero-data-loss atomic cutover (RPO=0), and warm-replica promotion readiness verification.
 
 ### Pending Todos
 
-- None. Milestone v2.8 is complete. Ready to merge PR and tag `v2.8.0`.
+- Plan and execute Phase 25 (Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery).

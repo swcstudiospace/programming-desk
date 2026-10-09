@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (in progress)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
 - ✅ **v2.7 Multi-Modal Processing & Streaming Tool Execution** — Phases 20-21 (shipped 2026-10-10) — [Archive](milestones/v2.7-ROADMAP.md)
 - ✅ **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (shipped 2026-10-10) — [Archive](milestones/v2.6-ROADMAP.md)
@@ -14,14 +15,23 @@
 
 ## Phases
 
-### Current Milestone: v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh
+### Current Milestone: v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication
 
-- [x] **Phase 22: Dynamic Seat Load Balancing & Swarm Backpressure Management**
-  - [x] 22-01: Seat Telemetry, Backpressure Spillover, Priority Preemption, & Circuit Breaker (`REQ-SWARM-001`, `REQ-SWARM-002`, `REQ-SWARM-003`, `REQ-SWARM-004`, `REQ-SWARM-005`)
-- [x] **Phase 23: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts**
-  - [x] 23-01: Recursive Delegation Protocol, Dual-Party Signatures, Dispute Arbitration, & Aggregated Receipts (`REQ-SWARM-006`, `REQ-SWARM-007`, `REQ-SWARM-008`, `REQ-SWARM-009`, `REQ-SWARM-010`)
+- [x] **Phase 24: Cross-Substrate Continuous State Mirroring & Fast RPO Sync**
+  - [x] 24-01: Asynchronous State Mirroring, Delta Snapshots, Replication Lag Throttling, and Warm-Replica Readiness (`REQ-DR-001`, `REQ-DR-002`, `REQ-DR-003`, `REQ-DR-004`, `REQ-DR-005`)
+- [ ] **Phase 25: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery**
+  - [ ] 25-01: Fencing Token Allocator, Quorum Heartbeat Evaluator, Deterministic Conflict Reconciler, and DR Drill Verifier (`REQ-DR-006`, `REQ-DR-007`, `REQ-DR-008`, `REQ-DR-009`, `REQ-DR-010`)
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh (Phases 22-23) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 22: Dynamic Seat Load Balancing & Swarm Backpressure Management (1/1 plan)
+- [x] Phase 23: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts (1/1 plan)
+
+See [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v2.7 Multi-Modal Processing & Streaming Tool Execution (Phases 20-21) — SHIPPED 2026-10-10</summary>
@@ -39,31 +49,4 @@ See [milestones/v2.7-ROADMAP.md](milestones/v2.7-ROADMAP.md) for full phase deta
 - [x] Phase 19: LLM Tier Routing & Cost-Aware Model Optimization (1/1 plan)
 
 See [milestones/v2.6-ROADMAP.md](milestones/v2.6-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh (Phases 16-17) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement (2/2 plans)
-- [x] Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution (1/1 plan)
-
-See [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery (Phases 14-15) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 14: Multi-Region Edge Federation & WAN Routing (2/2 plans)
-- [x] Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience (2/2 plans)
-
-See [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
-- [x] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (2/2 plans)
-
-See [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md) for full phase details and execution history.
 </details>

@@ -227,6 +227,42 @@ class HttpUpstream:
         return {"ok": True, "status": resp.status_code, "body": redact_value(body)}
 
 
+_MEMORY_WRITE_REFUSED = frozenset({"denied", "quarantined", "rejected"})
+
+
+def memory_write_refusal(name: str, content: Any) -> dict[str, Any] | None:
+    """A memory_write body whose outcome is denied, quarantined or rejected is a failed plane.
+
+    Other tools keep the is_error mapping. The substrate reports these refusals as ordinary
+    MCP results, so is_error alone would call the write ok.
+    """
+    if name != "memory_write":
+        return None
+    if isinstance(content, list):
+        blocks = content
+    elif isinstance(content, dict):
+        blocks = [content]
+    else:
+        return None
+    for block in blocks:
+        if not isinstance(block, dict):
+            continue
+        outcome = block.get("outcome")
+        if not isinstance(outcome, str) or outcome not in _MEMORY_WRITE_REFUSED:
+            continue
+        reason = block.get("reason")
+        writer = block.get("writer")
+        reason_text = reason if isinstance(reason, str) and reason else outcome
+        writer_text = writer if isinstance(writer, str) and writer else "unknown"
+        return {
+            "ok": False,
+            "error": "memory_denied",
+            "reason": redact_text(reason_text)[:300],
+            "writer": redact_text(writer_text)[:120],
+        }
+    return None
+
+
 class Substrate:
     """substrate-mcp on the VPS loopback: plain HTTP for brief/events, MCP for the rest."""
 
@@ -309,7 +345,12 @@ class Substrate:
         out: dict[str, Any] = {"ok": not result.is_error, "content": redact_value(content)}
         if result.structured_content is not None:
             out["structured"] = redact_value(result.structured_content)
-        if result.is_error:
+        refusal = memory_write_refusal(name, content)
+        if refusal is None and result.structured_content is not None:
+            refusal = memory_write_refusal(name, result.structured_content)
+        if refusal:
+            out.update(refusal)
+        elif result.is_error:
             out["error"] = UPSTREAM_ERROR
             out["reason"] = f"substrate {name} reported an error"
         return out

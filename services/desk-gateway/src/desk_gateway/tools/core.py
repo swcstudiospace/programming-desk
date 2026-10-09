@@ -12,6 +12,7 @@ from desk_gateway import __version__
 from desk_gateway.config import MAX_LIVE_TOOLS, SEAT_LABEL, SEATS
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.tools import ToolContext, failure
+from desk_gateway.upstreams import not_configured
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +82,23 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     return {"results": results, "source": "ragflow", "note": "a chunk is not a repository fact until the file is opened"}
 
 
+def _plane_verdict(plane: str, result: dict[str, Any]) -> dict[str, Any]:
+    """One plane's retain outcome. Shape is stable for the later Hindsight-via-substrate route."""
+    error = result.get("error")
+    if error == "memory_denied":
+        return {
+            "plane": plane,
+            "state": "denied",
+            "reason": result.get("reason"),
+            "writer": result.get("writer"),
+        }
+    if error == "not_configured":
+        return {"plane": plane, "state": "not_configured", "reason": result.get("reason")}
+    if error:
+        return {"plane": plane, "state": "error", "reason": result.get("reason") or error}
+    return {"plane": plane, "state": "stored", "reason": None}
+
+
 async def memory_retain(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     if not args.get("receipt_path") and not args.get("source"):
         return failure("evidence_required", "retain needs receipt_path or source")
@@ -94,16 +112,50 @@ async def memory_retain(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
     results: dict[str, Any] = {}
     if svc.hindsight.http.configured:
         results["hindsight"] = await svc.hindsight.retain(ctx.seat.memory_own, args["content"], tags, context=f"Programming Desk {SEAT_LABEL[ctx.short]}")
-    scope = f"graph:{args['graph_id']}" if args.get("graph_id") else "agent:grok-bot"
+    else:
+        results["hindsight"] = not_configured("hindsight")
+    graph_id = args.get("graph_id")
+    if graph_id:
+        scope = f"graph:{graph_id}"
+        kind = "decision"
+    else:
+        scope = "agent:grok-bot"
+        kind = "fact"
     results["substrate"] = await svc.substrate.call_tool(
         "memory_write",
-        {"scope": scope, "kind": "decision", "text": f"[{ctx.seat.memory_own}] {args['content']}", "trust": "agent-claimed", "ttl": "permanent"},
+        {
+            "scope": scope,
+            "kind": kind,
+            "text": f"[{ctx.seat.memory_own}] {args['content']}",
+            "trust": "agent-claimed",
+            "ttl": "permanent",
+        },
         timeout=8,
     )
-    ok = any(not r.get("error") for r in results.values())
-    if not ok:
-        return failure("memory_unavailable", "no memory plane accepted the write", results=results)
-    return {"ok": True, "bank": ctx.seat.memory_own, "results": results}
+    verdicts = [_plane_verdict(plane, result) for plane, result in results.items()]
+    for verdict in verdicts:
+        if verdict["state"] == "stored":
+            continue
+        logger.warning(
+            "memory plane not stored seat=%s plane=%s state=%s reason=%s writer=%s",
+            ctx.short,
+            verdict["plane"],
+            verdict["state"],
+            verdict.get("reason") or "",
+            verdict.get("writer") or "",
+        )
+    stored = any(verdict["state"] == "stored" for verdict in verdicts)
+    partial = stored and any(verdict["state"] != "stored" for verdict in verdicts)
+    if not stored:
+        return failure(
+            "memory_unavailable",
+            "no memory plane accepted the write",
+            results=results,
+            verdicts=verdicts,
+            ok=False,
+            partial=False,
+        )
+    return {"ok": True, "partial": partial, "bank": ctx.seat.memory_own, "results": results, "verdicts": verdicts}
 
 
 async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:

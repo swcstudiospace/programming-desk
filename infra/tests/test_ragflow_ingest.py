@@ -744,6 +744,53 @@ def test_quote_stripped_name_does_not_delete_a_different_path():
     assert set(client.deleted) == {"quoted", "legacy"}
 
 
+def test_plain_path_delete_keeps_the_quoted_sibling_legacy_document():
+    class _Client:
+        def __init__(self) -> None:
+            self.deleted: list[str] = []
+
+        def dataset_id(self, name: str) -> str:
+            return "ds"
+
+        def documents(self, dataset_id: str, keywords: str) -> list[dict]:
+            return [
+                {
+                    "id": "plain",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": "docs/guide.md"},
+                },
+                {
+                    "id": "legacy",
+                    "name": "programming-desk__docs__guide.md",
+                    "meta_fields": {"path": 'docs/"guide".md'},
+                },
+            ]
+
+        def delete(self, dataset_id: str, document_ids: list[str]) -> None:
+            self.deleted.extend(document_ids)
+
+        def upload(self, dataset_id: str, filename: str, content: bytes) -> str:
+            raise AssertionError("upload")
+
+        def set_meta(self, dataset_id: str, document_id: str, meta: dict) -> None:
+            return None
+
+        def parse(self, dataset_id: str, document_ids: list[str]) -> None:
+            return None
+
+    client = _Client()
+    ingest.execute(
+        [
+            ingest.Action(
+                "delete", "docs/guide.md", "programming-desk",
+                "programming-desk__docs__guide.md",
+            )
+        ],
+        client,
+    )
+    assert client.deleted == ["plain"]
+
+
 def test_named_run_states_are_not_parsed_again(tmp_path, monkeypatch):
     repo = _repo(tmp_path / "repo")
     body = b"# same\n"

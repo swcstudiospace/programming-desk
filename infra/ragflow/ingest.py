@@ -579,18 +579,24 @@ def _needs_parse(doc: dict) -> bool:
 
 
 def _matches(docs: list[dict], name: str, path: str) -> list[dict]:
-    """Exact document names match. A quote-stripped legacy name matches only the same path."""
-    stripped = name.replace('"', "").replace("\r", "").replace("\n", "")
+    """Match a document by its stored path, or by exact name when no path was stored.
+
+    A quote-stripped legacy name is the same string as the unquoted sibling's
+    document name. The stored path decides which file it belongs to. An exact
+    name match is used only when the document has no path.
+    """
     hits = []
     for doc in docs:
-        doc_name = doc.get("name")
-        if doc_name == name:
-            hits.append(doc)
-            continue
-        if stripped != name and doc_name == stripped:
-            meta = doc.get("meta_fields") or {}
-            if isinstance(meta, dict) and meta.get("path") == path:
+        meta = doc.get("meta_fields") or {}
+        if not isinstance(meta, dict):
+            meta = {}
+        stored = meta.get("path")
+        if stored:
+            if stored == path:
                 hits.append(doc)
+            continue
+        if doc.get("name") == name:
+            hits.append(doc)
     return hits
 
 

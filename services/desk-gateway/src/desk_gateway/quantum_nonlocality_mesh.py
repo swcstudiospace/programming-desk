@@ -83,6 +83,16 @@ class CHSHBellInequalityEngine:
         self.alice_angles = {0: 0.0, 1: math.pi / 4.0}
         self.bob_angles = {0: math.pi / 8.0, 1: 3.0 * math.pi / 8.0}
 
+    def simulate_key_pair(
+        self, noise_depolarizing: float = 0.0
+    ) -> Tuple[int, int]:
+        """Simulate aligned key generation measurement (both measured in identical basis, e.g. Z basis)."""
+        # For identical basis measurement on entangled state, outcomes are perfectly correlated in ideal case
+        # With depolarizing noise, bit flip probability is noise_depolarizing / 2
+        a_bit = 1 if self.rng.random() < 0.5 else 0
+        b_bit = a_bit if self.rng.random() >= noise_depolarizing else 1 - a_bit
+        return a_bit, b_bit
+
     def simulate_bipartite_pair(
         self, setting_a: int, setting_b: int, noise_depolarizing: float = 0.0
     ) -> CHSHTrialResult:
@@ -422,10 +432,7 @@ class DeviceIndependentQKDEngine:
         errors = 0
 
         for _ in range(num_key):
-            trial = engine.simulate_bipartite_pair(setting_a=0, setting_b=0, noise_depolarizing=noise_depolarizing)
-            # Map outcome +1 -> 1, -1 -> 0
-            a_bit = 1 if trial.outcome_a == 1 else 0
-            b_bit = 1 if trial.outcome_b == 1 else 0
+            a_bit, b_bit = engine.simulate_key_pair(noise_depolarizing=noise_depolarizing)
             alice_bits.append(a_bit)
             bob_bits.append(b_bit)
             if a_bit != b_bit:

@@ -5676,6 +5676,143 @@ def create_mcp(
         drill_results = MetacognitiveEpistemicDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.7: Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh
+    from desk_gateway.hardware_mesh import (
+        HardwareSubstrate,
+        KernelOpType,
+        SubstrateKernelCompiler,
+        SubstrateProfile,
+        SubstrateRegistry,
+        SubstrateTelemetryProfiler,
+        SubstrateWorkloadDispatcher,
+    )
+    from desk_gateway.neuromorphic_mesh import (
+        HardwareNeuromorphicDrillSimulator,
+        NeuromorphicAnchorExporter,
+        NeuromorphicMesh,
+        SpikeEvent,
+        SynapticAttestationLedger,
+    )
+
+    substrate_registry = SubstrateRegistry()
+    substrate_compiler = SubstrateKernelCompiler()
+    substrate_dispatcher = SubstrateWorkloadDispatcher(substrate_registry, substrate_compiler)
+    substrate_profiler = SubstrateTelemetryProfiler(substrate_registry)
+    neuromorphic_mesh = NeuromorphicMesh(mesh_id="primary-neuromorphic-mesh")
+    synaptic_ledger = SynapticAttestationLedger()
+    neuromorphic_anchor_exporter = NeuromorphicAnchorExporter()
+
+    mcp._substrate_registry = substrate_registry  # type: ignore[attr-defined]
+    mcp._substrate_compiler = substrate_compiler  # type: ignore[attr-defined]
+    mcp._substrate_dispatcher = substrate_dispatcher  # type: ignore[attr-defined]
+    mcp._substrate_profiler = substrate_profiler  # type: ignore[attr-defined]
+    mcp._neuromorphic_mesh = neuromorphic_mesh  # type: ignore[attr-defined]
+    mcp._synaptic_ledger = synaptic_ledger  # type: ignore[attr-defined]
+    mcp._neuromorphic_anchor_exporter = neuromorphic_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/hardware/substrates", methods=["GET"])
+    async def hardware_substrates_list_route(_request: Request) -> Response:
+        substrates = [s.to_dict() for s in substrate_registry.list_substrates()]
+        return JSONResponse({"ok": True, "substrates": substrates})
+
+    @mcp.custom_route("/v1/hardware/compile", methods=["POST"])
+    async def hardware_compile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        op_str = body.get("op_type", "gemm")
+        sub_str = body.get("target_substrate", "gpu_cuda")
+        shapes = body.get("input_shapes", [[1024, 1024], [1024, 1024]])
+        opt_level = int(body.get("optimization_level", 3))
+
+        try:
+            op_type = KernelOpType(op_str.lower())
+        except ValueError:
+            op_type = KernelOpType.GEMM
+
+        try:
+            substrate = HardwareSubstrate(sub_str.lower())
+        except ValueError:
+            substrate = HardwareSubstrate.GPU_CUDA
+
+        compiled = substrate_compiler.compile(op_type=op_type, target_substrate=substrate, input_shapes=shapes, optimization_level=opt_level)
+        return JSONResponse({"ok": True, "kernel": compiled.to_dict()})
+
+    @mcp.custom_route("/v1/hardware/dispatch", methods=["POST"])
+    async def hardware_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        op_str = body.get("op_type", "gemm")
+        shapes = body.get("input_shapes", [[512, 512], [512, 512]])
+        priority = int(body.get("priority", 5))
+        sub_override_str = body.get("target_override")
+
+        try:
+            op_type = KernelOpType(op_str.lower())
+        except ValueError:
+            op_type = KernelOpType.GEMM
+
+        override_sub = None
+        if sub_override_str:
+            try:
+                override_sub = HardwareSubstrate(sub_override_str.lower())
+            except ValueError:
+                override_sub = None
+
+        assignment = substrate_dispatcher.schedule_task(
+            op_type=op_type,
+            input_shapes=shapes,
+            priority=priority,
+            target_override=override_sub,
+        )
+        return JSONResponse({"ok": True, "assignment": assignment.to_dict()})
+
+    @mcp.custom_route("/v1/hardware/telemetry", methods=["GET"])
+    async def hardware_telemetry_route(_request: Request) -> Response:
+        telemetry = substrate_profiler.collect_cluster_telemetry()
+        return JSONResponse({"ok": True, "telemetry": telemetry})
+
+    @mcp.custom_route("/v1/neuromorphic/spikes/inject", methods=["POST"])
+    async def neuromorphic_spikes_inject_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        spikes_data = body.get("spikes", [])  # list of [neuron_id, intensity]
+        parsed_spikes = [(item[0], float(item[1])) for item in spikes_data if len(item) == 2]
+        count = neuromorphic_mesh.inject_spikes(parsed_spikes)
+        return JSONResponse({"ok": True, "injected_spikes_count": count})
+
+    @mcp.custom_route("/v1/neuromorphic/step", methods=["POST"])
+    async def neuromorphic_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        duration_us = float(body.get("duration_us", 10.0))
+        step_dt_us = float(body.get("step_dt_us", 1.0))
+        step_res = neuromorphic_mesh.step_simulation(duration_us=duration_us, step_dt_us=step_dt_us)
+        return JSONResponse({"ok": True, "simulation": step_res})
+
+    @mcp.custom_route("/v1/neuromorphic/ledger/receipts", methods=["POST"])
+    async def neuromorphic_ledger_receipts_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        mesh_id = body.get("mesh_id", neuromorphic_mesh.mesh_id)
+        rtype = body.get("receipt_type", "SYNAPTIC_WEIGHT_UPDATE")
+        payload = body.get("payload", {})
+        fp = neuromorphic_mesh.compute_synaptic_fingerprint()
+
+        rec = synaptic_ledger.append_receipt(
+            mesh_id=mesh_id,
+            receipt_type=rtype,
+            simulated_time_us=neuromorphic_mesh.simulated_time_us,
+            total_spikes=neuromorphic_mesh.total_mesh_spikes,
+            synaptic_fingerprint=fp,
+            payload=payload,
+        )
+        return JSONResponse({"ok": True, "receipt": rec.to_dict()})
+
+    @mcp.custom_route("/v1/neuromorphic/anchor/export", methods=["POST"])
+    async def neuromorphic_anchor_export_route(_request: Request) -> Response:
+        anchor = neuromorphic_anchor_exporter.export_commitment(synaptic_ledger.receipts)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/hardware/drill/simulate", methods=["POST"])
+    async def hardware_drill_simulate_route(_request: Request) -> Response:
+        drill_results = HardwareNeuromorphicDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:

@@ -1,20 +1,20 @@
-# Requirements: Milestone v4.6 — Autonomous Self-Reflective Metacognition & Continuous Epistemic Verification Mesh
+# Requirements: Milestone v4.7 — Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh
 
-This document defines the requirements for Milestone v4.6 of Programming Desk.
+This document defines the requirements for Milestone v4.7 of Programming Desk.
 
-## 1. Autonomous Epistemic Calibration & Self-Reflective Metacognition (Phase 58)
+## 1. Multi-Substrate Hardware Acceleration Engine & Kernel Compilation (Phase 60)
 
-- [x] **REQ-MC-001**: Epistemic Confidence Calibrator (`EpistemicCalibrator`, `CalibratedConfidence`, `ConfidenceBucket`) evaluating raw agent confidence against historical accuracy, computing Brier score and Expected Calibration Error (ECE), and outputting temperature-calibrated posterior probabilities.
-- [x] **REQ-MC-002**: Metacognitive Introspection Engine (`MetacognitiveIntrospector`, `SelfReflectionTrace`, `CognitiveBiasReport`) inspecting agent reasoning chains for circular deduction, confirmation bias, premature convergence, and cognitive drift across multi-step plans.
-- [x] **REQ-MC-003**: Autonomous Epistemic Belief Network (`EpistemicBeliefNetwork`, `BeliefNode`, `BeliefUpdate`) maintaining dynamic Bayesian belief distributions over hypotheses with explicit aleatoric and epistemic uncertainty quantification.
-- [x] **REQ-MC-004**: Introspective Strategy Optimizer (`IntrospectiveStrategyOptimizer`) dynamically selecting deliberate thinking modes (System 1 fast heuristic vs System 2 deep tree search/verification) based on epistemic entropy and risk tolerance.
-- [x] **REQ-MC-005**: Metacognition REST API endpoints under `/v1/metacognition/*` exposing confidence calibration, reasoning introspection, belief querying, and deliberative strategy optimization.
+- [x] **REQ-HW-001**: Substrate Architecture Registry (`HardwareSubstrate`, `SubstrateProfile`, `SubstrateRegistry`) modeling heterogeneous compute backends: CPU (x86_64/ARM NEON), GPU (CUDA/Triton), TPU (XLA/VPU), NPU (Neural Processing Unit), and Photonic/Neuromorphic Co-processors, tracking memory topology, TOPS/W efficiency, latency profiles, and concurrency bounds.
+- [x] **REQ-HW-002**: Multi-Substrate Kernel Compiler (`SubstrateKernelCompiler`, `CompiledKernel`, `CompilationTarget`) compiling high-level mathematical compute graphs and tensor kernels into target-specific intermediate representations (IR) and execution binaries with optimization passes (operator fusion, loop tiling, vectorization).
+- [x] **REQ-HW-003**: Dynamic Substrate Workload Dispatcher (`SubstrateWorkloadDispatcher`, `WorkloadAssignment`) routing compute tasks (dense GEMM, sparse graph traversal, spike event streams, memory-bound activations) to optimal hardware substrates based on power, throughput, and thermal constraints.
+- [x] **REQ-HW-004**: Substrate Thermal & Energy Telemetry Profiler (`SubstrateTelemetryProfiler`) continuously monitoring thermal throttling, watt-hour power consumption, compute saturation, and dynamic power fencing.
+- [x] **REQ-HW-005**: Hardware Substrate REST API endpoints under `/v1/hardware/*` exposing substrate inventory, kernel compilation, workload dispatch, and energy profiling.
 
-## 2. Continuous Epistemic Verification, Counter-Evidence Synthesis & Epistemic Audit Mesh (Phase 59)
+## 2. Neuromorphic Spiking Neural Mesh & Event-Driven Synaptic Attestation (Phase 61)
 
-- [x] **REQ-MC-006**: Automated Counter-Evidence Synthesizer (`CounterEvidenceSynthesizer`, `SocraticChallenge`) generating adversarial counter-hypotheses, devil's advocate challenges, and edge-case falsification probes against dominant beliefs.
-- [x] **REQ-MC-007**: Epistemic Consistency Verifier (`EpistemicConsistencyVerifier`) validating cross-desk belief coherence, detecting epistemic divergence between federated seats, and calculating Jensen-Shannon epistemic divergence metrics.
-- [x] **REQ-MC-008**: Cryptographic Epistemic Proof Receipt Ledger (`EpistemicReceiptLedger`, `EpistemicProofReceipt`) recording immutable belief state transitions, calibration verifications, and refutation logs with HMAC-SHA256 signatures.
-- [x] **REQ-MC-009**: External Epistemic Anchor & Solana Devnet Exporter (`EpistemicAnchorExporter`) publishing Merkle roots of verified epistemic receipts and belief commitments to Solana devnet targets.
-- [x] **REQ-MC-010**: End-to-End Metacognitive & Epistemic Verification Drill Simulator (`MetacognitiveEpistemicDrillSimulator`) verifying confidence calibration, cognitive bias detection, Socratic counter-evidence refutation, cross-desk epistemic coherence, and Solana devnet anchoring.
-- [x] **REQ-MC-011**: Epistemic REST API endpoints under `/v1/epistemic/*` and `/v1/metacognition/drill/simulate` exposing counter-evidence synthesis, coherence verification, receipt ledger queries, and drill executions.
+- [x] **REQ-HW-006**: Neuromorphic Spiking Mesh Simulator (`NeuromorphicMesh`, `SpikingNeuron`, `SynapticConnection`) implementing Leaky Integrate-and-Fire (LIF) / Izhikevich neuron dynamics, membrane potential decay, threshold event firing, and Spike-Timing-Dependent Plasticity (STDP) synaptic weight adaptation.
+- [x] **REQ-HW-007**: Event-Driven Asynchronous Spike Router (`EventSpikeRouter`, `SpikeEvent`) routing sparse discrete spike events across simulated neuromorphic crossbars with microsecond temporal resolution and zero quiescent power overhead.
+- [x] **REQ-HW-008**: Cryptographic Synaptic State & Spike Attestation Ledger (`SynapticAttestationLedger`, `SynapticProofReceipt`) recording immutable weight state transitions, firing rate distributions, and spike train digest hashes using HMAC-SHA256 signatures.
+- [x] **REQ-HW-009**: External Neuromorphic Commitment & Solana Devnet Exporter (`NeuromorphicAnchorExporter`) publishing Merkle roots of synaptic state transitions and spike attestation receipts to Solana devnet targets.
+- [x] **REQ-HW-010**: End-to-End Multi-Substrate & Neuromorphic Compute Verification Drill Simulator (`HardwareNeuromorphicDrillSimulator`) verifying substrate kernel compilation, energy-aware workload routing, LIF spike propagation, STDP weight adaptation, and Solana devnet anchoring.
+- [x] **REQ-HW-011**: Neuromorphic REST API endpoints under `/v1/neuromorphic/*` and `/v1/hardware/drill/simulate` exposing spike event ingestion, mesh step simulation, synaptic ledger receipts, and drill executions.

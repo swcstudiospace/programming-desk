@@ -1,16 +1,17 @@
-# Roadmap: Milestone v4.4 — Autonomous Cross-Desk Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
+# Roadmap: Milestone v4.5 — Autonomous Multi-Agent Neuro-Symbolic Reasoning & Causal Inference Mesh
 
-## Phase 54: Zero-Knowledge Proof Synthesis & Circuit Verification
-- [x] Rank-1 Constraint System (R1CS) Arithmetic Circuit Compiler (`ZKCircuit`, `ZKConstraint`)
-- [x] Zero-Knowledge Proof Synthesis Engine (`ZKProofGenerator`)
-- [x] Zero-Knowledge Proof Verifier (`ZKProofVerifier`)
-- [x] Private Tool State Transition Prover (`ZKStateTransitionProver`)
-- [x] REST API routes under `/v1/zk/*` in `services/desk-gateway/src/desk_gateway/server.py`
+## Phase 56: Neuro-Symbolic Logic Graph & First-Order Predicate Synthesis
+- [x] First-Order Predicate & Horn Clause Rule Engine (`FirstOrderLogicEngine`, `SymbolicRule`, `Predicate`)
+- [x] Neuro-Symbolic Knowledge Graph (`NeuroSymbolicGraph`, `ConceptNode`, `RelationEdge`)
+- [x] Swarm Logical Invariant Checker (`LogicalInvariantChecker`)
+- [x] Neural-to-Symbolic Rule Extractor (`RuleExtractionEngine`)
+- [x] REST API routes under `/v1/neuro-symbolic/*` in `services/desk-gateway/src/desk_gateway/server.py`
 
-## Phase 55: Homomorphic State Encapsulation & Multi-Party Private Inference
-- [x] Additively Homomorphic Encryption Simulator (`HomomorphicCipherEngine`)
-- [x] Shamir Threshold Secret Sharing Scheme (`ThresholdSecretSharing`)
-- [x] Privacy-Preserving Multi-Party Compute (MPC) Inference Coordinator (`SecureMPCInferenceCoordinator`)
-- [x] External Zero-Knowledge State Anchor Exporter (`PrivateZKAnchorExporter`)
-- [x] End-to-End ZK & Privacy Agent Swarm Drill Simulator (`ZKPrivacyAgentSwarmDrillSimulator`)
-- [x] REST API routes under `/v1/privacy/*` and `/v1/zk/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`
+## Phase 57: Causal DAG Discovery, Do-Calculus Interventions & Counterfactual Mesh
+- [x] Causal DAG Representation (`CausalDAG`, `CausalVariable`, `CausalEdge`) with topological cycle detection & d-separation
+- [x] Constraint-Based Causal Discovery Engine (`ConstraintCausalDiscovery`)
+- [x] Pearl's Do-Calculus Interventional Engine (`DoCalculusEngine`)
+- [x] Counterfactual Reasoning Simulator (`CounterfactualSimulator`)
+- [x] Causal Proof & Solana Devnet Anchor Exporter (`CausalAnchorExporter`)
+- [x] End-to-End Neuro-Symbolic & Causal Mesh Drill Simulator (`NeuroSymbolicCausalDrillSimulator`)
+- [x] REST API routes under `/v1/causal/*` and `/v1/neuro-symbolic/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`

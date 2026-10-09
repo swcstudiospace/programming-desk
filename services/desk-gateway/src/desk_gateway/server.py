@@ -6688,6 +6688,120 @@ def create_mcp(
         drill_results = BQCDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.4 (Phases 74 & 75): Quantum Internet Protocol Stack & Slicing Mesh
+    from desk_gateway.quantum_internet_mesh import (
+        EntanglementRoutingEngine,
+        QuantumConnectionManager,
+        QuantumNetworkLink,
+        QuantumPacket,
+    )
+    from desk_gateway.quantum_internet_anchoring import (
+        QuantumInternetAnchorExporter,
+        QuantumInternetDrillSimulator,
+        QuantumInternetLedger,
+        QuantumVirtualNetworkSlice,
+    )
+
+    qnet_routing_engine = EntanglementRoutingEngine()
+    # Add initial standard desk cluster link topology
+    qnet_routing_engine.add_link("desk-alpha", "q-router-1", raw_fidelity=0.98, latency_ms=1.5, bandwidth_ebits=2000)
+    qnet_routing_engine.add_link("q-router-1", "q-router-2", raw_fidelity=0.97, latency_ms=2.0, bandwidth_ebits=1500)
+    qnet_routing_engine.add_link("q-router-2", "desk-beta", raw_fidelity=0.98, latency_ms=1.5, bandwidth_ebits=2000)
+    qnet_conn_mgr = QuantumConnectionManager(qnet_routing_engine)
+    qnet_ledger = QuantumInternetLedger()
+    qnet_exporter = QuantumInternetAnchorExporter()
+    qnet_slices: Dict[str, QuantumVirtualNetworkSlice] = {}
+
+    mcp._qnet_routing_engine = qnet_routing_engine  # type: ignore[attr-defined]
+    mcp._qnet_conn_mgr = qnet_conn_mgr  # type: ignore[attr-defined]
+    mcp._qnet_ledger = qnet_ledger  # type: ignore[attr-defined]
+    mcp._qnet_exporter = qnet_exporter  # type: ignore[attr-defined]
+    mcp._qnet_slices = qnet_slices  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/internet/link/add", methods=["POST"])
+    async def quantum_internet_link_add_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_u = body.get("node_u", "desk-alpha")
+        node_v = body.get("node_v", "desk-beta")
+        raw_fidelity = float(body.get("raw_fidelity", 0.96))
+        latency_ms = float(body.get("latency_ms", 2.5))
+        bandwidth = int(body.get("bandwidth_ebits", 1000))
+
+        link = qnet_routing_engine.add_link(node_u, node_v, raw_fidelity, latency_ms, bandwidth)
+        return JSONResponse({"ok": True, "link": link.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/internet/route/compute", methods=["POST"])
+    async def quantum_internet_route_compute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source = body.get("source", "desk-alpha")
+        destination = body.get("destination", "desk-beta")
+
+        path, est_fidelity, total_latency = qnet_routing_engine.compute_shortest_entanglement_path(source, destination)
+        return JSONResponse({
+            "ok": bool(path),
+            "source": source,
+            "destination": destination,
+            "path": path,
+            "estimated_fidelity": round(est_fidelity, 6),
+            "total_latency_ms": round(total_latency, 2),
+        })
+
+    @mcp.custom_route("/v1/quantum/internet/packet/send", methods=["POST"])
+    async def quantum_internet_packet_send_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        source = body.get("source", "desk-alpha")
+        destination = body.get("destination", "desk-beta")
+        target_fidelity = float(body.get("target_fidelity", 0.85))
+
+        try:
+            pkt = qnet_conn_mgr.route_quantum_packet(source, destination, target_fidelity)
+            rcpt = qnet_ledger.append_event(
+                "QUANTUM_PACKET_DELIVERY",
+                source,
+                destination,
+                pkt.achieved_fidelity,
+                pkt.to_dict(),
+            )
+            return JSONResponse({"ok": True, "packet": pkt.to_dict(), "receipt": rcpt.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/internet/slice/allocate", methods=["POST"])
+    async def quantum_internet_slice_allocate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id", "default")
+        allocated_ebits = int(body.get("allocated_ebits_sec", 500))
+        min_fidelity = float(body.get("min_fidelity_guarantee", 0.90))
+        nodes = body.get("nodes_included", ["desk-alpha", "desk-beta"])
+
+        slice_id = f"qslice-{secrets.token_hex(4)}"
+        q_slice = QuantumVirtualNetworkSlice(
+            slice_id=slice_id,
+            tenant_id=tenant_id,
+            allocated_ebits_sec=allocated_ebits,
+            min_fidelity_guarantee=min_fidelity,
+            nodes_included=nodes,
+        )
+        qnet_slices[slice_id] = q_slice
+        rcpt = qnet_ledger.append_event(
+            "QUANTUM_SLICE_ALLOCATE",
+            nodes[0] if nodes else "desk-alpha",
+            nodes[-1] if len(nodes) > 1 else "desk-beta",
+            min_fidelity,
+            q_slice.to_dict(),
+        )
+        return JSONResponse({"ok": True, "slice": q_slice.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/internet/anchor/export", methods=["POST"])
+    async def quantum_internet_anchor_export_route(_request: Request) -> Response:
+        commitment = qnet_exporter.export_commitment(qnet_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/internet/drill/simulate", methods=["POST"])
+    async def quantum_internet_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumInternetDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8238,6 +8352,11 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "bqc_trap_verifier": getattr(mcp, "_bqc_trap_verifier", None),
         "bqc_ledger": getattr(mcp, "_bqc_ledger", None),
         "bqc_exporter": getattr(mcp, "_bqc_exporter", None),
+        "qnet_routing_engine": getattr(mcp, "_qnet_routing_engine", None),
+        "qnet_conn_mgr": getattr(mcp, "_qnet_conn_mgr", None),
+        "qnet_ledger": getattr(mcp, "_qnet_ledger", None),
+        "qnet_exporter": getattr(mcp, "_qnet_exporter", None),
+        "qnet_slices": getattr(mcp, "_qnet_slices", None),
     }
     return app, settings
 

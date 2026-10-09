@@ -79,7 +79,7 @@
     "Caller templates were not copied into agent-substrate, agent-swarm or claude-ultrathink.",
     "GitHub-hosted Actions did not run this workflow here, so hosted-minute billing, the last-successful-run lookup, and public RAGFlow reachability from a runner are untested.",
     "actionlint is not installed in this environment. The workflow and caller templates were checked by a YAML-load test in infra/tests/test_ragflow_ingest.py.",
-    "approved_by is absent until LEAD or a human stamps this receipt. Greptile's merge-gate verdict is not in this receipt."
+    "Ming approved merging pull request 209 in Desk Lead chat on 2026-10-10 at 04:22 AEDT. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve, and this agent does not merge the pull request. This pull request stays a draft. Lead marks it ready and merges. Greptile's merge-gate verdict is not in this receipt."
   ],
   "files_changed": [
     ".github/workflows/ragflow-ingest.yml",
@@ -97,5 +97,6 @@
   "loop_acks": [],
   "destructive": false,
   "secrets_committed": false,
-  "approval_requested_from": "bot-00-programming-lead"
+  "approval_requested_from": "bot-00-programming-lead",
+  "approved_by": "human:SomeRandmGuyy"
 }

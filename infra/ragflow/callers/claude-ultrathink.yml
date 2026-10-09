@@ -1,0 +1,22 @@
+# Copy to .github/workflows/ragflow-ingest.yml in swcstudiospace/claude-ultrathink.
+# Organisation secrets RAGFLOW_URL and RAGFLOW_API_KEY, limited to this repo.
+# secrets: inherit passes them. Empty values make the job a no-op.
+
+name: RAGFlow ingest
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  ingest:
+    permissions:
+      contents: read
+      actions: read
+    uses: swcstudiospace/programming-desk/.github/workflows/ragflow-ingest.yml@main
+    secrets: inherit
+    with:
+      repo: claude-ultrathink

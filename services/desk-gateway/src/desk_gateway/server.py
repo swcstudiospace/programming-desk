@@ -3559,12 +3559,32 @@ def create_mcp(
         RolloutState,
         FitnessScore,
     )
+    from desk_gateway.neural_routing import (
+        NeuralRoutingEngine,
+        IntentVectorizer,
+        DeskCapabilityProfile,
+        RoutingCircuitBreaker,
+        CircuitState,
+    )
+    from desk_gateway.sovereign_enclaves import (
+        SovereignEnclaveManager,
+        TenantSovereigntyProfile,
+        TenancyTier,
+        ZKTokenMasker,
+        TenantKeyEncapsulationMesh,
+        AttestedDataFencingEngine,
+        EnclaveBreachSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
     prompt_rollout_orchestrator = PromptRolloutOrchestrator(signing_key=secret_key)
+    neural_routing_engine = NeuralRoutingEngine(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    sovereign_enclave_manager = SovereignEnclaveManager(master_seed=secret_key.decode("utf-8", errors="ignore"))
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
+    setattr(mcp, "_neural_routing_engine", neural_routing_engine)
+    setattr(mcp, "_sovereign_enclave_manager", sovereign_enclave_manager)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -3853,6 +3873,179 @@ def create_mcp(
         lineage = prompt_rollout_orchestrator.get_lineage(seat_id)
         active = prompt_rollout_orchestrator.get_active_prompt(seat_id)
         return JSONResponse({"ok": True, "seat_id": seat_id, "active": active.to_dict() if active else None, "lineage": lineage})
+
+    @mcp.custom_route("/v1/neural-routing/register-desk", methods=["POST"])
+    async def neural_routing_register_desk_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id")
+        if not desk_id:
+            return JSONResponse({"ok": False, "error": "desk_id is required"}, status_code=400)
+        profile = DeskCapabilityProfile(
+            desk_id=desk_id,
+            seat_ids=body.get("seat_ids", []),
+            domains=body.get("domains", []),
+            supported_tools=body.get("supported_tools", []),
+            capacity_limit=int(body.get("capacity_limit", 100)),
+            active_load=int(body.get("active_load", 0)),
+            base_latency_ms=float(body.get("base_latency_ms", 25.0)),
+            cost_per_1k_tokens=float(body.get("cost_per_1k_tokens", 0.002)),
+        )
+        neural_routing_engine.register_desk(profile)
+        return JSONResponse({"ok": True, "desk_id": desk_id, "registered": True})
+
+    @mcp.custom_route("/v1/neural-routing/dispatch", methods=["POST"])
+    async def neural_routing_dispatch_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        task_text = body.get("task_text", "")
+        if not task_text:
+            return JSONResponse({"ok": False, "error": "task_text is required"}, status_code=400)
+        required_tools = body.get("required_tools", [])
+        max_latency_budget_ms = float(body.get("max_latency_budget_ms", 500.0))
+        max_cost_budget = float(body.get("max_cost_budget", 0.05))
+        conversation_state = body.get("conversation_state", {})
+        sensory_context = body.get("sensory_context", {})
+
+        receipt, selected_desk = neural_routing_engine.route_task(
+            task_id=task_id,
+            task_text=task_text,
+            required_tools=required_tools,
+            max_latency_budget_ms=max_latency_budget_ms,
+            max_cost_budget=max_cost_budget,
+        )
+
+        envelope = None
+        if selected_desk:
+            envelope = neural_routing_engine.create_context_envelope(
+                task_id=task_id,
+                source_desk_id=settings.public_host,
+                target_desk_id=selected_desk.desk_id,
+                target_seat_id=receipt.selected_seat_id,
+                conversation_state=conversation_state,
+                sensory_context=sensory_context,
+            )
+
+        return JSONResponse({
+            "ok": True,
+            "routed": bool(selected_desk is not None),
+            "receipt": dataclasses.asdict(receipt),
+            "envelope": dataclasses.asdict(envelope) if envelope else None,
+        })
+
+    @mcp.custom_route("/v1/neural-routing/circuit-breaker/probe", methods=["POST"])
+    async def neural_routing_circuit_breaker_probe_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id")
+        if not desk_id:
+            return JSONResponse({"ok": False, "error": "desk_id is required"}, status_code=400)
+        success = bool(body.get("success", True))
+        latency_ms = float(body.get("latency_ms", 30.0))
+        state = neural_routing_engine.circuit_breaker.record_probe(desk_id, success=success, latency_ms=latency_ms)
+        return JSONResponse({"ok": True, "desk_id": desk_id, "circuit_state": state.value})
+
+    @mcp.custom_route("/v1/neural-routing/mesh/status", methods=["GET"])
+    async def neural_routing_mesh_status_route(_request: Request) -> Response:
+        status_desks = {}
+        for d_id, d in neural_routing_engine.desks.items():
+            state = neural_routing_engine.circuit_breaker.get_state(d_id)
+            status_desks[d_id] = {
+                "seat_ids": d.seat_ids,
+                "domains": d.domains,
+                "supported_tools": d.supported_tools,
+                "active_load": d.active_load,
+                "capacity_limit": d.capacity_limit,
+                "load_ratio": round(d.load_ratio, 3),
+                "circuit_state": state.value,
+            }
+        return JSONResponse({
+            "ok": True,
+            "registered_desks_count": len(neural_routing_engine.desks),
+            "desks": status_desks,
+        })
+
+    @mcp.custom_route("/v1/neural-routing/receipt/{receipt_id}", methods=["GET"])
+    async def neural_routing_receipt_route(request: Request) -> Response:
+        receipt_id = request.path_params.get("receipt_id", "")
+        receipt = neural_routing_engine.decision_receipts.get(receipt_id)
+        if not receipt:
+            return JSONResponse({"ok": False, "error": "receipt not found"}, status_code=404)
+        return JSONResponse({"ok": True, "receipt": dataclasses.asdict(receipt)})
+
+    @mcp.custom_route("/v1/enclaves/tenant/register", methods=["POST"])
+    async def enclaves_tenant_register_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        if not tenant_id:
+            return JSONResponse({"ok": False, "error": "tenant_id is required"}, status_code=400)
+        tier_str = body.get("tier", "STANDARD")
+        try:
+            tier = TenancyTier(tier_str)
+        except ValueError:
+            tier = TenancyTier.STANDARD
+
+        profile = TenantSovereigntyProfile(
+            tenant_id=tenant_id,
+            tier=tier,
+            allowed_residency_regions=body.get("allowed_residency_regions", []),
+            allowed_desks=body.get("allowed_desks", []),
+            allowed_tools=body.get("allowed_tools", []),
+            forbidden_egress_domains=body.get("forbidden_egress_domains", []),
+            enforce_pii_masking=bool(body.get("enforce_pii_masking", True)),
+        )
+        sovereign_enclave_manager.register_tenant(profile)
+        return JSONResponse({"ok": True, "tenant_id": tenant_id, "tier": tier.value})
+
+    @mcp.custom_route("/v1/enclaves/mask", methods=["POST"])
+    async def enclaves_mask_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "default_session")
+        text = body.get("text", "")
+        masked = sovereign_enclave_manager.masker.mask_payload(session_id, text)
+        return JSONResponse({"ok": True, "session_id": session_id, "masked_text": masked})
+
+    @mcp.custom_route("/v1/enclaves/unmask", methods=["POST"])
+    async def enclaves_unmask_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "default_session")
+        masked_text = body.get("masked_text", "")
+        unmasked = sovereign_enclave_manager.masker.unmask_payload(session_id, masked_text)
+        return JSONResponse({"ok": True, "session_id": session_id, "unmasked_text": unmasked})
+
+    @mcp.custom_route("/v1/enclaves/fencing/evaluate", methods=["POST"])
+    async def enclaves_fencing_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        profile = sovereign_enclave_manager.profiles.get(tenant_id)
+        if not profile:
+            return JSONResponse({"ok": False, "error": f"Tenant '{tenant_id}' not found"}, status_code=404)
+
+        action = body.get("action", "transfer_context")
+        destination_region = body.get("destination_region", "us-east-1")
+        destination_desk = body.get("destination_desk", "desk-default")
+        tools_requested = body.get("tools_requested", [])
+
+        receipt = sovereign_enclave_manager.fencing_engine.evaluate_boundary(
+            profile=profile,
+            action=action,
+            destination_region=destination_region,
+            destination_desk=destination_desk,
+            tools_requested=tools_requested,
+        )
+        return JSONResponse({"ok": True, "fencing_decision": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/enclaves/key/rotate", methods=["POST"])
+    async def enclaves_key_rotate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        tenant_id = body.get("tenant_id")
+        if not tenant_id:
+            return JSONResponse({"ok": False, "error": "tenant_id is required"}, status_code=400)
+        new_ver, _ = sovereign_enclave_manager.kem.rotate_key(tenant_id)
+        return JSONResponse({"ok": True, "tenant_id": tenant_id, "active_key_version": new_ver})
+
+    @mcp.custom_route("/v1/enclaves/breach-test/run", methods=["POST"])
+    async def enclaves_breach_test_run_route(_request: Request) -> Response:
+        results = EnclaveBreachSimulator.run_benchmark(sovereign_enclave_manager)
+        return JSONResponse({"ok": True, "benchmark": results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -5298,6 +5491,8 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "chaos_immune_harness": getattr(mcp, "_chaos_immune_harness", None),
         "skill_synthesis_engine": getattr(mcp, "_skill_synthesis_engine", None),
         "prompt_rollout_orchestrator": getattr(mcp, "_prompt_rollout_orchestrator", None),
+        "neural_routing_engine": getattr(mcp, "_neural_routing_engine", None),
+        "sovereign_enclave_manager": getattr(mcp, "_sovereign_enclave_manager", None),
     }
     return app, settings
 

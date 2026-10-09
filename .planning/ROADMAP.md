@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves** — Phases 38-39 (shipped 2026-10-10) — [Archive](milestones/v3.6-ROADMAP.md)
 - ✅ **v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis** — Phases 36-37 (shipped 2026-10-10) — [Archive](milestones/v3.5-ROADMAP.md)
 - ✅ **v3.4 Autonomous Swarm Self-Healing & Active Immune Defense** — Phases 34-35 (shipped 2026-10-10) — [Archive](milestones/v3.4-ROADMAP.md)
 - ✅ **v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting** — Phases 32-33 (shipped 2026-10-10) — [Archive](milestones/v3.3-ROADMAP.md)
@@ -21,14 +22,23 @@
 
 ## Phases
 
-### Active Milestone: v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis
+### Active Milestone: v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves
 
-- [x] **Phase 36: Dynamic Skill & Tool Synthesis** (1/1 plans completed)
-  - Plan 36-01: Dynamic skill synthesizer, AST security vetting, sandbox execution verification, mesh registry hot-reloading, and capability lifecycle pruning.
-- [x] **Phase 37: Autonomous Prompt Optimization & Self-Refining Instruction Loops** (1/1 plans completed)
-  - Plan 37-01: Prompt telemetry evaluation, evolutionary mutation engine, shadow canary benchmarking, cryptographic rollout orchestrator, and mutation regression suite.
+- [x] **Phase 38: Cross-Desk Distributed Neural Routing & Semantic Dispatch** (1/1 plans completed)
+  - Plan 38-01: Neural intent vectorizer, capability embedding mesh, multi-attribute routing policy, cross-desk context forwarding, circuit-breaker failover mesh, and cryptographically attested routing decision receipts.
+- [x] **Phase 39: Multi-Tenant Sovereign Enclaves & Attested Data Fencing** (1/1 plans completed)
+  - Plan 39-01: Sovereign tenant enclave isolation, ephemeral PII redaction pipeline, tenant key encapsulation mechanism, attested data fencing engine, and boundary breach verification harness.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves (Phases 38-39) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 38: Cross-Desk Distributed Neural Routing & Semantic Dispatch (1/1 plan)
+- [x] Phase 39: Multi-Tenant Sovereign Enclaves & Attested Data Fencing (1/1 plan)
+
+See [milestones/v3.6-ROADMAP.md](milestones/v3.6-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis (Phases 36-37) — SHIPPED 2026-10-10</summary>
@@ -83,8 +93,6 @@ See [milestones/v3.1-ROADMAP.md](milestones/v3.1-ROADMAP.md) for full phase deta
 
 See [milestones/v3.0-ROADMAP.md](milestones/v3.0-ROADMAP.md) for full phase details and execution history.
 </details>
-
-### Completed Milestones
 
 <details>
 <summary>✅ v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication (Phases 24-25) — SHIPPED 2026-10-10</summary>

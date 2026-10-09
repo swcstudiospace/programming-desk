@@ -80,15 +80,21 @@ device clouds are off.
 ## Evidence
 
 Write the JSON from `ios/tools` and any simulator capture under
-`.verify-evidence/<task-id>/`. `output_tail` names the file. Do not commit
-the directory. A missing screenshot must stay missing: the MetaVR wrapper
-does not invent one (`ios/tools/IOS_TOOLS.md`).
+`.verify-evidence/<task-id>/`. Preserve concise result, action and state
+excerpts in `output_tail` and/or stable references to uploaded durable
+artifacts as `skills/verify/SKILL.md` requires. A local filename alone is
+insufficient. Do not commit the directory. A missing screenshot must stay
+missing: the MetaVR wrapper does not invent one (`ios/tools/IOS_TOOLS.md`).
 
 ## Cleanup
 
 Do not leave a signed archive or a store submission behind. This skill does
-not perform either. Remove local log copies only after the receipt names
-them.
+not perform either. Remove transient local log/capture copies only after
+their concise result/action/state excerpts are saved in the receipt's
+`output_tail`, or their upload succeeded and stable durable artifact
+references are recorded. Naming a soon-to-be-deleted local file is not
+preservation. If neither is available, retain the local evidence. Do not
+erase or delete simulators, devices, or other external resources as cleanup.
 
 ## Where it runs
 

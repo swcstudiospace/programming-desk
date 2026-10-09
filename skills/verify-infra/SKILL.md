@@ -80,9 +80,11 @@ plan.
 ## Evidence
 
 Save the plan output and the read-tool result under
-`.verify-evidence/<task-id>/`. `output_tail` names the file and must not
-contain a secret, a variable value, a tailnet name, or a private host.
-Redact before the receipt is written. Do not commit the directory.
+`.verify-evidence/<task-id>/`. Preserve concise action and state excerpts in
+durable evidence as `skills/verify/SKILL.md` requires; a local filename alone
+is insufficient. Do not include a secret, a variable value, a tailnet name,
+or a private host. Redact before the receipt is written. Do not commit the
+directory.
 
 ## Cleanup
 
@@ -106,7 +108,17 @@ A plan you did not execute is not "the plan is empty." Say you did not run it.
 | Observation | Field |
 |---|---|
 | `terraform fmt -check`, `validate`, `plan` | `commands[]` with the exit codes you saw. The claim "the plan was read" cites the plan command, not fmt |
-| A roster read | its own command. `output_tail` is redacted and names the artifact |
+| A roster read | `commands[]` only for an actually executed replayable shell/CLI invocation with its observed process exit code and redacted state excerpt. Tool-only observations stay separate and the G-2 proof claim stays `unverified` |
 | Redeploy, apply, variable edit | not a command in this skill's receipt. Those need `approvals[]` and a `rollback_plan` on a change that is allowed to do them (G-5, G-6) |
 | Credential or tool missing | `unverified` with the row above |
 | Reproduce-first failure | `expects_failure: true` |
+
+A roster tool name is not a shell command and an MCP response has no shell
+exit code. If command evidence is needed, reuse the authenticated `curl`
+route in `services/desk-gateway/README.md`: POST JSON-RPC `tools/call` to
+`/mcp/infra` with the roster's `params.name` and `params.arguments`. Record
+only the actual invocation and observed process exit code, with working
+directory and named environment prerequisites, never credential values.
+Inspect JSON-RPC errors, MCP `isError`, and the returned health/state fields;
+curl exit 0 proves transport success alone. Do not invent a CLI wrapper or
+assign exit 0 to a tool-only read.

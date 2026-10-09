@@ -67,15 +67,15 @@ SEAT_SKILLS = {
     "INFRA": ("skills/verify-infra/SKILL.md",),
 }
 
-# A citation is a repo-relative path under one of these roots. Globs and
-# example fences are not citations. A bare filename with no slash is not,
-# because the skills name commands and manifest files that are not in this
-# checkout on purpose.
+# A citation is a repo-relative path under one of these roots. Match the
+# whole path/glob token before excluding patterns, never a glob's prefix.
+# Globs and example fences are not citations. A bare filename with no slash
+# is not, because skills name files absent from this checkout on purpose.
 PATH_RE = re.compile(
     r"(?<![\w@./-])"
     r"((?:skills|ios|android|contracts|prompts-assembled|prompts|ci|docs|"
     r"services|scripts|\.github|web|infra|desktop|apps|tauri|electron)/"
-    r"[A-Za-z0-9_./-]*[A-Za-z0-9])"
+    r"[A-Za-z0-9_./*?\[\]!^-]*[A-Za-z0-9_*?\[\]/-])"
 )
 
 FENCE_RE = re.compile(r"```([^\n]*)\n(.*?)```", re.DOTALL)
@@ -131,7 +131,7 @@ def skill_problems(text: str, repo_root: Path, label: str) -> list[str]:
 
     for match in PATH_RE.finditer(visible):
         cited = match.group(1).rstrip("/")
-        if "*" in cited or ".." in cited.split("/"):
+        if any(char in cited for char in "*?[]") or ".." in cited.split("/"):
             continue
         candidate = repo_root / cited
         if not candidate.exists():
@@ -257,6 +257,34 @@ def test_missing_section_is_detected() -> None:
 def test_missing_path_outside_fence_is_detected() -> None:
     problems = fixture_problems("missing-path")
     assert any("cites missing path web/verify/missing.sh" in item for item in problems), problems
+
+
+def test_concrete_missing_path_fails_but_patterns_are_ignored(tmp_path: Path) -> None:
+    patterns = (
+        "apps/web/*",
+        "apps/web/**/test_*.py",
+        "apps/missing*/web/missing.py",
+        "apps/web/missing?.py",
+        "apps/web/[ab]/missing.py",
+        "apps/web/[!ab]/missing.py",
+        "apps/web/../missing.py",
+    )
+    text = _minimal_skill(
+        extra="\n".join(
+            [f"Pattern: `{pattern}`." for pattern in patterns]
+            + ["Concrete helper: `apps/web/missing.py`."]
+        )
+    )
+    assert skill_problems(text, tmp_path, "mixed") == [
+        "mixed: cites missing path apps/web/missing.py"
+    ]
+
+
+def test_wildcard_suffix_never_cites_a_partial_missing_path(tmp_path: Path) -> None:
+    for suffix in ("*", "?", "[ab]", "[!ab]", "]"):
+        for token in (f"apps/web/missing{suffix}", f"apps/web/missing{suffix}/test.py"):
+            text = _minimal_skill(extra=f"Pattern: `{token}`.")
+            assert skill_problems(text, tmp_path, "pattern") == [], token
 
 
 def test_example_fence_does_not_cite() -> None:

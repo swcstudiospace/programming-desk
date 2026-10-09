@@ -35,7 +35,7 @@ Name the command from the tree you opened, not from memory.
 | Tree | Command that exists for it |
 |---|---|
 | Desk gate suite | `python3 -m pytest ci/tests/ -v` |
-| Gateway | `python3 -m pytest` with working directory `services/desk-gateway`. `services/desk-gateway/pyproject.toml` sets `testpaths = ["tests"]` and the tests live in `services/desk-gateway/tests` |
+| Gateway | From `services/desk-gateway`, run `DESK_REPO_DIR=<absolute-checkout> DATA_DIR=<isolated-test-data-dir> uv run pytest -q` after `uv sync`. `services/desk-gateway/pyproject.toml` declares pytest in the `dev` dependency group and sets `testpaths = ["tests"]`; `services/desk-gateway/README.md` documents this uv convention |
 | A Rust crate whose checkout contains `Cargo.toml` | `cargo test`, `cargo clippy -- -D warnings`, and `cargo fmt --check` (`skills/platforms/rust/SKILL.md`) |
 
 programming-desk at this skill's base has no root `Cargo.toml`. Do not report
@@ -54,6 +54,11 @@ Install the test runner the manifest already declares. Do not add a
 dependency to make a check look green (`skills/security/supply-chain/SKILL.md`).
 If `pytest` is missing, the check did not run. Say so. Do not mask the
 failure with a bypass G-2 rejects (`|| true`, `--passWithNoTests`).
+
+For the gateway, use uv's existing `dev` dependency group, not a bare
+`python3 -m pytest` against the system interpreter. Record the real absolute
+checkout and isolated test-data directory in the invocation so it can be
+replayed from the documented working directory.
 
 A test that skips because a credential or a data plane is absent is
 inconclusive. Read the output for the skip. Exit 0 with skipped tests does
@@ -80,7 +85,8 @@ not prove the skipped cases.
 ## Evidence
 
 Save the pytest (or cargo) output under `.verify-evidence/<task-id>/`.
-`output_tail` names the file and includes the pass or fail count you saw.
+`output_tail` includes the pass or fail count you saw, not only a filename;
+preserve durable evidence before cleanup as `skills/verify/SKILL.md` requires.
 Do not commit the directory. Do not put a connection string or a token in
 the tail (PD-4).
 
@@ -95,8 +101,8 @@ supposed to leave them.
 
 | Runner | What it can host | Unverified line |
 |---|---|---|
-| Linux cloud agent | `python3 -m pytest ci/tests/ -v` and, when the dev extra is installed, the gateway tests | `gateway tests not run: dependency missing` |
-| Self-hosted VPS runner | The same pytest commands. A data-plane test you cannot reach from here stays unrun | `no data plane: self-hosted VPS runner` |
+| Linux cloud agent | `python3 -m pytest ci/tests/ -v` and the gateway's `uv run pytest -q` with its declared `dev` group available | `gateway tests not run: dependency missing` |
+| Self-hosted VPS runner | The same suite-specific commands. A data-plane test you cannot reach from here stays unrun | `no data plane: self-hosted VPS runner` |
 | GitHub-hosted `ubuntu-latest` | Public-repo test jobs when a workflow runs them | `suite not run: no workflow in this checkout` |
 | Ming's Mac | Private-repo suites the checkout can run | `suite not run: Ming's Mac` |
 

@@ -21,7 +21,7 @@ Is the change something a person does in a browser?
     ├─ Public product with a Playwright suite (clippyos pins Playwright 1.64.0)?
     │   └─▶ Drive that suite. A missing browser is unverified, not a pass.
     └─ Desk checkout (no Playwright suite in this repo)?
-        └─▶ desk_preview_check and desk_bundle_secret_scan. Do not promote.
+        └─▶ desk_preview_check. Generated-bundle secret coverage stays unverified.
 ```
 
 Apply the proof standard in `skills/verify/SKILL.md` before the first claim.
@@ -58,10 +58,14 @@ them. A promotion is not a verification step.
    navigation, the error that should appear).
 3. On this desk checkout, call `desk_preview_check` with the preview `url`.
    The tool records status, latency and a body hash and does not follow
-   off-host redirects (`contracts/tool-rosters/web.yaml`). Then call
-   `desk_bundle_secret_scan` on the build output paths inside the checkout.
-   `desk_vercel_deployments` is the read that lists what was built. None of
-   these three promote.
+   off-host redirects (`contracts/tool-rosters/web.yaml`).
+   `desk_vercel_deployments` is the read that lists what was built. Neither
+   promotes. `desk_bundle_secret_scan` runs G-3, which skips files under
+   `dist`, `build`, and `.next` and does not recurse into directory arguments
+   (`ci/gates/check_secrets.py`). Even `ok: true` or exit 0 does not prove
+   generated bundles were scanned. Record `generated-bundle secret scan
+   unverified: G-3 excludes generated output` until a real scan of the
+   generated files exists. Do not claim bundle verification from this tool.
 4. Mock only where production already isolates the call. A stub in place of
    the preview URL proves the stub.
 5. A dry run that never opened the URL did not drive the page. Do not record
@@ -69,10 +73,12 @@ them. A promotion is not a verification step.
 
 ## Evidence
 
-Write the preview result and any suite log under
-`.verify-evidence/<task-id>/`. `output_tail` names the file. Do not commit
-the directory (`.gitignore`). A body hash you did not receive from
-`desk_preview_check` is not a hash.
+Save the preview result and any suite log under
+`.verify-evidence/<task-id>/`. Put the observed status, action and resulting
+state in the receipt's durable evidence, following `skills/verify/SKILL.md`;
+an artifact filename alone is insufficient. Do not commit the directory
+(`.gitignore`). A body hash you did not receive from `desk_preview_check`
+is not a hash.
 
 ## Cleanup
 
@@ -84,7 +90,7 @@ Verification ends when the evidence is on the receipt.
 
 | Runner | Web proof it can host | When it cannot, write |
 |---|---|---|
-| Linux cloud agent | `desk_preview_check`, bundle scan, pytest. A browser suite only if the browser actually launched | `no browser: Linux cloud agent` |
+| Linux cloud agent | `desk_preview_check` observations and pytest; generated-bundle scan stays unverified. A browser suite only if the browser actually launched | `no browser: Linux cloud agent` |
 | Self-hosted VPS runner | Same read tools, if the gateway is reachable. No assumption of a desktop browser | `no browser: self-hosted VPS runner` |
 | GitHub-hosted `ubuntu-latest` | Public-repo browser suites when the workflow installs the pinned browser | `browser suite not run: workflow not in this checkout` |
 | Ming's Mac | Private-repo browser runs when a browser is installed | `no browser: Ming's Mac` |
@@ -97,8 +103,17 @@ runners. Do not add a workflow in this unit.
 
 | Observation | Field |
 |---|---|
-| Preview status from `desk_preview_check` | a `commands` entry whose `output_tail` names the saved result, cited by the claim |
+| Preview status from `desk_preview_check` | `commands[]` only for an actually executed replayable shell/CLI invocation with its observed process exit code and result excerpt. A tool-only observation stays separate; the G-2 proof claim stays `unverified` |
 | Playwright (or other) suite exit code | a separate command. Exit 0 supports "the suite passed" only. It does not support "promoted" |
-| Bundle scan | its own command. A lint pass is not this scan |
+| `desk_bundle_secret_scan` result | `unverified` for generated-bundle secret coverage, even if G-3 returned exit 0 |
 | Suite or preview you could not run | `unverified`, with the runner phrase from the table above |
 | Reproduce-first failure | `expects_failure: true` on that claim |
+
+Tool names are not shell commands. For a command-backed gateway read, reuse
+the authenticated `curl` route documented in
+`services/desk-gateway/README.md`: POST JSON-RPC `tools/call` to `/mcp/web`
+with `params.name` and `params.arguments` from the roster. Record the actual
+invocation, working directory and named environment prerequisites without
+secrets. Inspect the JSON-RPC error, MCP `isError`, and returned preview
+`matches`/status; a successful HTTP request is not a successful preview.
+Never assign a synthetic exit 0 to an MCP call.

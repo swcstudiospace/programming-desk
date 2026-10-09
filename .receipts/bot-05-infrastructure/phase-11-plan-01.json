@@ -1,0 +1,82 @@
+{
+  "task_id": "phase-11-plan-01",
+  "branch": "bot-05-infrastructure/phase-11-plan-01",
+  "bot": "bot-05-infrastructure",
+  "started_at": "2026-10-09T09:10:00Z",
+  "completed_at": "2026-10-09T09:25:00Z",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest infra/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 0.98,
+      "output_tail": "4 passed in 0.98s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q",
+      "exit_code": 0,
+      "duration_s": 15.59,
+      "output_tail": "291 passed in 15.59s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest tests/ -q",
+      "exit_code": 0,
+      "duration_s": 20.12,
+      "output_tail": "146 passed in 20.12s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files infra/desk-gateway/deploy-staging.sh infra/desk-gateway/reload-nginx-gateway.sh infra/tests/test_staging_deployment.py",
+      "exit_code": 0,
+      "duration_s": 0.20,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files infra/desk-gateway/deploy-staging.sh infra/desk-gateway/reload-nginx-gateway.sh infra/tests/test_staging_deployment.py",
+      "exit_code": 0,
+      "duration_s": 0.15,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py",
+      "exit_code": 0,
+      "duration_s": 0.18,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py",
+      "exit_code": 0,
+      "duration_s": 0.28,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Declarative VPS deployment pipeline validates pre-flight health, creates atomic symlinks, and triggers automatic rollback on health regression (REQ-STAGE-001)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Zero-downtime hot reloading for Desk Gateway instances gracefully reloads uvicorn/systemd workers and Nginx without dropping active client connections (REQ-STAGE-002)",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Infra test suite (4 passed), CI gate tests (291 passed), and Gateway suite (146 passed) pass cleanly without regressions",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Quality gates G-1, G-3, G-4, and G-7 pass cleanly for bot-05-infrastructure",
+      "evidence_command_index": 3
+    }
+  ],
+  "unverified": [
+    "Live production VPS TLS certificate issuance with Certbot against external Let's Encrypt endpoint"
+  ],
+  "files_changed": [
+    "infra/desk-gateway/deploy-staging.sh",
+    "infra/desk-gateway/reload-nginx-gateway.sh",
+    "infra/tests/test_staging_deployment.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "approved_by": "SomeRandmGuyy"
+}

@@ -1,0 +1,193 @@
+{
+  "task_id": "spe-8594-honest-memory-retain",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-10-08T21:20:00Z",
+  "completed_at": "2026-10-08T22:24:17Z",
+  "commands": [
+    {
+      "cmd": "cd /tmp/pd-479d627/services/desk-gateway && PYTHONPATH=src /workspace/services/desk-gateway/.venv/bin/pytest -q tests/test_memory_retain.py --tb=line -p no:cacheprovider",
+      "exit_code": 1,
+      "duration_s": 8,
+      "output_tail": "12 failed, 1 passed in 5.72s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_memory_retain.py",
+      "exit_code": 0,
+      "duration_s": 9,
+      "output_tail": "13 passed in 6.05s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q",
+      "exit_code": 0,
+      "duration_s": 115,
+      "output_tail": "177 passed in 113.89s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 3,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 161,
+      "output_tail": "291 passed in 160.31s"
+    },
+    {
+      "cmd": "env -u SUBSTRATE_URL -u SUBSTRATE_TOKEN -u SUBSTRATE_TOKEN_GROK_BOT python3 \"$SWARM_ROOT/scripts/orch_plan.py\" --root /workspace --graph-id ut-mv00tcgl-d8215d3e --pattern hotfix --brief-text \"G1 honest memory retain. Graph ut-mv00tcgl-d8215d3e unit n2 SPE-8594. Advisory cloud session, no signing key.\" --json",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "status ok; correlation 07f71cb7-2e1a-4590-b74e-6f2bea0e5a62; 8 hotfix tasks PLANNED; no signed gate"
+    },
+    {
+      "cmd": "cd /tmp/pd-479d627/services/desk-gateway && PYTHONPATH=src /workspace/services/desk-gateway/.venv/bin/pytest -q tests/test_memory_retain.py::test_substrate_only_stored_is_partial tests/test_memory_retain.py::test_substrate_only_denied_is_unavailable --tb=line -p no:cacheprovider",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "2 failed in 0.07s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_memory_retain.py",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "15 passed in 0.67s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && uv run pytest -q",
+      "exit_code": 0,
+      "duration_s": 16,
+      "output_tail": "179 passed in 15.63s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 4 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "On 479d627, before fix 94375ba, these tests fail: test_agent_scope_sends_kind_fact (kind was decision), test_graph_scope_sends_kind_decision (verdicts missing; kind decision was already sent), test_denied_substrate_is_partial_and_logged, test_call_tool_maps_refused_memory_write[denied|quarantined|rejected], test_call_tool_protocol_error_with_denial_is_memory_denied, test_call_tool_structured_denial_without_text_content, test_hindsight_only_when_substrate_not_configured, test_both_planes_stored, test_no_plane_stored_is_memory_unavailable, test_no_plane_when_both_error. test_call_tool_accepted_write_stays_ok already passed.",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "Fix 94375ba makes tests/test_memory_retain.py pass",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The desk-gateway pytest suite passes on the fix",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ownership.yaml validates",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Changed paths are owned by bot-01-systems-backend",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The diff contains no secret shape",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Gate self-tests pass",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "orch_plan accepted graph id ut-mv00tcgl-d8215d3e and wrote an advisory hotfix plan",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "On 479d627, substrate-only stored and substrate-only denied tests fail before the verdict reply exists",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "After the fix, substrate-only stored is partial with substrate stored, substrate-only denied is memory_unavailable, and tests/test_memory_retain.py passes",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The desk-gateway pytest suite passes with the substrate-only tests included",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "Changed paths remain owned by bot-01-systems-backend against current origin/main",
+      "evidence_command_index": 13
+    }
+  ],
+  "unverified": [
+    "Live substrate acceptance of the memory write is not proven. It waits for S1 (SUBSTRATE_ALLOW_ANONYMOUS and a recognised SUBSTRATE_TOKEN_GROK_BOT) plus Ming's separate operator step to set that token and restart substrate-mcp. This run used fake upstreams only.",
+    "Greptile review 2 on commit bd96b2f scored 5/5 and said the substrate-only finding is addressed, with no new finding. GitHub thread 4224459948 on tests/test_memory_retain.py is resolved. CI on that commit is not green, so this receipt does not ask for a merge.",
+    "Quality Gates run 37849426852, job gates, failed in G-1 path ownership: check_ownership reported fatal origin/main...HEAD no merge base. The acting-bot step had already printed bot-01-systems-backend. The failure follows git fetch --depth=1 origin main in .github/workflows/gates.yml, owned by bot-05-infrastructure. Run 37850164088 on another pull request failed with the same line. Local check_ownership against origin/main passes. This seat does not edit that workflow.",
+    "Security PR Gate run 37849426972: Gitleaks named only ci/tests/test_gates.py, services/desk-gateway/tests/test_units.py and services/desk-gateway/tests/test_server.py, none of them files in this diff. Semgrep (SAST) exited 2 with no finding text. The separate Semgrep OSS check and the separate gitleaks check succeeded. Those workflows are outside this unit.",
+    "Ming authorized merging pull request 122 in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve, and this agent does not merge the pull request.",
+    "Swarm gates are advisory. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset, so correlation 07f71cb7-2e1a-4590-b74e-6f2bea0e5a62 is not APPROVED.",
+    "docs/desk-operating-model.md still describes ok as any() over the two planes. That file is owned by bot-00-programming-lead and was not edited. The reply now also carries verdicts and partial.",
+    "No VPS change was made. No nginx reload, unit edit, or token write."
+  ],
+  "files_changed": [
+    "services/desk-gateway/src/desk_gateway/tools/core.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
+    "services/desk-gateway/tests/test_memory_retain.py",
+    ".receipts/bot-01-systems-backend/spe-8594-honest-memory-retain.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "fix_commit": "94375bab3adccca4ca40ba3e174c19e851d05c02",
+  "red_tests_commit": "195b7c1e8d17120962719fdb4c1599527ad98f5c",
+  "graph_id": "ut-mv00tcgl-d8215d3e",
+  "approved_by": "human:SomeRandmGuyy"
+}

@@ -26,6 +26,12 @@ SEAT_LABEL: dict[str, str] = {
     "quality": "QUALITY",
 }
 TOOL_DEADLINE_SEC = 20.0
+# docs_search spends these inside the tool deadline: 4s lookup + 10s retrieval = 14s.
+DOCS_LOOKUP_BUDGET_SEC = 4.0
+DOCS_RETRIEVAL_BUDGET_SEC = 10.0
+RECALL_BANK_TIMEOUT_SEC = 6.0
+RAGFLOW_DATASET_TTL_SEC = 600.0
+DEFAULT_RAGFLOW_DATASETS = ("programming-desk", "agent-substrate")
 MAX_LIVE_TOOLS = 20
 PACK_MAX_TOOLS = 5
 
@@ -36,6 +42,13 @@ def _env(name: str, default: str = "") -> str:
 
 def _csv(value: str) -> list[str]:
     return [v.strip() for v in value.split(",") if v.strip()]
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = _env(name)
+    if not raw:
+        return default
+    return float(raw)
 
 
 @dataclass
@@ -64,6 +77,16 @@ class Settings:
     greptime_db: str = "public"
     pg_url: str = ""
     dragonfly_url: str = ""
+    # Paid once at startup. A seat request never waits on this connect.
+    dragonfly_connect_timeout_ms: int = 500
+    # Warm command budget. Measured commands are about 240 ms.
+    dragonfly_command_timeout_ms: int = 250
+    # Hard cap on one rate-limit check. The local bucket answers when it expires.
+    dragonfly_rate_limit_budget_ms: int = 150
+    dragonfly_health_check_interval_sec: int = 30
+    dragonfly_socket_keepalive: bool = True
+    dragonfly_breaker_failures: int = 3
+    dragonfly_breaker_recovery_sec: float = 30.0
     hindsight_url: str = ""
     hindsight_api_key: str = ""
     ragflow_url: str = ""
@@ -84,6 +107,30 @@ class Settings:
     extra_allowed_origins: list[str] = field(default_factory=list)
     view_passphrase: str = ""
     view_secret: str = ""
+    intake_queue_max_depth: int = 100
+    intake_rate_limit_per_minute: int = 60
+    webhook_secrets: dict[str, str] = field(default_factory=dict)
+    idempotency_window_sec: float = 300.0
+    intake_max_retries: int = 3
+    federation_enabled: bool = False
+    federation_peer_keys: dict[str, str] = field(default_factory=dict)
+    federation_peers: dict[str, str] = field(default_factory=dict)
+    cutover_enabled: bool = False
+    canary_percentage: int = 100
+    isolated_seats: list[str] = field(default_factory=list)
+    alert_webhook_url: str = ""
+    slo_latency_p99_max_ms: float = 500.0
+    slo_intake_success_min_pct: float = 99.9
+    dlq_alert_threshold: int = 10
+    edge_default_region: str = "us-east"
+    edge_latency_threshold_ms: float = 400.0
+    edge_rate_limit_per_minute: int = 60
+    edge_burst_capacity: int = 120
+    ragflow_datasets: list[str] = field(default_factory=lambda: list(DEFAULT_RAGFLOW_DATASETS))
+    ragflow_dataset_ttl_sec: float = RAGFLOW_DATASET_TTL_SEC
+    docs_lookup_budget_sec: float = DOCS_LOOKUP_BUDGET_SEC
+    docs_retrieval_budget_sec: float = DOCS_RETRIEVAL_BUDGET_SEC
+    recall_bank_timeout_sec: float = RECALL_BANK_TIMEOUT_SEC
 
     @property
     def issuer_url(self) -> str:
@@ -117,6 +164,9 @@ class Settings:
                 return origin
         return None
 
+    def webhook_secret_for_origin(self, origin: str) -> str | None:
+        return self.webhook_secrets.get(origin)
+
     @classmethod
     def from_env(cls) -> Settings:
         passphrases = {seat: _env(f"SEAT_PASSPHRASE_{seat.upper()}") for seat in SEATS}
@@ -125,6 +175,11 @@ class Settings:
             origin, _, token = pair.partition(":")
             if origin and token:
                 intake[origin.strip()] = token.strip()
+        webhook_sec: dict[str, str] = {}
+        for pair in _csv(_env("WEBHOOK_SECRETS")):
+            origin, _, sec = pair.partition(":")
+            if origin and sec:
+                webhook_sec[origin.strip()] = sec.strip()
         projects = {
             "ultrathink": _env("RAILWAY_PROJECT_ULTRATHINK"),
             "agent-substrate": _env("RAILWAY_PROJECT_AGENT_SUBSTRATE"),
@@ -134,6 +189,16 @@ class Settings:
             "desklanes": _env("PACK_DESKLANES_API_BASE"),
             "clippyos": _env("PACK_CLIPPYOS_API_BASE"),
         }
+        fed_peers: dict[str, str] = {}
+        for pair in _csv(_env("FEDERATION_PEERS")):
+            desk_id, _, peer_url = pair.partition(":")
+            if desk_id and peer_url:
+                fed_peers[desk_id.strip()] = peer_url.strip()
+        fed_keys: dict[str, str] = {}
+        for pair in _csv(_env("FEDERATION_PEER_KEYS")):
+            key_id, _, key_pem = pair.partition(":")
+            if key_id and key_pem:
+                fed_keys[key_id.strip()] = key_pem.strip().replace("\\n", "\n")
         return cls(
             public_host=_env("PUBLIC_HOST", "desk.swcstudio.space"),
             host=_env("HOST", "127.0.0.1"),
@@ -156,6 +221,13 @@ class Settings:
             greptime_db=_env("GREPTIME_DB", "public"),
             pg_url=_env("SUBSTRATE_PG_URL"),
             dragonfly_url=_env("DRAGONFLY_URL"),
+            dragonfly_connect_timeout_ms=int(_env("DRAGONFLY_CONNECT_TIMEOUT_MS", "500")),
+            dragonfly_command_timeout_ms=int(_env("DRAGONFLY_COMMAND_TIMEOUT_MS", "250")),
+            dragonfly_rate_limit_budget_ms=int(_env("DRAGONFLY_RATE_LIMIT_BUDGET_MS", "150")),
+            dragonfly_health_check_interval_sec=int(_env("DRAGONFLY_HEALTH_CHECK_INTERVAL_SEC", "30")),
+            dragonfly_socket_keepalive=_env("DRAGONFLY_SOCKET_KEEPALIVE", "true").lower() in ("true", "1", "yes"),
+            dragonfly_breaker_failures=int(_env("DRAGONFLY_BREAKER_FAILURES", "3")),
+            dragonfly_breaker_recovery_sec=float(_env("DRAGONFLY_BREAKER_RECOVERY_SEC", "30")),
             hindsight_url=_env("HINDSIGHT_URL").rstrip("/"),
             hindsight_api_key=_env("HINDSIGHT_API_KEY"),
             ragflow_url=_env("RAGFLOW_URL").rstrip("/"),
@@ -176,4 +248,28 @@ class Settings:
             extra_allowed_origins=_csv(_env("EXTRA_ALLOWED_ORIGINS")),
             view_passphrase=_env("DESK_VIEW_PASSPHRASE"),
             view_secret=_env("DESK_VIEW_SECRET"),
+            intake_queue_max_depth=int(_env("INTAKE_QUEUE_MAX_DEPTH", "100")),
+            intake_rate_limit_per_minute=int(_env("INTAKE_RATE_LIMIT_PER_MINUTE", "60")),
+            webhook_secrets=webhook_sec,
+            idempotency_window_sec=float(_env("IDEMPOTENCY_WINDOW_SEC", "300.0")),
+            intake_max_retries=int(_env("INTAKE_MAX_RETRIES", "3")),
+            federation_enabled=_env("FEDERATION_ENABLED", "false").lower() in ("true", "1", "yes"),
+            federation_peer_keys=fed_keys,
+            federation_peers=fed_peers,
+            cutover_enabled=_env("CUTOVER_ENABLED", "false").lower() in ("true", "1", "yes"),
+            canary_percentage=int(_env("CANARY_PERCENTAGE", "100")),
+            isolated_seats=_csv(_env("ISOLATED_SEATS", "")),
+            alert_webhook_url=_env("ALERT_WEBHOOK_URL"),
+            slo_latency_p99_max_ms=float(_env("SLO_LATENCY_P99_MAX_MS", "500.0")),
+            slo_intake_success_min_pct=float(_env("SLO_INTAKE_SUCCESS_MIN_PCT", "99.9")),
+            dlq_alert_threshold=int(_env("DLQ_ALERT_THRESHOLD", "10")),
+            edge_default_region=_env("EDGE_DEFAULT_REGION", "us-east"),
+            edge_latency_threshold_ms=float(_env("EDGE_LATENCY_THRESHOLD_MS", "400.0")),
+            edge_rate_limit_per_minute=int(_env("EDGE_RATE_LIMIT_PER_MINUTE", "60")),
+            edge_burst_capacity=int(_env("EDGE_BURST_CAPACITY", "120")),
+            ragflow_datasets=_csv(_env("RAGFLOW_DATASETS")) or list(DEFAULT_RAGFLOW_DATASETS),
+            ragflow_dataset_ttl_sec=_float_env("RAGFLOW_DATASET_TTL_SEC", RAGFLOW_DATASET_TTL_SEC),
+            docs_lookup_budget_sec=_float_env("DOCS_LOOKUP_BUDGET_SEC", DOCS_LOOKUP_BUDGET_SEC),
+            docs_retrieval_budget_sec=_float_env("DOCS_RETRIEVAL_BUDGET_SEC", DOCS_RETRIEVAL_BUDGET_SEC),
+            recall_bank_timeout_sec=_float_env("RECALL_BANK_TIMEOUT_SEC", RECALL_BANK_TIMEOUT_SEC),
         )

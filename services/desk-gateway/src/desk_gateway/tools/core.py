@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -9,9 +10,25 @@ import time
 from typing import Any
 
 from desk_gateway import __version__
-from desk_gateway.config import MAX_LIVE_TOOLS, SEAT_LABEL, SEATS
+from desk_gateway.config import (
+    DEFAULT_RAGFLOW_DATASETS,
+    DOCS_LOOKUP_BUDGET_SEC,
+    DOCS_RETRIEVAL_BUDGET_SEC,
+    MAX_LIVE_TOOLS,
+    RECALL_BANK_TIMEOUT_SEC,
+    SEAT_LABEL,
+    SEATS,
+    TOOL_DEADLINE_SEC,
+)
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.tools import ToolContext, failure
+from desk_gateway.upstreams import (
+    budget_cancelled_http,
+    is_unknown_dataset,
+    not_configured,
+    pop_budget_http_scope,
+    push_budget_http_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +44,20 @@ async def brief(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
         if cached and now - cached[0] < BRIEF_TTL_SEC:
             return {**cached[1], "cached": True}
     svc = ctx.services
-    substrate = await svc.substrate.brief(repo=None, graph_id=args.get("graph_id"))
-    recall = await memory_recall(ctx, {"query": args.get("task_id") or args.get("graph_id") or "current work", "limit": 5, "include_shared": True})
+    # The brief costs the slower of the two calls, not the sum.
+    substrate_result, recall_result = await asyncio.gather(
+        svc.substrate.brief(repo=None, graph_id=args.get("graph_id")),
+        memory_recall(ctx, {"query": args.get("task_id") or args.get("graph_id") or "current work", "limit": 5, "include_shared": True}),
+        return_exceptions=True,
+    )
+    if isinstance(substrate_result, BaseException):
+        substrate = {"error": "upstream_error", "reason": redact_text(str(substrate_result))[:300], "plane": "substrate"}
+    else:
+        substrate = substrate_result
+    if isinstance(recall_result, BaseException):
+        recall = {"banks": [], "results": [], "error": "upstream_error", "reason": redact_text(str(recall_result))[:300], "plane": "hindsight"}
+    else:
+        recall = recall_result
     intake = svc.store.intake_counts() if ctx.short == "lead" else None
     packs = svc.store.pack_records(ctx.short)
     result = {
@@ -49,36 +78,195 @@ async def brief(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
-    svc = ctx.services
-    if not svc.ragflow.http.configured:
-        via = await svc.substrate.call_tool("docs_search", {"query": args["query"], "limit": args.get("limit", 8)}, timeout=10)
-        if via.get("error"):
-            return {"results": [], "reason": via.get("reason") or "docs plane not configured", "error": via["error"]}
-        return {"results": via.get("content") or [], "source": "substrate"}
-    datasets = await svc.ragflow.datasets()
-    if datasets.get("error"):
-        return {"results": [], **datasets}
-    wanted = {"programming-desk", "agent-substrate"}
-    if args.get("repo"):
-        wanted.add(args["repo"].split("/")[-1])
-    ids = [d.get("id") for d in ((datasets.get("body") or {}).get("data") or []) if d.get("name") in wanted and d.get("id")]
-    if not ids:
-        return {"results": [], "reason": "no matching datasets in RAGFlow", "wanted": sorted(wanted)}
-    hit = await svc.ragflow.retrieve(args["query"], ids, args.get("limit", 8))
-    if hit.get("error"):
-        return {"results": [], **hit}
-    chunks = ((hit.get("body") or {}).get("data") or {}).get("chunks") or []
-    results = [
+def _docs_budgets(settings: Any) -> tuple[float, float]:
+    lookup = max(0.0, float(getattr(settings, "docs_lookup_budget_sec", DOCS_LOOKUP_BUDGET_SEC)))
+    retrieval = max(0.0, float(getattr(settings, "docs_retrieval_budget_sec", DOCS_RETRIEVAL_BUDGET_SEC)))
+    # Stay inside the tool wrapper's deadline so a slow phase is named ragflow,
+    # not reported as the outer "deadline" error.
+    slack = min(0.5, TOOL_DEADLINE_SEC * 0.05) if TOOL_DEADLINE_SEC > 0 else 0.0
+    ceiling = max(0.0, TOOL_DEADLINE_SEC - slack)
+    # Each phase may use up to the tool deadline. Retrieval is shortened later
+    # by the time actually left, so a large unused lookup allowance does not
+    # cancel a search whose dataset ids are already cached.
+    return min(lookup, ceiling), min(retrieval, ceiling)
+
+
+def _wanted_datasets(settings: Any, args: dict[str, Any]) -> list[str]:
+    configured = getattr(settings, "ragflow_datasets", None)
+    names = list(configured) if configured else list(DEFAULT_RAGFLOW_DATASETS)
+    repo = args.get("repo")
+    if isinstance(repo, str) and repo:
+        short = repo.split("/")[-1]
+        if short and short not in names:
+            names.append(short)
+    return names
+
+
+def _ragflow_timeout(phase: str, budget: float) -> dict[str, Any]:
+    return {
+        "results": [],
+        "error": "upstream_timeout",
+        "reason": f"ragflow {phase} exceeded {budget:g}s budget",
+        "plane": "ragflow",
+    }
+
+
+def _is_ragflow_budget(result: dict[str, Any]) -> bool:
+    return result.get("plane") == "ragflow" and result.get("results") == [] and "exceeded" in str(result.get("reason") or "")
+
+
+def _record_budget_failure(http: Any) -> None:
+    """A budget that cancels an in-flight call is an upstream failure.
+
+    Caller cancellation is a CancelledError and does not come through here, so it
+    does not trip the breaker.
+    """
+    breaker = getattr(http, "circuit_breaker", None)
+    record = getattr(breaker, "record_failure", None)
+    if record is not None:
+        record()
+
+
+async def _within(deadline: float, coro: Any, phase: str, budget: float, http: Any = None) -> dict[str, Any]:
+    left = deadline - asyncio.get_running_loop().time()
+    if left <= 0:
+        if asyncio.iscoroutine(coro):
+            coro.close()
+        return _ragflow_timeout(phase, budget)
+    token = push_budget_http_scope()
+    try:
+        try:
+            return await asyncio.wait_for(coro, left)
+        except TimeoutError:
+            if budget_cancelled_http():
+                _record_budget_failure(http)
+            return _ragflow_timeout(phase, budget)
+    finally:
+        pop_budget_http_scope(token)
+
+
+def _chunks(hit: dict[str, Any]) -> list[dict[str, Any]]:
+    body = hit.get("body") or {}
+    data = body.get("data") if isinstance(body, dict) else None
+    chunks = data.get("chunks") if isinstance(data, dict) else None
+    return [
         {
             "content": redact_text(str(c.get("content") or c.get("content_with_weight") or ""))[:1500],
             "document": c.get("document_keyword") or c.get("docnm_kwd"),
             "dataset_id": c.get("dataset_id") or c.get("kb_id"),
             "score": c.get("similarity"),
         }
-        for c in chunks
+        for c in (chunks or [])
+        if isinstance(c, dict)
     ]
-    return {"results": results, "source": "ragflow", "note": "a chunk is not a repository fact until the file is opened"}
+
+
+async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
+    svc = ctx.services
+    if not svc.ragflow.http.configured:
+        # Phase 25 adds substrate docs_search. Until then an unconfigured RAGflow
+        # is not_configured, not an upstream error from a tool the substrate lacks.
+        return {
+            "results": [],
+            "error": "not_configured",
+            "state": "not_configured",
+            "reason": "ragflow is not configured on the gateway; substrate docs_search is not available until Phase 25",
+        }
+    settings = svc.settings
+    lookup_budget, retrieval_budget = _docs_budgets(settings)
+    names = _wanted_datasets(settings, args)
+    loop = asyncio.get_running_loop()
+    slack = min(0.5, TOOL_DEADLINE_SEC * 0.05) if TOOL_DEADLINE_SEC > 0 else 0.0
+    outer_end = loop.time() + max(0.0, TOOL_DEADLINE_SEC - slack)
+    lookup_started = loop.time()
+    lookup_deadline = min(lookup_started + lookup_budget, outer_end)
+
+    resolved = await _within(
+        lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget, svc.ragflow.http
+    )
+    unused_lookup = max(0.0, lookup_budget - (loop.time() - lookup_started))
+    if _is_ragflow_budget(resolved):
+        return resolved
+    if resolved.get("error"):
+        return {"results": [], **resolved, "plane": "ragflow"}
+
+    def _empty(missing: list[str]) -> dict[str, Any]:
+        return {
+            "results": [],
+            "reason": "no matching datasets in RAGFlow",
+            "wanted": names,
+            "missing_datasets": missing,
+            "plane": "ragflow",
+        }
+
+    ids = list(resolved.get("ids") or [])
+    missing = list(resolved.get("missing") or [])
+    if not ids:
+        return _empty(missing)
+
+    limit = args.get("limit", 8)
+    retrieval_started = loop.time()
+    retrieval_deadline = min(retrieval_started + retrieval_budget, outer_end)
+    hit = await _within(
+        retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget, svc.ragflow.http
+    )
+    unused_retrieval = max(0.0, retrieval_budget - (loop.time() - retrieval_started))
+    if not _is_ragflow_budget(hit) and is_unknown_dataset(hit):
+        # Retrieval time does not consume the lookup allowance. The refresh gets
+        # whatever lookup budget was left when the first list finished.
+        refresh_allowance = min(unused_lookup, max(0.0, outer_end - loop.time()))
+        resolved = await _within(
+            loop.time() + refresh_allowance,
+            svc.ragflow.resolve_dataset_ids(names, refresh=True),
+            "dataset lookup",
+            lookup_budget,
+            svc.ragflow.http,
+        )
+        if _is_ragflow_budget(resolved):
+            return resolved
+        if resolved.get("error"):
+            return {"results": [], **resolved, "plane": "ragflow"}
+        ids = list(resolved.get("ids") or [])
+        missing = list(resolved.get("missing") or [])
+        if not ids:
+            return _empty(missing)
+        retry_allowance = min(unused_retrieval, max(0.0, outer_end - loop.time()))
+        hit = await _within(
+            loop.time() + retry_allowance,
+            svc.ragflow.retrieve(args["query"], ids, limit),
+            "retrieval",
+            retrieval_budget,
+            svc.ragflow.http,
+        )
+    if _is_ragflow_budget(hit):
+        return hit
+    if hit.get("error"):
+        return {"results": [], **hit, "plane": "ragflow"}
+    reply: dict[str, Any] = {
+        "results": _chunks(hit),
+        "source": "ragflow",
+        "note": "a chunk is not a repository fact until the file is opened",
+    }
+    if missing:
+        reply["missing_datasets"] = missing
+    return reply
+
+
+def _plane_verdict(plane: str, result: dict[str, Any]) -> dict[str, Any]:
+    """One plane's retain outcome. Shape is stable for the later Hindsight-via-substrate route."""
+    error = result.get("error")
+    if error == "memory_denied":
+        return {
+            "plane": plane,
+            "state": "denied",
+            "reason": result.get("reason"),
+            "writer": result.get("writer"),
+        }
+    if error == "not_configured":
+        return {"plane": plane, "state": "not_configured", "reason": result.get("reason")}
+    if error:
+        return {"plane": plane, "state": "error", "reason": result.get("reason") or error}
+    return {"plane": plane, "state": "stored", "reason": None}
 
 
 async def memory_retain(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
@@ -94,16 +282,58 @@ async def memory_retain(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
     results: dict[str, Any] = {}
     if svc.hindsight.http.configured:
         results["hindsight"] = await svc.hindsight.retain(ctx.seat.memory_own, args["content"], tags, context=f"Programming Desk {SEAT_LABEL[ctx.short]}")
-    scope = f"graph:{args['graph_id']}" if args.get("graph_id") else "agent:grok-bot"
+    else:
+        results["hindsight"] = not_configured("hindsight")
+    graph_id = args.get("graph_id")
+    if graph_id:
+        scope = f"graph:{graph_id}"
+        kind = "decision"
+    else:
+        scope = "agent:grok-bot"
+        kind = "fact"
     results["substrate"] = await svc.substrate.call_tool(
         "memory_write",
-        {"scope": scope, "kind": "decision", "text": f"[{ctx.seat.memory_own}] {args['content']}", "trust": "agent-claimed", "ttl": "permanent"},
+        {
+            "scope": scope,
+            "kind": kind,
+            "text": f"[{ctx.seat.memory_own}] {args['content']}",
+            "trust": "agent-claimed",
+            "ttl": "permanent",
+        },
         timeout=8,
     )
-    ok = any(not r.get("error") for r in results.values())
-    if not ok:
-        return failure("memory_unavailable", "no memory plane accepted the write", results=results)
-    return {"ok": True, "bank": ctx.seat.memory_own, "results": results}
+    verdicts = [_plane_verdict(plane, result) for plane, result in results.items()]
+    for verdict in verdicts:
+        if verdict["state"] == "stored":
+            continue
+        logger.warning(
+            "memory plane not stored seat=%s plane=%s state=%s reason=%s writer=%s",
+            ctx.short,
+            verdict["plane"],
+            verdict["state"],
+            verdict.get("reason") or "",
+            verdict.get("writer") or "",
+        )
+    stored = any(verdict["state"] == "stored" for verdict in verdicts)
+    partial = stored and any(verdict["state"] != "stored" for verdict in verdicts)
+    if not stored:
+        return failure(
+            "memory_unavailable",
+            "no memory plane accepted the write",
+            results=results,
+            verdicts=verdicts,
+            ok=False,
+            partial=False,
+        )
+    return {"ok": True, "partial": partial, "bank": ctx.seat.memory_own, "results": results, "verdicts": verdicts}
+
+
+def _bank_row(bank: str, hit: dict[str, Any], status: str) -> dict[str, Any]:
+    http_status = hit.get("status") if isinstance(hit.get("status"), int) else None
+    row = {"bank": bank, **hit, "status": status, "plane": hit.get("plane") or "hindsight"}
+    if http_status is not None:
+        row["http_status"] = http_status
+    return row
 
 
 async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
@@ -111,9 +341,44 @@ async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
     banks = [ctx.seat.memory_own] + (list(ctx.seat.memory_shared) if args.get("include_shared", True) else [])
     out: dict[str, Any] = {"banks": banks, "results": []}
     if svc.hindsight.http.configured:
-        for bank in banks:
-            hit = await svc.hindsight.recall(bank, args["query"], args.get("limit", 8))
-            out["results"].append({"bank": bank, **hit})
+        timeout = float(getattr(svc.settings, "recall_bank_timeout_sec", RECALL_BANK_TIMEOUT_SEC))
+
+        async def one(bank: str) -> dict[str, Any]:
+            token = push_budget_http_scope()
+            try:
+                try:
+                    hit = await asyncio.wait_for(
+                        svc.hindsight.recall(bank, args["query"], args.get("limit", 8)),
+                        timeout,
+                    )
+                except TimeoutError:
+                    if budget_cancelled_http():
+                        _record_budget_failure(svc.hindsight.http)
+                    return {
+                        "bank": bank,
+                        "status": "timeout",
+                        "error": "upstream_timeout",
+                        "reason": f"hindsight bank {bank} exceeded the {timeout:g}s recall budget",
+                        "plane": "hindsight",
+                    }
+                except Exception as exc:
+                    return {
+                        "bank": bank,
+                        "status": "error",
+                        "error": "upstream_error",
+                        "reason": redact_text(str(exc))[:300],
+                        "plane": "hindsight",
+                    }
+                if not isinstance(hit, dict):
+                    return {"bank": bank, "status": "error", "error": "upstream_error", "reason": "hindsight recall returned no result", "plane": "hindsight"}
+                if hit.get("error"):
+                    status = "timeout" if hit.get("error") == "upstream_timeout" else "error"
+                    return _bank_row(bank, hit, status)
+                return _bank_row(bank, hit, "ok")
+            finally:
+                pop_budget_http_scope(token)
+
+        out["results"] = list(await asyncio.gather(*(one(bank) for bank in banks)))
         return out
     via = await svc.substrate.call_tool("memory_search", {"query": args["query"], "limit": args.get("limit", 8)}, timeout=8)
     if via.get("error"):

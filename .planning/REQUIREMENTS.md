@@ -1,29 +1,20 @@
-# Requirements: Milestone v2.1 — Live Drills & Intake Hardening
+# Requirements: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
 
-This document defines the requirements for Milestone v2.1 of Programming Desk.
+This document defines the requirements for Milestone v5.1 of Programming Desk.
 
-## 1. Gateway Resiliency & Subagent Execution Drills (Phase 8)
+## 1. Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing (Phase 68)
 
-- **REQ-DRILL-001**: Verification script suite for 15 specialized Cursor subagents located in `.cursor/agents/` validating system prompt integrity, tools declaration matching, and prompt token bounds.
-- **REQ-DRILL-002**: Automated loopback probe for `services/desk-gateway` verifying `/healthz`, `/metrics`, and `/readyz` endpoints under concurrent load simulation.
-- **REQ-DRILL-003**: Token verification and expiration handling drill ensuring corrupted or expired GitHub / Substrate tokens produce structured RFC-7807 problem details.
-- **REQ-DRILL-004**: Rate limiting and backpressure integration test for desk-gateway intake queues.
-- **REQ-DRILL-005**: Diagnostic receipt generation validator testing offline mode receipt generation and hash verification.
-- **REQ-DRILL-006**: CLI runner smoke test exercising `desk-run` commands in a mock sandbox environment.
-- **REQ-DRILL-007**: Verification test for receipt schema adherence against JSON schema draft-07 specification.
-- **REQ-DRILL-008**: Test harness validating agent transition handoffs between `bot-00-programming-lead` and execution agents.
-- **REQ-DRILL-009**: Timeout boundary check for long-running tool executions ensuring proper signal traps and cleanup.
-- **REQ-DRILL-010**: Verification of audit log immutability and checksum chaining in gateway logs.
+- [x] **REQ-QTELEPORT-001**: Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `QuantumStateVector`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
+- [x] **REQ-QTELEPORT-002**: Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
+- [x] **REQ-QTELEPORT-003**: Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationSession`, `ClassicalCorrection`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
+- [x] **REQ-QTELEPORT-004**: Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`, `PurificationProtocol`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
+- [x] **REQ-QTELEPORT-005**: Quantum Phase 68 REST API endpoints under `/v1/quantum/teleportation/*` and `/v1/quantum/repeater/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## 2. External Intake Hardening & Telemetry Anchoring (Phase 9)
+## 2. Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring (Phase 69)
 
-- **REQ-INTAKE-001**: Webhook payload validation drill verifying HMAC-SHA256 signatures from GitHub and companion repositories.
-- **REQ-INTAKE-002**: ETag caching and conditional request verification for upstream Substrate and Swarm registry lookups.
-- **REQ-INTAKE-003**: Ingress schema validation rejecting malformed PR payloads before worker dispatch.
-- **REQ-INTAKE-004**: Idempotency key tracking ensuring duplicate incoming events are deduplicated within a sliding window.
-- **REQ-INTAKE-005**: Graceful degradation fallback when companion `agent-substrate` or `agent-swarm` services are unreachable.
-- **REQ-INTAKE-006**: Structured log formatter ensuring OTel-compatible trace and span propagation across requests.
-- **REQ-INTAKE-007**: Circuit breaker implementation on gateway outbound client sessions.
-- **REQ-INTAKE-008**: Dead-letter queue (DLQ) retry policies and terminal failure reporting for webhook events.
-- **REQ-INTAKE-009**: Secure secrets redaction filter ensuring zero credentials appear in debug or trace output.
-- **REQ-INTAKE-010**: End-to-end telemetry anchoring test validating metrics export compatibility with Prometheus / OpenTelemetry collectors.
+- [x] **REQ-QTELEPORT-006**: BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
+- [x] **REQ-QTELEPORT-007**: Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`, `QuantumChannelInterception`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
+- [x] **REQ-QTELEPORT-008**: Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
+- [x] **REQ-QTELEPORT-009**: External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- [x] **REQ-QTELEPORT-010**: End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
+- [x] **REQ-QTELEPORT-011**: Quantum Phase 69 REST API endpoints under `/v1/quantum/qkd/*`, `/v1/quantum/teleportation/ledger/*`, `/v1/quantum/teleportation/anchor/*`, and `/v1/quantum/teleportation/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

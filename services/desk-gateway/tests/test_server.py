@@ -211,6 +211,221 @@ async def test_intake_flow_only_lead_can_drain(client, rpc):
     assert out["notify"]["delivered"] is False
 
 
+async def test_intake_rate_limiting_and_backpressure_drill(monkeypatch, tmp_path):
+    """REQ-DRILL-004: Rate limiting and backpressure integration test for desk-gateway intake queues."""
+    import httpx
+    from asgi_lifespan import LifespanManager
+    from desk_gateway import server
+    from desk_gateway.config import Settings
+    from desk_gateway.server import build_app
+
+    server._origin_request_timestamps.clear()
+
+    # Configure custom settings with tight rate limit (3/min) and max depth (2)
+    custom_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "drill_data",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        intake_rate_limit_per_minute=3,
+        intake_queue_max_depth=2,
+    )
+    application, _ = build_app(custom_settings)
+    async with LifespanManager(application):
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            # First 2 requests should be accepted (queued)
+            res1 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 1", "ask": "Ask description for item 1 in drill.", "idempotency_key": "k1"},
+            )
+            assert res1.status_code == 202
+            assert res1.json()["ok"] is True
+
+            res2 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 2", "ask": "Ask description for item 2 in drill.", "idempotency_key": "k2"},
+            )
+            assert res2.status_code == 202
+
+            # 3rd request reaches max queue depth (2 queued items already in queue) -> Backpressure HTTP 429
+            res3 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Item 3", "ask": "Ask description for item 3 in drill.", "idempotency_key": "k3"},
+            )
+            assert res3.status_code == 429
+            assert "application/problem+json" in res3.headers["content-type"]
+            p_bp = res3.json()
+            assert p_bp["error"] == "backpressure"
+            assert p_bp["title"] == "Intake Queue Saturated"
+            assert res3.headers["Retry-After"] == "30"
+
+    # Now test rate limiting independently with higher queue capacity
+    server._origin_request_timestamps.clear()
+    rate_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "drill_data_rate",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        intake_rate_limit_per_minute=2,
+        intake_queue_max_depth=100,
+    )
+    app_rate, _ = build_app(rate_settings)
+    async with LifespanManager(app_rate):
+        transport = httpx.ASGITransport(app=app_rate)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            r1 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 1", "ask": "Rate test ask description 1.", "idempotency_key": "r1"},
+            )
+            assert r1.status_code == 202
+
+            r2 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 2", "ask": "Rate test ask description 2.", "idempotency_key": "r2"},
+            )
+            assert r2.status_code == 202
+
+            # 3rd request within window exceeds 2 requests/min limit -> Rate limited HTTP 429
+            r3 = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}"},
+                json={"title": "Rate 3", "ask": "Rate test ask description 3.", "idempotency_key": "r3"},
+            )
+            assert r3.status_code == 429
+            assert "application/problem+json" in r3.headers["content-type"]
+            p_rl = r3.json()
+            assert p_rl["error"] == "rate_limited"
+            assert p_rl["title"] == "Intake Rate Limit Exceeded"
+            assert r3.headers["Retry-After"] == "60"
+
+
+async def test_intake_hmac_and_pr_schema_and_idempotency(monkeypatch, tmp_path):
+    """REQ-INTAKE-001, REQ-INTAKE-003, REQ-INTAKE-004: HMAC signature, PR schema validation, and sliding window idempotency."""
+    import hashlib
+    import hmac
+    import httpx
+    from asgi_lifespan import LifespanManager
+    from desk_gateway import server
+    from desk_gateway.config import Settings
+    from desk_gateway.server import build_app
+
+    server._origin_request_timestamps.clear()
+    server._idempotency_cache.clear()
+
+    webhook_secret = "test-webhook-hmac-secret-12345"  # pragma: allowlist secret (test fixture key)
+    custom_settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "hmac_data",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": INTAKE_TOKEN},
+        webhook_secrets={"github": webhook_secret},
+        idempotency_window_sec=1.0,  # short 1s window for test
+    )
+    application, _ = build_app(custom_settings)
+
+    async with LifespanManager(application):
+        transport = httpx.ASGITransport(app=application)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as test_client:
+            valid_payload = {
+                "title": "PR from GitHub: Fix typo",
+                "ask": "Please inspect this pull request and run lint/tests.",
+                "idempotency_key": "gh-pr-101",
+                "pr_payload": {
+                    "repo": "swcstudiospace/programming-desk",
+                    "number": 101,
+                    "action": "opened",
+                    "head_sha": "049ff8748fa7975d064cf27b409a4731be753e16",
+                    "base_branch": "main",
+                    "sender": "octocat",
+                },
+            }
+            raw_bytes = json.dumps(valid_payload).encode("utf-8")
+            valid_sig = "sha256=" + hmac.new(webhook_secret.encode("utf-8"), raw_bytes, hashlib.sha256).hexdigest()
+
+            # 1. Missing signature when secret is configured -> 401 problem details (REQ-INTAKE-001)
+            res_no_sig = await test_client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {INTAKE_TOKEN}", "Content-Type": "application/json"},
+                content=raw_bytes,
+            )
+            assert res_no_sig.status_code == 401
+            assert res_no_sig.json()["error"] == "missing_signature"
+
+            # 2. Invalid HMAC signature -> 403 problem details (REQ-INTAKE-001)
+            res_bad_sig = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": "sha256=badbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadbadb",
+                },
+                content=raw_bytes,
+            )
+            assert res_bad_sig.status_code == 403
+            assert res_bad_sig.json()["error"] == "invalid_signature"
+
+            # 3. Valid HMAC signature -> 202 Accepted (REQ-INTAKE-001)
+            res_ok = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": valid_sig,
+                },
+                content=raw_bytes,
+            )
+            assert res_ok.status_code == 202
+            intake_id = res_ok.json()["intake_id"]
+            assert intake_id.startswith("in-")
+
+            # 4. Sliding window idempotency: duplicate within window returns cached response (REQ-INTAKE-004)
+            res_dup = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": valid_sig,
+                },
+                content=raw_bytes,
+            )
+            assert res_dup.status_code == 202
+            assert res_dup.json()["intake_id"] == intake_id
+
+            # 5. Schema validation: malformed PR payload -> 400 invalid_args (REQ-INTAKE-003)
+            malformed_payload = {
+                "title": "PR from GitHub: Malformed",
+                "ask": "This payload has invalid PR field types.",
+                "idempotency_key": "gh-pr-102",
+                "pr_payload": {
+                    "repo": "invalid-repo-format",  # missing slash
+                    "number": 0,  # minimum 1
+                    "action": "unknown_action",
+                },
+            }
+            mal_bytes = json.dumps(malformed_payload).encode("utf-8")
+            mal_sig = "sha256=" + hmac.new(webhook_secret.encode("utf-8"), mal_bytes, hashlib.sha256).hexdigest()
+            res_mal = await test_client.post(
+                "/v1/intake",
+                headers={
+                    "Authorization": f"Bearer {INTAKE_TOKEN}",
+                    "Content-Type": "application/json",
+                    "X-Hub-Signature-256": mal_sig,
+                },
+                content=mal_bytes,
+            )
+            assert res_mal.status_code == 400
+            assert res_mal.json()["error"] == "invalid_args"
+
+
 async def test_packs_load_unload_and_ceiling(rpc):
     out = await rpc.call("ios", "desk_app_tools_load", {"app": "kanbanos", "task_id": "feat-push"})
     assert out["ok"] and out["live_tools"] == 20
@@ -1396,3 +1611,347 @@ async def test_railway_redeploy_compares_the_deployment_in_the_target_environmen
     out = await rpc.call("infra", "desk_railway_redeploy", REDEPLOY)
     assert out["ok"] is True, out
     assert out["environment_id"] == "env-prod" and redeploys == [("svc-1", "env-prod")]
+
+
+# ---------------------------------------------------------------------------
+# Upstream Resilience: Circuit Breakers, ETag Caching & Graceful Fallbacks
+# ---------------------------------------------------------------------------
+
+async def test_upstream_etag_caching_and_conditional_requests():
+    """REQ-INTAKE-002: ETag caching and conditional request (If-None-Match) handling."""
+    from desk_gateway.upstreams import HttpUpstream
+    import httpx
+
+    requests_received = []
+
+    def app_handler(request: httpx.Request) -> httpx.Response:
+        requests_received.append(request)
+        if_none_match = request.headers.get("if-none-match")
+        if if_none_match == '"v1.0.0"':
+            return httpx.Response(304, headers={"ETag": '"v1.0.0"'})
+        return httpx.Response(200, headers={"ETag": '"v1.0.0"'}, json={"data": "registry_info", "count": 42})
+
+    transport = httpx.MockTransport(app_handler)
+    upstream = HttpUpstream("mock-registry", "http://substrate-mock")
+
+    # Monkeypatch AsyncClient in request to use mock transport
+    original_client_init = httpx.AsyncClient.__init__
+
+    def mock_client_init(self, *args, **kwargs):
+        kwargs["transport"] = transport
+        original_client_init(self, *args, **kwargs)
+
+    import unittest.mock
+    with unittest.mock.patch.object(httpx.AsyncClient, "__init__", mock_client_init):
+        # 1. Initial GET - cache miss, sets etag
+        res1 = await upstream.request("GET", "/registry")
+        assert res1["ok"] is True
+        assert res1["status"] == 200
+        assert res1["body"] == {"data": "registry_info", "count": 42}
+        assert len(requests_received) == 1
+        assert "if-none-match" not in requests_received[0].headers
+
+        # 2. Subsequent GET - sends If-None-Match, server returns 304, upstream returns cached body
+        res2 = await upstream.request("GET", "/registry")
+        assert res2["ok"] is True
+        assert res2["status"] == 304
+        assert res2["cached"] is True
+        assert res2["body"] == {"data": "registry_info", "count": 42}
+        assert len(requests_received) == 2
+        assert requests_received[1].headers.get("if-none-match") == '"v1.0.0"'
+
+
+async def test_upstream_circuit_breaker_and_recovery():
+    """REQ-INTAKE-007: Circuit breaker halts outbound calls on threshold failures and recovers."""
+    from desk_gateway.upstreams import HttpUpstream, CircuitBreaker
+    import httpx
+
+    attempts = 0
+
+    def app_handler(request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        return httpx.Response(500, json={"error": "server exploded"})
+
+    transport = httpx.MockTransport(app_handler)
+    upstream = HttpUpstream("failing-upstream", "http://failing-upstream", failure_threshold=3, recovery_timeout_sec=0.1)
+
+    original_client_init = httpx.AsyncClient.__init__
+
+    def mock_client_init(self, *args, **kwargs):
+        kwargs["transport"] = transport
+        original_client_init(self, *args, **kwargs)
+
+    import unittest.mock
+    with unittest.mock.patch.object(httpx.AsyncClient, "__init__", mock_client_init):
+        # Fail 3 times to trip circuit breaker
+        for _ in range(3):
+            res = await upstream.request("GET", "/status")
+            assert res.get("status") == 500
+
+        assert attempts == 3
+        assert upstream.circuit_breaker.state == "open"
+
+        # 4th call: circuit breaker is open, fails fast without hitting network
+        res_tripped = await upstream.request("GET", "/status")
+        assert res_tripped["error"] == "circuit_breaker_open"
+        assert res_tripped["status"] == 503
+        assert res_tripped["circuit_breaker"] == "open"
+        assert attempts == 3  # not incremented
+
+        # Wait for recovery timeout (0.1s)
+        await asyncio.sleep(0.12)
+        assert upstream.circuit_breaker.allow_request() is True
+        assert upstream.circuit_breaker.state == "half-open"
+
+        # In half-open state, a successful call resets breaker
+        def ok_handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"healthy": True})
+
+        ok_transport = httpx.MockTransport(ok_handler)
+        with unittest.mock.patch.object(
+            httpx.AsyncClient,
+            "__init__",
+            lambda s, *a, **kw: original_client_init(s, *a, **{**kw, "transport": ok_transport}),
+        ):
+            res_recovered = await upstream.request("GET", "/status")
+            assert res_recovered["ok"] is True
+            assert upstream.circuit_breaker.state == "closed"
+
+
+async def test_upstream_graceful_degradation_fallbacks():
+    """REQ-INTAKE-005: Graceful degradation fallback when Substrate/AgentBus companion services fail."""
+    from desk_gateway.config import Settings
+    from desk_gateway.upstreams import Substrate, AgentBus
+
+    settings = Settings(
+        substrate_url="http://127.0.0.1:7410",
+        substrate_token="sub-tok",
+        agent_bus_url="http://127.0.0.1:8790",
+        agent_bus_token="bus-tok",
+    )
+    sub = Substrate(settings)
+    bus = AgentBus(settings)
+
+    # Trigger call to unreachable endpoint
+    import httpx
+    def failing_handler(request: httpx.Request):
+        return httpx.Response(502, json={"error": "service unavailable"})
+
+    transport = httpx.MockTransport(failing_handler)
+    orig_client_init = httpx.AsyncClient.__init__
+    import unittest.mock
+    with unittest.mock.patch.object(
+        httpx.AsyncClient,
+        "__init__",
+        lambda s, *a, **kw: orig_client_init(s, *a, **{**kw, "transport": transport}),
+    ):
+        sub_res = await sub.brief(repo="swcstudiospace/programming-desk", graph_id="graph-1")
+        assert sub_res["degraded"] is True
+        assert "[degraded] Substrate is currently unreachable" in sub_res["brief"]
+        assert "graph-1" in sub_res["brief"]
+
+        bus_res = await bus.start_job(runtime="python", goal="test resilience", provider=None, idempotency_key=None)
+        assert bus_res["degraded"] is True
+        assert bus_res["fallback"]["status"] == "queued_local_fallback"
+        assert bus_res["fallback"]["runtime"] == "python"
+
+
+async def test_intake_dlq_retries_and_terminal_failure(tmp_path):
+    """REQ-INTAKE-008: Dead-letter queue captures intake events exceeding retry policy and audit trails failure."""
+    from desk_gateway.server import build_app
+    from desk_gateway.config import Settings
+    from asgi_lifespan import LifespanManager
+    import httpx
+    import json
+
+    intake_token = "tok-github-dlq"
+    settings = Settings(
+        public_host="desk.swcstudio.space",
+        data_dir=tmp_path / "dlq_test",
+        repo_dir=REPO,
+        repo_branch="HEAD",
+        intake_tokens={"github": intake_token},
+        intake_max_retries=3,
+    )
+    app, _ = build_app(settings)
+    store = app.state["store"]
+
+    async with LifespanManager(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            # 1. Post intake item
+            res = await client.post(
+                "/v1/intake",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"title": "Flaky task", "ask": "Do some complex flaky step", "idempotency_key": "flaky-1"},
+            )
+            assert res.status_code == 202
+            intake_id = res.json()["intake_id"]
+
+            # DLQ initially empty
+            dlq_res = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res.status_code == 200
+            assert dlq_res.json()["count"] == 0
+
+            # 2. Record 1st failure -> stays queued, retry_count=1
+            f1 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "connection timeout on worker", "error_code": "timeout"},
+            )
+            assert f1.status_code == 200
+            data1 = f1.json()
+            assert data1["state"] == "queued"
+            assert data1["retry_count"] == 1
+            assert data1["terminal"] is False
+            assert len(data1["failures"]) == 1
+
+            # 3. Record 2nd failure -> stays queued, retry_count=2
+            f2 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "worker crashed during compile", "error_code": "worker_crash"},
+            )
+            assert f2.status_code == 200
+            assert f2.json()["retry_count"] == 2
+            assert f2.json()["terminal"] is False
+
+            # 4. Record 3rd failure -> max_retries reached (3) -> terminal dead_letter!
+            f3 = await client.post(
+                f"/v1/intake/{intake_id}/fail",
+                headers={"Authorization": f"Bearer {intake_token}"},
+                json={"reason": "fatal out of memory", "error_code": "oom"},
+            )
+            assert f3.status_code == 200
+            data3 = f3.json()
+            assert data3["state"] == "dead_letter"
+            assert data3["retry_count"] == 3
+            assert data3["terminal"] is True
+            assert len(data3["failures"]) == 3
+
+            # DLQ now has 1 item
+            dlq_res2 = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res2.status_code == 200
+            assert dlq_res2.json()["count"] == 1
+            dlq_item = dlq_res2.json()["dlq"][0]
+            assert dlq_item["intake_id"] == intake_id
+            assert dlq_item["state"] == "dead_letter"
+            assert dlq_item["dead_letter_reason"] == "fatal out of memory"
+
+            # Check audit trail captured terminal failure
+            audit_file = settings.data_dir / "audit.jsonl"
+            assert audit_file.exists()
+            lines = [json.loads(line) for line in audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            dead_letter_events = [ev for ev in lines if ev.get("kind") == "intake.dead_letter"]
+            assert len(dead_letter_events) == 1
+            assert dead_letter_events[0]["payload"]["intake_id"] == intake_id
+            assert dead_letter_events[0]["payload"]["error_code"] == "oom"
+
+            # 5. Replay dead-lettered item back to queue
+            rep = await client.post(
+                f"/v1/intake/{intake_id}/replay",
+                headers={"Authorization": f"Bearer {intake_token}"},
+            )
+            assert rep.status_code == 200
+            assert rep.json()["state"] == "queued"
+
+            # Verify it's removed from DLQ and active in intake
+            dlq_res3 = await client.get("/v1/intake/dlq", headers={"Authorization": f"Bearer {intake_token}"})
+            assert dlq_res3.json()["count"] == 0
+            item_now = store.intake_get(intake_id)
+            assert item_now["state"] == "queued"
+            assert item_now["retry_count"] == 0
+
+
+async def test_trace_context_propagation_and_redaction(client, app, monkeypatch):
+    """REQ-INTAKE-006: OTel trace context propagation, and REQ-INTAKE-009: secrets redaction filter."""
+    import io
+    import logging
+    from desk_gateway.telemetry import RedactionFilter, StructuredJsonFormatter, parse_traceparent
+
+    # Test traceparent parser
+    tp_valid = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+    parsed = parse_traceparent(tp_valid)
+    assert parsed == ("4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7", "01")
+    assert parse_traceparent("invalid") is None
+    assert parse_traceparent("ff-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01") is None
+
+    # Test StructuredJsonFormatter and RedactionFilter with credentials
+    stream = io.StringIO()
+    handler = logging.StreamHandler(stream)
+    handler.setFormatter(StructuredJsonFormatter())
+    handler.addFilter(RedactionFilter())
+    test_logger = logging.getLogger("test.telemetry")
+    test_logger.handlers = [handler]
+    test_logger.setLevel(logging.INFO)
+
+    secret_key = "ghp_abcdefghijklmnopqrstuvwxyz012345"  # pragma: allowlist secret (redaction test fixture)
+    test_logger.info("Connecting with secret %s", secret_key)
+    log_text = stream.getvalue()
+    assert secret_key not in log_text
+    assert "<redacted>" in log_text
+    parsed_log = json.loads(log_text.strip())
+    assert parsed_log["level"] == "INFO"
+    assert "<redacted>" in parsed_log["message"]
+
+    # Test W3C traceparent context injected via HTTP request headers into intake audit events
+    store = app.state["store"]
+    trace_id = "4bf92f3577b34da6a3ce929d0e0e4736"
+    span_id = "00f067aa0ba902b7"
+    tp_header = f"00-{trace_id}-{span_id}-01"
+    res = await client.post(
+        "/v1/intake",
+        headers={
+            "Authorization": f"Bearer {INTAKE_TOKEN}",
+            "traceparent": tp_header,
+            "tracestate": "congo=t61rcWkgMzE",
+        },
+        json={"title": "Trace test task", "ask": "Inspect trace propagation through gateway pipeline."},
+    )
+    assert res.status_code == 202
+    intake_id = res.json()["intake_id"]
+
+    # Verify audit event captured the trace context
+    audit_file = app.state["services"].store.dir / "audit.jsonl"
+    lines = [json.loads(line) for line in audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+    intake_events = [ev for ev in lines if ev.get("payload", {}).get("intake_id") == intake_id]
+    assert len(intake_events) >= 1
+    assert "trace" in intake_events[0]
+    assert intake_events[0]["trace"]["trace_id"] == trace_id
+    assert intake_events[0]["trace"]["span_id"] == span_id
+    assert intake_events[0]["trace"]["tracestate"] == "congo=t61rcWkgMzE"
+
+
+async def test_telemetry_anchoring_prometheus_metrics_export(client):
+    """REQ-INTAKE-010: End-to-end telemetry anchoring test validating metrics export compatibility."""
+    resp = await client.get("/metrics")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"].startswith("text/plain")
+
+    content = resp.text
+    # Validate standard Prometheus exposition format requirements
+    required_metrics = [
+        "desk_gateway_up",
+        "desk_gateway_active_viewers",
+        "desk_gateway_intake_queue_total",
+        "desk_gateway_registered_seats_total",
+        "desk_gateway_seat_tools_total",
+    ]
+    for metric in required_metrics:
+        assert f"# HELP {metric}" in content
+        assert f"# TYPE {metric}" in content
+        assert metric in content
+
+    # Validate metric line formatting
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        assert len(parts) == 2, f"Invalid metric exposition line: {line}"
+        val = float(parts[1])
+        assert val >= 0.0
+
+
+

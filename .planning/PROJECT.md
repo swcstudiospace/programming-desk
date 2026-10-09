@@ -4,11 +4,9 @@
 
 Programming Desk v2 is Ove's seven-seat programming desk, installed from seven Team-only Grok Bot templates and bootstrapped into a six-member group with QUALITY independent and off-channel. Its VPS Desk Gateway exposes contract-defined tools per seat, connects to five Railway data services through private project forwarders, and admits outside work only through LEAD.
 
-The current milestone is **v2.1 — Live Drills & Intake Hardening**: testing gateway resiliency, subagent prompt integrity, token handling, and telemetry anchoring. Existing authored surfaces and bounded runtime observations inform the work.
+The current milestone is **v2.4 — Multi-Region Edge Federation & Autonomous Chaos Recovery**: multi-region edge ingress routing, distributed DragonflyDB rate limiting, cross-region WAN inter-seat routing, high-latency vector clock convergence, and autonomous chaos recovery.
 
 ## Core Value
-
-A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 
 A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
 
@@ -23,13 +21,19 @@ A fresh team can install a seven-seat desk whose work, tools, memory and approva
 - ✓ Phase 5: Prompts, skills, templates, plugin — REQ-SHARE-001 through REQ-SHARE-040 (v2.0)
 - ✓ Phase 6: Fresh-desk acceptance and external intake — REQ-ACCEPT-001 through REQ-ACCEPT-034 (v2.0)
 - ✓ Phase 7: Ordered rollout and rollback — REQ-ROLLOUT-001 through REQ-ROLLOUT-013 (v2.0)
+- ✓ Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010 (v2.1)
+- ✓ Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010 (v2.1)
+- ✓ Phase 10: Multi-Desk Federation & Inter-Seat Routing — REQ-FED-001 through REQ-FED-005 (v2.2)
+- ✓ Phase 11: Automated Staging & VPS Environment Promotion — REQ-STAGE-001 through REQ-STAGE-005 (v2.2)
+- ✓ Phase 12: Production Cutover & Dynamic Failover — REQ-CUTOVER-001 through REQ-CUTOVER-005 (v2.3)
+- ✓ Phase 13: Advanced Telemetry, SLOs & Alert Thresholds — REQ-ALERT-001 through REQ-ALERT-005 (v2.3)
 
-All 217 requirements shipped and verified in Milestone v2.0.
+All 257 requirements shipped and verified across Milestones v2.0, v2.1, v2.2, and v2.3.
 
-### Active
+### Active (Milestone v2.4)
 
-- [ ] Phase 8: Gateway Resiliency & Subagent Execution Drills — REQ-DRILL-001 through REQ-DRILL-010.
-- [ ] Phase 9: External Intake Hardening & Telemetry Anchoring — REQ-INTAKE-001 through REQ-INTAKE-010.
+- Phase 14: Multi-Region Edge Federation & WAN Routing — REQ-EDGE-001 through REQ-EDGE-005
+- Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience — REQ-CHAOS-001 through REQ-CHAOS-005
 
 ### Out of Scope
 
@@ -79,4 +83,4 @@ Evidence-worker-owned durable artifacts: [implementation map](intel/implementati
 After each verified transition, update active/validated requirements and decisions only from actual evidence, preserving unverified limits. At milestone closure review scope, source crosswalk, external receipts and human checkpoints; do not infer completion from initialized files.
 
 ---
-*Last updated: 2026-10-08 after v2.0 milestone completion.*
+*Last updated: 2026-10-08 after v2.2 milestone initialization.*

@@ -58,7 +58,7 @@ jobs:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF"
           ls ci/gates/
@@ -219,7 +219,7 @@ jobs:
           BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set -euo pipefail
-          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
           git checkout "origin/$BASE_REF" -- ci/gates/
           echo "Trusted ci/gates overlay from origin/$BASE_REF (gate-self-test)"
 

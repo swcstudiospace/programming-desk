@@ -1,0 +1,236 @@
+{
+  "task_id": "CI1",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/gates-full-base-fetch",
+  "started_at": "2026-10-08T23:24:00Z",
+  "completed_at": "2026-10-09T03:30:23Z",
+  "approved_by": "human:SomeRandmGuyy",
+  "approval_note": "Ming authorized fixing and merging #140 in chat on 2026-10-09 at 14:19 AEDT.",
+  "commands": [
+    {
+      "cmd": "bash scripts/dev/repro_shallow_base_fetch.sh --old-only",
+      "exit_code": 1,
+      "duration_s": 0.158,
+      "output_tail": "OLD fetch: origin/main...HEAD has no merge base (diff exit 128)\nfatal: origin/main...HEAD: no merge base"
+    },
+    {
+      "cmd": "bash scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.183,
+      "output_tail": "OLD fetch: origin/main...HEAD has no merge base (diff exit 128)\nfatal: origin/main...HEAD: no merge base\nNEW fetch: merge-base is the fork b6bbc97b5212f9ca32ed6b1400b0eb6829ecd493"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\ndef body(p):\n    lines = Path(p).read_text().splitlines(keepends=True)\n    i = 0\n    while i < len(lines) and (lines[i].lstrip().startswith(\"#\") or not lines[i].strip()):\n        i += 1\n    return \"\".join(lines[i:])\nlive = body(\".github/workflows/gates.yml\")\ntmpl = body(\"ci/.github/workflows/gates.yml\")\nassert live == tmpl, \"bodies differ\"\nassert \"--depth=1\" not in live\nneedle = 'git fetch --no-tags origin \"+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF\"'\nn = live.count(needle)\nassert n == 2, n\nprint(f\"Gate definitions match — {len(live.splitlines())} lines shared. full fetches: {n}\")\nPY",
+      "exit_code": 0,
+      "duration_s": 0.021,
+      "output_tail": "Gate definitions match — 206 lines shared. full fetches: 2"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 10.38,
+      "output_tail": "291 passed in 10.05s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.056,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 1,
+      "duration_s": 0.061,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.04,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.053,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.153,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/CI1.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "duration_s": 0.03,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/CI1.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/CI1.json",
+      "exit_code": 0,
+      "duration_s": 0.028,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\nimport subprocess, sys\nfiles = [Path('.github/workflows/gates.yml'), Path('ci/.github/workflows/gates.yml')]\noriginal = {p: p.read_text() for p in files}\nold = 'git fetch --no-tags --depth=1 origin \"$BASE_REF\"'\nnew = 'git fetch --no-tags origin \"+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF\"'\ntry:\n    for p, text in original.items():\n        assert text.count(new) == 2\n        p.write_text(text.replace(new, old))\n    r = subprocess.run([sys.executable, '-m', 'pytest', 'ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow', '-q', '--tb=line'], capture_output=True, text=True)\n    print(r.stdout)\n    print(r.stderr)\n    sys.exit(r.returncode)\nfinally:\n    for p, text in original.items():\n        p.write_text(text)\nPY",
+      "exit_code": 1,
+      "duration_s": 0.35,
+      "output_tail": "FAILED ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow::test_workflow_fetches_the_base_ref_at_full_depth[.github/workflows/gates.yml]\nFAILED ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow::test_workflow_fetches_the_base_ref_at_full_depth[ci/.github/workflows/gates.yml]\n2 failed, 1 passed in 0.17s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/test_gates.py::TestBaseRefFetchIsNotShallow -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.203,
+      "output_tail": "3 passed in 0.04s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 10.799,
+      "output_tail": "294 passed in 10.64s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml ci/.github/workflows/gates.yml ci/tests/test_gates.py scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 1,
+      "duration_s": 0.071,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)\n  FOREIGN  ci/tests/test_gates.py  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .github/workflows/gates.yml ci/.github/workflows/gates.yml ci/tests/test_gates.py scripts/dev/repro_shallow_base_fetch.sh",
+      "exit_code": 0,
+      "duration_s": 0.088,
+      "output_tail": "G-3 PASS — 4 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 - <<'PY'\nfrom pathlib import Path\nimport subprocess, sys\nfiles = [Path('.github/workflows/gates.yml'), Path('ci/.github/workflows/gates.yml')]\noriginal = {p: p.read_text() for p in files}\nold = 'git fetch --no-tags --depth=1 origin \"$BASE_REF\"'\nnew = 'git fetch --no-tags origin \"+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF\"'\ntry:\n    for p, text in original.items():\n        assert text.count(new) == 2\n        p.write_text(text.replace(new, old))\n    r = subprocess.run([sys.executable, '-m', 'pytest', 'infra/tests/test_gates_base_fetch.py', '-q', '--tb=line'], capture_output=True, text=True)\n    print(r.stdout)\n    print(r.stderr)\n    sys.exit(r.returncode)\nfinally:\n    for p, text in original.items():\n        p.write_text(text)\nPY",
+      "exit_code": 1,
+      "duration_s": 0.182,
+      "output_tail": "FAILED infra/tests/test_gates_base_fetch.py::test_workflow_fetches_the_base_ref_at_full_depth[.github/workflows/gates.yml]\nFAILED infra/tests/test_gates_base_fetch.py::test_workflow_fetches_the_base_ref_at_full_depth[ci/.github/workflows/gates.yml]\n2 failed, 1 passed in 0.03s"
+    },
+    {
+      "cmd": "python3 -m pytest infra/tests/test_gates_base_fetch.py -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 0.204,
+      "output_tail": "3 passed in 0.03s"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.733,
+      "output_tail": "291 passed in 9.55s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files .github/workflows/gates.yml ci/.github/workflows/gates.yml scripts/dev/repro_shallow_base_fetch.sh infra/tests/test_gates_base_fetch.py .receipts/bot-05-infrastructure/CI1.json",
+      "exit_code": 1,
+      "duration_s": 0.06,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  ci/.github/workflows/gates.yml  (owned by bot-06-quality-security)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.066,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/CI1.json --bot bot-05-infrastructure --strict",
+      "exit_code": 0,
+      "duration_s": 0.027,
+      "output_tail": "G-2 PASS — CI1: 22 command(s), 17 substantiated claim(s), 4 unverified item(s)"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "A depth-1 fetch of main after it moves past the fork point leaves origin/main...HEAD with no merge base",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "Fetching the base ref with an explicit refspec and no --depth keeps the fork commit as the merge base",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The live gates workflow and the distributable template share one body, with two full base-ref fetches and no --depth=1",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The gate self-test suite passes",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ci/.github/workflows/gates.yml is foreign to bot-05-infrastructure under the current ownership manifest",
+      "evidence_command_index": 5,
+      "expects_failure": true
+    },
+    {
+      "claim": "Strict G-2 fails because approved_by is empty",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "The receipt records no deployment and no destructive operation",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "Restoring --depth=1 in the live workflow and the template fails the test that reads the fetch from each file",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    },
+    {
+      "claim": "The base-ref fetch guard passes against the workflows on this branch",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "The gate self-test suite passed on the revision that carried the fetch guard inside ci/tests",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "ci/tests/test_gates.py is foreign to bot-05-infrastructure, along with the gate template",
+      "evidence_command_index": 14,
+      "expects_failure": true
+    },
+    {
+      "claim": "Restoring --depth=1 in the live workflow and the template fails the Infra test that reads the fetch from each file",
+      "evidence_command_index": 16,
+      "expects_failure": true
+    },
+    {
+      "claim": "infra/tests/test_gates_base_fetch.py passes against the workflows on this branch",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "Reverting the ci/tests edit leaves the gate self-test suite passing",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "The foreign path left on this diff is ci/.github/workflows/gates.yml",
+      "evidence_command_index": 19,
+      "expects_failure": true
+    },
+    {
+      "claim": "After merging a76e4e5, path ownership passes for this diff against origin/main",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "Strict G-2 passes with approved_by set to human:SomeRandmGuyy",
+      "evidence_command_index": 21
+    }
+  ],
+  "unverified": [
+    "The self-hosted GitHub Actions runner has not executed this branch yet. Local git is 2.43.0, the version logged on run 37854476144, but the reproduction uses a temporary local remote rather than that runner's persistent work directory.",
+    "GitHub Actions has not executed the merge of a76e4e5 or this stamped receipt. Local G-1 against origin/main passed after that merge (5 files, including ci/.github/workflows/gates.yml).",
+    "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite and infra/tests/test_staging_deployment.py::test_reload_nginx_gateway_execution failed when the Infra suite was run (2 failed, 13 passed). This change does not edit those files.",
+    "Gitleaks and Semgrep inside security-pr.yml may stay red until #139 lands. That workflow still fetches the base ref with --depth=1 and is outside this change."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    "ci/.github/workflows/gates.yml",
+    "scripts/dev/repro_shallow_base_fetch.sh",
+    "infra/tests/test_gates_base_fetch.py",
+    ".receipts/bot-05-infrastructure/CI1.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

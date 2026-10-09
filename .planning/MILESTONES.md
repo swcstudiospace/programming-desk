@@ -1,5 +1,63 @@
 # Milestones
 
+## v5.1 Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 68-69), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `EntangledBellPair`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
+- Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
+- Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationResult`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
+- Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
+- BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
+- Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
+- Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
+- External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
+- REST API routes under `/v1/quantum/teleportation/*`, `/v1/quantum/repeater/*`, and `/v1/quantum/qkd/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
+## v5.0 Autonomous Multi-Agent Quantum-Classical Hybrid Mesh & Topological Qubit Fault-Tolerant Orchestration (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 66-67), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Quantum Circuit & State Vector Representation (`QuantumCircuitState`, `QuantumGateType`, `QuantumGate`) supporting arbitrary n-qubit unitary operations (Hadamard, Pauli-X/Y/Z, CNOT, Phase, Rotation-Z) and state vector evolution with normalization.
+- Swarm Variational Quantum Eigensolver (`VQEProcessor`, `HamiltonianOperator`, `AnsatzCircuit`) executing parameter optimization loops for ground state energy estimation.
+- Quantum Approximate Optimization Algorithm (`QAOAOptimizer`) executing cost and mixer Hamiltonian layering for combinatorial scheduling and partition optimization across desk nodes.
+- Noise & Decoherence Simulator (`QuantumDecoherenceSimulator`, `NoiseModel`) modeling depolarizing channel noise, amplitude damping, phase damping, and gate infidelity.
+- Quantum-Classical Hybrid Workload Scheduler (`QuantumWorkloadScheduler`) dynamically routing hybrid computational steps between classical CPU/GPU nodes and simulated Quantum Processing Units (QPUs).
+- Topological Qubit & Rotated Surface Code Lattice (`SurfaceCodeLattice`, `QubitNode`, `QubitType`) modeling data qubits and measure qubits on a 2D planar square lattice with code distance \(d\).
+- Quantum Error Syndrome Extractor (`SyndromeExtractor`, `StabilizerMeasurement`) measuring \(X\)-type (star) and \(Z\)-type (plaquette) stabilizers detecting bit-flip and phase-flip error chains.
+- Minimum-Weight Perfect Matching (MWPM) Syndrome Decoder (`MWPMDecoder`, `CorrectionOperator`) matching error defect pairs and applying Pauli corrections to preserve logical qubit fidelity.
+- Cryptographic Quantum State & Syndrome Receipt Ledger (`QuantumStateReceiptLedger`, `QuantumStateReceipt`) maintaining an append-only binary Merkle tree of verified syndrome extractions and logical state transitions.
+- External Solana Devnet Quantum State Exporter (`QuantumAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
+- End-to-End Quantum-Classical & Topological Verification Drill Simulator (`QuantumTopologicalDrillSimulator`) verifying circuit simulation, VQE convergence, QAOA partitioning, surface code syndrome extraction, MWPM error recovery, and Solana anchoring.
+- REST API routes under `/v1/quantum/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
+## v4.9 Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 64-65), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) tracking semi-major axis, inclination, true anomaly, slant range, elevation angles, and contact pass duration.
+- Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 compliant bundle representations with TTL, hop counts, and SHA-256 payload digests.
+- Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) calculating earliest arrival paths over scheduled, time-varying contact graphs.
+- Resilient Custodial Storage Management (`CustodialStorageManager`) supporting store-and-forward retention queues, custody acceptance/release, and HMAC-SHA256 custody receipts.
+- Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) evaluating carrier frequency shifts, relative velocities, and SNR link degradation margins.
+- Earth Ground Station Terminal Representation (`GroundStationNode`) tracking ground station coordinates, antenna gain, slew rates, and concurrent satellite tracking passes.
+- Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating cross-constellation passes with Doppler compensation and contact telemetry.
+- Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent passes.
+- Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) recording verifiable orbital state transitions and calculating Merkle tree roots.
+- Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) exporting batch Merkle roots and orbital downlink proofs to Solana devnet targets.
+- End-to-End SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
+- REST API routes under `/v1/sagin/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
 ## v4.8 Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh (Shipped: 2026-10-12)
 
 **Phases completed:** 2 phases (Phases 62-63), 2 plans, 0 tasks

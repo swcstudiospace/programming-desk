@@ -6971,6 +6971,62 @@ def create_mcp(
         drill_results = QuantumSensingDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.7 (Phases 80 & 81): Quantum Machine Learning (QML) & Parameterized Quantum Circuits
+    from desk_gateway.quantum_ml_mesh import (
+        ParameterizedQuantumCircuit,
+        ParameterShiftOptimizer,
+        QuantumNeuralNetworkClassifier,
+    )
+    from desk_gateway.quantum_ml_anchoring import (
+        QuantumMLDrillSimulator,
+        QuantumModelAnchorExporter,
+        QuantumModelLedger,
+        QuantumModelReceipt,
+    )
+
+    qml_classifier = QuantumNeuralNetworkClassifier()
+    qml_ledger = QuantumModelLedger()
+    qml_exporter = QuantumModelAnchorExporter()
+
+    mcp._qml_classifier = qml_classifier  # type: ignore[attr-defined]
+    mcp._qml_ledger = qml_ledger  # type: ignore[attr-defined]
+    mcp._qml_exporter = qml_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/ml/train/step", methods=["POST"])
+    async def quantum_ml_train_step_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        features = [float(x) for x in body.get("features", [0.5, -0.2])]
+        target_label = float(body.get("target_label", 1.0))
+        learning_rate = float(body.get("learning_rate", 0.1))
+
+        epoch = qml_classifier.train_step(features, target_label, learning_rate)
+        rcpt = qml_ledger.append_event(
+            "QNN_TRAIN_STEP",
+            "qnn-vqc-default",
+            epoch.loss,
+            epoch.weights,
+            epoch.to_dict(),
+        )
+        return JSONResponse({"ok": True, "epoch": epoch.to_dict(), "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/ml/predict", methods=["POST"])
+    async def quantum_ml_predict_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        features = [float(x) for x in body.get("features", [0.5, -0.2])]
+
+        prediction = qml_classifier.predict(features)
+        return JSONResponse({"ok": True, "prediction": round(prediction, 6), "weights": [round(w, 4) for w in qml_classifier.weights]})
+
+    @mcp.custom_route("/v1/quantum/ml/anchor/export", methods=["POST"])
+    async def quantum_ml_anchor_export_route(_request: Request) -> Response:
+        commitment = qml_exporter.export_commitment(qml_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/ml/drill/simulate", methods=["POST"])
+    async def quantum_ml_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumMLDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8534,6 +8590,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qsensing_clock_sync": getattr(mcp, "_qsensing_clock_sync", None),
         "qsensing_ledger": getattr(mcp, "_qsensing_ledger", None),
         "qsensing_exporter": getattr(mcp, "_qsensing_exporter", None),
+        "qml_classifier": getattr(mcp, "_qml_classifier", None),
+        "qml_ledger": getattr(mcp, "_qml_ledger", None),
+        "qml_exporter": getattr(mcp, "_qml_exporter", None),
     }
     return app, settings
 

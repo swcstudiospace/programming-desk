@@ -1,5 +1,23 @@
 # Milestones
 
+## v4.7 Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 60-61), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Substrate Architecture Registry (`HardwareSubstrate`, `SubstrateProfile`, `SubstrateRegistry`) modeling CPU (x86/ARM), GPU (CUDA/Triton), TPU (XLA), NPU, Neuromorphic (Loihi 2), and Photonic accelerators with TOPS/W metrics and thermal fencing.
+- Multi-Substrate Kernel Compiler (`SubstrateKernelCompiler`, `CompiledKernel`, `KernelOpType`) compiling tensor operators (GEMM, FlashAttention, Spike Propagation) with operator fusion, tiling, and vectorization passes.
+- Dynamic Substrate Workload Dispatcher (`SubstrateWorkloadDispatcher`, `WorkloadAssignment`) routing compute workloads to optimal substrates balancing latency and energy efficiency.
+- Substrate Thermal & Energy Telemetry Profiler (`SubstrateTelemetryProfiler`) tracking dynamic power dissipation, thermal throttling, and cluster utilization.
+- Neuromorphic Spiking Mesh Simulator (`NeuromorphicMesh`, `SpikingNeuron`, `SynapticConnection`) implementing Leaky Integrate-and-Fire (LIF) neuron dynamics and Spike-Timing-Dependent Plasticity (STDP) synaptic weight adaptation.
+- Event-Driven Asynchronous Spike Router (`EventSpikeRouter`, `SpikeEvent`) managing sparse discrete microsecond spike packet delivery across simulated crossbars.
+- Cryptographic Synaptic State & Spike Attestation Ledger (`SynapticAttestationLedger`, `SynapticProofReceipt`) recording immutable weight state transitions, firing metrics, and HMAC-SHA256 signatures.
+- External Neuromorphic Commitment & Solana Devnet Exporter (`NeuromorphicAnchorExporter`) publishing Merkle roots of synaptic state transitions to Solana devnet targets.
+- End-to-End Multi-Substrate & Neuromorphic Compute Verification Drill Simulator (`HardwareNeuromorphicDrillSimulator`) verifying compilation, energy-aware dispatch, LIF spike firing, STDP adaptation, and Solana devnet anchoring.
+- REST API routes under `/v1/hardware/*` and `/v1/neuromorphic/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
 ## v4.6 Autonomous Self-Reflective Metacognition & Continuous Epistemic Verification Mesh (Shipped: 2026-10-12)
 
 **Phases completed:** 2 phases (Phases 58-59), 2 plans, 0 tasks

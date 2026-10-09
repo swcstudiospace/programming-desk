@@ -3483,6 +3483,20 @@ def create_mcp(
     context_compressor = ContextCompressionEngine()
     setattr(mcp, "_context_compressor", context_compressor)
 
+    # Milestone v3.3 (Phase 32): Decentralized Multi-Desk Governance & Proposal State Machine
+    from desk_gateway.governance import (
+        GovernanceStateMachine,
+        ProposalStatus,
+        VoteChoice,
+        Ballot,
+        Proposal,
+        QuorumEngine,
+        TimelockExecutor,
+        EmergencyVetoCircuitBreaker,
+    )
+    governance_sm = GovernanceStateMachine()
+    setattr(mcp, "_governance_sm", governance_sm)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4359,6 +4373,144 @@ def create_mcp(
         )
         return JSONResponse({"ok": True, "verification": result.to_dict()})
 
+    # Milestone v3.3 (Phase 32): Decentralized Multi-Desk Governance REST Endpoints
+    @mcp.custom_route("/v1/governance/proposal/create", methods=["POST"])
+    async def governance_proposal_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id")
+        proposer_seat = body.get("proposer_seat", "lead")
+        proposer_desk_id = body.get("proposer_desk_id", "desk-local")
+        title = body.get("title", "")
+        description = body.get("description", "")
+        action_payload = body.get("action_payload", {})
+        timelock_delay_seconds = float(body.get("timelock_delay_seconds", 60.0))
+        voting_period_seconds = float(body.get("voting_period_seconds", 300.0))
+        quorum_threshold = float(body.get("quorum_threshold", 0.5))
+        approval_threshold = float(body.get("approval_threshold", 0.66))
+        tags = body.get("tags", [])
+
+        if not proposal_id or not title:
+            return JSONResponse({"ok": False, "error": "proposal_id and title are required"}, status_code=400)
+
+        try:
+            prop = governance_sm.create_proposal(
+                proposal_id=proposal_id,
+                proposer_seat=proposer_seat,
+                proposer_desk_id=proposer_desk_id,
+                title=title,
+                description=description,
+                action_payload=action_payload,
+                timelock_delay_seconds=timelock_delay_seconds,
+                voting_period_seconds=voting_period_seconds,
+                quorum_threshold=quorum_threshold,
+                approval_threshold=approval_threshold,
+                tags=tags,
+            )
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/proposal/{proposal_id}", methods=["GET"])
+    async def governance_proposal_get_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        try:
+            prop = governance_sm.get_proposal(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except KeyError:
+            return JSONResponse({"ok": False, "error": f"Proposal '{proposal_id}' not found"}, status_code=404)
+
+    @mcp.custom_route("/v1/governance/proposal/start_voting", methods=["POST"])
+    async def governance_proposal_start_voting_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        try:
+            prop = governance_sm.start_voting(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/vote", methods=["POST"])
+    async def governance_vote_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        seat = body.get("seat", "lead")
+        desk_id = body.get("desk_id", "desk-local")
+        choice = body.get("choice", "YES")
+        raw_votes = float(body.get("raw_votes", 1.0))
+        reason = body.get("reason", "")
+        signature = body.get("signature")
+
+        try:
+            ballot = governance_sm.cast_vote(
+                proposal_id=proposal_id,
+                seat=seat,
+                desk_id=desk_id,
+                choice=choice,
+                raw_votes=raw_votes,
+                reason=reason,
+                signature=signature,
+            )
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except (KeyError, ValueError, TimeoutError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/tally", methods=["POST"])
+    async def governance_tally_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        total_possible_seats = int(body.get("total_possible_seats", 7))
+        try:
+            result = governance_sm.tally_and_resolve(proposal_id, total_possible_seats=total_possible_seats)
+            return JSONResponse({"ok": True, "result": result.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/queue", methods=["POST"])
+    async def governance_queue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        try:
+            prop = governance_sm.queue_for_execution(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/execute", methods=["POST"])
+    async def governance_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        executor_seat = body.get("executor_seat", "lead")
+        current_time = body.get("current_time")
+        now = float(current_time) if current_time is not None else None
+        try:
+            receipt = governance_sm.execute_proposal(proposal_id, executor_seat=executor_seat, current_time=now)
+            return JSONResponse({"ok": True, "receipt": receipt})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/veto", methods=["POST"])
+    async def governance_veto_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        veto_seat = body.get("veto_seat", "security")
+        reason = body.get("reason", "Emergency veto triggered")
+        try:
+            prop = governance_sm.emergency_veto(proposal_id, veto_seat=veto_seat, reason=reason)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/governance/cancel", methods=["POST"])
+    async def governance_cancel_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        proposal_id = body.get("proposal_id", "")
+        requester_seat = body.get("requester_seat", "lead")
+        try:
+            prop = governance_sm.cancel_proposal(proposal_id, requester_seat=requester_seat)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except (KeyError, ValueError, PermissionError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4599,6 +4751,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "remote_execution_supervisor": getattr(mcp, "_remote_execution_supervisor", None),
         "memory_graph_engine": getattr(mcp, "_memory_graph_engine", None),
         "context_compressor": getattr(mcp, "_context_compressor", None),
+        "governance_sm": getattr(mcp, "_governance_sm", None),
     }
     return app, settings
 

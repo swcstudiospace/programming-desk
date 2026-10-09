@@ -1,19 +1,19 @@
-# Requirements: Milestone v3.2 — Multi-Modal Sensory Memory Graph & Dynamic Context Compression
+# Requirements: Milestone v3.3 — Decentralized Multi-Desk Governance & Byzantine Consensus Voting
 
-This document defines the requirements for Milestone v3.2 of Programming Desk.
+This document defines the requirements for Milestone v3.3 of Programming Desk.
 
-## 1. Distributed Sensory Memory Graph & Cross-Modal Embeddings (Phase 30)
+## 1. Decentralized Multi-Desk Governance & Proposal State Machine (Phase 32)
 
-- [x] **REQ-GRAPH-001**: Knowledge graph linkage mapping multi-modal artifacts, desk ledger events, and tool execution traces into an integrated property graph.
-- [x] **REQ-GRAPH-002**: Cross-modal semantic search engine with cosine nearest-neighbor vector retrieval across heterogeneous embeddings.
-- [x] **REQ-GRAPH-003**: Temporal graph decay and attention weighting prioritizing recent and high-relevance nodes.
-- [x] **REQ-GRAPH-004**: Graph partitioning and edge-node caching for low-latency graph traversals.
-- [x] **REQ-GRAPH-005**: Cryptographic graph state commitment and Merkle verification receipts.
+- [x] **REQ-GOV-001**: Multi-desk proposal lifecycle engine with deterministic state machine (`DRAFT` -> `ACTIVE` -> `VOTING` -> `APPROVED` / `REJECTED` -> `QUEUED` -> `EXECUTED` / `CANCELLED`).
+- [x] **REQ-GOV-002**: Weighted multi-seat quorum evaluation supporting threshold governance, quadratic voting, and seat reputation multipliers.
+- [x] **REQ-GOV-003**: Cryptographic ballot signing and non-repudiable vote commitments with HMAC-SHA256 signatures.
+- [x] **REQ-GOV-004**: Proposal timelock buffer and execution delay enforcement preventing instant malicious parameter mutations.
+- [x] **REQ-GOV-005**: Autonomous emergency veto and circuit-breaker abort triggers for anomalous proposals.
 
-## 2. Dynamic Context Window Compression & Semantic Pruning (Phase 31)
+## 2. Byzantine Consensus Voting & Verifiable On-Chain Attestation (Phase 33)
 
-- [x] **REQ-GRAPH-006**: Lossless token compression and context-window compaction pipeline.
-- [x] **REQ-GRAPH-007**: Semantic relevance pruning removing low-salience tokens while preserving syntactic validity.
-- [x] **REQ-GRAPH-008**: Hierarchical summary rollups and long-context eviction proofs.
-- [x] **REQ-GRAPH-009**: Dynamic context window adaptation based on model tier and budget ceilings.
-- [x] **REQ-GRAPH-010**: End-to-end context fidelity and reconstruction verification suite.
+- [ ] **REQ-GOV-006**: Federated Byzantine fault tolerant consensus rounds with three-phase commit (`PRE-PREPARE`, `PREPARE`, `COMMIT`).
+- [ ] **REQ-GOV-007**: View-change protocol and leader rotation handling Byzantine or unresponsive coordinator desks.
+- [ ] **REQ-GOV-008**: Cryptographic Merkle governance receipts linking proposal state transitions, ballot tallies, and execution outcomes.
+- [ ] **REQ-GOV-009**: On-chain and external WORM ledger audit export anchoring consensus receipts to distributed ledgers.
+- [ ] **REQ-GOV-010**: End-to-end multi-desk governance verification harness and Byzantine attack drill simulator.

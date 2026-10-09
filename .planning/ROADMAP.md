@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🔲 **v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting** — Phases 32-33
 - ✅ **v3.2 Multi-Modal Sensory Memory Graph & Dynamic Context Compression** — Phases 30-31 (shipped 2026-10-10) — [Archive](milestones/v3.2-ROADMAP.md)
 - ✅ **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (shipped 2026-10-10) — [Archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (shipped 2026-10-10) — [Archive](milestones/v3.0-ROADMAP.md)
@@ -17,6 +18,11 @@
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
+
+### Active Milestone: v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting
+
+- [x] Phase 32: Decentralized Multi-Desk Governance & Proposal State Machine (1/1 plan)
+- [ ] Phase 33: Byzantine Consensus Voting & Verifiable On-Chain Attestation (0/1 plan)
 
 ### Completed Milestones
 

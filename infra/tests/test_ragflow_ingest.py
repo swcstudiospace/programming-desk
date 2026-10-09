@@ -436,6 +436,18 @@ def test_skill_file_maps_to_agent_skills_dataset(tmp_path, monkeypatch):
     assert state.docs["ds-agent-skills"]
 
 
+def test_ref_name_diffs_instead_of_listing_the_tree(tmp_path, capsys, monkeypatch):
+    repo = _repo(tmp_path / "repo")
+    first = _commit(repo, "docs/one.md", b"# one\n", "one")
+    _git(repo, "branch", "base", first)
+    _commit(repo, "docs/two.md", b"# two\n", "two")
+    code = _run(monkeypatch, repo, "--before", "base", "--after", "HEAD", "--dry-run")
+    captured = capsys.readouterr()
+    assert code == 0
+    assert "path=docs/two.md" in captured.out
+    assert "path=docs/one.md" not in captured.out
+
+
 def test_all_zero_before_lists_the_tree(tmp_path, capsys, monkeypatch):
     repo = _repo(tmp_path / "repo")
     _commit(repo, "docs/one.md", b"# one\n", "one")

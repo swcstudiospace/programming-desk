@@ -47,10 +47,12 @@ From a checkout, with no secrets required:
 python3 infra/ragflow/ingest.py \
   --repo programming-desk \
   --root . \
-  --before origin/main \
+  --before "$(git merge-base origin/main HEAD)" \
   --after HEAD \
   --dry-run
 ```
+
+`--before` accepts a SHA or a single ref (`origin/main`). An all-zero before, the GitHub placeholder for a new branch, lists the whole tree. A feature branch compared with `origin/main` directly includes commits that landed on main after the branch point; the merge-base above is that branch's own diff.
 
 ## Rollback
 

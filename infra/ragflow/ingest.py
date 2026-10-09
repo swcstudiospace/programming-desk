@@ -83,6 +83,7 @@ SHARED_EXTRA_NAMES = {"Dockerfile", "Makefile", "LICENSE", "justfile", "Containe
 
 _SHA = re.compile(r"^[0-9a-fA-F]{7,64}$")
 _ZEROS = re.compile(r"^0+$")
+_SAFE_REV = re.compile(r"[A-Za-z0-9._/-]+")
 
 
 class IngestError(Exception):
@@ -291,8 +292,18 @@ def _git(root: Path, args: list[str], *, text: bool = False) -> str | bytes:
     return result.stdout
 
 
-def _valid_rev(value: str) -> bool:
-    return bool(_SHA.fullmatch(value)) and not _ZEROS.fullmatch(value)
+def _usable_rev(value: str) -> bool:
+    """A commit-ish that is safe to pass to git.
+
+    Accepts a SHA or a single ref such as ``origin/main``. Rejects option
+    injection, ranges, and the all-zero placeholder GitHub uses when the
+    before commit does not exist.
+    """
+    if not value or _ZEROS.fullmatch(value):
+        return False
+    if value.startswith("-") or ".." in value or "@{" in value or "\\" in value:
+        return False
+    return bool(_SAFE_REV.fullmatch(value))
 
 
 def changed_paths(root: Path, before: str, after: str) -> list[tuple[str, str]]:
@@ -300,13 +311,13 @@ def changed_paths(root: Path, before: str, after: str) -> list[tuple[str, str]]:
 
     An all-zero or missing ``before`` lists every file at ``after``.
     """
-    if not before or _ZEROS.fullmatch(before) or not _valid_rev(before):
-        rev = after if _valid_rev(after) else "HEAD"
+    if not _usable_rev(before):
+        rev = after if _usable_rev(after) else "HEAD"
         blob = _git(root, ["ls-tree", "-r", "-z", "--name-only", rev])
         assert isinstance(blob, bytes)
         return [("A", part.decode("utf-8", "surrogateescape")) for part in blob.split(b"\0") if part]
-    if not _valid_rev(after):
-        raise IngestError("after must be a commit sha when before is a commit sha")
+    if not _usable_rev(after):
+        raise IngestError("after must be a commit or ref when before is set")
     blob = _git(root, ["diff", "--name-status", "-z", "-M", before, after])
     assert isinstance(blob, bytes)
     return parse_name_status_z(blob)
@@ -332,8 +343,8 @@ def build_plan(
     *,
     github_base: str,
 ) -> list[Action]:
-    rev = after if _valid_rev(after) else "HEAD"
-    commit = after if _valid_rev(after) else _git(root, ["rev-parse", "HEAD"], text=True)
+    rev = after if _usable_rev(after) else "HEAD"
+    commit = _git(root, ["rev-parse", "--verify", f"{rev}^{{commit}}"], text=True)
     if isinstance(commit, bytes):
         commit = commit.decode()
     commit = str(commit).strip()

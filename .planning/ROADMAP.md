@@ -1,16 +1,49 @@
-# Roadmap: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
+# Roadmap: Milestone v8.0 — State-of-the-Art Enterprise Workbench Runtime
 
-## Phase 68: Inter-Cluster Quantum Teleportation Protocol & Entanglement Swarm Routing
-- [x] Bell State Generator & Entanglement Swarm Pair Distribution (`BellPairPool`, `BellState`, `QuantumStateVector`) generating and distributing maximally entangled Bell states (\(|\Phi^+\rangle, |\Phi^-\rangle, |\Psi^+\rangle, |\Psi^-\rangle\)) across distributed desk cluster nodes.
-- [x] Multi-Hop Quantum Repeater & Entanglement Swapping Engine (`QuantumRepeaterNode`, `EntanglementSwapper`, `QuantumRepeaterMesh`) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.
-- [x] Inter-Cluster Quantum Teleportation Protocol (`QuantumTeleportationProtocol`, `TeleportationSession`, `ClassicalCorrection`) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (\(F \ge 0.95\)).
-- [x] Purified Quantum Link Telemetry & Decoherence Evaluator (`EntanglementPurifier`, `PurificationProtocol`) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.
-- [x] REST API routes under `/v1/quantum/teleportation/*` and `/v1/quantum/repeater/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 118: Security, Policy & Secret Sandboxing
+- [x] Path Traversal Boundary Containment (`PolicySandbox.validate_path`) strictly confining path resolution within the configured workspace root and rejecting directory traversal escapes with `BoundarySecurityError`.
+- [x] Precision Secret & Credential Redaction (`PolicySandbox.sanitize`, `sanitize_env`) masking API tokens (`ghp_`, `sk-`, `Bearer`, `AKIA`) without corrupting 40-char git commit hashes or standard payloads.
+- [x] Command Policy & Injection Guard (`PolicySandbox.validate_command`) ensuring non-empty array arguments and blocking unsafe shell command-chaining metacharacters.
+- [x] Automated unit test suite under `tests/desk/test_security.py`.
 
-## Phase 69: Quantum Key Distribution (BB84 / E91), Entangled State Ledger & Solana Devnet Anchoring
-- [x] BB84 & E91 Quantum Key Distribution Engine (`QKDProtocolEngine`, `QKDProtocolType`, `QuantumBasis`, `QKDKeyExchangeSession`) executing polarized photon/qubit basis preparation (Rectilinear \(+\) and Diagonal \(\times\)), sifting, QBER (quantum bit error rate) calculation, error correction, and privacy amplification.
-- [x] Eavesdropping & Intercept-Resend Detector (`EavesdropDetector`, `QuantumChannelInterception`) measuring eavesdropper disturbance threshold (\(QBER > 11\%\)) and issuing automatic quantum channel aborts.
-- [x] Cryptographic Entanglement & QKD Session Merkle Receipt Ledger (`QuantumTeleportationReceiptLedger`, `QuantumQKDReceipt`) maintaining an append-only binary Merkle tree of verified teleportation sessions, entangled Bell pairs, and sifted symmetric key roots.
-- [x] External Solana Devnet Quantum Teleportation Exporter (`QuantumTeleportationAnchorExporter`) publishing Merkle roots and quantum execution proofs to Solana devnet targets.
-- [x] End-to-End Inter-Cluster Quantum Teleportation & QKD Verification Drill Simulator (`QuantumTeleportationDrillSimulator`) verifying Bell state generation, entanglement swapping across repeaters, state teleportation, BB84 key exchange, eavesdropping detection aborts, and Solana anchoring.
-- [x] REST API routes under `/v1/quantum/qkd/*`, `/v1/quantum/teleportation/ledger/*`, `/v1/quantum/teleportation/anchor/*`, and `/v1/quantum/teleportation/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 119: Structured Telemetry & Audit Tracer
+- [x] Append-Only JSONL Event Stream (`AuditTracer`, `AuditEvent`) recording ISO-8601 timestamps, duration, actors, actions, exit codes, and correlation IDs.
+- [x] Integrated Credential Sanitization Filter intercepting and redacting sensitive tokens in details and message metadata before persisting to disk.
+- [x] Filtered Log Query & Tail Engine (`AuditTracer.read_events`) supporting phase, actor, and action filtering with record limits.
+- [x] Concurrency and crash resilience with thread-safe file locking and sync flushes.
+- [x] Automated unit test suite under `tests/desk/test_telemetry.py`.
+
+## Phase 120: Developer Experience & Doctor Diagnostics Engine
+- [x] Zero-Dependency Diagnostic Probes (`DoctorEngine`, `check_python_version`, `check_git_installed`, `check_ownership_manifest`, `check_planning_directory`, `check_workspace_permissions`).
+- [x] Structured Health Status & Typed Exit Codes (`CheckStatus.PASS`, `WARN`, `FAIL`, exit code 0 for healthy/warn, 1 for fail).
+- [x] Extensible Probe Registry (`DoctorEngine.register_probe`) allowing modular addition of domain-specific checks.
+- [x] Multi-format Reporting (`format_report` for human CLI inspection, `--json` for automation pipelines).
+- [x] Automated unit test suite under `tests/desk/test_diagnostics.py`.
+
+## Phase 121: Resilient Execution & Process Supervision
+- [x] Safe Array Spawning (`ProcessSupervisor.run`) enforcing `shell=False` execution with POSIX process group detachment (`start_new_session=True`).
+- [x] Timeout Trapping & Process Tree Escalation (`_terminate_process_tree`) cascading `SIGTERM` followed by a grace period and `SIGKILL` to prevent zombie subprocesses.
+- [x] Exponential Backoff Retries with Jitter for transient exit codes and execution timeouts.
+- [x] Concurrency and active process registry with clean `shutdown_all()` lifecycle hook.
+- [x] Automated unit test suite under `tests/desk/test_supervision.py`.
+
+## Phase 122: Workspace Context & Session State Store
+- [x] Deterministic Session Frame Serialization (`SessionFrame`, `SessionStore.save_session`, `load_session`).
+- [x] Atomic Persistence Guarantee (`persist_atomic`) utilizing temporary file writes followed by atomic filesystem replacement (`os.replace`).
+- [x] Planning State Synchronization (`sync_to_markdown_state`) rendering active session status directly into `.planning/STATE.md`.
+- [x] Crash recovery and corruption resilience for invalid or uninitialized session files.
+- [x] Automated unit test suite under `tests/desk/test_session.py`.
+
+## Phase 123: Error Boundary & Transaction Recovery
+- [x] Transactional Boundary Context Manager (`RecoveryManager.transaction`).
+- [x] LIFO Compensating-Action Stack (`TransactionContext.register_compensation`) executing rollbacks in reverse registration order upon failure.
+- [x] Workspace File Backup & Automatic Reversion (`TransactionContext.backup_file`) restoring altered or deleting created files on rollback.
+- [x] Diagnostic Error Trapping & Reporting (`TransactionReport`) recording traceback dumps, failure messages, and rollback counts.
+- [x] Automated unit test suite under `tests/desk/test_recovery.py`.
+
+## Phase 124: Automated Verification Pipeline & Unified Workbench CLI
+- [x] Declarative Roadmap Assertion Parser (`MilestoneVerifier.parse_roadmap`) extracting milestone names, phases, task checklists, and completion rates.
+- [x] Automated Verification Engine (`MilestoneVerifier.verify_milestone`) combining checklist assertions with test harness execution.
+- [x] Unified CLI Entrypoint (`desk doctor`, `desk audit`, `desk verify`, `desk session`, `desk run`).
+- [x] High-level workbench module exports (`src/desk/__init__.py`, `src/desk/cli.py`, `src/desk/__main__.py`).
+- [x] Automated unit test suite under `tests/desk/test_assertions.py` and `tests/desk/test_cli.py`.

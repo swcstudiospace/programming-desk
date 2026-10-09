@@ -3,18 +3,32 @@
 from __future__ import annotations
 
 import argparse
+import json
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from . import adb, gradle, metavr_bridge
+from . import accel_check, adb, gradle, maestro_flow, metavr_bridge, screenrecord
 from .adb import DeviceUnavailable
 
 
 def _print_skip(reason: str) -> int:
     print(f"skipped: {reason}")
     return 0
+
+
+def _seconds_cap(value: str) -> int:
+    """argparse type: screenrecord --seconds is 1..180 inclusive."""
+    try:
+        seconds = int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("--seconds must be an integer") from exc
+    if seconds < 1 or seconds > screenrecord.MAX_SECONDS:
+        raise argparse.ArgumentTypeError(
+            f"--seconds must be from 1 to {screenrecord.MAX_SECONDS}"
+        )
+    return seconds
 
 
 def cmd_emu_boot(args: argparse.Namespace) -> int:
@@ -197,6 +211,33 @@ def cmd_ui_dump(args: argparse.Namespace) -> int:
         return _print_skip(str(exc))
 
 
+def _emit(code: int, message: str) -> int:
+    print(message, file=sys.stderr if code == 2 else sys.stdout)
+    return code
+
+
+def cmd_accel_check(args: argparse.Namespace) -> int:
+    report = accel_check.build_report()
+    print(json.dumps(report, indent=2))
+    if args.require and report["recommendation"] != "accelerated":
+        return 3
+    return 0
+
+
+def cmd_maestro_flow(args: argparse.Namespace) -> int:
+    code, message = maestro_flow.run(serial=args.serial, flow=args.flow, out=args.out)
+    return _emit(code, message)
+
+
+def cmd_screenrecord(args: argparse.Namespace) -> int:
+    code, message = screenrecord.run(
+        serial=args.serial,
+        out=args.out,
+        seconds=args.seconds,
+    )
+    return _emit(code, message)
+
+
 def cmd_ui_tap(args: argparse.Namespace) -> int:
     try:
         tid = metavr_bridge.ui_tap(
@@ -219,7 +260,7 @@ def cmd_ui_tap(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m android.tools",
-        description="Local adb/gradle helpers and MetaVR tool-id bridge",
+        description="Local adb/gradle helpers, MetaVR tool-id bridge, and verification probes",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -273,6 +314,34 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--resource-id", default=None)
     p.add_argument("--text", default=None)
     p.set_defaults(func=cmd_ui_tap)
+
+    p = sub.add_parser(
+        "accel_check",
+        help="Report KVM and emulator -accel-check without starting a VM",
+    )
+    p.add_argument(
+        "--json",
+        action="store_true",
+        help="Accepted for callers; the report is always JSON",
+    )
+    p.add_argument(
+        "--require",
+        action="store_true",
+        help="Exit 3 unless the recommendation is accelerated",
+    )
+    p.set_defaults(func=cmd_accel_check)
+
+    p = sub.add_parser("maestro_flow", help="maestro test --format junit for one serial")
+    p.add_argument("--serial", required=True)
+    p.add_argument("--flow", required=True)
+    p.add_argument("--out", required=True)
+    p.set_defaults(func=cmd_maestro_flow)
+
+    p = sub.add_parser("screenrecord", help="adb shell screenrecord, then pull into --out")
+    p.add_argument("--serial", required=True)
+    p.add_argument("--out", required=True)
+    p.add_argument("--seconds", type=_seconds_cap, default=screenrecord.DEFAULT_SECONDS)
+    p.set_defaults(func=cmd_screenrecord)
 
     return parser
 

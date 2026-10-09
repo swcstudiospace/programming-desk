@@ -6581,6 +6581,113 @@ def create_mcp(
         drill_results = QuantumMemoryDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.3 (Phases 72 & 73): Blind Quantum Computing & Verifiable QSS Mesh
+    from desk_gateway.quantum_bqc_mesh import (
+        BlindAngleSpecification,
+        BlindQuantumComputingEngine,
+        BrickworkClusterState,
+    )
+    from desk_gateway.quantum_bqc_anchoring import (
+        BQCAnchorExporter,
+        BQCDrillSimulator,
+        BQCLedger,
+        BQCReceipt,
+        QuantumSecretSharing,
+        TrapQubitVerifier,
+    )
+
+    bqc_engine = BlindQuantumComputingEngine()
+    bqc_trap_verifier = TrapQubitVerifier(trap_ratio=0.25)
+    bqc_ledger = BQCLedger()
+    bqc_exporter = BQCAnchorExporter()
+
+    mcp._bqc_engine = bqc_engine  # type: ignore[attr-defined]
+    mcp._bqc_trap_verifier = bqc_trap_verifier  # type: ignore[attr-defined]
+    mcp._bqc_ledger = bqc_ledger  # type: ignore[attr-defined]
+    mcp._bqc_exporter = bqc_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/bqc/session/init", methods=["POST"])
+    async def quantum_bqc_session_init_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        client_node = body.get("client_node", "desk-alpha")
+        server_node = body.get("server_node", "untrusted-server")
+        layers = int(body.get("layers", 3))
+        qubits_per_layer = int(body.get("qubits_per_layer", 4))
+
+        session_info = bqc_engine.init_bqc_session(
+            client_node=client_node,
+            server_node=server_node,
+            layers=layers,
+            qubits_per_layer=qubits_per_layer,
+        )
+        bqc_trap_verifier.designate_traps(layers * qubits_per_layer)
+        rcpt = bqc_ledger.append_event(
+            "BQC_SESSION_INIT",
+            session_info["session_id"],
+            [client_node, server_node],
+            1.0,
+            session_info,
+        )
+        return JSONResponse({"ok": True, "session": session_info, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/bqc/step/execute", methods=["POST"])
+    async def quantum_bqc_step_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        target_qubit = int(body.get("target_qubit", 0))
+        target_angle_rad = float(body.get("target_angle_rad", 0.0))
+
+        try:
+            step_res = bqc_engine.execute_blind_measurement_step(
+                session_id=session_id,
+                target_qubit=target_qubit,
+                target_angle_rad=target_angle_rad,
+            )
+            trap_verified = bqc_trap_verifier.verify_measurement(target_qubit, step_res["client_unblinded_outcome"])
+            step_res["trap_verified"] = trap_verified
+            rcpt = bqc_ledger.append_event(
+                "BQC_MEASUREMENT_STEP",
+                session_id,
+                [session_id],
+                1.0 if trap_verified else 0.0,
+                step_res,
+            )
+            return JSONResponse({"ok": True, "step": step_res, "receipt": rcpt.to_dict()})
+        except (KeyError, ValueError) as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/bqc/qss/split", methods=["POST"])
+    async def quantum_bqc_qss_split_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        secret = int(body.get("secret", 42))
+        threshold_t = int(body.get("threshold_t", 3))
+        num_shares_n = int(body.get("num_shares_n", 5))
+
+        try:
+            shares = QuantumSecretSharing.split_secret(secret, threshold_t, num_shares_n)
+            return JSONResponse({"ok": True, "shares": shares, "threshold_t": threshold_t, "num_shares_n": num_shares_n})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/bqc/qss/reconstruct", methods=["POST"])
+    async def quantum_bqc_qss_reconstruct_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        raw_shares = body.get("shares", [])
+        shares = [(int(s[0]), int(s[1])) for s in raw_shares if len(s) == 2]
+
+        secret = QuantumSecretSharing.reconstruct_secret(shares)
+        return JSONResponse({"ok": True, "reconstructed_secret": secret})
+
+    @mcp.custom_route("/v1/quantum/bqc/anchor/export", methods=["POST"])
+    async def quantum_bqc_anchor_export_route(_request: Request) -> Response:
+        commitment = bqc_exporter.export_commitment(bqc_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/bqc/drill/simulate", methods=["POST"])
+    async def quantum_bqc_drill_simulate_route(_request: Request) -> Response:
+        drill_results = BQCDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8127,6 +8234,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "cv_swapper": getattr(mcp, "_cv_swapper", None),
         "qmem_ledger": getattr(mcp, "_qmem_ledger", None),
         "qmem_exporter": getattr(mcp, "_qmem_exporter", None),
+        "bqc_engine": getattr(mcp, "_bqc_engine", None),
+        "bqc_trap_verifier": getattr(mcp, "_bqc_trap_verifier", None),
+        "bqc_ledger": getattr(mcp, "_bqc_ledger", None),
+        "bqc_exporter": getattr(mcp, "_bqc_exporter", None),
     }
     return app, settings
 

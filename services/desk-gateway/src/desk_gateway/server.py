@@ -7454,6 +7454,21 @@ def create_mcp(
         QuantumCounterfactualSolanaAnchorExporter,
         QuantumCounterfactualVerificationDrill,
     )
+    from desk_gateway.quantum_cvqkd_mesh import (
+        CVQKDExchangeSessionResult,
+        CVQKDMesh,
+        ChannelParameters,
+        DetectionMode,
+        GG02ProtocolEngine,
+        GaussianCoherentState,
+        HolevoInformationEvaluator,
+    )
+    from desk_gateway.quantum_cvqkd_anchoring import (
+        CVQKDMerkleLedger,
+        CVQKDReceipt,
+        CVQKDSolanaAnchorExporter,
+        CVQKDVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -7953,6 +7968,119 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/counterfactual/drill/simulate", methods=["POST"])
     async def quantum_counterfactual_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumCounterfactualVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qcvqkd_mesh = CVQKDMesh()
+    qcvqkd_ledger = CVQKDMerkleLedger()
+    qcvqkd_exporter = CVQKDSolanaAnchorExporter()
+    mcp._qcvqkd_mesh = qcvqkd_mesh  # type: ignore[attr-defined]
+    mcp._qcvqkd_ledger = qcvqkd_ledger  # type: ignore[attr-defined]
+    mcp._qcvqkd_exporter = qcvqkd_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/cvqkd/session/run", methods=["POST"])
+    async def quantum_cvqkd_session_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = str(body.get("session_id", f"cvqkd-sess-{int(time.time()*1000)}"))
+        num_pulses = int(body.get("num_pulses", 2000))
+        modulation_va = float(body.get("modulation_va", 4.0))
+        fiber_length_km = float(body.get("fiber_length_km", 10.0))
+        excess_noise = float(body.get("excess_noise", 0.01))
+        det_mode_str = str(body.get("detection_mode", "HOMODYNE")).upper()
+        det_mode = DetectionMode.HETERODYNE if "HET" in det_mode_str else DetectionMode.HOMODYNE
+        beta = float(body.get("beta", 0.95))
+
+        res = qcvqkd_mesh.run_cv_qkd_session(
+            session_id=session_id,
+            num_pulses=num_pulses,
+            modulation_va=modulation_va,
+            fiber_length_km=fiber_length_km,
+            excess_noise=excess_noise,
+            detection_mode=det_mode,
+            beta=beta,
+        )
+
+        rcpt = CVQKDReceipt(
+            receipt_id=f"rcpt-cvqkd-{int(time.time()*1000)}",
+            session_id=session_id,
+            detection_mode=det_mode.value,
+            pulses_transmitted=num_pulses,
+            transmittance_estimated=res.channel_transmittance_estimated,
+            excess_noise_estimated=res.excess_noise_estimated,
+            mutual_information_i_ab=res.mutual_information_i_ab,
+            holevo_bound_chi_be=res.holevo_bound_chi_be,
+            secret_key_rate=res.asymptotic_secret_key_rate,
+            distilled_key_bits=res.total_distilled_key_bits,
+            security_verified=res.security_verified,
+            channel_params_hash=hashlib.sha256(json.dumps(res.channel_params.to_dict()).encode("utf-8")).hexdigest(),
+        )
+        qcvqkd_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "session": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qcvqkd_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/cvqkd/holevo/evaluate", methods=["POST"])
+    async def quantum_cvqkd_holevo_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        v_a = float(body.get("modulation_va", 4.0))
+        transmittance = float(body.get("transmittance", 0.63))
+        excess_noise = float(body.get("excess_noise", 0.01))
+        beta = float(body.get("beta", 0.95))
+        det_mode_str = str(body.get("detection_mode", "HOMODYNE")).upper()
+        det_mode = DetectionMode.HETERODYNE if "HET" in det_mode_str else DetectionMode.HOMODYNE
+
+        i_ab, chi_be, key_rate = qcvqkd_mesh.holevo_evaluator.compute_asymptotic_secret_key_rate(
+            v_a=v_a,
+            transmittance=transmittance,
+            excess_noise=excess_noise,
+            beta=beta,
+            detection_mode=det_mode,
+        )
+
+        return JSONResponse({
+            "ok": True,
+            "mutual_information_i_ab": round(i_ab, 6),
+            "holevo_bound_chi_be": round(chi_be, 6),
+            "asymptotic_secret_key_rate": round(key_rate, 6),  # pragma: allowlist secret
+            "secure": key_rate > 0.0,
+        })
+
+    @mcp.custom_route("/v1/quantum/cvqkd/anchor/export", methods=["POST"])
+    async def quantum_cvqkd_anchor_export_route(_request: Request) -> Response:
+        root = qcvqkd_ledger.get_merkle_root()
+        latest_rcpt = qcvqkd_ledger.receipts[-1] if qcvqkd_ledger.receipts else CVQKDReceipt(
+            receipt_id="genesis-cvqkd",
+            session_id="genesis",
+            detection_mode="HOMODYNE",
+            pulses_transmitted=1000,
+            transmittance_estimated=0.6,
+            excess_noise_estimated=0.01,
+            mutual_information_i_ab=1.0,
+            holevo_bound_chi_be=0.4,
+            secret_key_rate=0.5,
+            distilled_key_bits=500,
+            security_verified=True,
+            channel_params_hash="0" * 64,
+        )
+        proof = qcvqkd_ledger.get_proof(len(qcvqkd_ledger.receipts) - 1) if qcvqkd_ledger.receipts else []
+        payload = CVQKDSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": CVQKDSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/cvqkd/drill/simulate", methods=["POST"])
+    async def quantum_cvqkd_drill_simulate_route(_request: Request) -> Response:
+        drill = CVQKDVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 

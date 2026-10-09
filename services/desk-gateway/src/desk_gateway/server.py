@@ -7484,6 +7484,21 @@ def create_mcp(
         QuantumByzantineSolanaAnchorExporter,
         QuantumByzantineVerificationDrill,
     )
+    from desk_gateway.quantum_tomography_mesh import (
+        DensityMatrix,
+        QSTMeasurementCount,
+        QSTResult,
+        QuantumStateTomographyEngine,
+        QuantumTomographyBenchmarkingMesh,
+        RBResult,
+        RandomizedBenchmarkingEngine,
+    )
+    from desk_gateway.quantum_tomography_anchoring import (
+        QuantumTomographyMerkleLedger,
+        QuantumTomographyReceipt,
+        QuantumTomographySolanaAnchorExporter,
+        QuantumTomographyVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -8193,6 +8208,115 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/byzantine/drill/simulate", methods=["POST"])
     async def quantum_byzantine_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumByzantineVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qtomography_mesh = QuantumTomographyBenchmarkingMesh()
+    qtomography_ledger = QuantumTomographyMerkleLedger()
+    qtomography_exporter = QuantumTomographySolanaAnchorExporter()
+    mcp._qtomography_mesh = qtomography_mesh  # type: ignore[attr-defined]
+    mcp._qtomography_ledger = qtomography_ledger  # type: ignore[attr-defined]
+    mcp._qtomography_exporter = qtomography_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/tomography/qst/run", methods=["POST"])
+    async def quantum_tomography_qst_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        state_type = str(body.get("state_type", "bell_phi_plus"))
+        shots = int(body.get("shots_per_basis", 1500))
+        noise = float(body.get("depolarizing_noise", 0.01))
+        seed = int(body["seed"]) if "seed" in body else None
+
+        res = qtomography_mesh.run_state_tomography(
+            state_type=state_type,
+            shots_per_basis=shots,
+            depolarizing_noise=noise,
+            seed=seed,
+        )
+
+        rcpt = QuantumTomographyReceipt(
+            receipt_id=f"rcpt-qst-{int(time.time()*1000)}",
+            benchmark_type="STATE_TOMOGRAPHY",
+            num_qubits=res.num_qubits,
+            fidelity=res.fidelity,
+            error_metric=res.trace_distance,
+            purity=res.purity,
+            mle_converged=res.mle_converged,
+            status="VERIFIED" if res.fidelity >= 0.90 else "DEGRADED",
+            parameters_digest=hashlib.sha256(f"{state_type}:{shots}:{noise}".encode("utf-8")).hexdigest(),
+        )
+        qtomography_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "tomography": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtomography_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tomography/rb/run", methods=["POST"])
+    async def quantum_tomography_rb_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        lengths = body.get("clifford_lengths")
+        if lengths is not None:
+            lengths = [int(x) for x in lengths]
+        depol_error = float(body.get("depolarizing_error", 0.004))
+        seed = int(body["seed"]) if "seed" in body else None
+
+        res = qtomography_mesh.run_randomized_benchmarking(
+            clifford_lengths=lengths,
+            depolarizing_error=depol_error,
+            seed=seed,
+        )
+
+        rcpt = QuantumTomographyReceipt(
+            receipt_id=f"rcpt-rb-{int(time.time()*1000)}",
+            benchmark_type="RANDOMIZED_BENCHMARKING",
+            num_qubits=res.num_qubits,
+            fidelity=res.average_gate_fidelity,
+            error_metric=res.error_per_clifford,
+            purity=1.0,
+            mle_converged=True,
+            status="CALIBRATED" if res.average_gate_fidelity >= 0.95 else "DEGRADED",
+            parameters_digest=hashlib.sha256(f"rb:{res.clifford_lengths}:{depol_error}".encode("utf-8")).hexdigest(),
+        )
+        qtomography_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "benchmarking": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtomography_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tomography/anchor/export", methods=["POST"])
+    async def quantum_tomography_anchor_export_route(_request: Request) -> Response:
+        root = qtomography_ledger.get_merkle_root()
+        latest_rcpt = qtomography_ledger.receipts[-1] if qtomography_ledger.receipts else QuantumTomographyReceipt(
+            receipt_id="genesis-tomography",
+            benchmark_type="STATE_TOMOGRAPHY",
+            num_qubits=2,
+            fidelity=0.99,
+            error_metric=0.01,
+            purity=0.98,
+            mle_converged=True,
+            status="VERIFIED",
+            parameters_digest="0" * 64,
+        )
+        proof = qtomography_ledger.get_proof(len(qtomography_ledger.receipts) - 1) if qtomography_ledger.receipts else []
+        payload = QuantumTomographySolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": payload,
+            "program": QuantumTomographySolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/tomography/drill/simulate", methods=["POST"])
+    async def quantum_tomography_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumTomographyVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -10143,6 +10267,13 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qfault_ledger": getattr(mcp, "_qfault_ledger", None),
         "qcounter_mesh": getattr(mcp, "_qcounter_mesh", None),
         "qcounter_ledger": getattr(mcp, "_qcounter_ledger", None),
+        "qbyzantine_router": getattr(mcp, "_qbyzantine_router", None),
+        "qbyzantine_coord": getattr(mcp, "_qbyzantine_coord", None),
+        "qbyzantine_ledger": getattr(mcp, "_qbyzantine_ledger", None),
+        "qbyzantine_exporter": getattr(mcp, "_qbyzantine_exporter", None),
+        "qtomography_mesh": getattr(mcp, "_qtomography_mesh", None),
+        "qtomography_ledger": getattr(mcp, "_qtomography_ledger", None),
+        "qtomography_exporter": getattr(mcp, "_qtomography_exporter", None),
     }
     return app, settings
 

@@ -110,7 +110,7 @@ receipt. Any other G-2 failure is yours to fix before pushing.
 `.cursor/agents/` is the Cursor export of agent-swarm (`a01-orchestrator`
 through `a15-docs`), copied by `scripts/_install_cursor.py` from
 [swcstudiospace/agent-swarm](https://github.com/swcstudiospace/agent-swarm)
-commit `e7acd5c525b3b31569141b8364c837486a741358` (`main`). This repo does not vendor that runtime.
+commit `663969821a4b9c844de1d529c85670abc863202f` (`main`). This repo does not vendor that runtime.
 [`.cursor/environment.json`](.cursor/environment.json) keeps the gate install
 and clones that commit to `$HOME/.local/share/agent-swarm`, then exports
 `SWARM_ROOT` to that absolute path. The same path is written for later login

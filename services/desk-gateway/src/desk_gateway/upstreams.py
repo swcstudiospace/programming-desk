@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import contextvars
 import json
 import logging
 import os
@@ -27,6 +28,33 @@ logger = logging.getLogger("desk_gateway.upstreams")
 NOT_CONFIGURED = "not_configured"
 UPSTREAM_ERROR = "upstream_error"
 UPSTREAM_TIMEOUT = "upstream_timeout"
+
+# A budget wrapper sets this to a one-element list. request() increments it only
+# when that budget cancels the task during the HTTP send, not while the task is
+# waiting on a local lock. Caller cancellation still propagates as CancelledError.
+_budget_http_cancels: contextvars.ContextVar[list[int] | None] = contextvars.ContextVar(
+    "desk_budget_http_cancels", default=None
+)
+
+
+def push_budget_http_scope() -> contextvars.Token[list[int] | None]:
+    return _budget_http_cancels.set([0])
+
+
+def pop_budget_http_scope(token: contextvars.Token[list[int] | None]) -> None:
+    _budget_http_cancels.reset(token)
+
+
+def budget_cancelled_http() -> bool:
+    holder = _budget_http_cancels.get()
+    return bool(holder and holder[0])
+
+
+def _note_budget_http_cancel() -> None:
+    holder = _budget_http_cancels.get()
+    task = asyncio.current_task()
+    if holder is not None and task is not None and task.cancelling():
+        holder[0] += 1
 
 READ_ONLY_SQL = re.compile(r"^\s*(select|with)\b", re.IGNORECASE)
 FORBIDDEN_SQL = re.compile(
@@ -232,7 +260,11 @@ class HttpUpstream:
         try:
             try:
                 pooled = await self._acquire()
-                resp = await pooled.client.request(method_upper, url, headers=headers, **kwargs)
+                try:
+                    resp = await pooled.client.request(method_upper, url, headers=headers, **kwargs)
+                except asyncio.CancelledError:
+                    _note_budget_http_cancel()
+                    raise
             except httpx.TimeoutException:
                 self.circuit_breaker.record_failure()
                 retire = self.circuit_breaker.state == "open"

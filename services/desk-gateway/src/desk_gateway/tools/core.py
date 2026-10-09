@@ -22,7 +22,13 @@ from desk_gateway.config import (
 )
 from desk_gateway.redact import contains_secret, redact_text
 from desk_gateway.tools import ToolContext, failure
-from desk_gateway.upstreams import is_unknown_dataset, not_configured
+from desk_gateway.upstreams import (
+    budget_cancelled_http,
+    is_unknown_dataset,
+    not_configured,
+    pop_budget_http_scope,
+    push_budget_http_scope,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -109,16 +115,34 @@ def _is_ragflow_budget(result: dict[str, Any]) -> bool:
     return result.get("plane") == "ragflow" and result.get("results") == [] and "exceeded" in str(result.get("reason") or "")
 
 
-async def _within(deadline: float, coro: Any, phase: str, budget: float) -> dict[str, Any]:
+def _record_budget_failure(http: Any) -> None:
+    """A budget that cancels an in-flight call is an upstream failure.
+
+    Caller cancellation is a CancelledError and does not come through here, so it
+    does not trip the breaker.
+    """
+    breaker = getattr(http, "circuit_breaker", None)
+    record = getattr(breaker, "record_failure", None)
+    if record is not None:
+        record()
+
+
+async def _within(deadline: float, coro: Any, phase: str, budget: float, http: Any = None) -> dict[str, Any]:
     left = deadline - asyncio.get_running_loop().time()
     if left <= 0:
         if asyncio.iscoroutine(coro):
             coro.close()
         return _ragflow_timeout(phase, budget)
+    token = push_budget_http_scope()
     try:
-        return await asyncio.wait_for(coro, left)
-    except TimeoutError:
-        return _ragflow_timeout(phase, budget)
+        try:
+            return await asyncio.wait_for(coro, left)
+        except TimeoutError:
+            if budget_cancelled_http():
+                _record_budget_failure(http)
+            return _ragflow_timeout(phase, budget)
+    finally:
+        pop_budget_http_scope(token)
 
 
 def _chunks(hit: dict[str, Any]) -> list[dict[str, Any]]:
@@ -157,7 +181,9 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     lookup_started = loop.time()
     lookup_deadline = min(lookup_started + lookup_budget, outer_end)
 
-    resolved = await _within(lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget)
+    resolved = await _within(
+        lookup_deadline, svc.ragflow.resolve_dataset_ids(names), "dataset lookup", lookup_budget, svc.ragflow.http
+    )
     unused_lookup = max(0.0, lookup_budget - (loop.time() - lookup_started))
     if _is_ragflow_budget(resolved):
         return resolved
@@ -181,7 +207,9 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     limit = args.get("limit", 8)
     retrieval_started = loop.time()
     retrieval_deadline = min(retrieval_started + retrieval_budget, outer_end)
-    hit = await _within(retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget)
+    hit = await _within(
+        retrieval_deadline, svc.ragflow.retrieve(args["query"], ids, limit), "retrieval", retrieval_budget, svc.ragflow.http
+    )
     unused_retrieval = max(0.0, retrieval_budget - (loop.time() - retrieval_started))
     if not _is_ragflow_budget(hit) and is_unknown_dataset(hit):
         # Retrieval time does not consume the lookup allowance. The refresh gets
@@ -192,6 +220,7 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             svc.ragflow.resolve_dataset_ids(names, refresh=True),
             "dataset lookup",
             lookup_budget,
+            svc.ragflow.http,
         )
         if _is_ragflow_budget(resolved):
             return resolved
@@ -207,6 +236,7 @@ async def docs_search(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
             svc.ragflow.retrieve(args["query"], ids, limit),
             "retrieval",
             retrieval_budget,
+            svc.ragflow.http,
         )
     if _is_ragflow_budget(hit):
         return hit
@@ -314,33 +344,39 @@ async def memory_recall(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any
         timeout = float(getattr(svc.settings, "recall_bank_timeout_sec", RECALL_BANK_TIMEOUT_SEC))
 
         async def one(bank: str) -> dict[str, Any]:
+            token = push_budget_http_scope()
             try:
-                hit = await asyncio.wait_for(
-                    svc.hindsight.recall(bank, args["query"], args.get("limit", 8)),
-                    timeout,
-                )
-            except TimeoutError:
-                return {
-                    "bank": bank,
-                    "status": "timeout",
-                    "error": "upstream_timeout",
-                    "reason": f"hindsight bank {bank} exceeded the {timeout:g}s recall budget",
-                    "plane": "hindsight",
-                }
-            except Exception as exc:
-                return {
-                    "bank": bank,
-                    "status": "error",
-                    "error": "upstream_error",
-                    "reason": redact_text(str(exc))[:300],
-                    "plane": "hindsight",
-                }
-            if not isinstance(hit, dict):
-                return {"bank": bank, "status": "error", "error": "upstream_error", "reason": "hindsight recall returned no result", "plane": "hindsight"}
-            if hit.get("error"):
-                status = "timeout" if hit.get("error") == "upstream_timeout" else "error"
-                return _bank_row(bank, hit, status)
-            return _bank_row(bank, hit, "ok")
+                try:
+                    hit = await asyncio.wait_for(
+                        svc.hindsight.recall(bank, args["query"], args.get("limit", 8)),
+                        timeout,
+                    )
+                except TimeoutError:
+                    if budget_cancelled_http():
+                        _record_budget_failure(svc.hindsight.http)
+                    return {
+                        "bank": bank,
+                        "status": "timeout",
+                        "error": "upstream_timeout",
+                        "reason": f"hindsight bank {bank} exceeded the {timeout:g}s recall budget",
+                        "plane": "hindsight",
+                    }
+                except Exception as exc:
+                    return {
+                        "bank": bank,
+                        "status": "error",
+                        "error": "upstream_error",
+                        "reason": redact_text(str(exc))[:300],
+                        "plane": "hindsight",
+                    }
+                if not isinstance(hit, dict):
+                    return {"bank": bank, "status": "error", "error": "upstream_error", "reason": "hindsight recall returned no result", "plane": "hindsight"}
+                if hit.get("error"):
+                    status = "timeout" if hit.get("error") == "upstream_timeout" else "error"
+                    return _bank_row(bank, hit, status)
+                return _bank_row(bank, hit, "ok")
+            finally:
+                pop_budget_http_scope(token)
 
         out["results"] = list(await asyncio.gather(*(one(bank) for bank in banks)))
         return out

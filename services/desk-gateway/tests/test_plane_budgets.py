@@ -544,3 +544,148 @@ async def test_open_breaker_lets_an_inflight_sibling_finish(monkeypatch: pytest.
     assert slow["ok"] is True
     assert gate.slow_finished is True
     assert made[0].is_closed is True
+
+
+class _Hang(httpx.AsyncBaseTransport):
+    def __init__(self) -> None:
+        self.started = asyncio.Event()
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        self.started.set()
+        await asyncio.Event().wait()
+        return httpx.Response(200, json={"ok": True})
+
+
+async def test_docs_budget_timeout_opens_the_circuit_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, _Hang())
+    settings = _settings(docs_lookup_budget_sec=0.15, docs_retrieval_budget_sec=0.15)
+    rag = RAGFlow(settings)
+    rag.http.circuit_breaker.failure_threshold = 1
+    ctx = _ctx(ragflow=rag, settings=settings)
+    first = await docs_search(ctx, {"query": "alpha"})
+    assert first["results"] == []
+    assert first.get("error") == "upstream_timeout"
+    assert rag.http.circuit_breaker.state == "open"
+    started = time.monotonic()
+    second = await docs_search(ctx, {"query": "beta"})
+    assert time.monotonic() - started < 0.05
+    assert second.get("error") == "circuit_breaker_open"
+
+
+async def test_recall_budget_timeout_opens_the_circuit_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_client(monkeypatch, _Hang())
+    http = HttpUpstream(
+        "hindsight",
+        "http://hindsight.test",
+        timeout=30.0,
+        failure_threshold=1,
+        recovery_timeout_sec=30.0,
+    )
+
+    class _Hindsight:
+        def __init__(self) -> None:
+            self.http = http
+
+        async def recall(self, bank: str, query: str, limit: int) -> dict:
+            return await self.http.request("POST", f"/banks/{bank}", json={"query": query})
+
+    settings = _settings(recall_bank_timeout_sec=0.15)
+    seat = SimpleNamespace(short="systems", memory_own="pd-systems", memory_shared=(), bot_id="bot-01-systems-backend")
+    ctx = _ctx(
+        ragflow=SimpleNamespace(http=SimpleNamespace(configured=False)),
+        settings=settings,
+        hindsight=_Hindsight(),
+        seat=seat,
+    )
+    first = await memory_recall(ctx, {"query": "current work", "include_shared": False, "limit": 1})
+    assert first["results"][0]["status"] == "timeout"
+    assert http.circuit_breaker.state == "open"
+    started = time.monotonic()
+    second = await memory_recall(ctx, {"query": "current work", "include_shared": False, "limit": 1})
+    assert time.monotonic() - started < 0.05
+    assert second["results"][0]["error"] == "circuit_breaker_open"
+
+
+class _HoldFirstList(httpx.AsyncBaseTransport):
+    """The first dataset list holds the RAGFlow lock. Later lists answer."""
+
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.release = asyncio.Event()
+        self.lists = 0
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        path = request.url.path
+        if path.startswith("/api/v1/datasets"):
+            self.lists += 1
+            if self.lists == 1:
+                self.entered.set()
+                await self.release.wait()
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"name": "programming-desk", "id": "ds-pd"},
+                        {"name": "agent-substrate", "id": "ds-as"},
+                    ]
+                },
+            )
+        return httpx.Response(200, json={"data": {"chunks": []}})
+
+
+async def test_lock_wait_budget_timeout_does_not_open_the_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport = _HoldFirstList()
+    _patch_client(monkeypatch, transport)
+    settings = _settings(docs_lookup_budget_sec=0.15, docs_retrieval_budget_sec=0.15)
+    rag = RAGFlow(settings)
+    rag.http.circuit_breaker.failure_threshold = 5
+    holder = asyncio.create_task(rag.resolve_dataset_ids(["programming-desk", "agent-substrate"]))
+    await transport.entered.wait()
+    ctx = _ctx(ragflow=rag, settings=settings)
+    waiters = await asyncio.gather(*(docs_search(ctx, {"query": f"queued-{i}"}) for i in range(5)))
+    assert [row.get("error") for row in waiters] == ["upstream_timeout"] * 5
+    assert rag.http.circuit_breaker.failure_count == 0
+    assert rag.http.circuit_breaker.state == "closed"
+    transport.release.set()
+    resolved = await holder
+    assert resolved.get("ok") is True
+    assert rag.http.circuit_breaker.state == "closed"
+
+
+async def test_caller_cancel_does_not_record_an_upstream_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    hang = _Hang()
+    _patch_client(monkeypatch, hang)
+    settings = _settings(
+        docs_lookup_budget_sec=30,
+        docs_retrieval_budget_sec=30,
+        recall_bank_timeout_sec=30,
+    )
+    rag = RAGFlow(settings)
+    http = HttpUpstream("hindsight", "http://hindsight.test", timeout=30.0, failure_threshold=1)
+
+    class _Hindsight:
+        def __init__(self) -> None:
+            self.http = http
+
+        async def recall(self, bank: str, query: str, limit: int) -> dict:
+            return await self.http.request("POST", f"/banks/{bank}", json={"query": query})
+
+    seat = SimpleNamespace(short="systems", memory_own="pd-systems", memory_shared=(), bot_id="bot-01-systems-backend")
+    ctx = _ctx(ragflow=rag, settings=settings, hindsight=_Hindsight(), seat=seat)
+
+    docs_task = asyncio.create_task(docs_search(ctx, {"query": "alpha"}))
+    await hang.started.wait()
+    docs_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await docs_task
+    assert rag.http.circuit_breaker.failure_count == 0
+    assert rag.http.circuit_breaker.state == "closed"
+
+    hang.started.clear()
+    recall_task = asyncio.create_task(memory_recall(ctx, {"query": "current work", "include_shared": False, "limit": 1}))
+    await hang.started.wait()
+    recall_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await recall_task
+    assert http.circuit_breaker.failure_count == 0
+    assert http.circuit_breaker.state == "closed"

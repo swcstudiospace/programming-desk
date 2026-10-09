@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis** — Phases 36-37 (shipped 2026-10-10) — [Archive](milestones/v3.5-ROADMAP.md)
 - ✅ **v3.4 Autonomous Swarm Self-Healing & Active Immune Defense** — Phases 34-35 (shipped 2026-10-10) — [Archive](milestones/v3.4-ROADMAP.md)
 - ✅ **v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting** — Phases 32-33 (shipped 2026-10-10) — [Archive](milestones/v3.3-ROADMAP.md)
 - ✅ **v3.2 Multi-Modal Sensory Memory Graph & Dynamic Context Compression** — Phases 30-31 (shipped 2026-10-10) — [Archive](milestones/v3.2-ROADMAP.md)
@@ -20,14 +21,23 @@
 
 ## Phases
 
-### Active Milestone: v3.4 Autonomous Swarm Self-Healing & Active Immune Defense
+### Active Milestone: v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis
 
-- [x] **Phase 34: Anomaly Detection & Autonomous Seat Quarantine** (1/1 plans completed)
-  - Plan 34-01: Real-time behavioral anomaly detection, automated seat quarantine state machine, synthetic shadow execution sandboxing, capability pruning, and federated HMAC quarantine receipts.
-- [x] **Phase 35: Self-Healing Reconstitution & Immune Memory Attestation** (1/1 plans completed)
-  - Plan 35-01: Autonomous seat reconstitution, tamper-evident immune memory ledger, proactive federated antibody distribution, and post-quarantine rehabilitation drills.
+- [x] **Phase 36: Dynamic Skill & Tool Synthesis** (1/1 plans completed)
+  - Plan 36-01: Dynamic skill synthesizer, AST security vetting, sandbox execution verification, mesh registry hot-reloading, and capability lifecycle pruning.
+- [x] **Phase 37: Autonomous Prompt Optimization & Self-Refining Instruction Loops** (1/1 plans completed)
+  - Plan 37-01: Prompt telemetry evaluation, evolutionary mutation engine, shadow canary benchmarking, cryptographic rollout orchestrator, and mutation regression suite.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis (Phases 36-37) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 36: Dynamic Skill & Tool Synthesis (1/1 plan)
+- [x] Phase 37: Autonomous Prompt Optimization & Self-Refining Instruction Loops (1/1 plan)
+
+See [milestones/v3.5-ROADMAP.md](milestones/v3.5-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.4 Autonomous Swarm Self-Healing & Active Immune Defense (Phases 34-35) — SHIPPED 2026-10-10</summary>

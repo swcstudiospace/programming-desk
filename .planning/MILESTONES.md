@@ -65,6 +65,22 @@
 
 ---
 
+## v3.5 Autonomous Swarm Self-Evolution & Capability Synthesis (Shipped: 2026-10-10)
+
+**Phases completed:** 2 phases (Phases 36-37), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Autonomous skill synthesis engine dynamically generating structured tool specifications, schema contracts, and invocation handlers from capability gaps.
+- Automated AST security policy validation inspecting tool code against prohibited imports, unsafe system calls, and complex AST boundaries.
+- Ephemeral in-process sandbox harness executing synthetic test cases and fuzz assertions before capability promotion.
+- Dynamic tool mesh registry promotion and hot-reloading with HMAC-SHA256 attestation signing and lifecycle management with automated deprecation.
+- Continuous telemetry-driven prompt evaluation engine scoring execution fidelity, tool accuracy, latency, and token efficiency against task outcomes.
+- Evolutionary prompt mutation engine perturbing instructions via genetic exploration across multiple operational directives.
+- Deterministic A/B canary shadow evaluation comparing incumbent vs candidate variants across synthetic golden benchmark datasets.
+- Cryptographically attested prompt rollout orchestrator atomically promoting validated prompt revisions with rollbacks and SHA-256 version lineage tracking.
+
+---
+
 ## v3.4 Autonomous Swarm Self-Healing & Active Immune Defense (Shipped: 2026-10-10)
 
 **Phases completed:** 2 phases (Phases 34-35), 2 plans, 0 tasks

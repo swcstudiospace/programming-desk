@@ -1,19 +1,19 @@
-# Requirements: Milestone v3.8 — Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus
+# Requirements: Milestone v3.9 — Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh
 
-This document defines the requirements for Milestone v3.8 of Programming Desk.
+This document defines the requirements for Milestone v3.9 of Programming Desk.
 
-## 1. Dynamic Partition Sharding & Multi-Master Geo-Replication (Phase 42)
+## 1. Post-Quantum Hybrid Cryptographic Primitives & Lattice KEM (Phase 44)
 
-- [x] **REQ-SHARD-001**: Consistent hash ring partitioner (`ConsistentHashRing`) distributing shard keys across distributed desk nodes and regions with configurable virtual vnodes and replica factors.
-- [x] **REQ-SHARD-002**: Multi-master Conflict-Free Replicated Data Types (`CRDTStore`) supporting Last-Write-Wins (LWW) registers, PN-Counters, and OR-Sets with deterministic commutative convergence.
-- [x] **REQ-SHARD-003**: Cross-region delta replication engine (`GeoReplicationEngine`) propagating delta updates across regional peers with vector clocks and HMAC-SHA256 attestation receipts.
-- [x] **REQ-SHARD-004**: Deterministic shard key router (`ShardRouter`) mapping read/write requests to partition owners and fallback replicas with quorum consistency policies (ONE, QUORUM, ALL).
-- [x] **REQ-SHARD-005**: Sharding and replication REST API endpoints under `/v1/sharding/*` exposing ring topology, key routing, delta ingestion, and replica synchronization.
+- [x] **REQ-PQC-001**: Hybrid Key Encapsulation Mechanism (`HybridKEM`) combining classical ECDH (X25519) with NIST lattice-based Kyber/ML-KEM-768 parameters to produce shared cryptographic secrets resilient to quantum cryptanalysis.
+- [x] **REQ-PQC-002**: Hybrid Digital Signature Engine (`HybridSignatureEngine`) combining Ed25519 with lattice-based Dilithium/ML-DSA-65 to generate post-quantum tamper-proof signatures over inter-seat messages and tool requests.
+- [x] **REQ-PQC-003**: Post-Quantum Handshake & Channel Encryption (`PQCChannelSession`) establishing encrypted duplex sessions with ephemeral hybrid KEM exchanges, AES-256-GCM symmetric session keys, and replay counter verification.
+- [x] **REQ-PQC-004**: Quantum Security Audit & Downgrade Attack Detector (`QuantumAuditInspector`) validating algorithm suite negotiation, detecting downgrade attempts to classical-only ciphers, and logging security posture telemetry.
+- [x] **REQ-PQC-005**: Post-Quantum Cryptographic REST API endpoints under `/v1/pqc/*` exposing key generation, hybrid encapsulation/decapsulation, sign/verify, and channel session negotiation.
 
-## 2. Sovereign Mesh Consensus & Cross-Region Quorum Healing (Phase 43)
+## 2. Lattice-Attested Multi-Desk Ledger & Quantum-Resistant Audit Anchors (Phase 45)
 
-- [x] **REQ-SHARD-006**: WAN anti-entropy gossip protocol (`AntiEntropyGossip`) performing peer digest exchanges and detecting divergence across geographically dispersed desks.
-- [x] **REQ-SHARD-007**: Dynamic split-brain quorum monitor (`SplitBrainDetector`) fencing disconnected partitions and preventing split-brain writes during WAN disruptions.
-- [x] **REQ-SHARD-008**: Epoch-fenced partition lease coordinator (`EpochCoordinator`) issuing monotonically increasing epoch leases to active regional masters.
-- [x] **REQ-SHARD-009**: Automated cross-region partition self-healing orchestrator (`PartitionHealingOrchestrator`) reconciling divergent CRDT state and resynchronizing missing deltas upon WAN recovery.
-- [x] **REQ-SHARD-010**: End-to-end multi-region partition and healing drill simulator (`GeoPartitionDrillSimulator`) verifying partition survival, split-brain isolation, and post-healing convergence.
+- [x] **REQ-PQC-006**: Quantum-Resistant Merkle Audit Ledger (`PQCMerkleLedger`) using quantum-safe state leaf digests (SHA3-256 / SHAKE-256) and lattice-signed batch checkpoint roots.
+- [x] **REQ-PQC-007**: Post-Quantum Seat Identity Certificate Authority (`PQCIdentityAuthority`) issuing lattice-attested seat identity passports with algorithm agility and dynamic expiry.
+- [x] **REQ-PQC-008**: Cross-Desk Lattice Attestation Verifier (`CrossDeskLatticeVerifier`) validating remote seat passports, proof receipts, and cryptographic multi-signature quorums.
+- [x] **REQ-PQC-009**: External Quantum-Safe Anchor Exporter (`PQCAnchorExporter`) serializing quantum-proof ledger commitments to immutable audit targets and Solana devnet anchors.
+- [x] **REQ-PQC-010**: End-to-End Quantum Attack & Downgrade Drill Simulator (`QuantumAttackDrillSimulator`) verifying resistance against Shor algorithm forgery simulations, downgrade tampering, and session replay attacks.

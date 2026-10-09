@@ -1,5 +1,22 @@
 # Milestones
 
+## v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases (Phases 44-45), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Hybrid Key Encapsulation Mechanism combining classical ECDH (X25519) with NIST lattice-based Kyber/ML-KEM-768 parameters (`HybridKEM`).
+- Hybrid Digital Signature Engine combining classical Ed25519 with lattice-based Dilithium/ML-DSA-65 (`HybridSignatureEngine`).
+- Post-Quantum duplex encrypted channel sessions with ephemeral derivation and replay counter protection (`PQCChannelSession`).
+- Continuous quantum security audit inspector detecting cipher downgrade attempts and enforcing lattice security policies (`QuantumAuditInspector`).
+- Quantum-resistant Merkle audit ledger with SHA3-256 state leaves and lattice root checkpoint signatures (`PQCMerkleLedger`).
+- Post-Quantum seat identity certificate authority issuing lattice-attested passports (`PQCIdentityAuthority`).
+- Cross-desk lattice attestation verifier validating remote seat passports and multi-seat quorums (`CrossDeskLatticeVerifier`).
+- External quantum-safe anchor exporter committing Merkle roots to Solana devnet targets (`PQCAnchorExporter`).
+- End-to-end quantum attack and downgrade drill simulator verifying resistance against Shor algorithm forgery, downgrade tampering, and session replay (`QuantumAttackDrillSimulator`).
+
+---
+
 ## v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases (Phases 42-43), 2 plans, 0 tasks

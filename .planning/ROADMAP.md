@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- ✅ **v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh** — Phases 44-45 (shipped 2026-10-11) — [Archive](milestones/v3.9-ROADMAP.md)
 - ✅ **v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus** — Phases 42-43 (shipped 2026-10-11) — [Archive](milestones/v3.8-ROADMAP.md)
 - ✅ **v3.7 Autonomous Formal Verification & Multi-Seat Synthesis Proving** — Phases 40-41 (shipped 2026-10-11) — [Archive](milestones/v3.7-ROADMAP.md)
 - ✅ **v3.6 Cross-Desk Distributed Neural Routing & Multi-Tenant Sovereign Enclaves** — Phases 38-39 (shipped 2026-10-10) — [Archive](milestones/v3.6-ROADMAP.md)
@@ -24,14 +25,23 @@
 
 ## Phases
 
-### Active Milestone: v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus
+### Active Milestone: v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh
 
-- [x] **Phase 42: Dynamic Partition Sharding & Multi-Master Geo-Replication** (1/1 plans completed)
-  - Plan 42-01: Consistent hash ring partitioning, multi-master CRDT state stores (LWW, PN-Counter, OR-Set), cross-region delta replication pipeline, and deterministic key routing.
-- [x] **Phase 43: Sovereign Mesh Consensus & Cross-Region Quorum Healing** (1/1 plans completed)
-  - Plan 43-01: WAN anti-entropy gossip, dynamic split-brain quorum detection, epoch-fenced coordinator leases, automated partition healing resync, and multi-region partition drill simulator.
+- [x] **Phase 44: Post-Quantum Hybrid Cryptographic Primitives & Lattice KEM** (1/1 plans completed)
+  - Plan 44-01: Hybrid KEM (X25519 + Kyber/ML-KEM-768), hybrid signature engine (Ed25519 + Dilithium/ML-DSA-65), encrypted channel session negotiation, downgrade attack detector, and REST endpoints.
+- [x] **Phase 45: Lattice-Attested Multi-Desk Ledger & Quantum-Resistant Audit Anchors** (1/1 plans completed)
+  - Plan 45-01: Quantum-resistant Merkle audit ledger (SHA3-256), seat identity certificates, cross-desk lattice verifier, external anchor exporter, and quantum attack drill simulator.
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.9 Post-Quantum Cryptographic Migration & Lattice-Based Attestation Mesh (Phases 44-45) — SHIPPED 2026-10-11</summary>
+
+- [x] Phase 44: Post-Quantum Hybrid Cryptographic Primitives & Lattice KEM (1/1 plan)
+- [x] Phase 45: Lattice-Attested Multi-Desk Ledger & Quantum-Resistant Audit Anchors (1/1 plan)
+
+See [milestones/v3.9-ROADMAP.md](milestones/v3.9-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.8 Autonomous Multi-Region Active-Active Sharding & Sovereign Mesh Consensus (Phases 42-43) — SHIPPED 2026-10-11</summary>

@@ -3607,6 +3607,19 @@ def create_mcp(
         PartitionHealingOrchestrator,
         GeoPartitionDrillSimulator,
     )
+    from desk_gateway.post_quantum import (
+        HybridKEM,
+        HybridSignatureEngine,
+        PQCChannelSession,
+        QuantumAuditInspector,
+    )
+    from desk_gateway.lattice_ledger import (
+        PQCMerkleLedger,
+        PQCIdentityAuthority,
+        CrossDeskLatticeVerifier,
+        PQCAnchorExporter,
+        QuantumAttackDrillSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3651,6 +3664,14 @@ def create_mcp(
         split_detector=split_brain_detector,
     )
 
+    pqc_kem = HybridKEM(seed=secret_key)
+    pqc_sig_engine = HybridSignatureEngine(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    pqc_inspector = QuantumAuditInspector()
+    pqc_ca = PQCIdentityAuthority(ca_secret=secret_key.decode("utf-8", errors="ignore"))
+    pqc_ledger = PQCMerkleLedger(sig_engine=pqc_sig_engine)
+    pqc_verifier = CrossDeskLatticeVerifier(authority=pqc_ca)
+    pqc_anchor_exporter = PQCAnchorExporter()
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3667,6 +3688,13 @@ def create_mcp(
     setattr(mcp, "_split_brain_detector", split_brain_detector)
     setattr(mcp, "_epoch_coordinator", epoch_coordinator)
     setattr(mcp, "_partition_healing_orchestrator", partition_healing_orchestrator)
+    setattr(mcp, "_pqc_kem", pqc_kem)
+    setattr(mcp, "_pqc_sig_engine", pqc_sig_engine)
+    setattr(mcp, "_pqc_inspector", pqc_inspector)
+    setattr(mcp, "_pqc_ca", pqc_ca)
+    setattr(mcp, "_pqc_ledger", pqc_ledger)
+    setattr(mcp, "_pqc_verifier", pqc_verifier)
+    setattr(mcp, "_pqc_anchor_exporter", pqc_anchor_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4392,6 +4420,105 @@ def create_mcp(
     @mcp.custom_route("/v1/mesh/consensus/drill/simulate", methods=["POST"])
     async def mesh_consensus_drill_simulate_route(_request: Request) -> Response:
         drill_results = GeoPartitionDrillSimulator.run_partition_and_healing_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v3.9 (Phases 44 & 45): Post-Quantum Cryptographic Migration & Lattice Attestation Mesh
+    @mcp.custom_route("/v1/pqc/keys/generate", methods=["POST"])
+    async def pqc_keys_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key_id = body.get("key_id")
+        keypair = pqc_kem.generate_keypair(key_id=key_id)
+        return JSONResponse({"ok": True, "bundle": keypair.public_bundle()})
+
+    @mcp.custom_route("/v1/pqc/kem/encapsulate", methods=["POST"])
+    async def pqc_kem_encapsulate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        key_id = body.get("key_id", "default-kem-key")
+        keypair = pqc_kem.generate_keypair(key_id=key_id)
+        sec, receipt = pqc_kem.encapsulate(keypair)
+        return JSONResponse({"ok": True, "receipt": receipt.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/signature/sign", methods=["POST"])
+    async def pqc_signature_sign_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        message = body.get("message", "").encode("utf-8")
+        key_id = body.get("key_id", "seat-pqc-signer")
+        sig = pqc_sig_engine.sign(message, key_id=key_id)
+        return JSONResponse({"ok": True, "signature": sig.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/signature/verify", methods=["POST"])
+    async def pqc_signature_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        message = body.get("message", "").encode("utf-8")
+        sig_data = body.get("signature", {})
+        from desk_gateway.post_quantum import HybridSignature
+        sig = HybridSignature(
+            key_id=sig_data.get("key_id", ""),
+            classical_sig=sig_data.get("classical_sig", ""),
+            lattice_sig=sig_data.get("lattice_sig", ""),
+            algorithm_suite=sig_data.get("algorithm_suite", ""),
+            message_digest=sig_data.get("message_digest", ""),
+            timestamp=sig_data.get("timestamp", time.time()),
+        )
+        valid = pqc_sig_engine.verify(message, sig)
+        return JSONResponse({"ok": True, "valid": valid})
+
+    @mcp.custom_route("/v1/pqc/audit/negotiate", methods=["POST"])
+    async def pqc_audit_negotiate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        client_suites = body.get("client_suites", [])
+        server_suites = body.get("server_suites", [])
+        agreed_suite = body.get("agreed_suite", "")
+        res = pqc_inspector.evaluate_negotiation(client_suites, server_suites, agreed_suite)
+        return JSONResponse({"ok": True, "negotiation": res})
+
+    @mcp.custom_route("/v1/pqc/identity/passport/issue", methods=["POST"])
+    async def pqc_identity_passport_issue_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        desk_id = body.get("desk_id", settings.public_host)
+        roles = body.get("roles")
+        passport = pqc_ca.issue_passport(seat_id, desk_id, roles=roles)
+        return JSONResponse({"ok": True, "passport": passport.to_dict()})
+
+    @mcp.custom_route("/v1/pqc/identity/passport/verify", methods=["POST"])
+    async def pqc_identity_passport_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pass_data = body.get("passport", {})
+        from desk_gateway.lattice_ledger import PQCSeatPassport
+        passport = PQCSeatPassport(
+            seat_id=pass_data["seat_id"],
+            desk_id=pass_data["desk_id"],
+            public_bundle=pass_data["public_bundle"],
+            roles=pass_data["roles"],
+            expires_at=pass_data["expires_at"],
+            ca_signature=pass_data["ca_signature"],
+            issued_at=pass_data.get("issued_at", time.time()),
+        )
+        res = pqc_verifier.verify_remote_peer(passport)
+        return JSONResponse({"ok": True, "verification": res})
+
+    @mcp.custom_route("/v1/pqc/ledger/append", methods=["POST"])
+    async def pqc_ledger_append_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        desk_id = body.get("desk_id", settings.public_host)
+        action = body.get("action", "record_event")
+        payload = body.get("payload", {})
+        entry = pqc_ledger.append_entry(desk_id=desk_id, action=action, payload=payload)
+        return JSONResponse({
+            "ok": True,
+            "entry": entry.to_dict(),
+            "merkle_root": pqc_ledger.compute_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/pqc/ledger/anchor/export", methods=["POST"])
+    async def pqc_ledger_anchor_export_route(_request: Request) -> Response:
+        anchor = pqc_anchor_exporter.export_anchor(pqc_ledger)
+        return JSONResponse({"ok": True, "anchor": anchor})
+
+    @mcp.custom_route("/v1/pqc/drill/simulate", methods=["POST"])
+    async def pqc_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumAttackDrillSimulator.run_quantum_attack_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -5852,6 +5979,13 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "split_brain_detector": getattr(mcp, "_split_brain_detector", None),
         "epoch_coordinator": getattr(mcp, "_epoch_coordinator", None),
         "partition_healing_orchestrator": getattr(mcp, "_partition_healing_orchestrator", None),
+        "pqc_kem": getattr(mcp, "_pqc_kem", None),
+        "pqc_sig_engine": getattr(mcp, "_pqc_sig_engine", None),
+        "pqc_inspector": getattr(mcp, "_pqc_inspector", None),
+        "pqc_ca": getattr(mcp, "_pqc_ca", None),
+        "pqc_ledger": getattr(mcp, "_pqc_ledger", None),
+        "pqc_verifier": getattr(mcp, "_pqc_verifier", None),
+        "pqc_anchor_exporter": getattr(mcp, "_pqc_anchor_exporter", None),
     }
     return app, settings
 

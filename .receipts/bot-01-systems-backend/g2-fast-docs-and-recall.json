@@ -75,6 +75,12 @@
       "exit_code": 0,
       "duration_s": 33.51,
       "output_tail": "668 passed in 32.98s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/g2-fast-docs-and-recall.json --bot bot-01-systems-backend --strict",
+      "exit_code": 0,
+      "duration_s": 0.14,
+      "output_tail": "G-2 PASS — g2-fast-docs-and-recall: 13 command(s), 13 substantiated claim(s), 7 unverified item(s)"
     }
   ],
   "claims": [
@@ -128,6 +134,10 @@
     {
       "claim": "After capping retrieval by time left rather than the full lookup allowance, the desk-gateway pytest suite passes, including a fast lookup with a lookup budget equal to the tool deadline",
       "evidence_command_index": 11
+    },
+    {
+      "claim": "Strict receipt check passes once approved_by is human:SomeRandmGuyy",
+      "evidence_command_index": 12
     }
   ],
   "unverified": [
@@ -135,7 +145,7 @@
     "The live RAGflow dataset names were not confirmed. RAGFLOW_DATASETS defaults to programming-desk,agent-substrate. A configured name that is absent is returned in missing_datasets and does not fail the search.",
     "Dataset listing still uses page_size 100. A catalog that does not fit on one page is not paged.",
     "uv run pytest -q with the gateway defaults DATA_DIR=/var/lib/desk-gateway and DESK_REPO_DIR=/root/src/repos/programming-desk is not green on this VM. The same PermissionError and FileNotFoundError occur on 48b3098 because those paths are absent here. The suite above was run with DESK_REPO_DIR=/workspace and DATA_DIR=/tmp/desk-gateway-data.",
-    "approved_by is absent until an independent reviewer stamps this receipt. check_receipt.py --strict fails on that field. This seat does not self-approve.",
+    "Ming authorized this stamp in chat on 2026-10-09 at 19:56 AEDT, and authorized Lead to merge this pull request once Greptile is 5/5 and the checks are green. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve. This pull request stays a draft. Lead merges.",
     "Swarm planning is advisory. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset, so nothing from this run is APPROVED.",
     "No VPS change, deploy, or live plane call was made."
   ],
@@ -154,5 +164,6 @@
   "rollback_plan": null,
   "approvals": [],
   "loop_acks": [],
-  "graph_id": "ut-mv00tcgl-d8215d3e"
+  "graph_id": "ut-mv00tcgl-d8215d3e",
+  "approved_by": "human:SomeRandmGuyy"
 }

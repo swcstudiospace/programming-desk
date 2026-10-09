@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v3.2 Multi-Modal Sensory Memory Graph & Dynamic Context Compression** — Phases 30-31 (in progress)
 - ✅ **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (shipped 2026-10-10) — [Archive](milestones/v3.1-ROADMAP.md)
 - ✅ **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (shipped 2026-10-10) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
@@ -17,14 +18,23 @@
 
 ## Phases
 
-### Current Milestone: v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation
+### Current Milestone: v3.2 Multi-Modal Sensory Memory Graph & Dynamic Context Compression
 
-- [x] **Phase 28: Dynamic MCP Tool Mesh Registry & Capability Scopes**
-  - [x] 28-01: Capability Discovery, Scope Permissions, Schema Translation, Rate Limiting & Circuit Breaker (`REQ-MCP-001`, `REQ-MCP-002`, `REQ-MCP-003`, `REQ-MCP-004`, `REQ-MCP-005`)
-- [x] **Phase 29: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts**
-  - [x] 29-01: Async RPC Transport, Attested Signing, Streaming Proxy, Timeout Supervision & Execution Receipts (`REQ-MCP-006`, `REQ-MCP-007`, `REQ-MCP-008`, `REQ-MCP-009`, `REQ-MCP-010`)
+- [x] **Phase 30: Distributed Sensory Memory Graph & Cross-Modal Embeddings**
+  - [x] 30-01: Knowledge Graph Linkage, Cross-Modal Vector Search, Temporal Decay, Graph Partitioning & Cryptographic Commitment (`REQ-GRAPH-001`, `REQ-GRAPH-002`, `REQ-GRAPH-003`, `REQ-GRAPH-004`, `REQ-GRAPH-005`)
+- [ ] **Phase 31: Dynamic Context Window Compression & Semantic Pruning**
+  - [ ] 31-01: Lossless Compaction, Semantic Pruning, Hierarchical Summaries, Budget Adaptation & Reconstruction Verification (`REQ-GRAPH-006`, `REQ-GRAPH-007`, `REQ-GRAPH-008`, `REQ-GRAPH-009`, `REQ-GRAPH-010`)
 
 ### Completed Milestones
+
+<details>
+<summary>✅ v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation (Phases 28-29) — SHIPPED 2026-10-10</summary>
+
+- [x] Phase 28: Dynamic MCP Tool Mesh Registry & Capability Scopes (1/1 plan)
+- [x] Phase 29: Cross-Desk Distributed Remote Tool Invocation & Attested Execution Receipts (1/1 plan)
+
+See [milestones/v3.1-ROADMAP.md](milestones/v3.1-ROADMAP.md) for full phase details and execution history.
+</details>
 
 <details>
 <summary>✅ v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation (Phases 26-27) — SHIPPED 2026-10-10</summary>

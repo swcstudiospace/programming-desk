@@ -7366,6 +7366,88 @@ def create_mcp(
         QuantumReservoirSolanaAnchorExporter,
         QuantumReservoirVerificationDrill,
     )
+    from desk_gateway.quantum_anyon_braiding_mesh import (
+        AnyonSpecies,
+        QuantumTopologicalBraidingMesh,
+    )
+    from desk_gateway.quantum_anyon_braiding_anchoring import (
+        TopologicalBraidMerkleLedger,
+        TopologicalBraidReceipt,
+        TopologicalSolanaAnchorExporter,
+        TopologicalVerificationDrill,
+    )
+
+    qtopo_mesh = QuantumTopologicalBraidingMesh(species=AnyonSpecies.MAJORANA)
+    qtopo_ledger = TopologicalBraidMerkleLedger()
+    qtopo_exporter = TopologicalSolanaAnchorExporter()
+    mcp._qtopo_mesh = qtopo_mesh  # type: ignore[attr-defined]
+    mcp._qtopo_ledger = qtopo_ledger  # type: ignore[attr-defined]
+    mcp._qtopo_exporter = qtopo_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/topological/qubit/create", methods=["POST"])
+    async def quantum_topological_create_qubit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        qubit_id = body.get("qubit_id", f"topo-q-{int(time.time()*1000)}")
+        q = qtopo_mesh.create_qubit(qubit_id)
+        return JSONResponse({"ok": True, "qubit": q.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/topological/braid", methods=["POST"])
+    async def quantum_topological_braid_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        qubit_id = body.get("qubit_id", "topo-q0")
+        if qubit_id not in qtopo_mesh.qubits:
+            qtopo_mesh.create_qubit(qubit_id)
+        generator_index = int(body.get("generator_index", 1))
+        clockwise = bool(body.get("clockwise", True))
+        q = qtopo_mesh.apply_braid(qubit_id, generator_index=generator_index, clockwise=clockwise)
+        meas = qtopo_mesh.measure_topological_charge(qubit_id)
+
+        rcpt = TopologicalBraidReceipt(
+            receipt_id=f"rcpt-braid-{int(time.time()*1000)}",
+            qubit_id=qubit_id,
+            species=qtopo_mesh.species.value,
+            num_braids=len(qtopo_mesh.braid_history),
+            braid_depth=q.braid_depth,
+            final_fidelity=q.fidelity,
+            measured_parity=meas["measured_parity"],
+            state_merkle_root=hashlib.sha256(json.dumps(q.to_dict()).encode("utf-8")).hexdigest(),
+        )
+        qtopo_ledger.add_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "qubit": q.to_dict(),
+            "measurement": meas,
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtopo_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/topological/charge/measure", methods=["POST"])
+    async def quantum_topological_charge_measure_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        qubit_id = body.get("qubit_id", "topo-q0")
+        if qubit_id not in qtopo_mesh.qubits:
+            qtopo_mesh.create_qubit(qubit_id)
+        meas = qtopo_mesh.measure_topological_charge(qubit_id)
+        return JSONResponse({"ok": True, "charge": meas})
+
+    @mcp.custom_route("/v1/quantum/topological/anchor/export", methods=["POST"])
+    async def quantum_topological_anchor_export_route(_request: Request) -> Response:
+        anchor_payload = qtopo_exporter.generate_instruction_payload(
+            merkle_root=qtopo_ledger.get_merkle_root(),
+            num_receipts=len(qtopo_ledger.receipts),
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": qtopo_exporter.export_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/topological/drill/simulate", methods=["POST"])
+    async def quantum_topological_drill_simulate_route(_request: Request) -> Response:
+        drill = TopologicalVerificationDrill(species=AnyonSpecies.MAJORANA)
+        res = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": res})
 
     qres_node = QuantumReservoirNode(num_qubits=4)
     qres_elm = QuantumExtremeLearningMachine(feature_dim=10)
@@ -9112,6 +9194,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qres_elm": getattr(mcp, "_qres_elm", None),
         "qres_ledger": getattr(mcp, "_qres_ledger", None),
         "qres_exporter": getattr(mcp, "_qres_exporter", None),
+        "qtopo_mesh": getattr(mcp, "_qtopo_mesh", None),
+        "qtopo_ledger": getattr(mcp, "_qtopo_ledger", None),
+        "qtopo_exporter": getattr(mcp, "_qtopo_exporter", None),
     }
     return app, settings
 

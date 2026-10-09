@@ -4,6 +4,8 @@ Python tools under `ios/tools/`. The checks in the first table run on Linux. The
 
 `sim_drive`, `xcodebuild_test` and `maestro_flow` are the macOS harness. On a Mac or a GitHub-hosted `macos-26` runner they drive Simulator, `xcodebuild test` and Maestro. On Linux, or when the binary is missing, each one exits 3 and the JSON `reason` is `skipped: <why>`. A skip is not a pass. `--dry-run` prints the argv as JSON and spawns nothing, including on Linux. `--json` is accepted for symmetry; output is always JSON. Evidence is written only under the `--out` directory the caller passes.
 
+No-spawn regressions inspect the executable call log while their temporary directory still exists. Linux skips and dry runs must leave that log absent; deleting the directory first would hide an unexpected invocation.
+
 Device types and runtimes are whatever the caller passes. Nothing in these commands hard-codes a simulator name.
 
 SPE-5161 asked for `ios/tools/README.md`. That file is not here. `ownership.yaml` has a bare `README.md` rule owned by QUALITY that matches at any depth and wins over `ios/**`, so G-1 would reject it. This note is the substitute until QUALITY moves that rule.

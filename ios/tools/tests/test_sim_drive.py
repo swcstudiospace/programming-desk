@@ -166,11 +166,11 @@ class SimDriveTests(unittest.TestCase):
             install_xcrun(root, calls)
             with prepend_path(root):
                 result = boot("iPhone 17", "iOS-26", out=root / "out", system_name="Linux")
+            self.assertFalse(calls.exists())
         self.assertEqual(result["exit_code"], 3)
         self.assertEqual(result["status"], "skipped")
         self.assertIn("skipped:", result["reason"])
         self.assertFalse(result["invoked"])
-        self.assertFalse(calls.exists())
 
     def test_dry_run_prints_xcrun_argv_and_spawns_nothing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -179,13 +179,13 @@ class SimDriveTests(unittest.TestCase):
             install_xcrun(root, calls)
             with prepend_path(root):
                 result = boot("iPhone 17", "iOS-26", dry_run=True, system_name="Linux")
+            self.assertFalse(calls.exists())
         self.assertEqual(result["exit_code"], 0)
         self.assertEqual(result["status"], "dry-run")
         self.assertEqual(result["argv"][:3], ["xcrun", "simctl", "create"])
         self.assertIn("iPhone 17", result["argv"])
         self.assertIn("iOS-26", result["argv"])
         self.assertFalse(result["invoked"])
-        self.assertFalse(calls.exists())
 
     def test_boot_creates_udid_with_fake_xcrun(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🟡 **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (in progress)
+- ✅ **v3.0 Continuous Zero-Trust Compliance & Cryptographic Enclave Attestation** — Phases 26-27 (shipped 2026-10-10) — [Archive](milestones/v3.0-ROADMAP.md)
 - ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
 - ✅ **v2.7 Multi-Modal Processing & Streaming Tool Execution** — Phases 20-21 (shipped 2026-10-10) — [Archive](milestones/v2.7-ROADMAP.md)
@@ -20,8 +20,8 @@
 
 - [x] **Phase 26: Ephemeral Seat Enclave Credentials & Dynamic Mutual TLS**
   - [x] 26-01: Ephemeral Credentials, Dynamic mTLS CA, Enclave Attestation, Continuous Posture Check, and CRL Revocation (`REQ-ZERO-001`, `REQ-ZERO-002`, `REQ-ZERO-003`, `REQ-ZERO-004`, `REQ-ZERO-005`)
-- [ ] **Phase 27: Continuous Merkle Proof Verification & Immutable Audit Export**
-  - [ ] 27-01: Incremental Merkle Aggregator, Consistency Proofs, External Anchor Export, Tamper Scrubber, and Compliance Verification (`REQ-ZERO-006`, `REQ-ZERO-007`, `REQ-ZERO-008`, `REQ-ZERO-009`, `REQ-ZERO-010`)
+- [x] **Phase 27: Continuous Merkle Proof Verification & Immutable Audit Export**
+  - [x] 27-01: Incremental Merkle Aggregator, Consistency Proofs, External Anchor Export, Tamper Scrubber, and Compliance Verification (`REQ-ZERO-006`, `REQ-ZERO-007`, `REQ-ZERO-008`, `REQ-ZERO-009`, `REQ-ZERO-010`)
 
 ### Completed Milestones
 

@@ -10,7 +10,7 @@ from typing import Sequence
 
 from .assertions.milestone_verifier import MilestoneVerifier
 from .diagnostics.doctor_engine import CheckStatus, DoctorEngine
-from .security.policy_sandbox import PolicySandbox
+from .security.policy_sandbox import BoundarySecurityError, PolicySandbox
 from .session.session_store import SessionFrame, SessionStore
 from .supervision.process_supervisor import ProcessSupervisor
 from .telemetry.audit_tracer import AuditTracer
@@ -34,7 +34,9 @@ def handle_doctor(args: argparse.Namespace) -> int:
 
 def handle_audit(args: argparse.Namespace) -> int:
     tracer = AuditTracer()
-    events = tracer.read_events(phase=args.phase, limit=args.tail)
+    events = tracer.read_events(
+        phase=args.phase, correlation_id=args.correlation, limit=args.tail
+    )
     if args.json:
         print(json.dumps(events, indent=2))
     else:
@@ -45,9 +47,11 @@ def handle_audit(args: argparse.Namespace) -> int:
             ts = ev.get("timestamp", "")
             action = ev.get("action", "")
             actor = ev.get("actor", "")
+            corr = ev.get("correlation_id", "")
+            corr_str = f"<{corr}>" if corr else ""
             dur = ev.get("duration_ms")
             dur_str = f"({dur:.1f}ms)" if dur is not None else ""
-            print(f"[{ts}] {actor} -> {action} {dur_str}")
+            print(f"[{ts}] {actor} -> {action} {corr_str} {dur_str}".rstrip())
     return 0
 
 
@@ -96,6 +100,14 @@ def handle_session(args: argparse.Namespace) -> int:
     if not frame:
         print("No active session found.")
         return 1
+
+    if args.sync:
+        # A damaged STATE.md (start marker, no end marker) raises ValueError
+        # here; main() reports it as "Error:" with exit 1 and the file stays
+        # untouched so no notes are lost.
+        state_path = store.sync_to_markdown_state(frame)
+        print(f"Synced session '{frame.session_id}' to '{state_path}'.")
+        return 0
 
     if args.json:
         print(json.dumps(frame.to_dict(), indent=2))
@@ -168,6 +180,18 @@ def handle_run(args: argparse.Namespace) -> int:
             print(res.stderr, file=sys.stderr, end="")
 
         return res.exit_code
+    except BoundarySecurityError as exc:
+        # 126 keeps "refused to run" distinct from "ran and failed", so
+        # scripts can tell a policy rejection apart from an exit code 1.
+        print(f"Error executing command: {exc}", file=sys.stderr)
+        tracer.emit(
+            action="run_failure",
+            cmd=cmd[0] if cmd else "unknown",
+            error=str(exc),
+            exit_code=126,
+            correlation_id=correlation_id,
+        )
+        return 126
     except Exception as exc:
         print(f"Error executing command: {exc}", file=sys.stderr)
         tracer.emit(
@@ -194,6 +218,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     p_audit = subparsers.add_parser("audit", help="Inspect audit telemetry logs")
     p_audit.add_argument("--tail", type=int, default=20, help="Number of trailing events")
     p_audit.add_argument("--phase", type=str, default=None, help="Filter by phase")
+    p_audit.add_argument("--correlation", type=str, default=None, help="Filter by session correlation id")
     p_audit.add_argument("--json", action="store_true", help="Output JSON")
     p_audit.set_defaults(handler=handle_audit)
 
@@ -207,6 +232,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # session
     p_session = subparsers.add_parser("session", help="Session state inspections and sync")
     p_session.add_argument("--init", type=str, help="Initialize a new session ID")
+    p_session.add_argument("--sync", action="store_true", help="Re-render STATE.md from the loaded session")
     p_session.add_argument("--milestone", default="v8.0", help="Milestone label")
     p_session.add_argument("--phase", default="Phase 1", help="Phase label")
     p_session.add_argument("--json", action="store_true", help="Output JSON")

@@ -81,7 +81,7 @@ def test_cli_run_rejects_shell(capsys, monkeypatch, tmp_path) -> None:
         lambda self, log_path=None: orig_init(self, log_path=log_path or (tmp_path / "audit.jsonl")),
     )
     code = cli.main(["run", "sh", "-c", "echo should_not_run"])
-    assert code == 1
+    assert code == 126
     captured = capsys.readouterr()
     assert "should_not_run" not in captured.out
     assert str(cli._desk_run_allowlist()) in captured.err
@@ -134,3 +134,54 @@ def test_cli_run_correlates_session(capsys, monkeypatch, tmp_path) -> None:
     supervised = [event for event in supervised if event.get("action") == "supervised_run"]
     assert supervised
     assert supervised[-1]["correlation_id"] == correlation_id
+
+
+def test_cli_audit_filters_correlation(capsys, monkeypatch, tmp_path) -> None:
+    from src.desk.telemetry.audit_tracer import AuditTracer
+
+    orig_init = AuditTracer.__init__
+    monkeypatch.setattr(
+        AuditTracer,
+        "__init__",
+        lambda self, log_path=None: orig_init(self, log_path=log_path or (tmp_path / "audit.jsonl")),
+    )
+    tracer = AuditTracer()
+    tracer.emit(action="kept", phase="v8.3", correlation_id="corr-aaaa")
+    tracer.emit(action="dropped", phase="v8.3", correlation_id="corr-bbbb")
+
+    code = cli.main(["audit", "--correlation", "corr-aaaa", "--json"])
+    assert code == 0
+    events = json.loads(capsys.readouterr().out)
+    assert [event["correlation_id"] for event in events] == ["corr-aaaa"]
+
+    code = cli.main(["audit", "--correlation", "corr-aaaa"])
+    assert code == 0
+    out = capsys.readouterr().out
+    assert "<corr-aaaa>" in out
+    assert "corr-bbbb" not in out
+
+
+def test_cli_session_sync_rewrites_state(capsys, monkeypatch, tmp_path) -> None:
+    from src.desk.session.session_store import SessionStore
+
+    orig_init = SessionStore.__init__
+
+    def custom_init(self, storage_path=None, state_md_path=None):
+        orig_init(
+            self,
+            storage_path=tmp_path / "session.json",
+            state_md_path=tmp_path / "STATE.md",
+        )
+
+    monkeypatch.setattr(SessionStore, "__init__", custom_init)
+    assert cli.main(["session", "--init", "sync-test-001"]) == 0
+    capsys.readouterr()
+
+    state_md = tmp_path / "STATE.md"
+    state_md.write_text("# Operator notes\n", encoding="utf-8")
+    assert cli.main(["session", "--sync"]) == 0
+    out = capsys.readouterr().out
+    assert "sync-test-001" in out
+    text = state_md.read_text(encoding="utf-8")
+    assert "# Operator notes" in text
+    assert "sync-test-001" in text

@@ -141,6 +141,16 @@ class PolicySandbox:
         raw_exe = cmd[0]
         exe_path = Path(raw_exe)
         exe_name = exe_path.name
+        # A versioned interpreter (python3.11) is the same family as the
+        # allowlisted base (python3). Strip trailing numeric segments so the
+        # membership test below sees the family name. Explicit paths still
+        # go through the resolve check further down.
+        family_name = re.sub(r"(\.\d+)+$", "", exe_name)
+        if family_name.startswith("python") and family_name in (
+            "python",
+            "python3",
+        ):
+            exe_name = family_name
 
         if allowed_executables is not None:
             allowed_names = set(allowed_executables)

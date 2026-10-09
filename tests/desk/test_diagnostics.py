@@ -10,6 +10,7 @@ from src.desk.diagnostics import (
     DiagnosticCheckResult,
     DoctorEngine,
     check_audit_chain,
+    check_session_state,
     check_git_installed,
     check_ownership_manifest,
     check_planning_directory,
@@ -181,3 +182,60 @@ def test_audit_chain_rejects_symlink_log() -> None:
         result = check_audit_chain(root)
         assert result.status == CheckStatus.FAIL
         assert outside.read_text(encoding="utf-8") == "{}\n"
+
+
+def test_session_state_missing_passes() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        result = check_session_state(Path(tmp_dir))
+    assert result.status == CheckStatus.PASS
+    assert result.name == "session_state"
+
+
+def test_session_state_valid_and_unbalanced_markers() -> None:
+    import json
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        planning = root / ".planning"
+        planning.mkdir()
+        session = planning / "session.json"
+        session.write_text(
+            json.dumps(
+                {
+                    "session_id": "sess-1",
+                    "schema_version": 1,
+                    "correlation_id": "corr-abcd",
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert check_session_state(root).status == CheckStatus.PASS
+
+        (planning / "STATE.md").write_text(
+            "# Notes\n\n<!-- desk-session:start -->\norphan\n", encoding="utf-8"
+        )
+        unbalanced = check_session_state(root)
+        assert unbalanced.status == CheckStatus.WARN
+        assert "end marker" in unbalanced.message
+
+
+def test_session_state_rejects_corrupt_and_symlink() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir)
+        planning = root / ".planning"
+        planning.mkdir()
+        session = planning / "session.json"
+        outside = root / "outside.json"
+        outside.write_text('{"session_id": "stolen"}', encoding="utf-8")
+
+        session.write_bytes(b"\xff\xfe not utf8")
+        bad = check_session_state(root)
+        assert bad.status == CheckStatus.FAIL
+        # Read-only probe: the corrupt file is left for the store to quarantine.
+        assert session.exists() and not session.is_symlink()
+
+        session.unlink()
+        session.symlink_to(outside)
+        linked = check_session_state(root)
+        assert linked.status == CheckStatus.FAIL
+        assert outside.read_text(encoding="utf-8") == '{"session_id": "stolen"}'

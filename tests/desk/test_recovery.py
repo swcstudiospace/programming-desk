@@ -8,6 +8,11 @@ from src.desk.recovery import RecoveryManager
 from src.desk.security.policy_sandbox import BoundarySecurityError
 
 
+@pytest.fixture(autouse=True)
+def _isolated_audit_cwd(monkeypatch, tmp_path):
+    """Transactions emit audit records; keep them out of the real .planning."""
+    monkeypatch.chdir(tmp_path)
+
 def test_successful_transaction() -> None:
     mgr = RecoveryManager()
     with mgr.transaction("step-1") as tx:
@@ -268,3 +273,48 @@ def test_backup_restore_preserves_source_mode() -> None:
 
         assert source.read_text(encoding="utf-8") == "keep-me"
         assert (source.stat().st_mode & 0o777) == 0o640
+
+
+def _tx_audit_rows(root, action):
+    import json
+
+    log = root / ".planning" / "audit.jsonl"
+    rows = [
+        json.loads(line)
+        for line in log.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    return [row for row in rows if row.get("action") == action]
+
+
+def test_transaction_commit_emits_audit(tmp_path) -> None:
+    mgr = RecoveryManager()
+    target = tmp_path / "data.txt"
+    target.write_text("v1", encoding="utf-8")
+    with mgr.transaction("audit-commit", correlation_id="corr-tx-01") as tx:
+        tx.backup_file(target)
+        target.write_text("v2", encoding="utf-8")
+
+    commits = _tx_audit_rows(tmp_path, "transaction_commit")
+    assert len(commits) == 1
+    assert commits[0]["correlation_id"] == "corr-tx-01"
+    assert commits[0]["details"]["transaction"] == "audit-commit"
+    assert commits[0]["details"]["files"] == 1
+
+
+def test_transaction_rollback_emits_audit(tmp_path) -> None:
+    mgr = RecoveryManager()
+    target = tmp_path / "data.txt"
+    target.write_text("v1", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="boom"):
+        with mgr.transaction("audit-rollback") as tx:
+            tx.backup_file(target)
+            target.write_text("v2", encoding="utf-8")
+            raise RuntimeError("boom")
+
+    rollbacks = _tx_audit_rows(tmp_path, "transaction_rollback")
+    assert len(rollbacks) == 1
+    assert rollbacks[0]["details"]["transaction"] == "audit-rollback"
+    assert rollbacks[0]["details"]["rollbacks_executed"] == 1
+    assert rollbacks[0]["details"]["rollbacks_failed"] == 0
+    assert "boom" in (rollbacks[0]["details"]["error"] or "")

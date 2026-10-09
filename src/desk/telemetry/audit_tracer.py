@@ -638,6 +638,7 @@ class AuditTracer:
         phase: str | None,
         actor: str | None,
         action: str | None,
+        correlation_id: str | None,
         dir_fd: int | None = None,
     ) -> bool:
         """Append linked user records from ``path``.
@@ -685,6 +686,8 @@ class AuditTracer:
                         continue
                     if action and entry.get("action") != action:
                         continue
+                    if correlation_id and entry.get("correlation_id") != correlation_id:
+                        continue
                     sink.append(entry)
         except FileNotFoundError:
             return False
@@ -695,6 +698,7 @@ class AuditTracer:
         phase: str | None = None,
         actor: str | None = None,
         action: str | None = None,
+        correlation_id: str | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """Read linked user events from the retained segment and the active log.
@@ -705,10 +709,10 @@ class AuditTracer:
         active line that is not JSON, is not a dict, or breaks ``seq`` /
         ``prev_hash`` / ``record_hash`` ends the walk; that line and everything
         after it are omitted, and earlier linked user events are kept.
-        ``segment_anchor`` records are not returned. Phase, actor, action, and
-        ``limit`` apply only to the user records that linked. ``limit`` keeps
-        the newest matches across both files. Extra keys do not drop a record
-        whose hash still matches.
+        ``segment_anchor`` records are not returned. Phase, actor, action,
+        correlation_id, and ``limit`` apply only to the user records that
+        linked. ``limit`` keeps the newest matches across both files. Extra
+        keys do not drop a record whose hash still matches.
         """
         use_bounded = limit is not None and limit > 0
         matched: list[dict[str, Any]] = []
@@ -737,6 +741,7 @@ class AuditTracer:
                         phase=phase,
                         actor=actor,
                         action=action,
+                        correlation_id=correlation_id,
                         dir_fd=dir_fd,
                     )
                     if not whole:
@@ -751,6 +756,7 @@ class AuditTracer:
                     phase=phase,
                     actor=actor,
                     action=action,
+                    correlation_id=correlation_id,
                     dir_fd=dir_fd,
                 )
 

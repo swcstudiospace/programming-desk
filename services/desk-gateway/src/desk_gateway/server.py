@@ -3410,6 +3410,28 @@ def create_mcp(
     dr_engine = SubstrateStateMirrorEngine(primary_id=settings.public_host)
     setattr(mcp, "_dr_engine", dr_engine)
 
+    # Milestone v2.9 (Phase 25): Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery
+    from desk_gateway.split_brain_recovery import (
+        FencingTokenAllocator,
+        QuorumHeartbeatEvaluator,
+        VectorClockReconciler,
+        FastFailoverOrchestrator,
+        DisasterRecoveryDrillVerifier,
+    )
+    fencing_allocator = FencingTokenAllocator(cluster_gen_id="prod-cluster-01")
+    quorum_evaluator = QuorumHeartbeatEvaluator(cluster_nodes=["node-1", "node-2", "node-3"])
+    vector_reconciler = VectorClockReconciler()
+    failover_orchestrator = FastFailoverOrchestrator(
+        fencing_allocator=fencing_allocator,
+        quorum_evaluator=quorum_evaluator,
+    )
+    drill_verifier = DisasterRecoveryDrillVerifier(orchestrator=failover_orchestrator)
+    setattr(mcp, "_fencing_allocator", fencing_allocator)
+    setattr(mcp, "_quorum_evaluator", quorum_evaluator)
+    setattr(mcp, "_vector_reconciler", vector_reconciler)
+    setattr(mcp, "_failover_orchestrator", failover_orchestrator)
+    setattr(mcp, "_drill_verifier", drill_verifier)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3648,6 +3670,66 @@ def create_mcp(
         except (KeyError, RuntimeError) as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
 
+    # Split-Brain Protection & Fast RTO Recovery (Phase 25)
+    @mcp.custom_route("/v1/dr/fencing/allocate", methods=["POST"])
+    async def dr_fencing_allocate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "candidate-node")
+        token = fencing_allocator.allocate(node_id)
+        return JSONResponse({"ok": True, "token": token.to_dict()})
+
+    @mcp.custom_route("/v1/dr/fencing/validate", methods=["POST"])
+    async def dr_fencing_validate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        epoch = int(body.get("epoch", 0))
+        cluster_gen_id = body.get("cluster_gen_id", "")
+        valid, msg = fencing_allocator.validate(epoch, cluster_gen_id)
+        return JSONResponse({"ok": True, "valid": valid, "detail": msg})
+
+    @mcp.custom_route("/v1/dr/quorum/heartbeat", methods=["POST"])
+    async def dr_quorum_heartbeat_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "node-1")
+        quorum_evaluator.record_heartbeat(node_id)
+        state, alive, total = quorum_evaluator.evaluate_quorum()
+        return JSONResponse({
+            "ok": True,
+            "quorum_state": state.value,
+            "alive_nodes": alive,
+            "total_nodes": total,
+        })
+
+    @mcp.custom_route("/v1/dr/reconcile", methods=["POST"])
+    async def dr_reconcile_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        entry_a = body.get("entry_a", {})
+        entry_b = body.get("entry_b", {})
+        winner = vector_reconciler.reconcile(entry_a, entry_b)
+        return JSONResponse({"ok": True, "winner": winner})
+
+    @mcp.custom_route("/v1/dr/drill/run", methods=["POST"])
+    async def dr_drill_run_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        drill_id = body.get("drill_id", f"drill-{secrets.token_hex(4)}")
+        candidate_node = body.get("candidate_node", "node-2")
+        receipt = drill_verifier.run_drill(drill_id=drill_id, candidate_node=candidate_node)
+        valid = drill_verifier.verify_receipt(receipt)
+        return JSONResponse({
+            "ok": True,
+            "valid": valid,
+            "receipt": {
+                "drill_id": receipt.drill_id,
+                "scenario": receipt.scenario,
+                "simulated_failure_node": receipt.simulated_failure_node,
+                "promoted_node": receipt.promoted_node,
+                "rto_ms": receipt.rto_ms,
+                "rpo_loss_blocks": receipt.rpo_loss_blocks,
+                "passed": receipt.passed,
+                "receipt_hash": receipt.receipt_hash,
+                "signature": receipt.signature,
+            }
+        })
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3876,6 +3958,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "swarm_balancer": getattr(mcp, "_swarm_balancer", None),
         "delegation_mesh": getattr(mcp, "_delegation_mesh", None),
         "dr_engine": getattr(mcp, "_dr_engine", None),
+        "fencing_allocator": getattr(mcp, "_fencing_allocator", None),
+        "quorum_evaluator": getattr(mcp, "_quorum_evaluator", None),
+        "failover_orchestrator": getattr(mcp, "_failover_orchestrator", None),
+        "drill_verifier": getattr(mcp, "_drill_verifier", None),
     }
     return app, settings
 

@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🟡 **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (in progress)
+- ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
 - ✅ **v2.7 Multi-Modal Processing & Streaming Tool Execution** — Phases 20-21 (shipped 2026-10-10) — [Archive](milestones/v2.7-ROADMAP.md)
 - ✅ **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (shipped 2026-10-10) — [Archive](milestones/v2.6-ROADMAP.md)
 - ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
@@ -18,8 +18,8 @@
 
 - [x] **Phase 22: Dynamic Seat Load Balancing & Swarm Backpressure Management**
   - [x] 22-01: Seat Telemetry, Backpressure Spillover, Priority Preemption, & Circuit Breaker (`REQ-SWARM-001`, `REQ-SWARM-002`, `REQ-SWARM-003`, `REQ-SWARM-004`, `REQ-SWARM-005`)
-- [ ] **Phase 23: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts**
-  - [ ] 23-01: Recursive Delegation Protocol, Dual-Party Signatures, Dispute Arbitration, & Aggregated Receipts (`REQ-SWARM-006`, `REQ-SWARM-007`, `REQ-SWARM-008`, `REQ-SWARM-009`, `REQ-SWARM-010`)
+- [x] **Phase 23: Autonomous Hierarchical Subagent Delegation & Byzantine Consensus Receipts**
+  - [x] 23-01: Recursive Delegation Protocol, Dual-Party Signatures, Dispute Arbitration, & Aggregated Receipts (`REQ-SWARM-006`, `REQ-SWARM-007`, `REQ-SWARM-008`, `REQ-SWARM-009`, `REQ-SWARM-010`)
 
 ### Completed Milestones
 

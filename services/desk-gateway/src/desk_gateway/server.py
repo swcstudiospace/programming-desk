@@ -7376,6 +7376,132 @@ def create_mcp(
         TopologicalSolanaAnchorExporter,
         TopologicalVerificationDrill,
     )
+    from desk_gateway.quantum_timelock_mesh import (
+        QuantumTimelockMesh,
+        WesolowskiVDFEngine,
+        SlothVDFEngine,
+        VDFAlgorithm,
+    )
+    from desk_gateway.quantum_timelock_anchoring import (
+        QuantumTimelockMerkleLedger,
+        QuantumTimelockReceipt,
+        QuantumTimelockSolanaAnchorExporter,
+        QuantumTimelockVerificationDrill,
+    )
+
+    qtimelock_mesh = QuantumTimelockMesh()
+    qtimelock_ledger = QuantumTimelockMerkleLedger()
+    qtimelock_exporter = QuantumTimelockSolanaAnchorExporter()
+    mcp._qtimelock_mesh = qtimelock_mesh  # type: ignore[attr-defined]
+    mcp._qtimelock_ledger = qtimelock_ledger  # type: ignore[attr-defined]
+    mcp._qtimelock_exporter = qtimelock_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/timelock/puzzle/create", methods=["POST"])
+    async def quantum_timelock_puzzle_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        puzzle_id = body.get("puzzle_id", f"puzzle-{int(time.time()*1000)}")
+        secret_text = body.get("secret_text", "payload_timelock_data")  # pragma: allowlist secret
+        delay_seconds = float(body.get("delay_seconds", 0.05))
+        puz = qtimelock_mesh.create_puzzle(puzzle_id, secret_text, delay_seconds)
+        return JSONResponse({"ok": True, "puzzle": puz.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/timelock/puzzle/solve", methods=["POST"])
+    async def quantum_timelock_puzzle_solve_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        puzzle_id = body.get("puzzle_id", "")
+        try:
+            res = qtimelock_mesh.solve_puzzle(puzzle_id)
+            vdf = res["vdf_proof"]
+            rcpt = QuantumTimelockReceipt(
+                receipt_id=f"rcpt-solve-{int(time.time()*1000)}",
+                puzzle_or_tick_id=puzzle_id,
+                vdf_type=vdf["vdf_type"],
+                iterations=vdf["iterations_t"],
+                computation_time_ms=vdf["computation_time_ms"],
+                output_y_hash=hashlib.sha256(vdf["output_y_hex"].encode()).hexdigest(),
+                proof_pi_hash=hashlib.sha256(vdf["proof_pi_hex"].encode()).hexdigest(),
+                challenge_l=int(vdf["challenge_l_hex"], 16),
+                verified=res["verified"],
+            )
+            qtimelock_ledger.add_receipt(rcpt)
+            return JSONResponse({
+                "ok": True,
+                "solution": res,
+                "receipt": rcpt.to_dict(),
+                "merkle_root": qtimelock_ledger.get_merkle_root(),
+            })
+        except KeyError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/timelock/vdf/verify", methods=["POST"])
+    async def quantum_timelock_vdf_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        algorithm = body.get("algorithm", "wesolowski")
+        iterations = int(body.get("iterations", 100))
+        input_x = int(body.get("input_x", 1337))
+
+        if algorithm == "wesolowski":
+            proof = qtimelock_mesh.wesolowski.compute_vdf(input_x, iterations)
+            return JSONResponse({"ok": True, "proof": proof.to_dict()})
+        elif algorithm == "sloth":
+            y, elapsed = qtimelock_mesh.sloth.compute_sloth(input_x, iterations)
+            verified = qtimelock_mesh.sloth.verify_sloth(input_x, y, iterations)
+            return JSONResponse({
+                "ok": True,
+                "algorithm": "sloth",
+                "input_x": input_x,
+                "output_y": hex(y),
+                "iterations": iterations,
+                "computation_time_ms": round(elapsed, 3),
+                "verified": verified,
+            })
+        return JSONResponse({"error": f"Unknown VDF algorithm: {algorithm}"}, status_code=400)
+
+    @mcp.custom_route("/v1/quantum/timelock/beacon/tick", methods=["POST"])
+    async def quantum_timelock_beacon_tick_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        epoch = int(body.get("epoch_index", len(qtimelock_mesh.beacon_history) + 1))
+        seed = body.get("quantum_seed")
+        tick = qtimelock_mesh.emit_beacon_tick(epoch, seed)
+        vdf = tick["vdf_proof"]
+        rcpt = QuantumTimelockReceipt(
+            receipt_id=f"rcpt-beacon-{epoch}",
+            puzzle_or_tick_id=f"beacon-epoch-{epoch}",
+            vdf_type=vdf["vdf_type"],
+            iterations=vdf["iterations_t"],
+            computation_time_ms=vdf["computation_time_ms"],
+            output_y_hash=hashlib.sha256(vdf["output_y_hex"].encode()).hexdigest(),
+            proof_pi_hash=hashlib.sha256(vdf["proof_pi_hex"].encode()).hexdigest(),
+            challenge_l=int(vdf["challenge_l_hex"], 16),
+            verified=vdf["verified"],
+        )
+        qtimelock_ledger.add_receipt(rcpt)
+        return JSONResponse({
+            "ok": True,
+            "tick": tick,
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qtimelock_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/timelock/anchor/export", methods=["POST"])
+    async def quantum_timelock_anchor_export_route(_request: Request) -> Response:
+        last_beacon = qtimelock_mesh.beacon_history[-1]["beacon_entropy"] if qtimelock_mesh.beacon_history else ""
+        anchor_payload = qtimelock_exporter.generate_instruction_payload(
+            merkle_root=qtimelock_ledger.get_merkle_root(),
+            num_receipts=len(qtimelock_ledger.receipts),
+            epoch_beacon_entropy=last_beacon,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": qtimelock_exporter.export_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/timelock/drill/simulate", methods=["POST"])
+    async def quantum_timelock_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumTimelockVerificationDrill(iterations=150)
+        res = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": res})
 
     qtopo_mesh = QuantumTopologicalBraidingMesh(species=AnyonSpecies.MAJORANA)
     qtopo_ledger = TopologicalBraidMerkleLedger()
@@ -9197,6 +9323,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qtopo_mesh": getattr(mcp, "_qtopo_mesh", None),
         "qtopo_ledger": getattr(mcp, "_qtopo_ledger", None),
         "qtopo_exporter": getattr(mcp, "_qtopo_exporter", None),
+        "qtimelock_mesh": getattr(mcp, "_qtimelock_mesh", None),
+        "qtimelock_ledger": getattr(mcp, "_qtimelock_ledger", None),
+        "qtimelock_exporter": getattr(mcp, "_qtimelock_exporter", None),
     }
     return app, settings
 

@@ -3,11 +3,15 @@
 # Supports atomic release symlinks, pre-flight gate validation, health checks, and instant rollback.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_TARGET_ROOT="/opt/programming-desk"
 RELEASE_ROOT="${DESK_RELEASES_ROOT:-/opt/programming-desk-releases}"
 CURRENT_LINK="${DESK_CURRENT_LINK:-$DEFAULT_TARGET_ROOT}"
 UNIT="${DESK_SERVICE_UNIT:-desk-gateway.service}"
+# Nginx reload is opt-in on reload-nginx-gateway.sh. State the flag explicitly
+# here (default off). This staging script does not invoke nginx; pass
+# DESK_RELOAD_NGINX=true or 1 when invoking the reload script.
+DESK_RELOAD_NGINX="${DESK_RELOAD_NGINX:-false}"
+export DESK_RELOAD_NGINX
 GATEWAY_URL="${DESK_HEALTH_URL:-http://127.0.0.1:8791/healthz}"
 MAX_HEALTH_ATTEMPTS="${DESK_HEALTH_ATTEMPTS:-15}"
 HEALTH_INTERVAL="${DESK_HEALTH_INTERVAL:-1}"
@@ -20,6 +24,20 @@ err() {
   printf '[deploy-staging %s] ERROR: %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*" >&2
 }
 
+# An explicit SYSTEMCTL_BIN must exist. Unset means systemctl on PATH, which
+# may be absent on a host without systemd. A missing override is not that case:
+# the release symlink must not move while the restart is silently skipped.
+require_explicit_systemctl_bin() {
+  if [[ ! -v SYSTEMCTL_BIN ]]; then
+    SYSTEMCTL_BIN="systemctl"
+    return 0
+  fi
+  if [[ -z "$SYSTEMCTL_BIN" ]] || ! command -v "$SYSTEMCTL_BIN" >/dev/null 2>&1; then
+    err "SYSTEMCTL_BIN is set but not executable: ${SYSTEMCTL_BIN:-empty}"
+    exit 1
+  fi
+}
+
 # 1. Validation & Pre-flight
 SRC_DIR="${1:-}"
 if [[ -z "$SRC_DIR" ]]; then
@@ -28,6 +46,8 @@ if [[ -z "$SRC_DIR" ]]; then
 fi
 
 SRC_DIR="$(cd "$SRC_DIR" && pwd)"
+require_explicit_systemctl_bin
+export SYSTEMCTL_BIN
 RELEASE_ID="${2:-$(date -u +'%Y%m%d%H%M%S')-$(git -C "$SRC_DIR" rev-parse --short HEAD 2>/dev/null || echo 'manual')}"
 TARGET_RELEASE="$RELEASE_ROOT/$RELEASE_ID"
 
@@ -43,15 +63,17 @@ elif [[ -d "$CURRENT_LINK" ]]; then
   PREV_RELEASE="$CURRENT_LINK.previous"
 fi
 
+# Invoked by the ERR trap below; shellcheck cannot see that call.
+# shellcheck disable=SC2317
 rollback() {
   local exit_code=$?
   err "Deployment failure detected (exit code: $exit_code). Initiating automated rollback..."
   if [[ -n "$PREV_RELEASE" && -d "$PREV_RELEASE" ]]; then
     log "Rolling back symlink $CURRENT_LINK -> $PREV_RELEASE"
     ln -sfn "$PREV_RELEASE" "$CURRENT_LINK"
-    if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet "$UNIT" 2>/dev/null; then
+    if command -v "$SYSTEMCTL_BIN" >/dev/null 2>&1 && "$SYSTEMCTL_BIN" is-active --quiet "$UNIT" 2>/dev/null; then
       log "Restarting $UNIT to previous release..."
-      systemctl restart "$UNIT" || err "Failed to restart unit during rollback"
+      "$SYSTEMCTL_BIN" restart "$UNIT" || err "Failed to restart unit during rollback"
     fi
   else
     err "No previous valid release found to roll back to!"
@@ -106,10 +128,10 @@ log "Executing atomic symlink cutover: $CURRENT_LINK -> $TARGET_RELEASE"
 ln -sfn "$TARGET_RELEASE" "$CURRENT_LINK"
 
 # 5. Service reload / restart
-if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files "$UNIT" >/dev/null 2>&1; then
+if command -v "$SYSTEMCTL_BIN" >/dev/null 2>&1 && "$SYSTEMCTL_BIN" list-unit-files "$UNIT" >/dev/null 2>&1; then
   log "Restarting systemd service $UNIT..."
-  systemctl daemon-reload
-  systemctl restart "$UNIT"
+  "$SYSTEMCTL_BIN" daemon-reload
+  "$SYSTEMCTL_BIN" restart "$UNIT"
 fi
 
 # 6. Post-deployment health verification probe
@@ -147,6 +169,7 @@ log "Deployment of release $RELEASE_ID verified successfully!"
 # Prune older releases, keeping latest 5
 if [[ -d "$RELEASE_ROOT" ]]; then
   log "Pruning old releases (retaining last 5)..."
+  # shellcheck disable=SC2015,SC2012,SC2035
   (cd "$RELEASE_ROOT" && ls -dt */ 2>/dev/null | tail -n +6 | xargs rm -rf 2>/dev/null || true)
 fi
 

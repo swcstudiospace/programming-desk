@@ -1,0 +1,94 @@
+{
+  "task_id": "verify-web-desktop-harness-ut-muzt4gj6",
+  "bot": "bot-02-web-edge",
+  "branch": "bot-02-web-edge/verify-web-desktop-harness-ut-muzt4gj6",
+  "receipt_kind": "verification",
+  "evidence_provenance": "Post-fix commands and outcomes observed by the parent orchestrator in /tmp/pr88/web/verify. Evidence summaries describe observations rather than fabricated transcripts. All runtime targets were local fixtures, not product UI.",
+  "commands": [
+    {
+      "cmd": "npm run typecheck && VERIFY_FIXTURES=1 VERIFY_HARNESS_REGRESSIONS=1 VERIFY_BROWSERS=chromium VERIFY_FIXTURE_PORT=4199 BASE_URL=http://127.0.0.1:4199 node --experimental-strip-types scripts/to-receipt.ts verify --grep 'harness regressions cancellation'",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "duration_s": 13.62,
+      "output_tail": "4 passed (11.2s)\nverify-result checks=4 failed=0 run_exit=0",
+      "evidence_summary": "tsc --noEmit and four real Chromium cancellation regressions passed. SIGINT/SIGTERM on the wrapper alone waited for CLI/worker/browser and fixture cleanup, with exit 130/143 and non-pass evidence for verify, selftest and expected-negative selftest."
+    },
+    {
+      "cmd": "VERIFY_FIXTURE_PORT=4199 npm run selftest && VERIFY_FIXTURE_PORT=4199 npm run selftest:fail",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "output_tail": "selftest:fail: observed exactly the expected console-error and image-alt failures in every project",
+      "evidence_summary": "Custom fixture port reached the matching server. Negative selfcheck exited 0 only for the expected console-error and image-alt findings; evidence retained the failing underlying Playwright exit. Supplemental inspection observed run.exit_code=1 and exactly two failed individual checks. This run preceded the final trace-cleanup edit; the final regression in command 0 also exercises the expected-negative path."
+    },
+    {
+      "cmd": "VERIFY_FIXTURES=1 VERIFY_FIXTURE_PORT=4199 BASE_URL=http://127.0.0.1:4199 VERIFY_BROWSERS=chromium,firefox ROUTES='/pass.html?a=b,/pass.html?a/b' npm run verify -- --grep screenshots",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "output_tail": "4 passed (8.9s)\nverify-result checks=4 failed=0 run_exit=0",
+      "evidence_summary": "Supplemental direct output-directory inspection observed eight distinct screenshot files for two routes, two viewport variants and Chromium/Firefox project directories. A Firefox mobile fixture screenshot was opened and visually inspected before subsequent invocations cleared it. This run preceded the final trace-cleanup and cancellation edits, which do not change screenshot naming."
+    },
+    {
+      "cmd": "VERIFY_FIXTURE_PORT=4199 VERIFY_HARNESS_REGRESSIONS=1 npm run selftest",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "duration_s": 56.53,
+      "output_tail": "11 passed (55.6s)\nverify-result checks=11 failed=0 run_exit=0",
+      "evidence_summary": "Post-cancellation-fix full real Chromium suite passed: fixture HTTP/console/page/axe/screenshots, bounded delayed errors, four signal/mode cancellation cases and current-evidence/negative-selfcheck/screenshot-shell-replay regressions."
+    },
+    {
+      "cmd": "node --input-type=module - <<'JS'\nimport assert from 'node:assert/strict';\nimport {spawn} from 'node:child_process';\nimport {cp,mkdtemp,readFile,rm,symlink,writeFile} from 'node:fs/promises';\nimport net from 'node:net';\nimport os from 'node:os';\nimport path from 'node:path';\nconst wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));\nconst bind=port=>new Promise((resolve,reject)=>{const server=net.createServer();server.once('error',reject);server.listen(port,'127.0.0.1',()=>resolve(server));});\nconst reservation=await bind(0);const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));\nconst sandbox=await mkdtemp(path.join(os.tmpdir(),'web-cancel-after-smoke-'));const harness=path.join(sandbox,'verify');let child,ready,output='';\ntry {\n await cp(process.cwd(),harness,{recursive:true,filter:source=>!['node_modules','out'].includes(path.basename(source))});\n await symlink(path.join(process.cwd(),'node_modules'),path.join(harness,'node_modules'),'dir');\n await writeFile(path.join(harness,'tests','external-cancel.spec.ts'),`import {test} from '@playwright/test';import {writeFile} from 'node:fs/promises';\ntest('external cancellation smoke',async({page,browser})=>{await page.goto(process.env.BASE_URL+'/pass.html');const session=await browser.newBrowserCDPSession();const info=await session.send('SystemInfo.getProcessInfo');let count=0;await writeFile('worker-writes','0');setInterval(()=>writeFile('worker-writes',String(++count)),30);await writeFile('ready.json',JSON.stringify({cliPid:process.ppid,workerPid:process.pid,browserPids:info.processInfo.filter(item=>item.type==='browser').map(item=>item.id)}));await new Promise(()=>{});});`);\n child=spawn(process.execPath,['--experimental-strip-types','scripts/to-receipt.ts','verify','--grep','external cancellation smoke'],{cwd:harness,detached:true,env:{...process.env,VERIFY_FIXTURES:'1',VERIFY_HARNESS_REGRESSIONS:'0',VERIFY_BROWSERS:'chromium',VERIFY_FIXTURE_PORT:String(port),BASE_URL:`http://127.0.0.1:${port}`},stdio:['ignore','pipe','pipe']});\n child.stdout.on('data',chunk=>{output+=chunk;});child.stderr.on('data',chunk=>{output+=chunk;});\n const closed=new Promise(resolve=>child.once('close',(code,signal)=>resolve({code,signal})));\n for(let attempt=0;attempt<500;attempt++){try{ready=JSON.parse(await readFile(path.join(harness,'ready.json'),'utf8'));break;}catch(error){if(error.code!=='ENOENT')throw error;}assert.equal(child.exitCode,null,output);await wait(40);}\n assert.ok(ready,output);assert.ok(ready.browserPids.length);await wait(120);assert.ok(Number(await readFile(path.join(harness,'worker-writes'),'utf8'))>0);\n child.kill('SIGTERM');const result=await Promise.race([closed,new Promise((_,reject)=>{setTimeout(()=>reject(new Error('wrapper did not complete cancellation')),10000).unref();})]);assert.deepEqual(result,{code:143,signal:null},output);\n const alive=async pid=>{try{process.kill(pid,0);const stat=await readFile(`/proc/${pid}/stat`,'utf8');return !/\\) [ZX] /.test(stat);}catch(error){if(error.code==='ESRCH'||error.code==='ENOENT')return false;throw error;}};\n assert.equal(await alive(ready.cliPid),false);assert.equal(await alive(ready.workerPid),false);for(const pid of ready.browserPids)assert.equal(await alive(pid),false);\n const counter=await readFile(path.join(harness,'worker-writes'),'utf8');await wait(150);assert.equal(await readFile(path.join(harness,'worker-writes'),'utf8'),counter);const reusable=await bind(port);await new Promise(resolve=>reusable.close(resolve));\n console.log(JSON.stringify({wrapper_exit:result.code,playwright_cli_stopped:true,worker_stopped:true,browser_stopped:true,fixture_port_rebound:true,worker_writes_stable_after_close:true}));\n} finally {\n if(ready){try{process.kill(ready.cliPid,'SIGINT');}catch(error){if(error.code!=='ESRCH')throw error;}}\n if(child&&child.exitCode===null&&child.signalCode===null)child.kill('SIGTERM');\n await rm(sandbox,{recursive:true,force:true});\n}\nJS",
+      "cwd": "/tmp/pr88/web/verify",
+      "exit_code": 0,
+      "duration_s": 2.59,
+      "output_tail": "{\"wrapper_exit\":143,\"playwright_cli_stopped\":true,\"worker_stopped\":true,\"browser_stopped\":true,\"fixture_port_rebound\":true,\"worker_writes_stable_after_close\":true}",
+      "evidence_summary": "Independent throwaway native CLI/browser smoke sent SIGTERM only to the wrapper, then observed stopped processes, stable worker writes and a reusable fixture TCP port after wrapper close. Temporary harness was removed."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The TypeScript typecheck and four real Chromium signal/mode cancellation regressions passed, including cleanup before wrapper close and non-pass cancellation evidence; no build or product UI behavior is claimed.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The custom-port positive and expected-negative fixture selfchecks succeeded, while negative evidence retained Playwright exit 1 and exactly two failed checks.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The Chromium/Firefox screenshot run passed four screenshot cases and generated eight distinct project/route/viewport paths for two colliding readable route slugs.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "The full post-cancellation-fix eleven-test real Chromium/CLI suite passed, including stale-evidence replacement, trace cleanup before configuration errors, exact expected-negative selfcheck and screenshot shell replay.",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Independent SIGTERM smoke observed wrapper exit 143 only after Playwright CLI, worker, Chromium and fixture cleanup; the fixture port was reusable and worker writes stayed unchanged after close.",
+      "evidence_command_index": 4
+    }
+  ],
+  "unverified": [
+    "Only local fixture pages were exercised; no preview or production routes or product application UI was verified.",
+    "No Electron or Tauri desktop application was launched; desktop runtime behavior remains unverified.",
+    "WebKit/Safari was not exercised. Firefox evidence covers screenshot scenarios only, not the full regression suite.",
+    "Observation stops after the configured bounded startup interval; later page errors and unsupported concurrent shared-out runs are outside the contract.",
+    "Cancellation process-tree proof covers Linux and Chromium only. Windows cleanup, Firefox/WebKit cancellation and SIGKILL are unverified; a stuck Playwright teardown can wait indefinitely and repeated signals do not abandon cleanup.",
+    "Each invocation replaces local artifacts. Recorded summaries retain the observations; no stable uploaded screenshot or trace links were created.",
+    "Independent QUALITY approval is absent; approved_by is omitted and strict G-2 remains blocked.",
+    "Latest pushed-head CI and Greptile are not established by these local commands; the PR remains draft.",
+    "No deployment, merge, auto-merge, force-push or fabricated approval was performed."
+  ],
+  "files_changed": [
+    "web/verify/package.json",
+    "web/verify/package-lock.json",
+    "web/verify/scripts/to-receipt.ts",
+    "web/verify/tests/smoke.spec.ts",
+    "web/verify/fixtures/fail.html",
+    "web/verify/USAGE.md",
+    ".receipts/bot-02-web-edge/verify-web-desktop-harness-ut-muzt4gj6.json"
+  ],
+  "files_changed_scope": "Review corrections and this receipt; not every file from the original implementation commit.",
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

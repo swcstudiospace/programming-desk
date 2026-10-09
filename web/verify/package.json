@@ -1,0 +1,24 @@
+{
+  "name": "web-verify",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Playwright and axe smoke harness. Drives BASE_URL, writes receipt-shaped JSON under out/.",
+  "engines": {
+    "node": ">=22.6.0"
+  },
+  "scripts": {
+    "verify": "node --experimental-strip-types scripts/to-receipt.ts verify",
+    "selftest": "node --experimental-strip-types scripts/to-receipt.ts selftest",
+    "selftest:fail": "node --experimental-strip-types scripts/to-receipt.ts selftest:fail",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.64.0",
+    "@types/node": "22.20.5",
+    "@wdio/types": "9.31.2",
+    "playwright": "1.64.0",
+    "typescript": "5.9.3"
+  }
+}

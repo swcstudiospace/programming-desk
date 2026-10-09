@@ -5813,6 +5813,166 @@ def create_mcp(
         drill_results = HardwareNeuromorphicDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v4.8: Autonomous Swarm Immune & DePIN Physical Resource Mesh
+    from desk_gateway.swarm_immune_mesh import (
+        ImmuneAntibody,
+        MitigationAction,
+        MultiSeatAntibodyDistributor,
+        RuntimeReconstitutionSupervisor,
+        SwarmAntiFragilityEngine,
+        ThreatSeverity,
+        ThreatVectorType,
+    )
+    from desk_gateway.depin_mesh import (
+        DePINAnchorExporter,
+        DePINResourceLedger,
+        PhysicalResourceNode,
+        PhysicalResourceType,
+        SwarmImmuneDePINDrillSimulator,
+        VerifiableResourceOrchestrator,
+    )
+
+    swarm_antibody_distributor = MultiSeatAntibodyDistributor(seat_id="gateway")
+    swarm_antifragility_engine = SwarmAntiFragilityEngine(swarm_antibody_distributor)
+    runtime_reconstitution_supervisor = RuntimeReconstitutionSupervisor(swarm_antifragility_engine)
+    depin_orchestrator = VerifiableResourceOrchestrator()
+    depin_ledger = DePINResourceLedger()
+    depin_anchor_exporter = DePINAnchorExporter()
+
+    mcp._swarm_antibody_distributor = swarm_antibody_distributor  # type: ignore[attr-defined]
+    mcp._swarm_antifragility_engine = swarm_antifragility_engine  # type: ignore[attr-defined]
+    mcp._runtime_reconstitution_supervisor = runtime_reconstitution_supervisor  # type: ignore[attr-defined]
+    mcp._depin_orchestrator = depin_orchestrator  # type: ignore[attr-defined]
+    mcp._depin_ledger = depin_ledger  # type: ignore[attr-defined]
+    mcp._depin_anchor_exporter = depin_anchor_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/immune/mesh/antibodies", methods=["GET"])
+    async def immune_mesh_antibodies_list_route(_request: Request) -> Response:
+        antibodies = [ab.to_dict() for ab in swarm_antibody_distributor.antibodies.values()]
+        return JSONResponse({"ok": True, "antibodies": antibodies})
+
+    @mcp.custom_route("/v1/immune/mesh/antibodies/create", methods=["POST"])
+    async def immune_mesh_antibodies_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        vtype_str = body.get("vector_type", "byzantine_injection")
+        pattern_str = body.get("indicator_pattern", "UNAUTHORIZED_OP")
+        mitigation_str = body.get("mitigation", "quarantine_isolate")
+        severity_str = body.get("severity", "high")
+        fitness = float(body.get("fitness_score", 0.85))
+
+        try:
+            vtype = ThreatVectorType(vtype_str.lower())
+        except ValueError:
+            vtype = ThreatVectorType.BYZANTINE_INJECTION
+
+        try:
+            mitigation = MitigationAction(mitigation_str.lower())
+        except ValueError:
+            mitigation = MitigationAction.QUARANTINE_ISOLATE
+
+        try:
+            severity = ThreatSeverity(severity_str.lower())
+        except ValueError:
+            severity = ThreatSeverity.HIGH
+
+        ab = swarm_antibody_distributor.create_and_sign(
+            vector_type=vtype,
+            indicator_pattern=pattern_str,
+            mitigation=mitigation,
+            severity=severity,
+            fitness_score=fitness,
+        )
+        return JSONResponse({"ok": True, "antibody": ab.to_dict()})
+
+    @mcp.custom_route("/v1/immune/mesh/perturb", methods=["POST"])
+    async def immune_mesh_perturb_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "bot-02-web-edge")
+        vtype_str = body.get("vector_type", "latency_poisoning")
+        payload = body.get("payload", "BENCHMARK_PROBE")
+        entropy = float(body.get("entropy", 0.5))
+
+        try:
+            vtype = ThreatVectorType(vtype_str.lower())
+        except ValueError:
+            vtype = ThreatVectorType.LATENCY_POISONING
+
+        res = swarm_antifragility_engine.inject_chaos_perturbation(
+            target_seat=seat_id,
+            vector_type=vtype,
+            attack_payload=payload,
+            simulated_entropy=entropy,
+        )
+        return JSONResponse({"ok": True, "perturbation": res})
+
+    @mcp.custom_route("/v1/immune/mesh/reconstitute", methods=["POST"])
+    async def immune_mesh_reconstitute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "bot-02-web-edge")
+        reconstitution = runtime_reconstitution_supervisor.reconstitute_seat(seat_id)
+        return JSONResponse({"ok": True, "reconstitution": reconstitution})
+
+    @mcp.custom_route("/v1/depin/nodes", methods=["GET"])
+    async def depin_nodes_list_route(_request: Request) -> Response:
+        nodes = [n.to_dict() for n in depin_orchestrator.nodes.values()]
+        return JSONResponse({"ok": True, "nodes": nodes})
+
+    @mcp.custom_route("/v1/depin/lease", methods=["POST"])
+    async def depin_lease_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("consumer_seat", "lead")
+        rtype_str = body.get("resource_type", "gpu_cluster")
+        units = float(body.get("units", 100.0))
+        duration = float(body.get("duration_seconds", 3600.0))
+
+        try:
+            rtype = PhysicalResourceType(rtype_str.lower())
+        except ValueError:
+            rtype = PhysicalResourceType.GPU_CLUSTER
+
+        lease = depin_orchestrator.allocate_lease(
+            consumer_seat=seat_id,
+            resource_type=rtype,
+            required_units=units,
+            duration_seconds=duration,
+        )
+        if not lease:
+            return JSONResponse({"ok": False, "error": "insufficient_capacity"}, status_code=400)
+
+        depin_ledger.append_event("LEASE_ALLOCATION", lease.to_dict())
+        return JSONResponse({"ok": True, "lease": lease.to_dict()})
+
+    @mcp.custom_route("/v1/depin/popw/generate", methods=["POST"])
+    async def depin_popw_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id", "depin-us-east-gpu-0")
+        work_units = float(body.get("work_units", 50.0))
+        workload = body.get("workload_payload", "TENSOR_GEMM_1024")
+        elapsed = float(body.get("elapsed_ms", 25.0))
+
+        try:
+            popw = depin_orchestrator.generate_proof_of_physical_work(
+                node_id=node_id,
+                work_units=work_units,
+                workload_payload=workload,
+                elapsed_ms=elapsed,
+            )
+        except ValueError as err:
+            return JSONResponse({"ok": False, "error": str(err)}, status_code=404)
+
+        depin_ledger.append_event("POPW_VERIFIED", popw.to_dict())
+        return JSONResponse({"ok": True, "proof": popw.to_dict()})
+
+    @mcp.custom_route("/v1/depin/anchor/export", methods=["POST"])
+    async def depin_anchor_export_route(_request: Request) -> Response:
+        commitment = depin_anchor_exporter.export_commitment(depin_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/immune/drill/simulate", methods=["POST"])
+    async def immune_drill_simulate_route(_request: Request) -> Response:
+        drill_results = SwarmImmuneDePINDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -7324,6 +7484,19 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "epistemic_verifier": getattr(mcp, "_epistemic_verifier", None),
         "epistemic_ledger": getattr(mcp, "_epistemic_ledger", None),
         "epistemic_anchor_exporter": getattr(mcp, "_epistemic_anchor_exporter", None),
+        "substrate_registry": getattr(mcp, "_substrate_registry", None),
+        "substrate_compiler": getattr(mcp, "_substrate_compiler", None),
+        "substrate_dispatcher": getattr(mcp, "_substrate_dispatcher", None),
+        "substrate_profiler": getattr(mcp, "_substrate_profiler", None),
+        "neuromorphic_mesh": getattr(mcp, "_neuromorphic_mesh", None),
+        "synaptic_ledger": getattr(mcp, "_synaptic_ledger", None),
+        "neuromorphic_anchor_exporter": getattr(mcp, "_neuromorphic_anchor_exporter", None),
+        "swarm_antibody_distributor": getattr(mcp, "_swarm_antibody_distributor", None),
+        "swarm_antifragility_engine": getattr(mcp, "_swarm_antifragility_engine", None),
+        "runtime_reconstitution_supervisor": getattr(mcp, "_runtime_reconstitution_supervisor", None),
+        "depin_orchestrator": getattr(mcp, "_depin_orchestrator", None),
+        "depin_ledger": getattr(mcp, "_depin_ledger", None),
+        "depin_anchor_exporter": getattr(mcp, "_depin_anchor_exporter", None),
     }
     return app, settings
 

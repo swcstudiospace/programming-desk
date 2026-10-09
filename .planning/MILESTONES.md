@@ -1,5 +1,25 @@
 # Milestones
 
+## v4.8 Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 62-63), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Threat Pattern & Signature Representation (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) modeling Byzantine injection, latency poisoning, AST escapes, and entropy bursts.
+- Immune Antibody Registry & Distribution (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) verifying HMAC-SHA256 signatures and synchronizing cross-seat peer catalogs via anti-entropy digests.
+- Genetic Antibody Mutator (`GeneticAntibodyMutator`) generating evolved mitigation generations with perturbed entropy/latency thresholds and variant patterns.
+- Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) injecting controlled stress drills, scoring post-perturbation antifragile fitness gains, and synthesizing novel antibodies upon breaches.
+- Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) maintaining golden checkpoint snapshots, seat rollbacks, and score-based rehabilitation graduation.
+- Physical Resource Node Architecture (`PhysicalResourceNode`, `PhysicalResourceType`) tracking GPUs, neuromorphic crossbars, high-bandwidth storage, and edge PoW nodes across regions with reputation scoring.
+- Verifiable Resource Orchestrator (`VerifiableResourceOrchestrator`, `ResourceLease`) executing capacity-bounded reservations and lease tracking.
+- Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) generating and verifying HMAC-SHA256 execution attestations binding work units and payload digests.
+- DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) calculating binary Merkle tree roots across physical resource events.
+- Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) publishing physical resource commitment proofs to Solana devnet targets.
+- End-to-End Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`) verifying peer distribution, genetic evolution, runtime reconstitution, leasing, PoPW, and Solana anchoring.
+- REST API routes under `/v1/immune/mesh/*`, `/v1/depin/*`, and `/v1/immune/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
 ## v4.7 Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh (Shipped: 2026-10-12)
 
 **Phases completed:** 2 phases (Phases 60-61), 2 plans, 0 tasks

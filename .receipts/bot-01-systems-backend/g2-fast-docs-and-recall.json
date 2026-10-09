@@ -80,7 +80,13 @@
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/g2-fast-docs-and-recall.json --bot bot-01-systems-backend --strict",
       "exit_code": 0,
       "duration_s": 0.14,
-      "output_tail": "G-2 PASS — g2-fast-docs-and-recall: 13 command(s), 13 substantiated claim(s), 7 unverified item(s)"
+      "output_tail": "G-2 PASS — g2-fast-docs-and-recall: 14 command(s), 14 substantiated claim(s), 8 unverified item(s)"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DESK_REPO_DIR=/workspace DATA_DIR=/tmp/desk-gateway-data uv run pytest -q",
+      "exit_code": 0,
+      "duration_s": 34.2,
+      "output_tail": "671 passed in 33.43s"
     }
   ],
   "claims": [
@@ -138,6 +144,10 @@
     {
       "claim": "Strict receipt check passes once approved_by is human:SomeRandmGuyy",
       "evidence_command_index": 12
+    },
+    {
+      "claim": "After budget timeouts record an upstream failure, the desk-gateway pytest suite passes, including the docs and recall breaker tests, and a caller cancel leaves the breaker closed",
+      "evidence_command_index": 13
     }
   ],
   "unverified": [
@@ -147,7 +157,8 @@
     "uv run pytest -q with the gateway defaults DATA_DIR=/var/lib/desk-gateway and DESK_REPO_DIR=/root/src/repos/programming-desk is not green on this VM. The same PermissionError and FileNotFoundError occur on 48b3098 because those paths are absent here. The suite above was run with DESK_REPO_DIR=/workspace and DATA_DIR=/tmp/desk-gateway-data.",
     "Ming authorized this stamp in chat on 2026-10-09 at 19:56 AEDT, and authorized Lead to merge this pull request once Greptile is 5/5 and the checks are green. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve. This pull request stays a draft. Lead merges.",
     "Swarm planning is advisory. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset, so nothing from this run is APPROVED.",
-    "No VPS change, deploy, or live plane call was made."
+    "No VPS change, deploy, or live plane call was made.",
+    "tests/test_quantum_byzantine.py::test_server_routes_quantum_byzantine failed once in a full-suite run with drill all_passed false, then passed on a direct re-run and in the following full-suite run of 671. That test does not call docs_search or memory_recall."
   ],
   "files_changed": [
     "services/desk-gateway/src/desk_gateway/upstreams.py",

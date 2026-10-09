@@ -228,7 +228,7 @@ def test_server_cvqkd_routes():
     assert resp.status_code == 200
     data = resp.json()
     assert data["ok"] is True
-    assert data["asymptotic_secret_key_rate"] > 0.0
+    assert data["asymptotic_secret_key_rate"] > 0.0  # pragma: allowlist secret
     assert data["secure"] is True
 
     # 2. Test CV-QKD Session Run endpoint

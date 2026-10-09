@@ -8045,7 +8045,7 @@ def create_mcp(
             "ok": True,
             "mutual_information_i_ab": round(i_ab, 6),
             "holevo_bound_chi_be": round(chi_be, 6),
-            "asymptotic_secret_key_rate": round(key_rate, 6),
+            "asymptotic_secret_key_rate": round(key_rate, 6),  # pragma: allowlist secret
             "secure": key_rate > 0.0,
         })
 

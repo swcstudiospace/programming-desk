@@ -130,7 +130,7 @@ class CVQKDExchangeSessionResult:
             "excess_noise_estimated": round(self.excess_noise_estimated, 6),
             "mutual_information_i_ab": round(self.mutual_information_i_ab, 6),
             "holevo_bound_chi_be": round(self.holevo_bound_chi_be, 6),
-            "asymptotic_secret_key_rate": round(self.asymptotic_secret_key_rate, 6),
+            "asymptotic_secret_key_rate": round(self.asymptotic_secret_key_rate, 6),  # pragma: allowlist secret
             "total_distilled_key_bits": self.total_distilled_key_bits,
             "sifted_key_sample": self.sifted_key_sample[:5],
             "security_verified": self.security_verified,

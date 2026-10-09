@@ -7027,6 +7027,100 @@ def create_mcp(
         drill_results = QuantumMLDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
+    # Milestone v5.8 (Phases 82 & 83): Quantum Zero-Knowledge Proofs & Verifiable Witness Mesh
+    from desk_gateway.quantum_zkp_mesh import (
+        PauliBasis,
+        QZKPProofResponse,
+        QuantumWitnessState,
+        QuantumZKPEngine,
+    )
+    from desk_gateway.quantum_zkp_anchoring import (
+        QuantumZKPAnchorExporter,
+        QuantumZKPDrillSimulator,
+        QuantumZKPLedger,
+        QuantumZKPReceipt,
+    )
+
+    qzkp_engine = QuantumZKPEngine()
+    qzkp_ledger = QuantumZKPLedger()
+    qzkp_exporter = QuantumZKPAnchorExporter()
+
+    mcp._qzkp_engine = qzkp_engine  # type: ignore[attr-defined]
+    mcp._qzkp_ledger = qzkp_ledger  # type: ignore[attr-defined]
+    mcp._qzkp_exporter = qzkp_exporter  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/zkp/session/init", methods=["POST"])
+    async def quantum_zkp_session_init_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        prover = body.get("prover_node", "desk-alpha")
+        verifier = body.get("verifier_node", "verifier-node")
+        qubits = int(body.get("qubits_count", 3))
+        stabilizers = body.get("stabilizers", ["+XXX", "+ZZI", "+IZZ"])
+        angles = [float(a) for a in body.get("phase_angles", [0.0, 1.570796, 3.141592])]
+        fidelity = float(body.get("fidelity", 0.99))
+
+        witness = QuantumWitnessState(
+            witness_id=f"witness-{secrets.token_hex(4)}",
+            qubits_count=qubits,
+            stabilizers=stabilizers,
+            phase_angles=angles,
+            fidelity=fidelity,
+        )
+        session_info = qzkp_engine.init_proof_session(prover, verifier, witness)
+        rcpt = qzkp_ledger.append_event(
+            session_info["session_id"],
+            "QZKP_SESSION_INIT",
+            prover,
+            verifier,
+            fidelity,
+            session_info,
+        )
+        return JSONResponse({"ok": True, "session": session_info, "receipt": rcpt.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/zkp/challenge/generate", methods=["POST"])
+    async def quantum_zkp_challenge_generate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        try:
+            challenge = qzkp_engine.generate_verifier_challenge(session_id)
+            return JSONResponse({"ok": True, "session_id": session_id, "challenge_basis": challenge.value})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/zkp/proof/verify", methods=["POST"])
+    async def quantum_zkp_proof_verify_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        session_id = body.get("session_id", "")
+        basis_str = body.get("challenge_basis", "X")
+        try:
+            challenge_basis = PauliBasis(basis_str)
+        except ValueError:
+            challenge_basis = PauliBasis.X
+
+        try:
+            proof_resp = qzkp_engine.evaluate_prover_response(session_id, challenge_basis)
+            rcpt = qzkp_ledger.append_event(
+                session_id,
+                "QZKP_PROOF_VERIFIED",
+                "prover",
+                "verifier",
+                proof_resp.projector_expectation,
+                proof_resp.to_dict(),
+            )
+            return JSONResponse({"ok": True, "proof": proof_resp.to_dict(), "receipt": rcpt.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/quantum/zkp/anchor/export", methods=["POST"])
+    async def quantum_zkp_anchor_export_route(_request: Request) -> Response:
+        commitment = qzkp_exporter.export_commitment(qzkp_ledger)
+        return JSONResponse({"ok": True, "anchor": commitment})
+
+    @mcp.custom_route("/v1/quantum/zkp/drill/simulate", methods=["POST"])
+    async def quantum_zkp_drill_simulate_route(_request: Request) -> Response:
+        drill_results = QuantumZKPDrillSimulator.run_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
@@ -8593,6 +8687,9 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qml_classifier": getattr(mcp, "_qml_classifier", None),
         "qml_ledger": getattr(mcp, "_qml_ledger", None),
         "qml_exporter": getattr(mcp, "_qml_exporter", None),
+        "qzkp_engine": getattr(mcp, "_qzkp_engine", None),
+        "qzkp_ledger": getattr(mcp, "_qzkp_ledger", None),
+        "qzkp_exporter": getattr(mcp, "_qzkp_exporter", None),
     }
     return app, settings
 

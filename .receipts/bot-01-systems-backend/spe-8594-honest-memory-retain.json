@@ -172,7 +172,7 @@
     "Greptile review 2 on commit bd96b2f scored 5/5 and said the substrate-only finding is addressed, with no new finding. GitHub thread 4224459948 on tests/test_memory_retain.py is resolved. CI on that commit is not green, so this receipt does not ask for a merge.",
     "Quality Gates run 37849426852, job gates, failed in G-1 path ownership: check_ownership reported fatal origin/main...HEAD no merge base. The acting-bot step had already printed bot-01-systems-backend. The failure follows git fetch --depth=1 origin main in .github/workflows/gates.yml, owned by bot-05-infrastructure. Run 37850164088 on another pull request failed with the same line. Local check_ownership against origin/main passes. This seat does not edit that workflow.",
     "Security PR Gate run 37849426972: Gitleaks named only ci/tests/test_gates.py, services/desk-gateway/tests/test_units.py and services/desk-gateway/tests/test_server.py, none of them files in this diff. Semgrep (SAST) exited 2 with no finding text. The separate Semgrep OSS check and the separate gitleaks check succeeded. Those workflows are outside this unit.",
-    "approved_by is absent until bot-06-quality-security or a human stamps this receipt. The authoring seat does not self-approve.",
+    "Ming authorized merging pull request 122 in chat on 2026-10-09 at 14:19 AEDT. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve, and this agent does not merge the pull request.",
     "Swarm gates are advisory. SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset, so correlation 07f71cb7-2e1a-4590-b74e-6f2bea0e5a62 is not APPROVED.",
     "docs/desk-operating-model.md still describes ok as any() over the two planes. That file is owned by bot-00-programming-lead and was not edited. The reply now also carries verdicts and partial.",
     "No VPS change was made. No nginx reload, unit edit, or token write."
@@ -188,5 +188,6 @@
   "approvals": [],
   "fix_commit": "94375bab3adccca4ca40ba3e174c19e851d05c02",
   "red_tests_commit": "195b7c1e8d17120962719fdb4c1599527ad98f5c",
-  "graph_id": "ut-mv00tcgl-d8215d3e"
+  "graph_id": "ut-mv00tcgl-d8215d3e",
+  "approved_by": "human:SomeRandmGuyy"
 }

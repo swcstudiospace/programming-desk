@@ -1,19 +1,19 @@
-# Requirements: Milestone v4.3 — Autonomous Cross-Desk AI Model Distillation & Edge Compute Mesh
+# Requirements: Milestone v4.4 — Autonomous Cross-Desk Zero-Knowledge Proving & Privacy-Preserving Agent Swarm
 
-This document defines the requirements for Milestone v4.3 of Programming Desk.
+This document defines the requirements for Milestone v4.4 of Programming Desk.
 
-## 1. Multi-Teacher Distillation & Quantized Model Synthesis (Phase 52)
+## 1. Zero-Knowledge Proof Synthesis & Circuit Verification (Phase 54)
 
-- [x] **REQ-DISTILL-001**: Multi-Teacher Ensemble Distillation Engine (`EnsembleDistillationEngine`) synthesizing student model checkpoints from heterogeneous teacher models with temperature-scaled soft-target loss.
-- [x] **REQ-DISTILL-002**: Adaptive Quantization & Compression Pipeline (`QuantizationCompressor`) quantizing synthesized student weights to INT8/INT4 representations with per-channel scale calibrators.
-- [x] **REQ-DISTILL-003**: Fidelity & Regression Benchmarking Suite (`DistillationBenchmarker`) evaluating perplexity, reasoning accuracy, and capability retention against golden test corpora.
-- [x] **REQ-DISTILL-004**: Student Model Artifact Registry (`ModelArtifactRegistry`) managing versioned quantized weights, cryptographic SHA-256 model digests, and deployment metadata.
-- [x] **REQ-DISTILL-005**: Model Distillation REST API endpoints under `/v1/distillation/*` exposing distillation jobs, quantization pipelines, benchmark evaluations, and artifact retrievals.
+- [x] **REQ-ZK-001**: Rank-1 Constraint System (R1CS) Arithmetic Circuit Compiler (`ZKCircuit`, `ZKConstraint`) mapping multi-wire mathematical constraints and witness valuation sets.
+- [x] **REQ-ZK-002**: Zero-Knowledge Proof Synthesis Engine (`ZKProofGenerator`) producing non-interactive cryptographic proof artifacts without witness disclosure.
+- [x] **REQ-ZK-003**: Zero-Knowledge Proof Verifier (`ZKProofVerifier`) verifying execution validity and constraint satisfaction against public inputs.
+- [x] **REQ-ZK-004**: Private Tool State Transition Prover (`ZKStateTransitionProver`) synthesizing cryptographic receipts for agent state mutations while keeping authorization secrets hidden.
+- [x] **REQ-ZK-005**: Zero-Knowledge REST API endpoints under `/v1/zk/*` exposing circuit synthesis, proof generation, proof verification, and state transition proving.
 
-## 2. Distributed Edge Compute Orchestration & Off-Chain Verification (Phase 53)
+## 2. Homomorphic State Encapsulation & Multi-Party Private Inference (Phase 55)
 
-- [x] **REQ-DISTILL-006**: Heterogeneous Edge Compute Scheduler (`EdgeComputeScheduler`) dispatching student model inference workloads across edge nodes with memory budget fencing.
-- [x] **REQ-DISTILL-007**: Cryptographic Inference Attestation Engine (`InferenceProofEngine`) generating non-repudiable HMAC-SHA256 execution proofs binding input tokens, model digest, and generated completions.
-- [x] **REQ-DISTILL-008**: Edge Node Health & Failover Monitor (`EdgeClusterMonitor`) tracking compute latency, VRAM saturation, and triggering automatic workload reassignment.
-- [x] **REQ-DISTILL-009**: External Edge Inference Commitment Exporter (`EdgeCommitmentExporter`) anchoring batch inference proofs and Merkle tree roots to Solana devnet.
-- [x] **REQ-DISTILL-010**: End-to-End Distillation & Edge Inference Drill Simulator (`DistillationEdgeDrillSimulator`) verifying distillation convergence, quantization integrity, edge failover, and cryptographic attestation proofs.
+- [x] **REQ-ZK-006**: Additively Homomorphic Encryption Simulator (`HomomorphicCipherEngine`) supporting ciphertext additions and scalar multiplications over modular prime fields.
+- [x] **REQ-ZK-007**: Shamir Threshold Secret Sharing Scheme (`ThresholdSecretSharing`) splitting private keys and authorization seeds into `(t, n)` shares with Lagrange interpolation reconstruction.
+- [x] **REQ-ZK-008**: Privacy-Preserving Multi-Party Compute (MPC) Inference Coordinator (`SecureMPCInferenceCoordinator`) evaluating distributed model predictions across federated seats without exposing local inputs.
+- [x] **REQ-ZK-009**: External Zero-Knowledge State Anchor Exporter (`PrivateZKAnchorExporter`) committing Merkle tree roots of verified ZK receipts and MPC states to Solana devnet.
+- [x] **REQ-ZK-010**: End-to-End ZK & Privacy Agent Swarm Drill Simulator (`ZKPrivacyAgentSwarmDrillSimulator`) verifying constraint satisfaction, witness tamper detection, homomorphic operations, TSS secret reconstruction, and Solana devnet anchoring.

@@ -1,82 +1,18 @@
-# Roadmap: Programming Desk
+# Roadmap: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
 
-## Milestones
+## Phase 62: Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh
+- [x] Threat Pattern & Vector Architecture (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) modeling Byzantine injection, latency poisoning, AST escapes, and entropy bursts.
+- [x] Immune Antibody Registry & HMAC-SHA256 Distribution (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) verifying antibody signatures and synchronizing cross-seat peer catalogs via anti-entropy digests.
+- [x] Genetic Antibody Evolution Engine (`GeneticAntibodyMutator`) generating evolved mitigation generations with perturbed entropy/latency thresholds and variant patterns.
+- [x] Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) injecting controlled stress drills, scoring post-perturbation antifragile fitness gains, and synthesizing novel antibodies upon breaches.
+- [x] Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) maintaining golden checkpoint snapshots, seat rollbacks, and score-based rehabilitation graduation.
+- [x] REST API routes under `/v1/immune/mesh/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-- 🔄 **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (in progress)
-- ✅ **v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh** — Phases 16-17 (shipped 2026-10-09) — [Archive](milestones/v2.5-ROADMAP.md)
-- ✅ **v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery** — Phases 14-15 (shipped 2026-10-09) — [Archive](milestones/v2.4-ROADMAP.md)
-- ✅ **v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting** — Phases 12-13 (shipped 2026-10-09) — [Archive](milestones/v2.3-ROADMAP.md)
-- ✅ **v2.2 Multi-Desk Federation & Staging Deployments** — Phases 10-11 (shipped 2026-10-09) — [Archive](milestones/v2.2-ROADMAP.md)
-- ✅ **v2.1 Live Drills & Intake Hardening** — Phases 8-9 (shipped 2026-10-08) — [Archive](milestones/v2.1-ROADMAP.md)
-- ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
-
-## Phases
-
-### Active Milestone: v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization
-
-- [x] **Phase 18: FinOps Dynamic Token Budgeting & Cost Governance** (2 plans)
-  - [x] 18-01: Token consumption ledger, multi-model cost translation engine & spend circuit-breaker (REQ-FINOPS-001, REQ-FINOPS-002, REQ-FINOPS-004)
-  - [x] 18-02: Seat-level quota allocation matrix & tamper-evident expenditure receipts (REQ-FINOPS-003, REQ-FINOPS-005)
-- [x] **Phase 19: LLM Tier Routing & Cost-Aware Model Optimization** (1 plan)
-  - [x] 19-01: Complexity-aware task classifier, dynamic fallback cascade, prompt cache optimizer & FinOps verification (REQ-TIER-001 through REQ-TIER-005)
-
-### Completed Milestones
-
-<details>
-<summary>✅ v2.5 Multi-Tenant Governance & Inter-Desk Agent Mesh (Phases 16-17) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 16: Multi-Tenant Governance & RBAC Policy Enforcement (2/2 plans)
-- [x] Phase 17: Inter-Desk Agent Mesh & Distributed Work Distribution (1/1 plan)
-
-See [milestones/v2.5-ROADMAP.md](milestones/v2.5-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.4 Multi-Region Edge Federation & Autonomous Chaos Recovery (Phases 14-15) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 14: Multi-Region Edge Federation & WAN Routing (2/2 plans)
-- [x] Phase 15: Autonomous Chaos Recovery & Self-Healing Resilience (2/2 plans)
-
-See [milestones/v2.4-ROADMAP.md](milestones/v2.4-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.3 Production Cutover, Dynamic Failover & Telemetry Alerting (Phases 12-13) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 12: Production Cutover & Dynamic Failover (2/2 plans)
-- [x] Phase 13: Advanced Telemetry, SLOs & Alert Thresholds (2/2 plans)
-
-See [milestones/v2.3-ROADMAP.md](milestones/v2.3-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.2 Multi-Desk Federation & Staging Deployments (Phases 10-11) — SHIPPED 2026-10-09</summary>
-
-- [x] Phase 10: Multi-Desk Federation & Inter-Seat Routing (2/2 plans)
-- [x] Phase 11: Automated Staging & VPS Environment Promotion (2/2 plans)
-
-See [milestones/v2.2-ROADMAP.md](milestones/v2.2-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.1 Live Drills & Intake Hardening (Phases 8-9) — SHIPPED 2026-10-08</summary>
-
-- [x] Phase 8: Gateway Resiliency & Subagent Execution Drills (4/4 plans)
-- [x] Phase 9: External Intake Hardening & Telemetry Anchoring (4/4 plans)
-
-See [milestones/v2.1-ROADMAP.md](milestones/v2.1-ROADMAP.md) for full phase details and execution history.
-</details>
-
-<details>
-<summary>✅ v2.0 Desk v2 (Phases 1-7) — SHIPPED 2026-10-08</summary>
-
-- [x] Phase 1: Inventory and prove assumptions (7/7 plans)
-- [x] Phase 2: Network plane (6/6 plans)
-- [x] Phase 3: Substrate data planes (6/6 plans)
-- [x] Phase 4: Desk Gateway and contracts (6/6 plans)
-- [x] Phase 5: Prompts, skills, templates, plugin (6/6 plans)
-- [x] Phase 6: Fresh-desk acceptance and external intake (6/6 plans)
-- [x] Phase 7: Ordered rollout and rollback (4/4 plans)
-
-See [milestones/v2.0-ROADMAP.md](milestones/v2.0-ROADMAP.md) for full phase details and execution history.
-</details>
+## Phase 63: Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh
+- [x] Physical Resource Architecture (`PhysicalResourceNode`, `PhysicalResourceType`) tracking GPUs, neuromorphic crossbars, high-bandwidth storage, and edge PoW nodes across regions.
+- [x] Verifiable Resource Orchestrator (`VerifiableResourceOrchestrator`, `ResourceLease`) executing capacity-bounded reservations and lease tracking.
+- [x] Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) generating and verifying HMAC-SHA256 execution attestations binding work units and payload digests.
+- [x] DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) calculating binary Merkle tree roots across physical resource events.
+- [x] Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) publishing physical resource commitment proofs to Solana devnet targets.
+- [x] End-to-End Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`).
+- [x] REST API routes under `/v1/depin/*` and `/v1/immune/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

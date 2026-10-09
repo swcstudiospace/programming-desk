@@ -7439,6 +7439,21 @@ def create_mcp(
         FaultToleranceSolanaAnchorExporter,
         FaultToleranceVerificationDrill,
     )
+    from desk_gateway.quantum_counterfactual_mesh import (
+        CounterfactualDirectCommunication,
+        CounterfactualTransmissionResult,
+        GhostImageReconstruction,
+        InteractionFreeMeasurement,
+        InteractionFreeMeasurementResult,
+        QuantumCounterfactualMesh,
+        QuantumGhostImagingEngine,
+    )
+    from desk_gateway.quantum_counterfactual_anchoring import (
+        QuantumCounterfactualMerkleLedger,
+        QuantumCounterfactualReceipt,
+        QuantumCounterfactualSolanaAnchorExporter,
+        QuantumCounterfactualVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -7819,6 +7834,125 @@ def create_mcp(
     @mcp.custom_route("/v1/quantum/fault/drill/simulate", methods=["POST"])
     async def quantum_fault_drill_simulate_route(_request: Request) -> Response:
         drill = FaultToleranceVerificationDrill()
+        res = drill.run_all_stages()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qcounter_mesh = QuantumCounterfactualMesh()
+    qcounter_ledger = QuantumCounterfactualMerkleLedger()
+    mcp._qcounter_mesh = qcounter_mesh  # type: ignore[attr-defined]
+    mcp._qcounter_ledger = qcounter_ledger  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/counterfactual/ifm/interrogate", methods=["POST"])
+    async def quantum_counterfactual_ifm_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        object_present = bool(body.get("object_present", True))
+        cycles = int(body.get("cycles", 50))
+        res = qcounter_mesh.run_interaction_free_test(object_present=object_present, cycles=cycles)
+
+        rcpt = QuantumCounterfactualReceipt(
+            receipt_id=f"rcpt-ifm-{int(time.time()*1000)}",
+            operation_type="INTERACTION_FREE_MEASUREMENT",
+            channel_id=f"ifm-cycles-{cycles}",
+            purity_or_efficiency=res.counterfactual_efficiency,
+            channel_leakage=res.channel_leakage_probability,
+            cycles_or_photons=cycles,
+            success=res.detection_successful or not object_present,
+            spatial_contrast=0.0,
+            extra_data_hash=hashlib.sha256(json.dumps(res.to_dict()).encode("utf-8")).hexdigest(),
+        )
+        qcounter_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "measurement": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qcounter_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/counterfactual/direct/transmit", methods=["POST"])
+    async def quantum_counterfactual_transmit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        message_bits = str(body.get("message_bits", "1011001"))
+        res = qcounter_mesh.run_counterfactual_communication(message_bits)
+
+        rcpt = QuantumCounterfactualReceipt(
+            receipt_id=f"rcpt-comm-{int(time.time()*1000)}",
+            operation_type="COUNTERFACTUAL_COMMUNICATION",
+            channel_id="counterfactual-salih-nested",
+            purity_or_efficiency=res.counterfactual_purity,
+            channel_leakage=1.0 - res.counterfactual_purity,
+            cycles_or_photons=res.total_photons_used,
+            success=res.bit_error_rate < 0.25,
+            spatial_contrast=0.0,
+            extra_data_hash=hashlib.sha256(json.dumps(res.to_dict()).encode("utf-8")).hexdigest(),
+        )
+        qcounter_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "transmission": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qcounter_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/counterfactual/ghost/reconstruct", methods=["POST"])
+    async def quantum_counterfactual_ghost_reconstruct_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        pattern_name = str(body.get("pattern_name", "cross"))
+        photon_pairs = int(body.get("photon_pairs", 3000))
+        h = int(body.get("height", 8))
+        w = int(body.get("width", 8))
+        res = qcounter_mesh.run_ghost_imaging(pattern_name=pattern_name, photon_pairs=photon_pairs, resolution=(h, w))
+
+        rcpt = QuantumCounterfactualReceipt(
+            receipt_id=f"rcpt-ghost-{int(time.time()*1000)}",
+            operation_type="GHOST_IMAGING",
+            channel_id=f"ghost-spdc-{pattern_name}",
+            purity_or_efficiency=res.visibility,
+            channel_leakage=0.0,
+            cycles_or_photons=res.total_photon_pairs,
+            success=res.visibility >= 0.50,
+            spatial_contrast=res.correlation_contrast,
+            extra_data_hash=hashlib.sha256(json.dumps(res.reconstructed_matrix).encode("utf-8")).hexdigest(),
+        )
+        qcounter_ledger.append_receipt(rcpt)
+
+        return JSONResponse({
+            "ok": True,
+            "reconstruction": res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qcounter_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/counterfactual/anchor/export", methods=["POST"])
+    async def quantum_counterfactual_anchor_export_route(_request: Request) -> Response:
+        root = qcounter_ledger.get_merkle_root()
+        latest_rcpt = qcounter_ledger.receipts[-1] if qcounter_ledger.receipts else QuantumCounterfactualReceipt(
+            receipt_id="dummy",
+            operation_type="GENESIS",
+            channel_id="genesis",
+            purity_or_efficiency=1.0,
+            channel_leakage=0.0,
+            cycles_or_photons=0,
+            success=True,
+            spatial_contrast=1.0,
+            extra_data_hash="0"*64,
+        )
+        proof = qcounter_ledger.get_proof(len(qcounter_ledger.receipts) - 1) if qcounter_ledger.receipts else []
+        anchor_payload = QuantumCounterfactualSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": QuantumCounterfactualSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/counterfactual/drill/simulate", methods=["POST"])
+    async def quantum_counterfactual_drill_simulate_route(_request: Request) -> Response:
+        drill = QuantumCounterfactualVerificationDrill()
         res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
@@ -9765,6 +9899,10 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "qnonloc_mesh": getattr(mcp, "_qnonloc_mesh", None),
         "qnonloc_ledger": getattr(mcp, "_qnonloc_ledger", None),
         "qnonloc_exporter": getattr(mcp, "_qnonloc_exporter", None),
+        "qfault_mesh": getattr(mcp, "_qfault_mesh", None),
+        "qfault_ledger": getattr(mcp, "_qfault_ledger", None),
+        "qcounter_mesh": getattr(mcp, "_qcounter_mesh", None),
+        "qcounter_ledger": getattr(mcp, "_qcounter_ledger", None),
     }
     return app, settings
 

@@ -1,5 +1,25 @@
 # Milestones
 
+## v4.9 Autonomous Space-Air-Ground Integrated Network (SAGIN) & Delay-Tolerant Satellite Swarm Mesh (Shipped: 2026-10-12)
+
+**Phases completed:** 2 phases (Phases 64-65), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Orbital Ephemeris & Kinematics Modeling (`OrbitalEphemeris`) tracking semi-major axis, inclination, true anomaly, slant range, elevation angles, and contact pass duration.
+- Delay-Tolerant Bundle Protocol Architecture (`DelayTolerantBundle`, `BundlePriority`, `CustodyStatus`) implementing RFC 5050/9171 compliant bundle representations with TTL, hop counts, and SHA-256 payload digests.
+- Dynamic Contact Graph Routing (`ContactGraphRouter`, `ContactPlanEntry`) calculating earliest arrival paths over scheduled, time-varying contact graphs.
+- Resilient Custodial Storage Management (`CustodialStorageManager`) supporting store-and-forward retention queues, custody acceptance/release, and HMAC-SHA256 custody receipts.
+- Doppler Shift & Orbital Telemetry Tracker (`DopplerTelemetryTracker`) evaluating carrier frequency shifts, relative velocities, and SNR link degradation margins.
+- Earth Ground Station Terminal Representation (`GroundStationNode`) tracking ground station coordinates, antenna gain, slew rates, and concurrent satellite tracking passes.
+- Multi-Constellation Downlink Session Manager (`MultiConstellationDownlinkManager`) orchestrating cross-constellation passes with Doppler compensation and contact telemetry.
+- Intermittent Contact BFT Consensus Engine (`IntermittentGroundConsensusEngine`) coordinating ground station verification quorums across intermittent passes.
+- Satellite Append-Only Merkle Receipt Ledger (`SatelliteMerkleReceiptLedger`, `SatelliteLedgerReceipt`) recording verifiable orbital state transitions and calculating Merkle tree roots.
+- Solana Devnet SAGIN Commitment Exporter (`SAGINAnchorExporter`) exporting batch Merkle roots and orbital downlink proofs to Solana devnet targets.
+- End-to-End SAGIN Verification Drill Simulator (`SAGINOrbitalVerificationDrillSimulator`) verifying ephemeris windows, CGR routing, bundle custody, downlink sessions, BFT ground consensus, and Solana anchoring.
+- REST API routes under `/v1/sagin/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+
+---
+
 ## v4.8 Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh (Shipped: 2026-10-12)
 
 **Phases completed:** 2 phases (Phases 62-63), 2 plans, 0 tasks

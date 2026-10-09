@@ -419,6 +419,17 @@ async def test_oversized_docs_budgets_name_ragflow_before_the_tool_deadline(monk
     assert "ragflow" in str(reply.get("reason") or "").lower()
 
 
+async def test_large_lookup_budget_still_retrieves_when_lookup_is_fast(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("desk_gateway.tools.core.TOOL_DEADLINE_SEC", 1.0)
+    http = RecordingHttp()
+    settings = _settings(docs_lookup_budget_sec=1.0, docs_retrieval_budget_sec=0.4)
+    ctx = _ctx(ragflow=_rag(http, settings), settings=settings)
+    reply = await docs_search(ctx, {"query": "alpha"})
+    assert reply["results"]
+    assert _retrieves(http) == 1
+    assert reply.get("error") != "upstream_timeout"
+
+
 async def test_hindsight_http_timeout_is_a_bank_timeout() -> None:
     class _Hindsight:
         def __init__(self) -> None:

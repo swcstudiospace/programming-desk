@@ -79,12 +79,10 @@ def _docs_budgets(settings: Any) -> tuple[float, float]:
     # not reported as the outer "deadline" error.
     slack = min(0.5, TOOL_DEADLINE_SEC * 0.05) if TOOL_DEADLINE_SEC > 0 else 0.0
     ceiling = max(0.0, TOOL_DEADLINE_SEC - slack)
-    if lookup > ceiling:
-        lookup = ceiling
-    remaining = max(0.0, ceiling - lookup)
-    if retrieval > remaining:
-        retrieval = remaining
-    return lookup, retrieval
+    # Each phase may use up to the tool deadline. Retrieval is shortened later
+    # by the time actually left, so a large unused lookup allowance does not
+    # cancel a search whose dataset ids are already cached.
+    return min(lookup, ceiling), min(retrieval, ceiling)
 
 
 def _wanted_datasets(settings: Any, args: dict[str, Any]) -> list[str]:

@@ -2,7 +2,7 @@
   "task_id": "g2-fast-docs-and-recall",
   "bot": "bot-01-systems-backend",
   "started_at": "2026-10-09T08:01:00Z",
-  "completed_at": "2026-10-09T08:52:43Z",
+  "completed_at": "2026-10-09T09:06:00Z",
   "commands": [
     {
       "cmd": "cd services/desk-gateway && uv run pytest -q tests/test_plane_budgets.py --tb=line -s",
@@ -69,6 +69,12 @@
       "exit_code": 1,
       "duration_s": 0.13,
       "output_tail": "G-2 FAIL — .receipts/bot-01-systems-backend/g2-fast-docs-and-recall.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DESK_REPO_DIR=/workspace DATA_DIR=/tmp/desk-gateway-data uv run pytest -q",
+      "exit_code": 0,
+      "duration_s": 33.51,
+      "output_tail": "668 passed in 32.98s"
     }
   ],
   "claims": [
@@ -118,6 +124,10 @@
       "claim": "Strict receipt check fails because approved_by is absent, which waits for an independent reviewer",
       "evidence_command_index": 10,
       "expects_failure": true
+    },
+    {
+      "claim": "After capping retrieval by time left rather than the full lookup allowance, the desk-gateway pytest suite passes, including a fast lookup with a lookup budget equal to the tool deadline",
+      "evidence_command_index": 11
     }
   ],
   "unverified": [

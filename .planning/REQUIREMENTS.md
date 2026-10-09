@@ -1,20 +1,22 @@
-# Requirements: Milestone v4.7 — Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh
+# Requirements: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
 
-This document defines the requirements for Milestone v4.7 of Programming Desk.
+This document defines the requirements for Milestone v4.8 of Programming Desk.
 
-## 1. Multi-Substrate Hardware Acceleration Engine & Kernel Compilation (Phase 60)
+## 1. Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh (Phase 62)
 
-- [x] **REQ-HW-001**: Substrate Architecture Registry (`HardwareSubstrate`, `SubstrateProfile`, `SubstrateRegistry`) modeling heterogeneous compute backends: CPU (x86_64/ARM NEON), GPU (CUDA/Triton), TPU (XLA/VPU), NPU (Neural Processing Unit), and Photonic/Neuromorphic Co-processors, tracking memory topology, TOPS/W efficiency, latency profiles, and concurrency bounds.
-- [x] **REQ-HW-002**: Multi-Substrate Kernel Compiler (`SubstrateKernelCompiler`, `CompiledKernel`, `CompilationTarget`) compiling high-level mathematical compute graphs and tensor kernels into target-specific intermediate representations (IR) and execution binaries with optimization passes (operator fusion, loop tiling, vectorization).
-- [x] **REQ-HW-003**: Dynamic Substrate Workload Dispatcher (`SubstrateWorkloadDispatcher`, `WorkloadAssignment`) routing compute tasks (dense GEMM, sparse graph traversal, spike event streams, memory-bound activations) to optimal hardware substrates based on power, throughput, and thermal constraints.
-- [x] **REQ-HW-004**: Substrate Thermal & Energy Telemetry Profiler (`SubstrateTelemetryProfiler`) continuously monitoring thermal throttling, watt-hour power consumption, compute saturation, and dynamic power fencing.
-- [x] **REQ-HW-005**: Hardware Substrate REST API endpoints under `/v1/hardware/*` exposing substrate inventory, kernel compilation, workload dispatch, and energy profiling.
+- [x] **REQ-IMM-001**: Threat Pattern & Signature Representation (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) defining structured models for Byzantine injection, latency poisoning, memory corruption, AST escape, and entropy bursts.
+- [x] **REQ-IMM-002**: Immune Antibody & Cryptographic Attestation (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) providing HMAC-SHA256 authenticated mitigation antibodies with peer-to-peer anti-entropy catalog digest synchronization.
+- [x] **REQ-IMM-003**: Genetic Antibody Mutator (`GeneticAntibodyMutator`) mutating indicators, entropy thresholds, and latency bounds across generations to counter zero-day attack variants.
+- [x] **REQ-IMM-004**: Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) applying controlled stress perturbations, evaluating payload threats, scoring post-stress resilience gains, and evolving novel antibodies.
+- [x] **REQ-IMM-005**: Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) managing golden state checkpoint snapshots, clean runtime resets, and post-quarantine rehabilitation graduation.
+- [x] **REQ-IMM-006**: Swarm Immune REST API endpoints under `/v1/immune/mesh/*` exposing antibody listing, antibody creation, perturbation drills, and runtime reconstitution.
 
-## 2. Neuromorphic Spiking Neural Mesh & Event-Driven Synaptic Attestation (Phase 61)
+## 2. Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh (Phase 63)
 
-- [x] **REQ-HW-006**: Neuromorphic Spiking Mesh Simulator (`NeuromorphicMesh`, `SpikingNeuron`, `SynapticConnection`) implementing Leaky Integrate-and-Fire (LIF) / Izhikevich neuron dynamics, membrane potential decay, threshold event firing, and Spike-Timing-Dependent Plasticity (STDP) synaptic weight adaptation.
-- [x] **REQ-HW-007**: Event-Driven Asynchronous Spike Router (`EventSpikeRouter`, `SpikeEvent`) routing sparse discrete spike events across simulated neuromorphic crossbars with microsecond temporal resolution and zero quiescent power overhead.
-- [x] **REQ-HW-008**: Cryptographic Synaptic State & Spike Attestation Ledger (`SynapticAttestationLedger`, `SynapticProofReceipt`) recording immutable weight state transitions, firing rate distributions, and spike train digest hashes using HMAC-SHA256 signatures.
-- [x] **REQ-HW-009**: External Neuromorphic Commitment & Solana Devnet Exporter (`NeuromorphicAnchorExporter`) publishing Merkle roots of synaptic state transitions and spike attestation receipts to Solana devnet targets.
-- [x] **REQ-HW-010**: End-to-End Multi-Substrate & Neuromorphic Compute Verification Drill Simulator (`HardwareNeuromorphicDrillSimulator`) verifying substrate kernel compilation, energy-aware workload routing, LIF spike propagation, STDP weight adaptation, and Solana devnet anchoring.
-- [x] **REQ-HW-011**: Neuromorphic REST API endpoints under `/v1/neuromorphic/*` and `/v1/hardware/drill/simulate` exposing spike event ingestion, mesh step simulation, synaptic ledger receipts, and drill executions.
+- [x] **REQ-DEP-001**: Physical Resource Node Modeling (`PhysicalResourceNode`, `PhysicalResourceType`) tracking heterogeneous hardware capacity (GPU cluster, neuromorphic crossbar, high-bandwidth storage, edge compute) across geographical regions with reputation scoring.
+- [x] **REQ-DEP-002**: Verifiable Resource Orchestration & Leasing (`VerifiableResourceOrchestrator`, `ResourceLease`) dynamically matching consumer reservations to highest-reputation physical nodes with capacity tracking.
+- [x] **REQ-DEP-003**: Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) synthesizing and verifying HMAC-SHA256 attestation proofs binding completed compute units, workload digests, and execution latency.
+- [x] **REQ-DEP-004**: DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) recording immutable lease allocations, PoPW verification events, and capacity settlements with Merkle root computation.
+- [x] **REQ-DEP-005**: Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) anchoring batch Merkle roots and lease proofs to Solana devnet targets.
+- [x] **REQ-DEP-006**: Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`) verifying peer antibody distribution, genetic antibody mutation, runtime reconstitution, physical resource leasing, PoPW verification, and Solana devnet anchoring.
+- [x] **REQ-DEP-007**: DePIN REST API endpoints under `/v1/depin/*` and `/v1/immune/drill/simulate` exposing resource nodes, leasing, PoPW generation, Solana anchor exports, and resilience drills.

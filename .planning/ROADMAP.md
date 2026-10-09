@@ -1,16 +1,18 @@
-# Roadmap: Milestone v4.7 — Autonomous Multi-Substrate Hardware Acceleration & Neuromorphic Compute Mesh
+# Roadmap: Milestone v4.8 — Autonomous Multi-Agent Self-Evolving Immune & DePIN Physical Resource Mesh
 
-## Phase 60: Multi-Substrate Hardware Acceleration Engine & Kernel Compilation
-- [x] Substrate Architecture Registry (`HardwareSubstrate`, `SubstrateProfile`, `SubstrateRegistry`) modeling CPU, GPU, TPU, NPU, and Neuromorphic/Photonic backends with TOPS/W efficiency and memory topologies.
-- [x] Multi-Substrate Kernel Compiler (`SubstrateKernelCompiler`, `CompiledKernel`, `CompilationTarget`) compiling compute graphs and tensor kernels with operator fusion, tiling, and vectorization passes.
-- [x] Dynamic Substrate Workload Dispatcher (`SubstrateWorkloadDispatcher`, `WorkloadAssignment`) routing compute workloads to optimal substrates based on performance and energy constraints.
-- [x] Substrate Thermal & Energy Telemetry Profiler (`SubstrateTelemetryProfiler`) tracking power draw, thermal saturation, and dynamic throttling.
-- [x] REST API routes under `/v1/hardware/*` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 62: Multi-Agent Self-Evolving Immune & Swarm Anti-Fragility Mesh
+- [x] Threat Pattern & Vector Architecture (`ThreatPattern`, `ThreatVectorType`, `ThreatSeverity`, `MitigationAction`) modeling Byzantine injection, latency poisoning, AST escapes, and entropy bursts.
+- [x] Immune Antibody Registry & HMAC-SHA256 Distribution (`ImmuneAntibody`, `MultiSeatAntibodyDistributor`) verifying antibody signatures and synchronizing cross-seat peer catalogs via anti-entropy digests.
+- [x] Genetic Antibody Evolution Engine (`GeneticAntibodyMutator`) generating evolved mitigation generations with perturbed entropy/latency thresholds and variant patterns.
+- [x] Swarm Anti-Fragility Perturbation Engine (`SwarmAntiFragilityEngine`) injecting controlled stress drills, scoring post-perturbation antifragile fitness gains, and synthesizing novel antibodies upon breaches.
+- [x] Runtime Reconstitution & Progressive Rehabilitation (`RuntimeReconstitutionSupervisor`) maintaining golden checkpoint snapshots, seat rollbacks, and score-based rehabilitation graduation.
+- [x] REST API routes under `/v1/immune/mesh/*` in `services/desk-gateway/src/desk_gateway/server.py`.
 
-## Phase 61: Neuromorphic Spiking Neural Mesh & Event-Driven Synaptic Attestation
-- [x] Neuromorphic Spiking Mesh Simulator (`NeuromorphicMesh`, `SpikingNeuron`, `SynapticConnection`) implementing Leaky Integrate-and-Fire (LIF) neuron dynamics and Spike-Timing-Dependent Plasticity (STDP) synaptic learning.
-- [x] Event-Driven Asynchronous Spike Router (`EventSpikeRouter`, `SpikeEvent`) managing sparse discrete spike propagation across simulated crossbars.
-- [x] Cryptographic Synaptic State & Spike Attestation Ledger (`SynapticAttestationLedger`, `SynapticProofReceipt`) recording immutable weight state transitions and spike digests with HMAC-SHA256 signatures.
-- [x] External Neuromorphic Commitment & Solana Devnet Exporter (`NeuromorphicAnchorExporter`) publishing Merkle roots of synaptic state commitments to Solana devnet targets.
-- [x] End-to-End Multi-Substrate & Neuromorphic Compute Verification Drill Simulator (`HardwareNeuromorphicDrillSimulator`).
-- [x] REST API routes under `/v1/neuromorphic/*` and `/v1/hardware/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.
+## Phase 63: Quantum-Safe Decentralized Physical Infrastructure (DePIN) & Verifiable Resource Mesh
+- [x] Physical Resource Architecture (`PhysicalResourceNode`, `PhysicalResourceType`) tracking GPUs, neuromorphic crossbars, high-bandwidth storage, and edge PoW nodes across regions.
+- [x] Verifiable Resource Orchestrator (`VerifiableResourceOrchestrator`, `ResourceLease`) executing capacity-bounded reservations and lease tracking.
+- [x] Cryptographic Proof of Physical Work (`ProofOfPhysicalWork`) generating and verifying HMAC-SHA256 execution attestations binding work units and payload digests.
+- [x] DePIN Append-Only Merkle Ledger (`DePINResourceLedger`, `DePINLedgerReceipt`) calculating binary Merkle tree roots across physical resource events.
+- [x] Solana Devnet DePIN Commitment Exporter (`DePINAnchorExporter`) publishing physical resource commitment proofs to Solana devnet targets.
+- [x] End-to-End Swarm Immune & DePIN Verification Drill Simulator (`SwarmImmuneDePINDrillSimulator`).
+- [x] REST API routes under `/v1/depin/*` and `/v1/immune/drill/simulate` in `services/desk-gateway/src/desk_gateway/server.py`.

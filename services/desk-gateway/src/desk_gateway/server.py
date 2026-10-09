@@ -7423,6 +7423,22 @@ def create_mcp(
         QuantumNonLocalitySolanaAnchorExporter,
         QuantumNonLocalityVerificationDrill,
     )
+    from desk_gateway.quantum_fault_tolerance_mesh import (
+        CorrectionResult,
+        LatticeSurgeryEngine,
+        LatticeSurgeryResult,
+        MagicStateDistillationEngine,
+        MagicStateDistillationSummary,
+        MinimumWeightDecoder,
+        QuantumFaultToleranceMesh,
+        SurfaceCodePatch,
+    )
+    from desk_gateway.quantum_fault_tolerance_anchoring import (
+        FaultToleranceMerkleLedger,
+        FaultToleranceReceipt,
+        FaultToleranceSolanaAnchorExporter,
+        FaultToleranceVerificationDrill,
+    )
 
     qthermo_mesh = QuantumThermodynamicMesh()
     qthermo_ledger = QuantumThermodynamicMerkleLedger()
@@ -7689,6 +7705,121 @@ def create_mcp(
     async def quantum_nonlocality_drill_simulate_route(_request: Request) -> Response:
         drill = QuantumNonLocalityVerificationDrill()
         res = drill.run_drill()
+        return JSONResponse({"ok": True, "drill": res})
+
+    qfault_mesh = QuantumFaultToleranceMesh()
+    qfault_ledger = FaultToleranceMerkleLedger()
+    mcp._qfault_mesh = qfault_mesh  # type: ignore[attr-defined]
+    mcp._qfault_ledger = qfault_ledger  # type: ignore[attr-defined]
+
+    @mcp.custom_route("/v1/quantum/fault/patch/cycle", methods=["POST"])
+    async def quantum_fault_patch_cycle_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        patch_id = body.get("patch_id", "patch_l0")
+        distance = int(body.get("distance", 3))
+        if patch_id not in qfault_mesh.patches:
+            qfault_mesh.create_patch(patch_id, distance=distance)
+
+        res = qfault_mesh.cycle_and_decode(patch_id)
+        rcpt = FaultToleranceReceipt(
+            receipt_id=f"rcpt-cycle-{int(time.time()*1000)}",
+            operation_type="SURFACE_CODE_DECODE",
+            patch_id=patch_id,
+            code_distance=distance,
+            fidelity=1.0 - res.estimated_logical_error_rate,
+            error_rate=res.estimated_logical_error_rate,
+            cycles_or_rounds=1,
+            success=not res.residual_logical_error,
+            extra_data_hash=hashlib.sha256(f"{patch_id}:{res.defects_count}".encode()).hexdigest(),
+        )
+        qfault_ledger.append_receipt(rcpt)
+        return JSONResponse({
+            "ok": True,
+            "correction": dataclasses.asdict(res),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qfault_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/fault/surgery/cnot", methods=["POST"])
+    async def quantum_fault_surgery_cnot_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        ctrl_id = body.get("control_patch_id", "patch_c0")
+        tgt_id = body.get("target_patch_id", "patch_t0")
+        cnot_res = qfault_mesh.execute_logical_cnot(ctrl_id, tgt_id)
+        rcpt = FaultToleranceReceipt(
+            receipt_id=f"rcpt-cnot-{int(time.time()*1000)}",
+            operation_type="LATTICE_SURGERY_CNOT",
+            patch_id=f"{ctrl_id}->{tgt_id}",
+            code_distance=qfault_mesh.default_distance,
+            fidelity=cnot_res.fidelity,
+            error_rate=1.0 - cnot_res.fidelity,
+            cycles_or_rounds=cnot_res.duration_cycles,
+            success=cnot_res.success,
+            extra_data_hash=hashlib.sha256(f"{ctrl_id}:{tgt_id}:{cnot_res.fidelity}".encode()).hexdigest(),
+        )
+        qfault_ledger.append_receipt(rcpt)
+        return JSONResponse({
+            "ok": True,
+            "surgery": dataclasses.asdict(cnot_res),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qfault_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/fault/magic/distill", methods=["POST"])
+    async def quantum_fault_magic_distill_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        target_error = float(body.get("target_error", 1e-6))
+        count = int(body.get("count", 3))
+        distill_res = qfault_mesh.distill_magic_states(target_error=target_error, count=count)
+        rcpt = FaultToleranceReceipt(
+            receipt_id=f"rcpt-distill-{int(time.time()*1000)}",
+            operation_type="MAGIC_DISTILLATION",
+            patch_id="factory_0",
+            code_distance=qfault_mesh.default_distance,
+            fidelity=distill_res.final_fidelity,
+            error_rate=distill_res.final_output_error_rate,
+            cycles_or_rounds=distill_res.rounds_executed,
+            success=distill_res.success,
+            extra_data_hash=hashlib.sha256(f"{distill_res.protocol}:{count}".encode()).hexdigest(),
+        )
+        qfault_ledger.append_receipt(rcpt)
+        return JSONResponse({
+            "ok": True,
+            "distillation": distill_res.to_dict(),
+            "receipt": rcpt.to_dict(),
+            "merkle_root": qfault_ledger.get_merkle_root(),
+        })
+
+    @mcp.custom_route("/v1/quantum/fault/anchor/export", methods=["POST"])
+    async def quantum_fault_anchor_export_route(_request: Request) -> Response:
+        root = qfault_ledger.get_merkle_root()
+        latest_rcpt = qfault_ledger.receipts[-1] if qfault_ledger.receipts else FaultToleranceReceipt(
+            receipt_id="dummy",
+            operation_type="GENESIS",
+            patch_id="genesis",
+            code_distance=3,
+            fidelity=1.0,
+            error_rate=0.0,
+            cycles_or_rounds=0,
+            success=True,
+            extra_data_hash="0"*64,
+        )
+        proof = qfault_ledger.get_proof(len(qfault_ledger.receipts) - 1) if qfault_ledger.receipts else []
+        anchor_payload = FaultToleranceSolanaAnchorExporter.generate_instruction_payload(
+            merkle_root=root,
+            receipt=latest_rcpt,
+            proof=proof,
+        )
+        return JSONResponse({
+            "ok": True,
+            "anchor": anchor_payload,
+            "program": FaultToleranceSolanaAnchorExporter.generate_anchor_program(),
+        })
+
+    @mcp.custom_route("/v1/quantum/fault/drill/simulate", methods=["POST"])
+    async def quantum_fault_drill_simulate_route(_request: Request) -> Response:
+        drill = FaultToleranceVerificationDrill()
+        res = drill.run_all_stages()
         return JSONResponse({"ok": True, "drill": res})
 
     qtimelock_mesh = QuantumTimelockMesh()

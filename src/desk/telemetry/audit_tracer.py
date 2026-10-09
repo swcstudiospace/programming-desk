@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -14,6 +15,58 @@ from typing import Any
 import uuid
 
 from ..security.policy_sandbox import PolicySandbox
+
+
+_GENESIS_PREV_HASH = "0" * 64
+
+
+def _canonical_json(record: dict[str, Any]) -> str:
+    """Canonical JSON of a persisted record, excluding ``record_hash``."""
+    body = {key: value for key, value in record.items() if key != "record_hash"}
+    return json.dumps(body, sort_keys=True, separators=(",", ":"))
+
+
+def _record_hash(record: dict[str, Any]) -> str:
+    """Hex sha256 of ``prev_hash``, a newline, and the record's canonical JSON."""
+    prev_hash = record.get("prev_hash")
+    prefix = prev_hash if isinstance(prev_hash, str) else ""
+    material = f"{prefix}\n{_canonical_json(record)}".encode("utf-8")
+    return hashlib.sha256(material).hexdigest()
+
+
+def _confine_log_path(
+    log_path: str | Path,
+    workspace_root: str | Path | None,
+) -> tuple[Path, PolicySandbox]:
+    """Confine ``log_path`` and return the checked path plus the sandbox used.
+
+    Relative paths, including the default ``.planning/audit.jsonl``, are confined
+    to ``workspace_root`` or the process cwd. Absolute paths stay legal for tests
+    and are confined to the parent of that path, so a symlink leaf is rejected
+    and ``..`` cannot escape that parent.
+    """
+    raw = Path(log_path)
+    if not raw.is_absolute():
+        sandbox = PolicySandbox(workspace_root=workspace_root)
+        return sandbox.validate_path(raw), sandbox
+
+    # Anchor above any ``..`` so PolicySandbox sees the escape instead of
+    # collapsing it into a wider workspace root.
+    if ".." in raw.parts:
+        anchor_parts: list[str] = []
+        for part in raw.parts:
+            if part == "..":
+                break
+            anchor_parts.append(part)
+        anchor = Path(*anchor_parts) if anchor_parts else Path(os.sep)
+        sandbox = PolicySandbox(workspace_root=anchor)
+        return sandbox.validate_path(raw), sandbox
+
+    # Resolve ancestor symlinks, then validate the leaf so a symlink leaf fails
+    # and a lexical mismatch with PolicySandbox.resolve() does not.
+    parent = raw.parent.resolve()
+    sandbox = PolicySandbox(workspace_root=parent)
+    return sandbox.validate_path(parent / raw.name), sandbox
 
 
 @dataclass
@@ -37,7 +90,7 @@ class AuditEvent:
 
 
 class AuditTracer:
-    """Thread-safe, append-only JSONL audit event recorder with integrated credential redaction."""
+    """Thread-safe, append-only JSONL audit log with a tamper-evident hash chain."""
 
     SENSITIVE_KEY_RE = re.compile(
         r"(?:^|[a-z0-9_])(password|passwd|secret|passphrase|credential|credentials|token|key|bearer|auth|authorization|apikey)$",
@@ -49,14 +102,27 @@ class AuditTracer:
         log_path: str | Path = ".planning/audit.jsonl",
         sandbox: PolicySandbox | None = None,
         auto_flush: bool = True,
+        workspace_root: str | Path | None = None,
     ) -> None:
-        self.log_path = Path(log_path).resolve()
-        self.sandbox = sandbox or PolicySandbox()
+        checked, path_sandbox = _confine_log_path(log_path, workspace_root)
+        self._path_sandbox = path_sandbox
+        self.log_path = checked
+        self.sandbox = (
+            sandbox
+            if sandbox is not None
+            else PolicySandbox(workspace_root=workspace_root)
+        )
         self.auto_flush = auto_flush
         self._lock = threading.Lock()
 
         # Ensure directory exists
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def _checked_log_path(self) -> Path:
+        """Re-confine the log path so a swapped symlink leaf is rejected."""
+        checked = self._path_sandbox.validate_path(self.log_path)
+        self.log_path = checked
+        return checked
 
     def _sanitize_value(self, val: Any, key_name: str | None = None) -> Any:
         """Recursively redact sensitive keys and credential values."""
@@ -72,6 +138,38 @@ class AuditTracer:
             return [self._sanitize_value(item, key_name=key_name) for item in val]
         return val
 
+    def _last_link(self, path: Path) -> tuple[str, int]:
+        """Return the last valid line's ``(record_hash, seq)`` inside the write lock."""
+        prev_hash = _GENESIS_PREV_HASH
+        seq = 0
+        if not path.exists():
+            return prev_hash, seq
+
+        with open(path, "rb") as handle:
+            for raw_line in handle:
+                if not raw_line.strip():
+                    continue
+                try:
+                    stripped = raw_line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(entry, dict):
+                    continue
+                record_hash = entry.get("record_hash")
+                if not isinstance(record_hash, str):
+                    continue
+                prev_hash = record_hash
+                record_seq = entry.get("seq")
+                if type(record_seq) is int:
+                    seq = record_seq
+                else:
+                    seq += 1
+        return prev_hash, seq
+
     def record_event(self, event: AuditEvent) -> AuditEvent:
         """Record an audit event to the append-only JSONL log with credential redaction."""
         data = event.to_dict()
@@ -83,20 +181,30 @@ class AuditTracer:
         data["phase"] = self.sandbox.sanitize(data["phase"])
         data["actor"] = self.sandbox.sanitize(data["actor"])
 
-        line = json.dumps(data, separators=(",", ":")) + "\n"
-
         with self._lock:
-            with open(self.log_path, "a", encoding="utf-8") as f:
-                f.write(line)
+            path = self._checked_log_path()
+            prev_hash, last_seq = self._last_link(path)
+            data["seq"] = last_seq + 1
+            data["prev_hash"] = prev_hash
+            data["record_hash"] = _record_hash(data)
+            line = json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n"
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(line)
                 if self.auto_flush:
-                    f.flush()
+                    handle.flush()
                     try:
-                        os.fsync(f.fileno())
+                        os.fsync(handle.fileno())
                     except OSError:
                         # Some filesystems or mock pipes do not support fsync
                         pass
 
-        return event
+        return replace(
+            event,
+            phase=data["phase"],
+            actor=data["actor"],
+            action=data["action"],
+            details=data["details"],
+        )
 
     def emit(
         self,
@@ -120,6 +228,52 @@ class AuditTracer:
         )
         return self.record_event(event)
 
+    def verify_chain(self) -> tuple[bool, str]:
+        """Verify the hash chain.
+
+        Returns ``(True, "ok")`` for an empty log or a fully linked chain.
+        Returns ``(False, reason)`` for a bad hash, a ``prev_hash`` mismatch,
+        a gap in ``seq``, or truncated JSON.
+        """
+        with self._lock:
+            path = self._checked_log_path()
+            if not path.exists():
+                return True, "ok"
+
+            expected_prev = _GENESIS_PREV_HASH
+            expected_seq = 1
+            with open(path, "rb") as handle:
+                for raw_line in handle:
+                    if not raw_line.strip():
+                        continue
+                    try:
+                        stripped = raw_line.decode("utf-8").strip()
+                    except UnicodeDecodeError:
+                        return False, "truncated JSON"
+                    try:
+                        entry = json.loads(stripped)
+                    except json.JSONDecodeError:
+                        return False, "truncated JSON"
+                    if not isinstance(entry, dict):
+                        return False, "truncated JSON"
+
+                    seq = entry.get("seq")
+                    if type(seq) is not int or seq != expected_seq:
+                        return False, "seq gap"
+
+                    prev_hash = entry.get("prev_hash")
+                    if prev_hash != expected_prev:
+                        return False, "prev_hash mismatch"
+
+                    stored_hash = entry.get("record_hash")
+                    if not isinstance(stored_hash, str) or stored_hash != _record_hash(entry):
+                        return False, "bad hash"
+
+                    expected_prev = stored_hash
+                    expected_seq += 1
+
+        return True, "ok"
+
     def read_events(
         self,
         phase: str | None = None,
@@ -128,16 +282,16 @@ class AuditTracer:
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         """Read and filter structured events from the log using bounded memory."""
-        if not self.log_path.exists():
-            return []
-
         use_bounded = limit is not None and limit > 0
         bounded_queue: deque[dict[str, Any]] = deque(maxlen=limit if use_bounded else None)
         unbounded_list: list[dict[str, Any]] = []
 
         with self._lock:
-            with open(self.log_path, "r", encoding="utf-8") as f:
-                for line in f:
+            path = self._checked_log_path()
+            if not path.exists():
+                return []
+            with open(path, "r", encoding="utf-8") as handle:
+                for line in handle:
                     stripped = line.strip()
                     if not stripped:
                         continue

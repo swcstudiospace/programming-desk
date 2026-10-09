@@ -1,5 +1,7 @@
 """Tests for ProcessSupervisor and SupervisedProcessResult."""
 
+import os
+import signal
 import sys
 import time
 import pytest
@@ -69,3 +71,57 @@ def test_supervisor_partial_output_preserved_on_timeout() -> None:
     result = supervisor.run([sys.executable, "-c", script], timeout=0.3)
     assert result.timed_out is True
     assert result.stdout == "progress_before_timeout\n"
+    assert result.stdout_truncated is False
+
+
+def test_supervisor_truncates_stdout_over_max_output_bytes() -> None:
+    supervisor = ProcessSupervisor()
+    result = supervisor.run(
+        [sys.executable, "-c", "import sys; sys.stdout.write('a' * 250)"],
+        max_output_bytes=100,
+    )
+
+    assert result.succeeded
+    assert result.stdout_truncated is True
+    assert result.stdout == "a" * 100
+    assert len(result.stdout.encode("utf-8")) == 100
+    assert result.stderr_truncated is False
+
+
+def test_supervisor_child_sees_empty_github_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GITHUB_TOKEN", "dummy")
+    supervisor = ProcessSupervisor()
+    script = (
+        "import os; "
+        "print(os.environ.get('GITHUB_TOKEN', '')); "
+        "print(os.environ.get('DESK_PLAIN', '')); "
+        "print('path' if os.environ.get('PATH') else 'nopath')"
+    )
+    result = supervisor.run(
+        [sys.executable, "-c", script],
+        env={"GITHUB_TOKEN": "dummy", "DESK_PLAIN": "kept"},
+    )
+
+    assert result.succeeded
+    token_line, marker_line, path_line = result.stdout.splitlines()
+    assert token_line == ""
+    assert "dummy" not in result.stdout
+    assert marker_line == "kept"
+    assert path_line == "path"
+
+
+def test_signal_group_skips_killpg_when_pgid_is_own_group(monkeypatch: pytest.MonkeyPatch) -> None:
+    supervisor = ProcessSupervisor()
+    calls: list[tuple[int, int]] = []
+
+    def record_killpg(pgid: int, sig: int) -> None:
+        calls.append((pgid, int(sig)))
+
+    monkeypatch.setattr(os, "getpgrp", lambda: 4242)
+    monkeypatch.setattr(os, "killpg", record_killpg)
+
+    supervisor._signal_group(4242, signal.SIGTERM)
+    assert calls == []
+
+    supervisor._signal_group(4243, signal.SIGTERM)
+    assert calls == [(4243, int(signal.SIGTERM))]

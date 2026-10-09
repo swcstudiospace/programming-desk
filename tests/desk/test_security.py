@@ -27,6 +27,16 @@ def test_sanitize_tokens() -> None:
     assert git_sha in sanitized
     assert "[REDACTED]" in sanitized
 
+    fine_grained = "github_pat_" + ("ab" * 16)
+    slack = "xoxb-" + ("1" * 12)
+    anthropic = "sk-ant-" + ("c" * 24)
+    private_key = "-----BEGIN " + "PRIVATE KEY-----"
+    extra = sandbox.sanitize(f"{fine_grained} {slack} {anthropic} {private_key}")
+    assert fine_grained not in extra
+    assert slack not in extra
+    assert anthropic not in extra
+    assert "BEGIN PRIVATE KEY" not in extra
+
 
 def test_sanitize_env() -> None:
     sandbox = PolicySandbox()
@@ -69,6 +79,38 @@ def test_validate_path_traversal_rejection() -> None:
         with pytest.raises(BoundarySecurityError) as exc_info:
             sandbox.validate_path("../../etc/shadow")
         assert "Path traversal violation" in str(exc_info.value)
+
+
+def test_validate_path_rejects_symlink_escape() -> None:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        root = Path(tmp_dir).resolve()
+        outside = Path(tempfile.mkdtemp(prefix="desk-outside-"))
+        try:
+            secret = outside / "secret.txt"
+            secret.write_text("hidden", encoding="utf-8")
+            link = root / "alias"
+            link.symlink_to(secret)
+
+            sandbox = PolicySandbox(workspace_root=root)
+            with pytest.raises(BoundarySecurityError) as exc_info:
+                sandbox.validate_path(link)
+            assert "Symlink rejected" in str(exc_info.value)
+
+            nested = root / "sub"
+            nested.mkdir()
+            inner = nested / "jump"
+            inner.symlink_to(outside)
+            with pytest.raises(BoundarySecurityError):
+                sandbox.validate_path(inner / "secret.txt")
+        finally:
+            secret.unlink(missing_ok=True)
+            outside.rmdir()
+
+
+def test_validate_path_rejects_null_byte() -> None:
+    sandbox = PolicySandbox()
+    with pytest.raises(BoundarySecurityError):
+        sandbox.validate_path("safe\x00.txt")
 
 
 def test_validate_command() -> None:

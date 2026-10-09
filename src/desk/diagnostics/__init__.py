@@ -8,6 +8,8 @@ from .doctor_engine import (
     check_ownership_manifest,
     check_planning_directory,
     check_python_version,
+    check_sandbox_roundtrip,
+    check_workbench_imports,
     check_workspace_permissions,
 )
 
@@ -19,5 +21,7 @@ __all__ = [
     "check_ownership_manifest",
     "check_planning_directory",
     "check_python_version",
+    "check_sandbox_roundtrip",
+    "check_workbench_imports",
     "check_workspace_permissions",
 ]

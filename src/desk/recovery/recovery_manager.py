@@ -11,6 +11,17 @@ import tempfile
 import traceback
 from typing import Any, Callable
 
+from ..security.policy_sandbox import BoundarySecurityError, PolicySandbox
+
+
+def _sandbox_for_path(path: Path) -> PolicySandbox:
+    """Confine an absolute path to its parent and a relative path to cwd."""
+    if path.is_absolute():
+        workspace_root = path.parent
+    else:
+        workspace_root = Path.cwd()
+    return PolicySandbox(workspace_root=workspace_root)
+
 
 @dataclass
 class CompensationAction:
@@ -63,12 +74,30 @@ class TransactionContext:
         self._compensations.append(CompensationAction(name=action_name, action=action, args=args, kwargs=kwargs))
 
     def backup_file(self, file_path: str | Path) -> Path:
-        """Create a backup of a file to be automatically restored if transaction fails."""
-        target = Path(file_path).resolve()
+        """Create a backup of a file to be automatically restored if transaction fails.
+
+        Symlink targets are rejected before any copy. ``validate_path`` errors,
+        including ``BoundarySecurityError``, propagate to the caller.
+        """
+        raw = Path(file_path)
+        sandbox = _sandbox_for_path(raw)
+
+        # is_symlink() is false for a missing leaf and true for a dangling link.
+        # A null byte must reach validate_path, which raises BoundarySecurityError;
+        # stat'ing it here would raise ValueError instead.
+        leaf_is_symlink = False
+        if "\x00" not in os.fspath(raw):
+            leaf_is_symlink = raw.is_symlink()
+
+        target = sandbox.validate_path(raw)
+        if leaf_is_symlink or target.is_symlink():
+            raise BoundarySecurityError(f"Symlink rejected as backup target: '{target}'")
+
         if not target.exists():
-            # If file doesn't exist yet, compensation is to delete it if created
+            # If file doesn't exist yet, compensation is to delete it if created.
+            # unlink() removes a symlink itself and does not follow it.
             def _remove_created() -> None:
-                if target.exists():
+                if target.is_symlink() or target.exists():
                     target.unlink()
 
             self.register_compensation(_remove_created, name=f"delete_created_{target.name}")
@@ -78,13 +107,25 @@ class TransactionContext:
             self._backup_dir = Path(tempfile.mkdtemp(prefix="desk_tx_backup_"))
 
         backup_copy = self._backup_dir / f"{target.name}.bak.{len(self._file_backups)}"
-        shutil.copy2(target, backup_copy)
+        if target.is_symlink():
+            raise BoundarySecurityError(f"Symlink rejected as backup target: '{target}'")
+        shutil.copy2(target, backup_copy, follow_symlinks=False)
         self._file_backups[target] = backup_copy
 
         def _restore() -> None:
-            if backup_copy.exists():
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(backup_copy, target)
+            if target.is_symlink():
+                raise BoundarySecurityError(f"Refusing to restore through symlink: '{target}'")
+            _sandbox_for_path(target).validate_path(target)
+            if backup_copy.is_symlink():
+                raise BoundarySecurityError(
+                    f"Refusing to restore from symlink backup: '{backup_copy}'"
+                )
+            if not backup_copy.exists():
+                return
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.is_symlink():
+                raise BoundarySecurityError(f"Refusing to restore through symlink: '{target}'")
+            shutil.copy2(backup_copy, target, follow_symlinks=False)
 
         self.register_compensation(_restore, name=f"restore_{target.name}")
         return target

@@ -3400,6 +3400,11 @@ def create_mcp(
     swarm_balancer = SwarmSeatLoadBalancer()
     setattr(mcp, "_swarm_balancer", swarm_balancer)
 
+    # Milestone v2.8 (Phase 23): Autonomous Hierarchical Delegation & Byzantine Consensus Receipts
+    from desk_gateway.swarm_delegation import SwarmDelegationMesh
+    delegation_mesh = SwarmDelegationMesh()
+    setattr(mcp, "_delegation_mesh", delegation_mesh)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -3472,6 +3477,111 @@ def create_mcp(
         seat_id = body.get("seat_id", "lead")
         success = swarm_balancer.reset_breaker(seat_id)
         return JSONResponse({"ok": True, "seat_id": seat_id, "reset": success})
+
+    # Hierarchical Subagent Delegation (Phase 23)
+    @mcp.custom_route("/v1/swarm/delegation/create", methods=["POST"])
+    async def swarm_delegation_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", f"task-{secrets.token_hex(4)}")
+        parent_task_id = body.get("parent_task_id")
+        title = body.get("title", "delegated_task")
+        delegator_seat = body.get("delegator_seat", "lead")
+        delegatee_seat = body.get("delegatee_seat", "systems")
+        payload = body.get("payload", {})
+        try:
+            if parent_task_id:
+                node = delegation_mesh.decompose_subtask(
+                    parent_task_id=parent_task_id,
+                    subtask_id=task_id,
+                    title=title,
+                    delegator_seat=delegator_seat,
+                    delegatee_seat=delegatee_seat,
+                    payload=payload,
+                )
+            else:
+                node = delegation_mesh.create_root_task(
+                    task_id=task_id,
+                    title=title,
+                    delegator_seat=delegator_seat,
+                    delegatee_seat=delegatee_seat,
+                    payload=payload,
+                )
+            receipt = delegation_mesh.offer_delegation(
+                task_id=task_id,
+                delegator_seat=delegator_seat,
+                delegatee_seat=delegatee_seat,
+            )
+            return JSONResponse({
+                "ok": True,
+                "task_id": node.task_id,
+                "parent_task_id": node.parent_task_id,
+                "depth": node.depth,
+                "delegator_signature": receipt.delegator_signature,
+                "state": receipt.state.value,
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/accept", methods=["POST"])
+    async def swarm_delegation_accept_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        delegatee_seat = body.get("delegatee_seat", "")
+        signature = body.get("signature")
+        try:
+            receipt = delegation_mesh.accept_delegation(task_id, delegatee_seat, signature)
+            return JSONResponse({
+                "ok": True,
+                "task_id": receipt.task_id,
+                "delegatee_signature": receipt.delegatee_signature,
+                "state": receipt.state.value,
+            })
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/complete", methods=["POST"])
+    async def swarm_delegation_complete_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        delegatee_seat = body.get("delegatee_seat", "")
+        try:
+            receipt = delegation_mesh.complete_delegation(task_id, delegatee_seat)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/dispute", methods=["POST"])
+    async def swarm_delegation_dispute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        reporter_seat = body.get("reporter_seat", "lead")
+        reason = body.get("reason", "Byzantine anomaly detected")
+        try:
+            receipt = delegation_mesh.raise_dispute(task_id, reporter_seat, reason)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/arbitrate", methods=["POST"])
+    async def swarm_delegation_arbitrate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        task_id = body.get("task_id", "")
+        ruling = body.get("ruling", "Task revoked and reclaimed to pool")
+        arbitrator_seat = body.get("arbitrator_seat", "lead")
+        try:
+            receipt = delegation_mesh.arbitrate_dispute(task_id, ruling, arbitrator_seat)
+            return JSONResponse({"ok": True, "task_id": receipt.task_id, "state": receipt.state.value, "ruling": receipt.ruling})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/swarm/delegation/audit/{root_task_id}", methods=["GET"])
+    async def swarm_delegation_audit_route(request: Request) -> Response:
+        root_task_id = request.path_params.get("root_task_id", "")
+        try:
+            proof = delegation_mesh.generate_tree_audit_receipt(root_task_id)
+            return JSONResponse({"ok": True, **proof})
+        except ValueError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=404)
 
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
@@ -3699,6 +3809,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "downsampler": getattr(mcp, "_downsampler", None),
         "audit_logger": getattr(mcp, "_audit_logger", None),
         "swarm_balancer": getattr(mcp, "_swarm_balancer", None),
+        "delegation_mesh": getattr(mcp, "_delegation_mesh", None),
     }
     return app, settings
 

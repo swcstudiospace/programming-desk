@@ -502,3 +502,21 @@ def test_two_processes_keep_one_audit_chain() -> None:
         records = tracer.read_events()
         assert len(records) == 40
         assert [row["seq"] for row in records] == list(range(1, 41))
+
+
+def test_read_events_filters_correlation_id() -> None:
+    import tempfile
+    from pathlib import Path
+
+    from src.desk.telemetry import AuditTracer
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tracer = AuditTracer(log_path=Path(tmp_dir) / "audit.jsonl")
+        tracer.emit(action="first", phase="v8.3", correlation_id="corr-one-1")
+        tracer.emit(action="second", phase="v8.3", correlation_id="corr-two-22")
+        tracer.emit(action="third", phase="v8.3", correlation_id="corr-one-1")
+
+        kept = tracer.read_events(correlation_id="corr-one-1")
+        assert [event["seq"] for event in kept] == [1, 3]
+        assert all(event["correlation_id"] == "corr-one-1" for event in kept)
+        assert [event["seq"] for event in tracer.read_events()] == [1, 2, 3]

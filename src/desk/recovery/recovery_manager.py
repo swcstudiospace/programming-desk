@@ -183,10 +183,43 @@ class RecoveryManager:
     def __init__(self) -> None:
         self.history: list[TransactionReport] = []
 
-    def transaction(self, name: str, reraise: bool = True):
-        """Context manager creating a transactional recovery boundary."""
+    def transaction(
+        self,
+        name: str,
+        reraise: bool = True,
+        correlation_id: str | None = None,
+    ):
+        """Context manager creating a transactional recovery boundary.
+
+        Commit and rollback outcomes are appended to the audit log with the
+        transaction name, file count, and rollback counts. Audit failures
+        never break the transaction itself.
+        """
         mgr = self
 
+        def _emit_tx_audit(
+            action: str,
+            tx: TransactionContext,
+            executed: int = 0,
+            failed: int = 0,
+            error: str | None = None,
+        ) -> None:
+            try:
+                from ..telemetry.audit_tracer import AuditTracer
+
+                tracer = AuditTracer()
+                tracer.emit(
+                    action=action,
+                    phase="recovery",
+                    transaction=name,
+                    files=len(tx._file_backups),
+                    rollbacks_executed=executed,
+                    rollbacks_failed=failed,
+                    error=error,
+                    correlation_id=correlation_id,
+                )
+            except Exception:
+                pass
         class _TxContextManager:
             def __enter__(self) -> TransactionContext:
                 self.tx = TransactionContext(name=name, manager=mgr)
@@ -210,6 +243,13 @@ class RecoveryManager:
                         rollbacks_failed=failed,
                     )
                     mgr.history.append(report)
+                    _emit_tx_audit(
+                        "transaction_rollback",
+                        self.tx,
+                        executed=executed,
+                        failed=failed,
+                        error=str(exc_val)[:500],
+                    )
                     return not reraise  # Suppress exception if reraise is False
                 elif self.tx.is_rolled_back:
                     # Transaction was explicitly rolled back inside the block
@@ -223,6 +263,13 @@ class RecoveryManager:
                         rollbacks_failed=self.tx.rollbacks_failed,
                     )
                     mgr.history.append(report)
+                    _emit_tx_audit(
+                        "transaction_rollback",
+                        self.tx,
+                        executed=self.tx.rollbacks_executed,
+                        failed=self.tx.rollbacks_failed,
+                        error="explicit rollback",
+                    )
                     return False
                 else:
                     self.tx.commit()
@@ -233,6 +280,7 @@ class RecoveryManager:
                         finished_at=finished_at,
                     )
                     mgr.history.append(report)
+                    _emit_tx_audit("transaction_commit", self.tx)
                     return False
 
         return _TxContextManager()

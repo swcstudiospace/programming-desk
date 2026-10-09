@@ -148,3 +148,22 @@ def test_validate_command() -> None:
 
     with pytest.raises(BoundarySecurityError):
         sandbox.validate_command(["python3", "test.py"], allowed_executables=["git", "node"])
+
+
+def test_validate_command_accepts_versioned_python() -> None:
+    sandbox = PolicySandbox()
+
+    # python3.11 is the same family as the allowlisted python3.
+    cmd = ["python3.11", "-c", "print(1)"]
+    assert sandbox.validate_command(cmd, allowed_executables=["python3"]) == cmd
+    cmd = ["python3.11.2", "script.py"]
+    assert sandbox.validate_command(cmd, allowed_executables=["python3"]) == cmd
+
+    # A trailing non-numeric suffix is not a version: still rejected.
+    with pytest.raises(BoundarySecurityError):
+        sandbox.validate_command(
+            ["python3.11-evil", "script.py"], allowed_executables=["python3"]
+        )
+    # An unrelated runtime is still rejected.
+    with pytest.raises(BoundarySecurityError):
+        sandbox.validate_command(["ruby", "script.rb"], allowed_executables=["python3"])

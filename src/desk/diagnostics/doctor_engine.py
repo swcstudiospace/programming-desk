@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from enum import Enum
 import importlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -408,6 +409,105 @@ def check_audit_chain(root: Path) -> DiagnosticCheckResult:
     )
 
 
+def check_session_state(root: Path) -> DiagnosticCheckResult:
+    """Validate the workbench session file without mutating it.
+
+    A missing session file passes. A symlink leaf, undecodable bytes,
+    invalid JSON, or a bad schema fails. A present session whose
+    correlation id is malformed, or a STATE.md with an unbalanced
+    desk-session region, warns. The probe never quarantines or writes.
+    """
+    session_path = root / ".planning" / "session.json"
+    state_path = root / ".planning" / "STATE.md"
+    if session_path.is_symlink():
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message="Session file is a symlink and was not followed",
+            fix_hint="Replace .planning/session.json with a regular file",
+        )
+    if not session_path.exists():
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.PASS,
+            message="No session file present",
+            details={"session_path": str(session_path)},
+        )
+    try:
+        raw = session_path.read_bytes()
+    except OSError as exc:
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message=f"Session file could not be read: {exc}",
+            fix_hint="Restore .planning/session.json from a known-good copy",
+        )
+    try:
+        data = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message=f"Session file is not valid UTF-8 JSON: {exc}",
+            fix_hint="Delete the corrupt file or restore it from a known-good copy",
+        )
+    if not isinstance(data, dict):
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message="Session file must contain a JSON object",
+            fix_hint="Restore .planning/session.json from a known-good copy",
+        )
+    if data.get("schema_version") != 1:
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message="Session file has an unsupported schema_version",
+            fix_hint="Re-initialize the session with `desk session --init`",
+        )
+    session_id = data.get("session_id")
+    if not isinstance(session_id, str) or not session_id:
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.FAIL,
+            message="Session file is missing a valid session_id",
+            fix_hint="Re-initialize the session with `desk session --init`",
+        )
+    correlation_id = data.get("correlation_id")
+    if correlation_id is not None and (
+        not isinstance(correlation_id, str) or len(correlation_id) < 8
+    ):
+        return DiagnosticCheckResult(
+            name="session_state",
+            status=CheckStatus.WARN,
+            message="Session correlation id is malformed",
+            fix_hint="Re-initialize the session to mint a fresh correlation id",
+            details={"session_id": session_id},
+        )
+    if state_path.is_file():
+        try:
+            state_text = state_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            state_text = ""
+        if (
+            "<!-- desk-session:start -->" in state_text
+            and "<!-- desk-session:end -->" not in state_text
+        ):
+            return DiagnosticCheckResult(
+                name="session_state",
+                status=CheckStatus.WARN,
+                message="STATE.md has a session start marker and no end marker",
+                fix_hint="Repair the markers; sync refuses to rewrite such a file",
+                details={"session_id": session_id},
+            )
+    return DiagnosticCheckResult(
+        name="session_state",
+        status=CheckStatus.PASS,
+        message="Session file parses and markers are balanced",
+        details={"session_id": session_id},
+    )
+
+
 class DoctorEngine:
     """Extensible workspace diagnostic supervisor."""
 
@@ -426,6 +526,7 @@ class DoctorEngine:
             check_workbench_imports,
             check_sandbox_roundtrip,
             check_audit_chain,
+            check_session_state,
         ]
 
     def register_probe(self, probe: DiagnosticProbe) -> None:

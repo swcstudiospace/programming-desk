@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import atexit
 import os
 from pathlib import Path
 import random
@@ -45,6 +46,7 @@ class ProcessSupervisor:
         sandbox: PolicySandbox | None = None,
         workspace_root: str | Path | None = None,
         max_output_bytes: int = 1_048_576,
+        register_exit_cleanup: bool = True,
     ) -> None:
         self.default_timeout = default_timeout
         self.sandbox = sandbox or PolicySandbox(workspace_root=workspace_root)
@@ -52,6 +54,11 @@ class ProcessSupervisor:
         self.max_output_bytes = max_output_bytes
         self._active_processes: dict[int, subprocess.Popen[str]] = {}
         self._lock = threading.Lock()
+        if register_exit_cleanup:
+            # A supervisor that dies with children still tracked must not
+            # orphan their process groups. The finalizer only signals groups
+            # that are still alive; an empty table is a no-op.
+            atexit.register(self.shutdown_all)
 
     def _signal_group(self, pgid: int, sig: int) -> bool:
         """Signal a process group, never this supervisor's own group.

@@ -140,3 +140,37 @@ def test_signal_group_skips_killpg_when_pgid_is_own_group(monkeypatch: pytest.Mo
 
     supervisor._signal_group(4243, signal.SIGTERM)
     assert calls == [(4243, int(signal.SIGTERM))]
+
+
+def test_supervisor_registers_exit_cleanup(monkeypatch) -> None:
+    import atexit as atexit_module
+
+    seen: list = []
+    monkeypatch.setattr(atexit_module, "register", seen.append)
+    supervisor = ProcessSupervisor(register_exit_cleanup=True)
+    assert seen == [supervisor.shutdown_all]
+
+    seen.clear()
+    ProcessSupervisor(register_exit_cleanup=False)
+    assert seen == []
+
+
+def test_exit_cleanup_terminates_tracked_process() -> None:
+    import subprocess
+
+    supervisor = ProcessSupervisor(register_exit_cleanup=False)
+    proc = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        start_new_session=True,
+    )
+    try:
+        with supervisor._lock:
+            supervisor._active_processes[proc.pid] = proc
+        supervisor.shutdown_all()
+        assert proc.poll() is not None
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.wait(timeout=10)

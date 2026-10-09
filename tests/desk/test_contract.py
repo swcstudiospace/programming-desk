@@ -14,6 +14,12 @@ from src.desk.supervision import ProcessSupervisor
 from src.desk.telemetry import AuditTracer
 
 
+@pytest.fixture(autouse=True)
+def _isolated_audit_cwd(monkeypatch, tmp_path):
+    """Transactions emit audit records; keep them out of the real .planning."""
+    monkeypatch.chdir(tmp_path)
+
+
 def test_hardened_workbench_contract() -> None:
     with tempfile.TemporaryDirectory() as tmp_dir:
         root = Path(tmp_dir).resolve()

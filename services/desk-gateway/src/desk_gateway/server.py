@@ -3463,6 +3463,11 @@ def create_mcp(
     remote_execution_supervisor = MCPRemoteExecutionSupervisor(registry=mcp_mesh_registry)
     setattr(mcp, "_remote_execution_supervisor", remote_execution_supervisor)
 
+    # Milestone v3.2 (Phase 30): Distributed Sensory Memory Graph & Cross-Modal Embeddings
+    from desk_gateway.memory_graph import SensoryMemoryGraphEngine, ModalType, GraphNode, GraphEdge
+    memory_graph_engine = SensoryMemoryGraphEngine()
+    setattr(mcp, "_memory_graph_engine", memory_graph_engine)
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4099,6 +4104,121 @@ def create_mcp(
         except Exception as exc:
             return JSONResponse({"ok": False, "error": f"Invalid receipt format: {exc}"}, status_code=400)
 
+    # Multi-Modal Sensory Memory Graph Endpoints (Phase 30)
+    @mcp.custom_route("/v1/graph/node/create", methods=["POST"])
+    async def graph_node_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        node_id = body.get("node_id")
+        if not node_id:
+            return JSONResponse({"ok": False, "error": "node_id is required"}, status_code=400)
+        modality = body.get("modality", "text")
+        label = body.get("label", "")
+        content = body.get("content", "")
+        embedding = body.get("embedding", [])
+        metadata = body.get("metadata", {})
+        partition_id = body.get("partition_id", "default")
+        attention_score = float(body.get("attention_score", 1.0))
+
+        try:
+            node = memory_graph_engine.add_node(
+                node_id=node_id,
+                modality=modality,
+                label=label,
+                content=content,
+                embedding=embedding,
+                metadata=metadata,
+                partition_id=partition_id,
+                attention_score=attention_score,
+            )
+            return JSONResponse({"ok": True, "node": node.to_dict()})
+        except ValueError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/graph/edge/create", methods=["POST"])
+    async def graph_edge_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        edge_id = body.get("edge_id")
+        source_id = body.get("source_id")
+        target_id = body.get("target_id")
+        relation = body.get("relation", "RELATED_TO")
+        weight = float(body.get("weight", 1.0))
+        metadata = body.get("metadata", {})
+
+        if not edge_id or not source_id or not target_id:
+            return JSONResponse({"ok": False, "error": "edge_id, source_id, and target_id are required"}, status_code=400)
+
+        try:
+            edge = memory_graph_engine.add_edge(
+                edge_id=edge_id,
+                source_id=source_id,
+                target_id=target_id,
+                relation=relation,
+                weight=weight,
+                metadata=metadata,
+            )
+            return JSONResponse({"ok": True, "edge": edge.to_dict()})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/graph/search/semantic", methods=["POST"])
+    async def graph_search_semantic_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        embedding = body.get("query_embedding", [])
+        if not embedding:
+            return JSONResponse({"ok": False, "error": "query_embedding is required"}, status_code=400)
+        top_k = int(body.get("top_k", 10))
+        modality = body.get("modality")
+        partition_id = body.get("partition_id")
+        min_score = float(body.get("min_score", 0.0))
+        apply_decay = bool(body.get("apply_decay", True))
+
+        results = memory_graph_engine.search_semantic(
+            query_embedding=embedding,
+            top_k=top_k,
+            modality=modality,
+            partition_id=partition_id,
+            min_score=min_score,
+            apply_decay=apply_decay,
+        )
+        return JSONResponse({
+            "ok": True,
+            "count": len(results),
+            "results": [
+                {
+                    "node": r.node.to_dict(),
+                    "raw_similarity": r.raw_similarity,
+                    "decayed_score": r.decayed_score,
+                    "temporal_factor": r.temporal_factor,
+                }
+                for r in results
+            ],
+        })
+
+    @mcp.custom_route("/v1/graph/traverse/{node_id}", methods=["GET"])
+    async def graph_traverse_route(request: Request) -> Response:
+        node_id = request.path_params.get("node_id", "")
+        max_depth = int(request.query_params.get("max_depth", 2))
+        partition_id = request.query_params.get("partition_id")
+        direction = request.query_params.get("direction", "out")
+        try:
+            traversal = memory_graph_engine.traverse(
+                start_node_id=node_id,
+                max_depth=max_depth,
+                partition_id=partition_id,
+                direction=direction,
+            )
+            return JSONResponse({"ok": True, **traversal})
+        except KeyError as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+
+    @mcp.custom_route("/v1/graph/commit", methods=["POST"])
+    async def graph_commit_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        commit_id = body.get("commit_id")
+        receipt = memory_graph_engine.commit_state(commit_id=commit_id)
+        valid = memory_graph_engine.verify_commitment(receipt)
+        return JSONResponse({"ok": True, "valid": valid, "receipt": receipt.to_dict()})
+
     @mcp.custom_route("/v1/mesh/streaming/session/open", methods=["POST"])
     async def mesh_streaming_open_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4337,6 +4457,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "compliance_verifier": getattr(mcp, "_compliance_verifier", None),
         "mcp_mesh_registry": getattr(mcp, "_mcp_mesh_registry", None),
         "remote_execution_supervisor": getattr(mcp, "_remote_execution_supervisor", None),
+        "memory_graph_engine": getattr(mcp, "_memory_graph_engine", None),
     }
     return app, settings
 

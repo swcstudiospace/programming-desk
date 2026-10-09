@@ -1,0 +1,111 @@
+{
+  "task_id": "dragonfly-limiter-pool",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-10-09T14:54:00Z",
+  "completed_at": "2026-10-09T15:55:00Z",
+  "commands": [
+    {
+      "cmd": "cd /workspace/services/desk-gateway && /tmp/gw-venv/bin/python -m pytest tests/test_dragonfly_limiter.py tests/test_edge_routing.py tests/test_chaos_recovery.py -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 3.0,
+      "output_tail": "34 passed in 3.37s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 9 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 9 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.28,
+      "output_tail": "299 passed in 9.28s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-01-systems-backend/dragonfly-limiter-pool.json",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Slow checks stay under one second, a refused Dragonfly opens the breaker, a cold connect warms outside the request, pool contention leaves the breaker closed, and /health stays ok",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Ownership manifest is valid",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The changed files are owned by bot-01-systems-backend",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Secret scan finds no secrets in the diff",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Gate unit tests pass",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Rollback gate finds no deployment or destructive command",
+      "evidence_command_index": 7
+    }
+  ],
+  "unverified": [
+    "No live Dragonfly and no VPS. The 500 ms startup connect default was not timed against the measured first connect of about 1 s. Raise DRAGONFLY_CONNECT_TIMEOUT_MS if the startup probe cannot finish.",
+    "Pre-change failure was observed once in this session against edge.py at 81a6d3e: one slow check did not return within 0.4 s, and five checks opened five clients. That check replaced the file briefly and is not a re-runnable receipt command.",
+    "The full desk-gateway suite is not green in this VM: many tests mkdir /var/lib/desk-gateway and raise PermissionError. That failure is environmental and is not evidence about this change.",
+    "Ming approved merging in the Desk Lead chat on 2026-10-10 at 03:37 AEDT. approved_by is human:SomeRandmGuyy. The authoring seat did not self-approve. This pull request stays a draft. Lead marks ready and merges.",
+    "Greptile scored 5/5 on 562b441. The score is in the Greptile summary block on the draft pull request. The Apex review check on that commit completed with zero comments."
+  ],
+  "files_changed": [
+    "services/desk-gateway/README.md",
+    "services/desk-gateway/src/desk_gateway/config.py",
+    "services/desk-gateway/src/desk_gateway/edge.py",
+    "services/desk-gateway/src/desk_gateway/server.py",
+    "services/desk-gateway/src/desk_gateway/tools/__init__.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
+    "services/desk-gateway/tests/test_dragonfly_limiter.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "approved_by": "human:SomeRandmGuyy"
+}

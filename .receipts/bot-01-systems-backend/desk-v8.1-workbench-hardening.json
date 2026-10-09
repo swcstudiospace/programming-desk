@@ -1,0 +1,113 @@
+{
+  "task_id": "desk-v8.1-workbench-hardening",
+  "bot": "bot-01-systems-backend",
+  "branch": "bot-01-systems-backend/v8.1-workbench-hardening",
+  "approved_by": "bot-06-quality-security",
+  "approval_requested_from": "bot-06-quality-security",
+  "started_at": "2026-10-09T11:56:00Z",
+  "completed_at": "2026-10-09T12:15:31Z",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest tests/desk -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 1.97,
+      "output_tail": "66 passed in 1.67s"
+    },
+    {
+      "cmd": "python3 desk_cli.py doctor --json",
+      "exit_code": 0,
+      "duration_s": 0.14,
+      "output_tail": "\"overall_status\": \"PASS\""
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.10,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 17 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.11,
+      "output_tail": "G-3 PASS — 17 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.09,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.18,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 15.05,
+      "output_tail": "299 passed in 14.74s"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Workbench unit tests under tests/desk pass",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk doctor reports overall_status PASS on this checkout",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Changed paths are owned by bot-01-systems-backend",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Secret scan of the diff passes",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "ci/tests pass",
+      "evidence_command_index": 6
+    }
+  ],
+  "unverified": [
+    "GitHub Actions has not run this branch yet",
+    "The workbench pytest job is not in this change; .github/workflows is owned by infrastructure",
+    "Process-group termination was exercised by the unit tests on this Linux host only",
+    "Planning roadmap and state files were not updated here; .planning is owned by the lead seat",
+    "The ownership and secret scans above ran before this receipt file was committed"
+  ],
+  "files_changed": [
+    "src/desk/assertions/milestone_verifier.py",
+    "src/desk/cli.py",
+    "src/desk/diagnostics/__init__.py",
+    "src/desk/diagnostics/doctor_engine.py",
+    "src/desk/recovery/recovery_manager.py",
+    "src/desk/security/policy_sandbox.py",
+    "src/desk/session/session_store.py",
+    "src/desk/supervision/process_supervisor.py",
+    "src/desk/telemetry/audit_tracer.py",
+    "tests/desk/test_assertions.py",
+    "tests/desk/test_contract.py",
+    "tests/desk/test_diagnostics.py",
+    "tests/desk/test_recovery.py",
+    "tests/desk/test_security.py",
+    "tests/desk/test_session.py",
+    "tests/desk/test_supervision.py",
+    "tests/desk/test_telemetry.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

@@ -54,6 +54,11 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | `INTAKE_TOKENS` | `origin:token,...` accepted on `/v1/intake` |
 | `SUBSTRATE_URL/TOKEN`, `AGENT_BUS_URL/TOKEN` | Local upstreams on the VPS |
 | `HINDSIGHT_URL/API_KEY`, `RAGFLOW_URL/API_KEY`, `GREPTIME_*`, `SUBSTRATE_PG_URL`, `DRAGONFLY_URL` | Data planes via the per-project Tailscale forwarders |
+| `DRAGONFLY_CONNECT_TIMEOUT_MS` | Startup connect only. Default `500`. A seat request does not wait on this |
+| `DRAGONFLY_COMMAND_TIMEOUT_MS` | Socket timeout and budget for one cache command. Default `250`. Rate-limit checks use `DRAGONFLY_RATE_LIMIT_BUDGET_MS` instead |
+| `DRAGONFLY_RATE_LIMIT_BUDGET_MS` | Cap on one rate-limit check. Default `150`. The local token bucket answers when it expires |
+| `DRAGONFLY_HEALTH_CHECK_INTERVAL_SEC` | Idle-connection check on the shared pool. Default `30`. `DRAGONFLY_SOCKET_KEEPALIVE` defaults on |
+| `DRAGONFLY_BREAKER_FAILURES`, `DRAGONFLY_BREAKER_RECOVERY_SEC` | Shared circuit breaker. Defaults `3` failures and `30` seconds. While it is open, rate limits stay local and do no network I/O |
 | `RAGFLOW_DATASETS` | Comma-separated dataset names to search. Unset means `programming-desk,agent-substrate`. A name RAGflow does not have is reported as missing and is not fatal |
 | `RAGFLOW_DATASET_TTL_SEC` | How long a dataset name-to-id entry is reused. Default `600`. A miss or an unknown-dataset retrieval refreshes once |
 | `DOCS_LOOKUP_BUDGET_SEC` | Cap on a RAGflow dataset lookup, including that one refresh. Default `4` |
@@ -61,6 +66,8 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | `RECALL_BANK_TIMEOUT_SEC` | Per-bank Hindsight recall budget. Default `6`. A slow bank is `timeout`; the others still return |
 | `RAILWAY_*`, `VERCEL_*`, `GREPTILE_*`, `GITHUB_TOKEN`, `PLAY_ACCESS_TOKEN`, `ASC_*` | Seat platform tools |
 | `PACK_<APP>_API_BASE` | Product API base per tool pack |
+
+`DRAGONFLY_URL` unset leaves rate limits on the in-memory bucket. One process shares one pooled client. Startup connect and ping run outside the request budget, and a failed warm-up is retried in the background until the breaker opens. A seat request never waits on that connect. The token-bucket script is loaded once. Eight commands can be in flight; a ninth answers locally and does not open the breaker. `/health` stays `ok` when Dragonfly is down and reports `edge.limiter.mode` as `dragonfly`, `local`, or `breaker_open`.
 
 ## Run locally
 

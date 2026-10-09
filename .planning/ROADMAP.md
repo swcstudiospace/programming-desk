@@ -2,6 +2,7 @@
 
 ## Milestones
 
+- 🟡 **v3.4 Autonomous Swarm Self-Healing & Active Immune Defense** — Phases 34-35 (in progress)
 - ✅ **v3.3 Decentralized Multi-Desk Governance & Byzantine Consensus Voting** — Phases 32-33 (shipped 2026-10-10) — [Archive](milestones/v3.3-ROADMAP.md)
 - ✅ **v3.2 Multi-Modal Sensory Memory Graph & Dynamic Context Compression** — Phases 30-31 (shipped 2026-10-10) — [Archive](milestones/v3.2-ROADMAP.md)
 - ✅ **v3.1 Model Context Protocol (MCP) Dynamic Mesh & Cross-Desk Remote Tool Invocation** — Phases 28-29 (shipped 2026-10-10) — [Archive](milestones/v3.1-ROADMAP.md)
@@ -18,6 +19,13 @@
 - ✅ **v2.0 Desk v2** — Phases 1-7 (shipped 2026-10-08) — [Archive](milestones/v2.0-ROADMAP.md)
 
 ## Phases
+
+### Active Milestone: v3.4 Autonomous Swarm Self-Healing & Active Immune Defense
+
+- [x] **Phase 34: Anomaly Detection & Autonomous Seat Quarantine** (1/1 plans completed)
+  - Plan 34-01: Real-time behavioral anomaly detection, automated seat quarantine state machine, synthetic shadow execution sandboxing, capability pruning, and federated HMAC quarantine receipts.
+- [ ] **Phase 35: Self-Healing Reconstitution & Immune Memory Attestation** (0/1 plans completed)
+  - Plan 35-01: Autonomous seat reconstitution, tamper-evident immune memory ledger, proactive federated antibody distribution, and post-quarantine rehabilitation drills.
 
 ### Completed Milestones
 

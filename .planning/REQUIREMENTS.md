@@ -1,19 +1,19 @@
-# Requirements: Milestone v3.3 — Decentralized Multi-Desk Governance & Byzantine Consensus Voting
+# Requirements: Milestone v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense
 
-This document defines the requirements for Milestone v3.3 of Programming Desk.
+This document defines the requirements for Milestone v3.4 of Programming Desk.
 
-## 1. Decentralized Multi-Desk Governance & Proposal State Machine (Phase 32)
+## 1. Anomaly Detection & Autonomous Seat Quarantine (Phase 34)
 
-- [x] **REQ-GOV-001**: Multi-desk proposal lifecycle engine with deterministic state machine (`DRAFT` -> `ACTIVE` -> `VOTING` -> `APPROVED` / `REJECTED` -> `QUEUED` -> `EXECUTED` / `CANCELLED`).
-- [x] **REQ-GOV-002**: Weighted multi-seat quorum evaluation supporting threshold governance, quadratic voting, and seat reputation multipliers.
-- [x] **REQ-GOV-003**: Cryptographic ballot signing and non-repudiable vote commitments with HMAC-SHA256 signatures.
-- [x] **REQ-GOV-004**: Proposal timelock buffer and execution delay enforcement preventing instant malicious parameter mutations.
-- [x] **REQ-GOV-005**: Autonomous emergency veto and circuit-breaker abort triggers for anomalous proposals.
+- [x] **REQ-HEAL-001**: Real-time behavioral anomaly detection engine monitoring tool call latency, payload entropy, and error rate spikes against dynamic baseline profiles.
+- [x] **REQ-HEAL-002**: Automated seat quarantine protocol isolating rogue, compromised, or misbehaving seats with deterministic containment states (`HEALTHY` -> `SUSPICIOUS` -> `QUARANTINED` -> `DRAINED`).
+- [x] **REQ-HEAL-003**: Synthetic shadow execution sandbox isolating suspicious tool invocations to speculative scratchpads before committing desk mutations.
+- [x] **REQ-HEAL-004**: Dynamic capability pruning engine revoking sensitive permissions and execution privileges from degraded seats.
+- [x] **REQ-HEAL-005**: Cryptographic quarantine attestation and notification receipts broadcast across federated peer desks with HMAC-SHA256 signatures.
 
-## 2. Byzantine Consensus Voting & Verifiable On-Chain Attestation (Phase 33)
+## 2. Self-Healing Reconstitution & Immune Memory Attestation (Phase 35)
 
-- [x] **REQ-GOV-006**: Federated Byzantine fault tolerant consensus rounds with three-phase commit (`PRE-PREPARE`, `PREPARE`, `COMMIT`).
-- [x] **REQ-GOV-007**: View-change protocol and leader rotation handling Byzantine or unresponsive coordinator desks.
-- [x] **REQ-GOV-008**: Cryptographic Merkle governance receipts linking proposal state transitions, ballot tallies, and execution outcomes.
-- [x] **REQ-GOV-009**: On-chain and external WORM ledger audit export anchoring consensus receipts to distributed ledgers.
-- [x] **REQ-GOV-010**: End-to-end multi-desk governance verification harness and Byzantine attack drill simulator.
+- [ ] **REQ-HEAL-006**: Autonomous seat reconstitution engine regenerating clean agent runtime contexts from attested checkpoint baselines.
+- [ ] **REQ-HEAL-007**: Swarm immune memory ledger recording behavioral attack signatures and quarantine heuristics into a tamper-evident audit chain.
+- [ ] **REQ-HEAL-008**: Proactive antibody distribution sharing verified attack heuristics and mitigation policies across federated desks.
+- [ ] **REQ-HEAL-009**: Progressive post-quarantine rehabilitation protocol validating reconstituted seats via synthetic benchmark drills.
+- [ ] **REQ-HEAL-010**: End-to-end swarm immune defense verification harness and chaos anomaly injection test suite.

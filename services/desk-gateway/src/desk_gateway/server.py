@@ -3521,6 +3521,75 @@ def create_mcp(
     setattr(mcp, "_ledger_exporter", ledger_exporter)
     setattr(mcp, "_byzantine_simulator", byzantine_simulator)
 
+    # Milestone v3.4 (Phase 34): Swarm Self-Healing & Active Immune Defense
+    from desk_gateway.swarm_immune import SwarmImmuneEngine
+    swarm_immune = SwarmImmuneEngine()
+    setattr(mcp, "_swarm_immune", swarm_immune)
+
+    @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
+    async def immune_telemetry_evaluate_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "generic_tool")
+        payload = body.get("payload", "")
+        latency_ms = float(body.get("latency_ms", 50.0))
+        is_error = bool(body.get("is_error", False))
+        result = swarm_immune.record_telemetry(
+            seat_id=seat_id,
+            tool_name=tool_name,
+            payload=payload,
+            latency_ms=latency_ms,
+            is_error=is_error,
+        )
+        return JSONResponse({"ok": True, "telemetry": result})
+
+    @mcp.custom_route("/v1/immune/seat/quarantine", methods=["POST"])
+    async def immune_seat_quarantine_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Manual operator quarantine")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_immune.quarantine_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/seat/unquarantine", methods=["POST"])
+    async def immune_seat_unquarantine_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        seat_id = body.get("seat_id")
+        reason = body.get("reason", "Operator unquarantine")
+        if not seat_id:
+            return JSONResponse({"ok": False, "error": "seat_id is required"}, status_code=400)
+        res = swarm_immune.unquarantine_seat(seat_id, reason=reason)
+        return JSONResponse({"ok": True, "result": res})
+
+    @mcp.custom_route("/v1/immune/shadow/execute", methods=["POST"])
+    async def immune_shadow_execute_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        execution_id = body.get("execution_id", f"shadow-{secrets.token_hex(4)}")
+        seat_id = body.get("seat_id", "lead")
+        tool_name = body.get("tool_name", "speculative_tool")
+        arguments = body.get("arguments", {})
+
+        def dummy_handler(args):
+            if args.get("fail"):
+                raise RuntimeError("Simulated execution failure")
+            return {"status": "executed", "echo": args}
+
+        res = swarm_immune.shadow_sandbox.execute_in_shadow(
+            execution_id=execution_id,
+            seat_id=seat_id,
+            tool_name=tool_name,
+            arguments=arguments,
+            handler=dummy_handler,
+        )
+        return JSONResponse({"ok": True, "execution": res})
+
+    @mcp.custom_route("/v1/immune/status", methods=["GET"])
+    async def immune_status_route(request: Request) -> Response:
+        status = swarm_immune.get_status()
+        return JSONResponse({"ok": True, "status": status})
+
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
     async def swarm_telemetry_route(request: Request) -> Response:
         body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
@@ -4960,6 +5029,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "receipt_merkle_tree": getattr(mcp, "_receipt_merkle_tree", None),
         "ledger_exporter": getattr(mcp, "_ledger_exporter", None),
         "byzantine_simulator": getattr(mcp, "_byzantine_simulator", None),
+        "swarm_immune": getattr(mcp, "_swarm_immune", None),
     }
     return app, settings
 

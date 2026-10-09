@@ -1,20 +1,20 @@
 ---
 gsd_state_version: "1.0"
-milestone: v3.3
-milestone_name: Decentralized Multi-Desk Governance & Byzantine Consensus Voting
-status: completed
-stopped_at: Completed Milestone v3.3 (Phases 32 & 33). Ready for tag and release v3.3.0.
-last_updated: "2026-10-10T20:00:00.000Z"
+milestone: v3.4
+milestone_name: Autonomous Swarm Self-Healing & Active Immune Defense
+status: in_progress
+stopped_at: Completed Phase 34 implementation and verification.
+last_updated: "2026-10-10T21:00:00.000Z"
 last_activity: 2026-10-10
-last_activity_desc: Completed Phase 33 implementation and test validation.
+last_activity_desc: Completed Phase 34 implementation and test validation.
 progress:
-  total_phases: 33
-  completed_phases: 33
-  total_plans: 77
-  completed_plans: 77
-  percent: 100.0
-current_phase: 33
-current_phase_name: Byzantine Consensus Voting & Verifiable On-Chain Attestation
+  total_phases: 35
+  completed_phases: 34
+  total_plans: 79
+  completed_plans: 78
+  percent: 98.7
+current_phase: 34
+current_phase_name: Anomaly Detection & Autonomous Seat Quarantine
 ---
 
 # Project State
@@ -24,23 +24,23 @@ current_phase_name: Byzantine Consensus Voting & Verifiable On-Chain Attestation
 See: .planning/PROJECT.md (updated 2026-10-08)
 
 **Core value:** A fresh team can install a seven-seat desk whose work, tools, memory and approvals are independently evidenced and safely governed.
-**Current focus:** Milestone v3.3 — Decentralized Multi-Desk Governance & Byzantine Consensus Voting
-**Milestone:** v3.3 — Decentralized Multi-Desk Governance & Byzantine Consensus Voting (Complete)
+**Current focus:** Milestone v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense
+**Milestone:** v3.4 — Autonomous Swarm Self-Healing & Active Immune Defense (In Progress)
 
 ## Current Position
 
-Phase: Phase 33 (Byzantine Consensus Voting & Verifiable On-Chain Attestation) - Complete.
-Milestone: Milestone v3.3 (Phases 32 & 33) - Complete.
-Status: Complete.
-Last activity: 2026-10-10 — Completed Phase 33 (`REQ-GOV-006` through `REQ-GOV-010`).
+Phase: Phase 34 (Anomaly Detection & Autonomous Seat Quarantine) - Complete.
+Milestone: Milestone v3.4 (Phases 34 & 35) - In Progress.
+Status: In Progress.
+Last activity: 2026-10-10 — Completed Phase 34 (`REQ-HEAL-001` through `REQ-HEAL-005`).
 
 ## Accumulated Context
 
 ### Decisions
 
-- Milestone v2.0 through v3.3 (Phases 1-33, 77 plans) 100% completed.
-- Milestone v3.3 covers Decentralized Multi-Desk Governance & Proposal State Machine (Phase 32) and Byzantine Consensus Voting & Verifiable On-Chain Attestation (Phase 33).
-- Plan 33-01 implements `ByzantineConsensusEngine`, `ConsensusMessage`, `ViewChangeMessage`, `GovernanceReceiptMerkleTree`, `GovernanceMerkleReceipt`, `LedgerAnchorExporter`, and `ByzantineAttackSimulator`.
+- Milestone v3.3 completed, merged, tagged `v3.3.0`.
+- Milestone v3.4 introduces Autonomous Swarm Self-Healing & Active Immune Defense across Phase 34 and Phase 35.
+- Plan 34-01 implements `SwarmImmuneEngine`, `BehavioralProfile`, `ShadowExecutionSandbox`, entropy profiling, automated state transitions, capability pruning, and HMAC quarantine receipts.
 
 ### Pending Todos
 

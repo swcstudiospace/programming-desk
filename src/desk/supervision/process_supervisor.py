@@ -177,34 +177,35 @@ class ProcessSupervisor:
                     try:
                         # Bounded read to prevent hanging on surviving children keeping pipes open
                         more_out, more_err = proc.communicate(timeout=1.0)
-                        if more_out:
-                            stdout_data = (stdout_data + more_out) if stdout_data else more_out
-                        if more_err:
-                            stderr_data = (stderr_data + more_err) if stderr_data else more_err
+                        if more_out is not None:
+                            if isinstance(more_out, bytes):
+                                more_out = more_out.decode("utf-8", errors="replace")
+                            stdout_data = more_out
+                        if more_err is not None:
+                            if isinstance(more_err, bytes):
+                                more_err = more_err.decode("utf-8", errors="replace")
+                            stderr_data = more_err
                     except subprocess.TimeoutExpired as exc2:
-                        extra_out = exc2.output or ""
-                        extra_err = exc2.stderr or ""
-                        if isinstance(extra_out, bytes):
-                            extra_out = extra_out.decode("utf-8", errors="replace")
-                        if isinstance(extra_err, bytes):
-                            extra_err = extra_err.decode("utf-8", errors="replace")
-                        if extra_out:
-                            stdout_data = (stdout_data + extra_out) if stdout_data else extra_out
-                        if extra_err:
-                            stderr_data = (stderr_data + extra_err) if stderr_data else extra_err
+                        extra_out = exc2.output
+                        extra_err = exc2.stderr
+                        if extra_out is not None:
+                            if isinstance(extra_out, bytes):
+                                extra_out = extra_out.decode("utf-8", errors="replace")
+                            stdout_data = extra_out
+                        if extra_err is not None:
+                            if isinstance(extra_err, bytes):
+                                extra_err = extra_err.decode("utf-8", errors="replace")
+                            stderr_data = extra_err
                     except Exception:
                         pass
                 exit_code = -signal.SIGKILL
-            except (KeyboardInterrupt, BaseException):
-                # Cleanly reap and stop process on interrupt/cancellation before propagating
+            finally:
                 if proc is not None and proc.poll() is None:
                     self._terminate_process_tree(proc)
                     try:
                         proc.communicate(timeout=0.5)
                     except Exception:
                         pass
-                raise
-            finally:
                 if last_pid is not None:
                     with self._lock:
                         self._active_processes.pop(last_pid, None)

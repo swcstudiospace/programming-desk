@@ -47,6 +47,9 @@ def test_audit_redaction() -> None:
             author="Alice",
             token_count=123,
             token=secret_token,
+            clientSecret="my_secret_999",
+            accessToken="my_access_888",
+            dbPassword="super_secret_password",
             nested={"auth": f"Bearer token1234567890abcdef", "safe": "public_data"},
         )
 
@@ -57,6 +60,9 @@ def test_audit_redaction() -> None:
         assert details["author"] == "Alice"
         assert details["token_count"] == 123
         assert details["token"] == "[REDACTED]"
+        assert details["clientSecret"] == "[REDACTED]"
+        assert details["accessToken"] == "[REDACTED]"
+        assert details["dbPassword"] == "[REDACTED]"
         assert "token1234567890abcdef" not in details["nested"]["auth"]  # pragma: allowlist secret (redaction test fixture)
         assert details["nested"]["safe"] == "public_data"
 

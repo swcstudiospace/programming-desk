@@ -39,7 +39,7 @@ jobs:
     # Pull requests only. A push to main has no head ref, so the acting bot would resolve
     # to "main" and fail attribution before any gate ran — every push red, for a question
     # that is already settled by the time the merge lands.
-    if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'bot-0')
+    if: github.event_name == 'pull_request'
     runs-on: [self-hosted, Linux, X64]
     steps:
       - uses: actions/checkout@v4

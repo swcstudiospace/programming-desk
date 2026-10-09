@@ -43,6 +43,7 @@ class _Client:
         self.max_inflight = 0
         self.sha_seen: list[object] = []
         self.fail_loads = 0
+        self.flush = False
         self.ping_started = asyncio.Event()
 
     async def _hold(self) -> None:
@@ -76,11 +77,16 @@ class _Client:
             raise ConnectionError("load failed")
         if self.fail:
             raise ConnectionError("refused")
+        self.flush = False
         return "sha"
 
     async def evalsha(self, sha: object, *_args: object) -> list[object]:
         self.shas += 1
         self.sha_seen.append(sha)
+        if self.flush:
+            from redis.exceptions import NoScriptError
+
+            raise NoScriptError()
         await self._hold()
         if self.fail:
             raise ConnectionError("refused")
@@ -345,6 +351,28 @@ async def test_failed_script_load_is_retried(monkeypatch: pytest.MonkeyPatch) ->
     assert client.loads == [TOKEN_BUCKET_LUA, TOKEN_BUCKET_LUA]
     assert client.sha_seen == ["sha"]
     assert None not in client.sha_seen
+
+
+@pytest.mark.asyncio
+async def test_one_reload_serves_a_noscript_burst(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _Client()
+    _patch_factory(monkeypatch, client)
+    dragonfly = Dragonfly(_Url())
+    await dragonfly.open()
+    limiter = _limiter(dragonfly)
+    await limiter.check_rate_limit("lead")
+    assert len(client.loads) == 1
+
+    client.delay = 0.05
+    client.flush = True
+    started = time.monotonic()
+    results = await asyncio.gather(*(limiter.check_rate_limit("lead") for _ in range(8)))
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 0.2
+    assert all(item[2] == 9 for item in results)
+    assert len(client.loads) == 2
+    assert dragonfly.circuit_breaker.state == "closed"
 
 
 @pytest.mark.asyncio

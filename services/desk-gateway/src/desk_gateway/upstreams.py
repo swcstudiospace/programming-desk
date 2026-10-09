@@ -718,6 +718,7 @@ class Dragonfly:
         self._script: Any = None
         self._script_client: Any = None
         self._sha: str | None = None
+        self._sha_generation = 0
         self._trial_in_flight = False
         self._logged_failure = False
         self._inflight = 0
@@ -973,29 +974,38 @@ class Dragonfly:
 
     async def _evalsha(self, client: Any, redis_key: str, *args: str) -> Any:
         NoScriptError = _noscript_error()
-        sha = await self._ensure_sha(client)
+        sha, generation = await self._ensure_sha(client)
         try:
             return await client.evalsha(sha, 1, redis_key, *args)
         except NoScriptError:
-            sha = await self._reload_sha(client)
+            sha = await self._reload_sha(client, generation)
             return await client.evalsha(sha, 1, redis_key, *args)
 
-    async def _ensure_sha(self, client: Any) -> str:
+    async def _ensure_sha(self, client: Any) -> tuple[str, int]:
         async with self._script_lock:
             if self._sha is not None and self._script_client is client:
-                return self._sha
-            sha = await client.script_load(TOKEN_BUCKET_LUA)
-            self._script = client.register_script(TOKEN_BUCKET_LUA)
-            self._script_client = client
-            self._sha = sha
-            return sha
+                return self._sha, self._sha_generation
+            sha = await self._load_sha(client)
+            return sha, self._sha_generation
 
-    async def _reload_sha(self, client: Any) -> str:
+    async def _reload_sha(self, client: Any, seen_generation: int) -> str:
+        """One caller reloads. The rest reuse that SHA instead of loading again."""
         async with self._script_lock:
-            sha = await client.script_load(TOKEN_BUCKET_LUA)
-            self._script_client = client
-            self._sha = sha
-            return sha
+            if (
+                self._sha is not None
+                and self._script_client is client
+                and self._sha_generation != seen_generation
+            ):
+                return self._sha
+            return await self._load_sha(client)
+
+    async def _load_sha(self, client: Any) -> str:
+        sha = await client.script_load(TOKEN_BUCKET_LUA)
+        self._script = client.register_script(TOKEN_BUCKET_LUA)
+        self._script_client = client
+        self._sha = sha
+        self._sha_generation += 1
+        return sha
 
     async def health(self) -> dict[str, Any]:
         return await self.command("ping", "health", None, 1)

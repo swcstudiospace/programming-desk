@@ -1,0 +1,93 @@
+{
+  "task_id": "ragflow-ingest-on-merge",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/ragflow-ingest-on-merge",
+  "started_at": "2026-10-09T14:54:00Z",
+  "completed_at": "2026-10-09T15:10:28Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "Incremental RAGFlow ingest on push to main: stdlib ingest.py, reusable workflow that no-ops without RAGFLOW_URL or RAGFLOW_API_KEY, caller templates, and fake-server tests. Draft PR only.",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest infra/tests/test_ragflow_ingest.py -q --tb=line",
+      "exit_code": 0,
+      "observed": "14 passed in 4.11s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "observed": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "observed": "G-1 PASS — bot-05-infrastructure: 7 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "observed": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-3 PASS — 7 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "observed": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -c 'import importlib.util, subprocess, sys\nfrom pathlib import Path\nspec = importlib.util.spec_from_file_location(\"ragflow_ingest\", Path(\"infra/ragflow/ingest.py\"))\nmod = importlib.util.module_from_spec(spec)\nsys.modules[\"ragflow_ingest\"] = mod\nspec.loader.exec_module(mod)\nbefore = subprocess.check_output([\"git\", \"merge-base\", \"origin/main\", \"HEAD\"], text=True).strip()\nafter = subprocess.check_output([\"git\", \"rev-parse\", \"HEAD\"], text=True).strip()\nactions = mod.build_plan(Path(\".\").resolve(), \"programming-desk\", before, after, github_base=\"https://github.com/swcstudiospace\")\nupserts = [item for item in actions if item.kind == \"upsert\"]\nprint(mod.format_plan(upserts))\nprint(\"upserts\", len(upserts))\nif len(upserts) != 7 or any(item.kind not in (\"upsert\",) for item in actions):\n    raise SystemExit(1)\n'",
+      "exit_code": 0,
+      "observed": "upserts 7: ragflow-ingest.yml.txt, README-operators.md, agent-substrate.yml.txt, agent-swarm.yml.txt, claude-ultrathink.yml.txt, ingest.py.txt, test_ragflow_ingest.py.txt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Fake RAGFlow server tests cover diff parsing, naming, secret skip, upsert, delete, missing secrets and dataset mapping; 14 passed",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Changed paths are owned by bot-05-infrastructure",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "No secrets in the diff",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "No contract surface in the diff",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The merge-base plan for this branch is seven upserts and no other actions",
+      "evidence_command_index": 6
+    }
+  ],
+  "unverified": [
+    "Live RAGFlow was not called. RAGFLOW_URL and RAGFLOW_API_KEY were unset, and the VPS was not touched.",
+    "uploads/seed.py was not on disk, so extension lists, excluded directories and the four repos' extra globs follow the use-case steps rather than a byte copy of the VPS script.",
+    "Caller templates were not copied into agent-substrate, agent-swarm or claude-ultrathink.",
+    "GitHub-hosted Actions did not run this workflow here, so hosted-minute billing and public RAGFlow reachability from a runner are untested.",
+    "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite fails in this environment because the uv binary is absent. That test was not changed.",
+    "approved_by is absent until LEAD or a human stamps this receipt. Greptile's merge-gate verdict is not in this receipt."
+  ],
+  "files_changed": [
+    ".github/workflows/ragflow-ingest.yml",
+    ".receipts/bot-05-infrastructure/ragflow-ingest-on-merge.json",
+    "infra/ragflow/README-operators.md",
+    "infra/ragflow/callers/agent-substrate.yml",
+    "infra/ragflow/callers/agent-swarm.yml",
+    "infra/ragflow/callers/claude-ultrathink.yml",
+    "infra/ragflow/ingest.py",
+    "infra/tests/test_ragflow_ingest.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert the merge with git revert of this PR's merge commit. Recovery is one merge and takes minutes. No schema migration; documents already stored in RAGFlow remain until a later push deletes those paths.",
+  "approvals": [],
+  "loop_acks": [],
+  "destructive": false,
+  "secrets_committed": false,
+  "approval_requested_from": "bot-00-programming-lead"
+}

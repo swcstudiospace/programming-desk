@@ -2,7 +2,7 @@
 
 ## Milestones
 
-- 🟡 **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (in progress)
+- ✅ **v2.9 Cross-Cloud Disaster Recovery & Multi-Substrate Replication** — Phases 24-25 (shipped 2026-10-10) — [Archive](milestones/v2.9-ROADMAP.md)
 - ✅ **v2.8 Autonomous Swarm Self-Balancing & Work Distribution Mesh** — Phases 22-23 (shipped 2026-10-10) — [Archive](milestones/v2.8-ROADMAP.md)
 - ✅ **v2.7 Multi-Modal Processing & Streaming Tool Execution** — Phases 20-21 (shipped 2026-10-10) — [Archive](milestones/v2.7-ROADMAP.md)
 - ✅ **v2.6 FinOps Dynamic Token Budgeting & LLM Tier Optimization** — Phases 18-19 (shipped 2026-10-10) — [Archive](milestones/v2.6-ROADMAP.md)
@@ -19,8 +19,8 @@
 
 - [x] **Phase 24: Cross-Substrate Continuous State Mirroring & Fast RPO Sync**
   - [x] 24-01: Asynchronous State Mirroring, Delta Snapshots, Replication Lag Throttling, and Warm-Replica Readiness (`REQ-DR-001`, `REQ-DR-002`, `REQ-DR-003`, `REQ-DR-004`, `REQ-DR-005`)
-- [ ] **Phase 25: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery**
-  - [ ] 25-01: Fencing Token Allocator, Quorum Heartbeat Evaluator, Deterministic Conflict Reconciler, and DR Drill Verifier (`REQ-DR-006`, `REQ-DR-007`, `REQ-DR-008`, `REQ-DR-009`, `REQ-DR-010`)
+- [x] **Phase 25: Automated Split-Brain Protection, Fencing Tokens & Fast RTO Recovery**
+  - [x] 25-01: Fencing Token Allocator, Quorum Heartbeat Evaluator, Deterministic Conflict Reconciler, and DR Drill Verifier (`REQ-DR-006`, `REQ-DR-007`, `REQ-DR-008`, `REQ-DR-009`, `REQ-DR-010`)
 
 ### Completed Milestones
 

@@ -1,0 +1,85 @@
+{
+  "task_id": "verify-ios-harness-ut-muzt4gj6",
+  "bot": "bot-04-ios",
+  "branch": "bot-04-ios/verify-ios-harness-ut-muzt4gj6",
+  "receipt_kind": "verification",
+  "evidence_provenance": "Commands and outcomes observed by the parent orchestrator in /tmp/pr211 after the XML, simulator, Xcode, MOV structural and no-spawn guard review fixes. Linux process fixtures exercise local runtime boundaries only; no macOS or device acceptance is inferred.",
+  "commands": [
+    {
+      "cmd": "/tmp/desk-verify-python/bin/python -m pytest ios/tools/tests/ -q && /tmp/desk-verify-python/bin/python - <<'PY'\nimport base64\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom ios.tools.sim_drive import _usable_video, record\nfrom ios.tools.tests.test_sim_drive import MOV_BASE64, UDID, install_record_xcrun\n\ndef atom(kind, payload):\n return (8+len(payload)).to_bytes(4,'big')+kind+payload\nmedia=atom(b'mdhd',bytes(24))+atom(b'hdlr',bytes(8)+b'vide')\ntrack=atom(b'tkhd',bytes(84))+atom(b'mdia',media)\npayload=atom(b'moov',atom(b'mvhd',bytes(100))+atom(b'trak',track))+atom(b'mdat',b'x')\nwith TemporaryDirectory() as directory:\n root=Path(directory); bad=root/'incomplete.mov'; bad.write_bytes(payload)\n good=root/'valid.mov'; good.write_bytes(base64.b64decode(MOV_BASE64))\n assert not _usable_video(bad), 'Incomplete MOV still accepted'\n assert _usable_video(good), 'Real embedded MOV rejected'\n binary=root/'bin'; binary.mkdir(); calls=root/'calls.log'; install_record_xcrun(binary,calls)\n first=record(UDID,root/'out',1,system_name='Darwin',which=lambda _:str(binary/'xcrun'))\n second=record(UDID,root/'out',1,system_name='Darwin',which=lambda _:str(binary/'xcrun'))\n assert first['exit_code']==second['exit_code']==0,(first,second)\n assert first['artifact']!=second['artifact']\n assert _usable_video(Path(first['artifact'])) and _usable_video(Path(second['artifact']))\n assert calls.read_text().count('SIGINT')==2\n print({'missing_sample_table_rejected':True,'real_embedded_mov_accepted':True,'fresh_recordings_preserved':True,'graceful_SIGINT_count':2,'real_macos_exercised':False})\nPY",
+      "cwd": "/tmp/pr211",
+      "exit_code": 0,
+      "duration_s": 13.15,
+      "output_tail": "87 passed, 43 subtests passed in 10.64s\n{'missing_sample_table_rejected': True, 'real_embedded_mov_accepted': True, 'fresh_recordings_preserved': True, 'graceful_SIGINT_count': 2, 'real_macos_exercised': False}"
+    },
+    {
+      "cmd": "/tmp/desk-verify-python/bin/python - <<'PY'\nimport json, subprocess, sys\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom subprocess import CompletedProcess\nfrom ios.tools.maestro_flow import parse_junit_dir, maestro_flow\nwith TemporaryDirectory() as directory:\n root=Path(directory); xml=root/'unsafe.xml'; xml.write_text('<!DOCTYPE testsuite [<!ENTITY x \"expanded\">]><testsuite><testcase name=\"&x;\"/></testsuite>')\n unsafe=parse_junit_dir(root); assert unsafe['status']=='error' and unsafe['passed']==0,unsafe\n xml.unlink(); xml.write_text('<testsuite><testcase name=\"executed\"/></testsuite>')\n normal=parse_junit_dir(root); assert normal=={'passed':1,'failed':0,'skipped':0},normal\n flow=root/'flow.yaml'; flow.write_text('appId: smoke.fixture\\n---\\n- launchApp\\n')\n def skipped_runner(argv,**kwargs):\n  Path(argv[argv.index('--output')+1]).write_text('<testsuite><testcase name=\"unsupported\"><skipped/></testcase></testsuite>')\n  return CompletedProcess(argv,0,'','')\n skipped=maestro_flow(flow,root/'skipped',system_name='Darwin',which=lambda _: '/fixture/maestro',runner=skipped_runner)\n assert skipped['status']=='skipped' and skipped['exit_code']==3 and skipped['passed']==0 and skipped['skipped']==1,skipped\n proc=subprocess.run([sys.executable,'-m','ios.tools','maestro_flow','--flow',str(flow),'--out',str(root/'linux')],text=True,capture_output=True)\n payload=json.loads(proc.stdout); assert proc.returncode==3 and payload['status']=='skipped' and payload['invoked'] is False,(proc.returncode,payload)\n print({'unsafe_xml_rejected':True,'normal_xml_counts':normal,'all_skipped_exit':3,'linux_cli_exit':proc.returncode,'linux_spawned':payload['invoked'],'real_macos_exercised':False})\nPY",
+      "cwd": "/tmp/pr211",
+      "exit_code": 0,
+      "duration_s": 0.20,
+      "output_tail": "{'unsafe_xml_rejected': True, 'normal_xml_counts': {'passed': 1, 'failed': 0, 'skipped': 0}, 'all_skipped_exit': 3, 'linux_cli_exit': 3, 'linux_spawned': False, 'real_macos_exercised': False}"
+    },
+    {
+      "cmd": "/tmp/desk-verify-python/bin/python - <<'PY'\nimport os, stat, sys\nfrom pathlib import Path\nfrom tempfile import TemporaryDirectory\nfrom ios.tools.xcodebuild_test import xcodebuild_test\nwith TemporaryDirectory() as directory:\n root=Path(directory); binary=root/'xcodebuild'\n binary.write_text(f'#!{sys.executable}\\nimport os,pathlib,sys\\npathlib.Path(sys.argv[sys.argv.index(\"-resultBundlePath\")+1]).mkdir()\\nprint(\"** TEST SUCCEEDED **\")\\nsys.exit(int(os.environ.get(\"FIXTURE_XCODE_EXIT\",\"0\")))\\n')\n binary.chmod(binary.stat().st_mode|stat.S_IEXEC)\n out=root/'out'\n first=xcodebuild_test('FixtureScheme','platform=iOS Simulator',out,out/'suffixless',system_name='Darwin',which=lambda _:str(binary))\n second=xcodebuild_test('FixtureScheme','platform=iOS Simulator',out,out/'log.json',system_name='Darwin',which=lambda _:str(binary))\n assert first['exit_code']==second['exit_code']==0,(first,second)\n assert first['result_bundle']!=second['result_bundle'] and Path(first['result_bundle']).is_dir() and Path(second['result_bundle']).is_dir()\n os.environ['FIXTURE_XCODE_EXIT']='1'\n failed=xcodebuild_test('FixtureScheme','platform=iOS Simulator',out,out/'failed',system_name='Darwin',which=lambda _:str(binary))\n assert failed['exit_code']==1 and failed['status']=='failed',failed\n print({'suffixless_text_exit':first['exit_code'],'json_named_text_exit':second['exit_code'],'fresh_result_bundles_preserved':True,'nonzero_process_wrapper_exit':failed['exit_code'],'real_macos_exercised':False})\nPY",
+      "cwd": "/tmp/pr211",
+      "exit_code": 0,
+      "duration_s": 0.19,
+      "output_tail": "{'suffixless_text_exit': 0, 'json_named_text_exit': 0, 'fresh_result_bundles_preserved': True, 'nonzero_process_wrapper_exit': 1, 'real_macos_exercised': False}"
+    },
+    {
+      "cmd": "/tmp/desk-verify-python/bin/python -m pytest ios/tools/tests/ -q && /tmp/desk-verify-python/bin/python - <<'PY'\nimport io, subprocess, tempfile, unittest\nfrom pathlib import Path\nfrom unittest.mock import patch\nfrom ios.tools.tests import test_sim_drive as cases\n\ndef incorrectly_spawning_boot(device, runtime, **kwargs):\n subprocess.run(['xcrun','simctl','create',device,runtime],capture_output=True,check=False)\n return {'exit_code':0 if kwargs.get('dry_run') else 3,'status':'dry-run' if kwargs.get('dry_run') else 'skipped','reason':'skipped: platform','invoked':False,'argv':['xcrun','simctl','create',device,runtime]}\noutput=io.StringIO()\ntests=unittest.TestSuite(cases.SimDriveTests(name) for name in ('test_linux_skip_does_not_spawn_even_when_xcrun_is_on_path','test_dry_run_prints_xcrun_argv_and_spawns_nothing'))\nwith patch.object(cases,'boot',incorrectly_spawning_boot):\n result=unittest.TextTestRunner(stream=output).run(tests)\nassert result.testsRun==2 and len(result.failures)==2 and not result.errors,output.getvalue()\nwith tempfile.TemporaryDirectory() as tmp:\n root=Path(tmp); calls=root/'calls'; cases.install_xcrun(root,calls)\n with cases.prepend_path(root):\n  skipped=cases.boot('iPhone 17','iOS-26',out=root/'out',system_name='Linux')\n  planned=cases.boot('iPhone 17','iOS-26',dry_run=True,system_name='Linux')\n assert skipped['exit_code']==3 and planned['exit_code']==0 and not calls.exists(),(skipped,planned)\n print({'unexpected_spawn_rejected_by_both_tests':True,'guard_test_failures':len(result.failures),'linux_skip_exit':skipped['exit_code'],'dry_run_exit':planned['exit_code'],'real_fixture_executable_not_invoked':True,'simulator_exercised':False})\nPY",
+      "cwd": "/tmp/pr211",
+      "exit_code": 0,
+      "duration_s": 11.23,
+      "output_tail": "87 passed, 43 subtests passed in 10.68s\n{'unexpected_spawn_rejected_by_both_tests': True, 'guard_test_failures': 2, 'linux_skip_exit': 3, 'dry_run_exit': 0, 'real_fixture_executable_not_invoked': True, 'simulator_exercised': False}"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The iOS helper suite passed 87 tests and 43 subtests on Linux, including real subprocess concurrency, recording and malformed-MOV boundaries; this is not macOS acceptance.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The recording smoke rejected the reproduced missing-sample-table MOV, accepted the embedded real MOV, and preserved two fresh recordings finalized by two SIGINT events through executable fixtures.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "XML smoke rejected an entity-bearing DTD with zero passing cases, accepted normal executed-case counts, preserved all-skipped exit 3, and observed Linux CLI skip exit 3 without spawning Maestro.",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Xcode wrapper smoke parsed suffixless and .json-named captured text, preserved distinct fresh result bundles, and returned failure for a nonzero executable exit despite a TEST SUCCEEDED line.",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "After moving no-spawn call-log assertions inside the temporary-directory lifetime, all 87 tests and 43 subtests passed. A deliberate unexpected-spawn mutation failed both corrected guard tests; actual Linux skip and dry-run calls returned 3 and 0 without invoking the installed fixture executable.",
+      "evidence_command_index": 3
+    }
+  ],
+  "unverified": [
+    "No actual macOS/Xcode Simulator, physical iOS device, real xcodebuild or real Maestro execution was available; process fixtures establish local wrapper boundaries only.",
+    "MOV checks verify sample metadata and media containment, not codec decoding, real simctl output compatibility or macOS playback.",
+    "No provisioning, signing identity, App Store Connect, TestFlight or device release operation was performed.",
+    "The isolated Python environment /tmp/desk-verify-python used the pinned ios/tools/requirements.txt dependency; recreate an environment with that requirements file to replay elsewhere.",
+    "Pyright diagnostics for the isolated test_sim_drive.py reported unresolved ios.tools.sim_drive import; LSP-clean status is not claimed. The native Python import, complete helper suite and direct guard smoke succeeded.",
+    "Independent QUALITY approval is absent; approved_by is intentionally omitted and strict G-2 remains blocked.",
+    "Latest pushed-head Greptile and hosted CI are not established by these local runs; keep the PR draft.",
+    "No deployment, merge, auto-merge, force-push or fabricated approval was performed."
+  ],
+  "files_changed": [
+    "ios/tools/maestro_flow.py",
+    "ios/tools/sim_drive.py",
+    "ios/tools/xcodebuild_test.py",
+    "ios/tools/tests/test_maestro_flow.py",
+    "ios/tools/tests/test_sim_drive.py",
+    "ios/tools/tests/test_xcodebuild_test.py",
+    "ios/tools/IOS_TOOLS.md",
+    "ios/tools/requirements.txt",
+    ".receipts/bot-04-ios/verify-ios-harness-ut-muzt4gj6.json"
+  ],
+  "files_changed_scope": "Review corrections and this receipt; not every original implementation file.",
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

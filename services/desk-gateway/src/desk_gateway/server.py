@@ -3633,6 +3633,20 @@ def create_mcp(
         WorkflowFailureSynthesizer,
         SwarmOrchestrationDrillSimulator,
     )
+    from desk_gateway.swarm_dao import (
+        SwarmDAOEngine,
+        StakeReputationRegistry,
+        PolicyTimelockExecutor,
+        VoteOption,
+        ProposalStatus,
+    )
+    from desk_gateway.swarm_tokenomics import (
+        ComputeCreditLedger,
+        PaymentChannelManager,
+        CrossDeskClearinghouse,
+        SettlementAnchorExporter,
+        TokenomicsDrillSimulator,
+    )
     import dataclasses
     secret_key = settings.seat_token_signing_secret.encode("utf-8") if hasattr(settings, "seat_token_signing_secret") and settings.seat_token_signing_secret else b"desk-skill-synthesis-secret-key-32b"
     skill_synthesis_engine = SkillSynthesisEngine(signing_key=secret_key)
@@ -3694,6 +3708,15 @@ def create_mcp(
     workflow_receipt_ledger = WorkflowReceiptLedger(signing_secret=secret_key.decode("utf-8", errors="ignore"))
     workflow_anchor_exporter = WorkflowAnchorExporter()
 
+    # Milestone v4.1 components
+    dao_registry = StakeReputationRegistry()
+    swarm_dao_engine = SwarmDAOEngine(registry=dao_registry, signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    policy_timelock_executor = PolicyTimelockExecutor(dao_engine=swarm_dao_engine)
+    compute_credit_ledger = ComputeCreditLedger()
+    payment_channel_manager = PaymentChannelManager(signing_secret=secret_key.decode("utf-8", errors="ignore"))
+    cross_desk_clearinghouse = CrossDeskClearinghouse(ledger=compute_credit_ledger)
+    settlement_anchor_exporter = SettlementAnchorExporter()
+
     setattr(mcp, "_skill_synthesis_engine", skill_synthesis_engine)
     setattr(mcp, "_prompt_rollout_orchestrator", prompt_rollout_orchestrator)
     setattr(mcp, "_neural_routing_engine", neural_routing_engine)
@@ -3722,6 +3745,13 @@ def create_mcp(
     setattr(mcp, "_capability_broker", capability_broker)
     setattr(mcp, "_workflow_receipt_ledger", workflow_receipt_ledger)
     setattr(mcp, "_workflow_anchor_exporter", workflow_anchor_exporter)
+    setattr(mcp, "_dao_registry", dao_registry)
+    setattr(mcp, "_swarm_dao_engine", swarm_dao_engine)
+    setattr(mcp, "_policy_timelock_executor", policy_timelock_executor)
+    setattr(mcp, "_compute_credit_ledger", compute_credit_ledger)
+    setattr(mcp, "_payment_channel_manager", payment_channel_manager)
+    setattr(mcp, "_cross_desk_clearinghouse", cross_desk_clearinghouse)
+    setattr(mcp, "_settlement_anchor_exporter", settlement_anchor_exporter)
 
     @mcp.custom_route("/v1/immune/telemetry/evaluate", methods=["POST"])
     async def immune_telemetry_evaluate_route(request: Request) -> Response:
@@ -4615,6 +4645,63 @@ def create_mcp(
     @mcp.custom_route("/v1/swarm/workflows/drill/simulate", methods=["POST"])
     async def swarm_workflows_drill_simulate_route(_request: Request) -> Response:
         drill_results = SwarmOrchestrationDrillSimulator.run_swarm_orchestration_drill()
+        return JSONResponse({"ok": True, "drill": drill_results})
+
+    # Milestone v4.1 (Phases 48 & 49): Swarm DAO Governance & Algorithmic Tokenomics
+    @mcp.custom_route("/v1/dao/proposals/create", methods=["POST"])
+    async def dao_proposals_create_route(request: Request) -> Response:
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        prop = swarm_dao_engine.create_proposal(
+            proposer_seat=body.get("proposer_seat", "lead"),
+            title=body.get("title", "Governance Proposal"),
+            description=body.get("description", ""),
+            action_payload=body.get("action_payload", {}),
+            voting_duration_seconds=float(body.get("voting_duration_seconds", 300.0)),
+            timelock_delay_seconds=float(body.get("timelock_delay_seconds", 60.0)),
+        )
+        return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/vote", methods=["POST"])
+    async def dao_proposals_vote_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        voter_seat = body.get("voter_seat", "lead")
+        opt_str = body.get("option", "YES")
+        try:
+            ballot = swarm_dao_engine.cast_vote(proposal_id, voter_seat, VoteOption(opt_str))
+            return JSONResponse({"ok": True, "ballot": ballot.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/resolve", methods=["POST"])
+    async def dao_proposals_resolve_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        try:
+            prop = swarm_dao_engine.resolve_proposal(proposal_id)
+            return JSONResponse({"ok": True, "proposal": prop.to_dict()})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/proposals/{proposal_id}/execute", methods=["POST"])
+    async def dao_proposals_execute_route(request: Request) -> Response:
+        proposal_id = request.path_params.get("proposal_id", "")
+        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
+        force_unlock = bool(body.get("force_unlock", False))
+        try:
+            rec = policy_timelock_executor.execute_proposal(proposal_id, force_unlock=force_unlock)
+            return JSONResponse({"ok": True, "execution": rec})
+        except Exception as exc:
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+    @mcp.custom_route("/v1/dao/tokenomics/pricing", methods=["GET"])
+    async def dao_tokenomics_pricing_route(request: Request) -> Response:
+        load = float(request.query_params.get("node_load", 0.0))
+        price = compute_credit_ledger.calculate_compute_price(load)
+        return JSONResponse({"ok": True, "node_load": load, "unit_price": price})
+
+    @mcp.custom_route("/v1/dao/tokenomics/drill/simulate", methods=["POST"])
+    async def dao_tokenomics_drill_simulate_route(_request: Request) -> Response:
+        drill_results = TokenomicsDrillSimulator.run_tokenomics_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
     @mcp.custom_route("/v1/swarm/telemetry", methods=["POST"])
@@ -6087,6 +6174,13 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "capability_broker": getattr(mcp, "_capability_broker", None),
         "workflow_receipt_ledger": getattr(mcp, "_workflow_receipt_ledger", None),
         "workflow_anchor_exporter": getattr(mcp, "_workflow_anchor_exporter", None),
+        "dao_registry": getattr(mcp, "_dao_registry", None),
+        "swarm_dao_engine": getattr(mcp, "_swarm_dao_engine", None),
+        "policy_timelock_executor": getattr(mcp, "_policy_timelock_executor", None),
+        "compute_credit_ledger": getattr(mcp, "_compute_credit_ledger", None),
+        "payment_channel_manager": getattr(mcp, "_payment_channel_manager", None),
+        "cross_desk_clearinghouse": getattr(mcp, "_cross_desk_clearinghouse", None),
+        "settlement_anchor_exporter": getattr(mcp, "_settlement_anchor_exporter", None),
     }
     return app, settings
 

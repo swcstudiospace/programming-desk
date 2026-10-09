@@ -1,5 +1,21 @@
 # Milestones
 
+## v4.1 Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh (Shipped: 2026-10-11)
+
+**Phases completed:** 2 phases (Phases 48-49), 2 plans, 0 tasks
+
+**Key accomplishments:**
+- Decentralized Swarm DAO proposal lifecycle engine (`SwarmDAOEngine`) supporting multi-desk proposal submission, timelock escrow, quadratic voting, and cryptographic ballot verification.
+- Stake-weighted reputation & delegation registry (`StakeReputationRegistry`) tracking seat contributions, compute credits, slashing penalties, and liquid delegation.
+- Autonomous Policy Enforcer & Timelock Executor (`PolicyTimelockExecutor`) enforcing parameter updates and resource quotas after quorum approval and timelock expiration.
+- Algorithmic Tokenomics & Compute Credit Ledger (`ComputeCreditLedger`) tracking balance accounting, dynamic token pricing based on node load, and transaction fees.
+- Multi-Desk Clearinghouse & Settlement Pipeline (`CrossDeskClearinghouse`) facilitating atomic balance settlements between federated desks with fee reconciliation.
+- Cryptographic Payment Channel & Receipt Anchor (`PaymentChannelManager`) providing micro-payment channel contracts with HMAC-SHA256 state commitments.
+- External Settlement Exporter (`SettlementAnchorExporter`) anchoring batch settlement receipts and Merkle root proofs to Solana devnet and WORM audit ledgers.
+- End-to-end tokenomics stress drill simulator (`TokenomicsDrillSimulator`) verifying high-concurrency clearing, balance solvency, and double-spend rejection.
+
+---
+
 ## v4.0 Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh (Shipped: 2026-10-11)
 
 **Phases completed:** 2 phases (Phases 46-47), 2 plans, 0 tasks

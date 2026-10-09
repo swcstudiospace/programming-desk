@@ -1,19 +1,20 @@
-# Requirements: Milestone v4.0 — Autonomous Cross-Desk Swarm Orchestration & Self-Synthesizing Workflow Mesh
+# Requirements: Milestone v4.1 — Autonomous Self-Governing Swarm DAO & Algorithmic Tokenomics Mesh
 
-This document defines the requirements for Milestone v4.0 of Programming Desk.
+This document defines the requirements for Milestone v4.1 of Programming Desk.
 
-## 1. Autonomous Cross-Desk Swarm Workflow Engine (Phase 46)
+## 1. Decentralized Swarm DAO Governance & Quadratic Quorum Engine (Phase 48)
 
-- [x] **REQ-SWARM-001**: Cross-Desk Workflow DAG Compiler (`CrossDeskWorkflowCompiler`) compiling multi-stage workflow definitions into distributed execution graphs with dynamic seat allocation and capability constraints.
-- [x] **REQ-SWARM-002**: Distributed Task State Machine & Checkpointer (`WorkflowExecutionEngine`) managing state transitions across nodes with automatic retry backoff, timeout supervision, and crash-resilient checkpoint snapshots.
-- [x] **REQ-SWARM-003**: Swarm Dependency Resolver & Context Pipeline (`DependencyPipeline`) resolving cross-seat data dependencies with typed validation and zero-copy context streaming.
-- [x] **REQ-SWARM-004**: Adaptive Resource Allocator & Priority Preemption (`SwarmResourceScheduler`) dynamic load balancer prioritizing critical workflow tasks and preempting low-priority speculative background jobs.
-- [x] **REQ-SWARM-005**: Swarm Workflow REST API endpoints under `/v1/swarm/workflows/*` exposing DAG compilation, workflow dispatch, status tracking, cancellation, and execution inspection.
+- [x] **REQ-DAO-001**: Decentralized Swarm DAO proposal lifecycle engine (`SwarmDAOEngine`) supporting multi-desk proposal submission, timelock escrow, quadratic voting, and cryptographic ballot verification.
+- [x] **REQ-DAO-002**: Stake-weighted reputation & delegation registry (`StakeReputationRegistry`) tracking seat contributions, compute credits, slashing penalties, and liquid delegation.
+- [x] **REQ-DAO-003**: Autonomous Policy Enforcer & Timelock Executor (`PolicyTimelockExecutor`) enforcing parameter updates, tool whitelisting, and resource quotas only after quorum approval and timelock expiration.
+- [x] **REQ-DAO-004**: Swarm DAO REST API endpoints under `/v1/dao/*` exposing proposal creation, vote casting, ballot tallies, delegation, and execution.
+- [x] **REQ-DAO-005**: DAO governance drill simulator verifying Sybil resistance, bribery attack mitigation, and emergency timelock cancellation.
 
-## 2. Self-Synthesizing Capability Federation & Autonomous Execution Verification (Phase 47)
+## 2. Algorithmic Compute Tokenomics & Cross-Desk Settlement Mesh (Phase 49)
 
-- [x] **REQ-SWARM-006**: Autonomous Capability Discovery & Federation Broker (`CapabilityFederationBroker`) dynamically indexing available tools, skills, and agents across federated desks with automatic schema adaptation.
-- [x] **REQ-SWARM-007**: Cryptographic Workflow Execution Receipt Ledger (`WorkflowReceiptLedger`) recording immutable execution receipts with seat signatures, task output hashes, and Merkle root verification.
-- [x] **REQ-SWARM-008**: External Workflow Attestation & Solana Devnet Anchor (`WorkflowAnchorExporter`) publishing workflow completion proofs and consensus signatures to Solana devnet and immutable WORM storage.
-- [x] **REQ-SWARM-009**: Cross-Desk Failure Recovery & Fallback Synthesizer (`WorkflowFailureSynthesizer`) automatically synthesizing alternative fallback execution DAGs upon node or tool failures.
-- [x] **REQ-SWARM-010**: End-to-End Swarm Orchestration & Execution Drill Simulator (`SwarmOrchestrationDrillSimulator`) verifying distributed DAG execution, failure recovery, priority preemption, and attestation anchoring.
+- [x] **REQ-DAO-006**: Algorithmic Tokenomics & Compute Credit Ledger (`ComputeCreditLedger`) tracking balance accounting, dynamic token pricing based on node load, and transaction fees.
+- [x] **REQ-DAO-007**: Multi-Desk Clearinghouse & Settlement Pipeline (`CrossDeskClearinghouse`) facilitating atomic balance settlements between federated desks with vector clock state reconciliation.
+- [x] **REQ-DAO-008**: Cryptographic Payment Channel & Receipt Anchor (`PaymentChannelManager`) providing micro-payment channel contracts with HMAC-SHA256 state commitments.
+- [x] **REQ-DAO-009**: External Settlement Exporter (`SettlementAnchorExporter`) anchoring batch settlement receipts and Merkle root proofs to Solana devnet and WORM audit ledgers.
+- [x] **REQ-DAO-010**: End-to-end tokenomics stress drill simulator (`TokenomicsDrillSimulator`) verifying high-concurrency clearing, balance solvency, and double-spend rejection.
+

@@ -1273,8 +1273,44 @@ _STAGE_PREFIX = (
 _STAGE_PREFIX_FORCE = _STAGE_PREFIX.replace("git add -f --", "git add --force --", 1)
 
 
-def _staging_receipt(tmp_path: Path, cmd: str, **overrides) -> Path:
-    """An isolated receipt whose files_changed declares everything staged."""
+def _touch(root: Path, rel: str) -> None:
+    """Create an actual regular file at `root/rel` (parents included).
+
+    Shapes the literal classifier rejects before any filesystem check —
+    absolute paths, `..` traversal, glob/substitution characters — are left
+    uncreated so the rejection still comes from the shape, not the disk.
+    Existing paths (a directory or symlink the test placed) are left alone.
+    """
+    if not isinstance(rel, str) or not rel:
+        return
+    if rel.startswith("/") or ".." in rel.split("/"):
+        return
+    if any(ch in rel for ch in ("*", "?", "[", "{", "$", "`")):
+        return
+    target = root / rel
+    try:
+        if target.is_symlink() or target.exists():
+            return
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            return
+        target.write_text("fixture\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def _staging_receipt(
+    tmp_path: Path, cmd: str, repo_files: list[str] | None = None, **overrides
+) -> Path:
+    """An isolated receipt whose files_changed declares everything staged.
+
+    `repo_files` (default: the receipt's `files_changed`) are materialized as
+    actual regular files under `tmp_path`, which the tests pass as `--repo` —
+    the candidate checker verifies every staged target against that tree.
+    """
+    files_changed = overrides.get("files_changed", [_STAGE_RECEIPT, *_STAGE_SOURCES])
+    for rel in files_changed if repo_files is None else repo_files:
+        _touch(tmp_path, rel)
     base = {
         "bot": _STAGE_BOT,
         "approved_by": _STAGE_APPROVER,
@@ -1293,32 +1329,46 @@ class TestG2ReceiptForceStaging:
     """Receipt JSON lives under the gitignored `.receipts/` tree, so staging it
     REQUIRES `git add -f/--force` — a flag that forces past no safety check.
     The gate exempts exactly that narrow shape (own-bot receipt plus
-    `files_changed`-declared sources, committed in the same compound) and
-    keeps flagging every genuinely unsafe command, in any compound position.
-    These run the candidate gate CLI (the HEAD tip proposed for merge, not the
-    possibly base-overlaid working tree) over real receipt JSON via
+    `files_changed`-declared sources, each an actual regular file under the
+    `--repo` tree, committed in the same compound) and keeps flagging every
+    genuinely unsafe command, in any compound position. These run the candidate
+    gate CLI (the HEAD tip proposed for merge, not the possibly base-overlaid
+    working tree) over real receipt JSON and a real tmp file tree via
     run_candidate_gate().
     """
 
-    def test_dash_f_staging_with_declared_sources_passes(self, tmp_path):
-        p = _staging_receipt(
-            tmp_path, _STAGE_PREFIX + ' && git commit -m "stage fixture"'
+    def _passes(self, tmp_path: Path, cmd: str, **overrides):
+        p = _staging_receipt(tmp_path, cmd, **overrides)
+        r = run_candidate_gate(
+            "check_receipt.py", "--receipt", str(p), "--repo", str(tmp_path)
         )
-        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
         assert r.returncode == 0, r.stderr
         assert "bypass" not in r.stderr
+        return r
+
+    def test_dash_f_staging_with_declared_sources_passes(self, tmp_path):
+        self._passes(tmp_path, _STAGE_PREFIX + ' && git commit -m "stage fixture"')
 
     def test_force_long_flag_staging_passes(self, tmp_path):
-        p = _staging_receipt(
+        self._passes(
             tmp_path, _STAGE_PREFIX_FORCE + ' && git commit -m "stage fixture"'
         )
-        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
-        assert r.returncode == 0, r.stderr
-        assert "bypass" not in r.stderr
+
+    def test_standalone_receipt_only_long_flag_no_dashdash_passes(self, tmp_path):
+        """No `--` delimiter, no other path, no commit tail: the no-delimiter
+        branch still exempts the bot's own receipt staged with `--force`."""
+        self._passes(tmp_path, f"git add --force {_STAGE_RECEIPT}")
+
+    def test_standalone_receipt_only_long_flag_with_dashdash_passes(self, tmp_path):
+        """Same receipt-only shape through the `--`-delimiter branch: only the
+        bot's own receipt staged with `--force --`, no other path, no tail."""
+        self._passes(tmp_path, f"git add --force -- {_STAGE_RECEIPT}")
 
     def _blocked(self, tmp_path: Path, cmd: str, **overrides):
         p = _staging_receipt(tmp_path, cmd, **overrides)
-        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        r = run_candidate_gate(
+            "check_receipt.py", "--receipt", str(p), "--repo", str(tmp_path)
+        )
         assert r.returncode == 1, f"{cmd!r} should have been rejected\n{r.stderr}"
         assert "bypass" in r.stderr
         return r
@@ -1379,18 +1429,21 @@ class TestG2ReceiptForceStaging:
         )
 
     def test_undeclared_source_still_blocked(self, tmp_path):
+        unlisted = "services/desk-gateway/src/desk_gateway/unlisted.py"
         self._blocked(
             tmp_path,
-            f"git add -f -- {_STAGE_RECEIPT} "
-            "services/desk-gateway/src/desk_gateway/unlisted.py"
+            f"git add -f -- {_STAGE_RECEIPT} {unlisted}"
             + ' && git commit -m "stage fixture"',
+            repo_files=[_STAGE_RECEIPT, *_STAGE_SOURCES, unlisted],
         )
 
     def test_wrong_seat_receipt_still_blocked(self, tmp_path):
+        other = ".receipts/bot-03-android/other.json"
         self._blocked(
             tmp_path,
-            f"git add -f -- {_STAGE_RECEIPT} .receipts/bot-03-android/other.json"
+            f"git add -f -- {_STAGE_RECEIPT} {other}"
             + ' && git commit -m "stage fixture"',
+            repo_files=[_STAGE_RECEIPT, *_STAGE_SOURCES, other],
         )
 
     def test_unterminated_quote_still_blocked(self, tmp_path):
@@ -1487,6 +1540,57 @@ class TestG2ReceiptForceStaging:
             tmp_path,
             "{ git add --force -- "
             f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}; }}",
+        )
+
+    def test_declared_directory_with_nested_file_still_blocked(self, tmp_path):
+        """A declared directory recursively stages everything under it (e.g. an
+        ignored nested fixture) — the exemption is individual regular files."""
+        staged_dir = tmp_path / "services" / "desk-gateway"
+        (staged_dir / "src" / "desk_gateway").mkdir(parents=True, exist_ok=True)
+        (staged_dir / "nested-fixture.json").write_text("ignored\n", encoding="utf-8")
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} services/desk-gateway"
+            + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, "services/desk-gateway"],
+        )
+
+    def test_declared_but_missing_source_still_blocked(self, tmp_path):
+        """A declared path with no file on disk fails closed — no exemption."""
+        missing = "services/desk-gateway/src/desk_gateway/missing.py"
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} {missing}"
+            + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, missing],
+            repo_files=[_STAGE_RECEIPT],
+        )
+
+    def test_escaping_symlink_still_blocked(self, tmp_path):
+        """A staged symlink pointing outside the repo fails closed."""
+        outside = tmp_path.parent / f"{tmp_path.name}-outside.txt"
+        outside.write_text("outside\n", encoding="utf-8")
+        (tmp_path / "staged-link.txt").symlink_to(outside)
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} staged-link.txt"
+            + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, *_STAGE_SOURCES, "staged-link.txt"],
+        )
+
+    def test_inside_symlink_still_blocked(self, tmp_path):
+        """Even a symlink resolving inside the repo is rejected conservatively."""
+        real = "tests/real-target.py"
+        link = "tests/link-target.py"
+        (tmp_path / real).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / real).write_text("real\n", encoding="utf-8")
+        (tmp_path / link).symlink_to(tmp_path / real)
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} {link}"
+            + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, *_STAGE_SOURCES, real, link],
+            repo_files=[_STAGE_RECEIPT, *_STAGE_SOURCES, real],
         )
 
 

@@ -46,7 +46,7 @@ from desk_gateway.quantum_teleportation import (
     QuantumRepeaterMesh,
     QuantumResourceError,
     QuantumTeleportationProtocol,
-    TeleportationResult,
+    TeleportationSession,
 )
 from desk_gateway.quantum_transport import (
     LocalNodeTransport,
@@ -867,7 +867,7 @@ def test_teleport_explicit_allocation_mode_succeeds():
         ctx = _setup(rngs={"alice": ScriptedRng([0.1])})
         proto = _proto(ctx)
         result = await proto.teleport_qubit("alice", "bob", 1.0 + 0j, 0.0j)
-        assert isinstance(result, TeleportationResult)
+        assert isinstance(result, TeleportationSession)
         assert result.success is True
         assert result.fidelity >= 0.95
         assert ctx.pool.status_of(result.pair_id).value == "consumed"

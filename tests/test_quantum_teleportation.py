@@ -1008,3 +1008,51 @@ def test_quarantined_output_release_cannot_issue_another_mutation():
         assert all(lease["lease_id"] != result.output.lease_id for lease in worker["leases"])
 
     _run(body())
+
+
+@pytest.mark.parametrize("exception_type", [asyncio.CancelledError, KeyboardInterrupt])
+def test_cancelled_output_release_quarantines_after_actual_worker_effect(exception_type):
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.3]})
+        pair = await _pair(ctx.pool)
+        protocol = QuantumTeleportationProtocol(pool=ctx.pool)
+        result = await protocol.teleport_qubit("alice", "bob", 1, 1j, pair.pair_id)
+        assert result.success is True
+        session = result.session_id
+        output = protocol.outputs[session]
+        assert output.status == "available"
+        before = await ctx.transport.inspect("bob", instance=output.instance_id)
+        assert any(lease["lease_id"] == output.lease_id for lease in before["leases"])
+        interruption = exception_type("release completed before interruption")
+
+        class InterruptedRelease(LocalNodeTransport):
+            attempts = 0
+
+            async def release(self, node_id, **kwargs):
+                self.attempts += 1
+                await super().release(node_id, **kwargs)
+                raise interruption
+
+        transport = InterruptedRelease(ctx.workers)
+        protocol._transport = transport
+        with pytest.raises(exception_type) as caught:
+            await protocol.release_teleport_output(session, "bob", "release-first")
+        assert caught.value is interruption
+        after = await ctx.transport.inspect("bob", instance=output.instance_id)
+        assert all(lease["lease_id"] != output.lease_id for lease in after["leases"])
+        assert after["active_count"] == 0
+        assert protocol.outputs[session].to_dict() == {
+            **output.to_dict(), "status": "quarantined",
+        }
+        assert protocol.sessions[session].to_dict()["output"] == protocol.outputs[session].to_dict()
+        assert protocol._release_acks == {}
+        assert transport.attempts == 1
+        for operation in ("release-first", "release-new"):
+            with pytest.raises(QuantumResourceError) as retry:
+                await protocol.release_teleport_output(session, "bob", operation)
+            assert retry.value.code == "output_quarantined"
+            assert retry.value.status == 409
+            assert transport.attempts == 1
+            assert protocol._release_acks == {}
+
+    _run(body())

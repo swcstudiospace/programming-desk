@@ -67,7 +67,6 @@ __all__ = [
     "QuantumResourceError",
     "QuantumTeleportationProtocol",
     "SwapResult",
-    "TeleportationResult",
     "TeleportationSession",
     "TeleportOutput",
 ]
@@ -1308,14 +1307,6 @@ class QuantumRepeaterMesh:
 
 
 @dataclass(frozen=True, slots=True)
-class TeleportationSession:
-    session_id: str
-    source_node: str
-    target_node: str
-    pair_id: str
-
-
-@dataclass(frozen=True, slots=True)
 class ClassicalCorrection:
     """Wire-safe correction: IDs and bits only, never amplitudes."""
 
@@ -1331,7 +1322,7 @@ class ClassicalCorrection:
 
 
 @dataclass(frozen=True, slots=True)
-class TeleportationResult:
+class TeleportationSession:
     session_id: str
     source_node: str
     target_node: str
@@ -1418,7 +1409,7 @@ class QuantumTeleportationProtocol:
         self._transport = transport if transport is not None else self.pool._transport  # noqa: SLF001
         self._rng = rng if rng is not None else _secrets.SystemRandom()
         self._append_event = append_event if append_event is not None else self.pool._append_event  # noqa: SLF001
-        self.sessions: dict[str, TeleportationResult] = {}
+        self.sessions: dict[str, TeleportationSession] = {}
         # Successful receiver outputs keyed by session: explicit session
         # ownership plus receiver scope. Successful outputs persist until
         # the owner releases them; failed outputs are reclaimed, never stored.
@@ -1438,7 +1429,7 @@ class QuantumTeleportationProtocol:
         *,
         operation_id: str | None = None,
         session_id: str | None = None,
-    ) -> TeleportationResult:
+    ) -> TeleportationSession:
         _check_node(source_node, "source_node")
         _check_node(target_node, "target_node")
         if source_node == target_node:
@@ -1666,7 +1657,7 @@ class QuantumTeleportationProtocol:
                 bsm_x=m_x, bsm_z=m_z, frame_x=frame_x, frame_z=frame_z,
                 correction_x=correction_x, correction_z=correction_z,
             )
-            result = TeleportationResult(
+            result = TeleportationSession(
                 session_id=session, source_node=source_node, target_node=target_node,
                 pair_id=pair.pair_id, bsm_bits=(m_z, m_x), bsm_probability=pick.probability,
                 frame=(frame_x, frame_z), correction=correction,
@@ -1731,8 +1722,8 @@ class QuantumTeleportationProtocol:
         that does not own the session reports 403, and a second release
         under a new operation reports 409. A same-operation retry returns
         its saved acknowledgement without another worker mutation. The
-        worker release reuses ``operation_id`` verbatim so an ambiguous
-        first attempt replays instead of double-applying.
+        worker release reuses ``operation_id`` verbatim. An unconfirmed
+        release quarantines the output and refuses every subsequent attempt.
 
         Returns ``{"ok": True, "acknowledgement": ..., "output": {...}}``
         with ``output={session_id, receiver, resource_id, lease_id,
@@ -1766,6 +1757,9 @@ class QuantumTeleportationProtocol:
                     receiver, operation_id=operation_id, lease_ids=[record.lease_id],
                     instance=record.instance_id or None,
                 )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                self._set_output_status(record, "quarantined")
+                raise
             except NodeTransportAmbiguous as exc:
                 self._set_output_status(record, "quarantined")
                 raise QuantumResourceError(

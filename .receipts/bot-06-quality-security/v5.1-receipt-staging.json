@@ -197,6 +197,28 @@
   "duration_s": 0.04,
   "output_tail": "Observed verification UTC2026-10-10T19:13:00Z."
 }
+,
+{
+  "cmd": "git commit --only -m 'docs(gates): record file-only staging proof and repo context' -- docs/quality-gates.md skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.21,
+  "output_tail": "9033d18 committed only three QUALITY documentation/receipt paths after observed332-suite and filesystem smoke."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 1.49,
+  "output_tail": "Final committed owner union: G1PASS5paths/G3PASS5paths7templatesclean/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; duration is whole pipeline, not individual gate timings."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json --bot bot-06-quality-security --strict",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 0.32,
+  "output_tail": "Final updated owner receipt: G2FAIL ONLYmissing independent approved_by, no other schema/bypass/claim failure."
+}
   ],
   "claims": [
     {
@@ -245,6 +267,16 @@
 {
   "claim": "Known-file owner strict G2 still rejects absent independent approval.",
   "evidence_command_index": 23,
+  "expects_failure": true
+}
+,
+{
+  "claim": "Final committed owner G1/G3/G4/G5/G6/G7 pipeline passed with five owned files and no secrets/contract/deploy/destructive surface.",
+  "evidence_command_index": 28
+},
+{
+  "claim": "Final updated owner strict G2 rejects only the absent independent approval; not a pass or self-stamp.",
+  "evidence_command_index": 29,
   "expects_failure": true
 }
   ],

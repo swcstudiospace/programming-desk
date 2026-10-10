@@ -166,7 +166,8 @@
       "qualification": "Supersedes earlier owner queue/pending metadata only. SOURCEchecker still unintegrated/pushheld/G2independentstamp, SASTlegacy/livechain blocked."
     },
     "latest_lead_publication_snapshot": "Actual parent publishedLEADdb8f5e76e8fd791028ccd7741efab3fc234e18e5/tool2.34s atcommands[55]; earlier179270e retained. Final receipt-only evidence append follows this checkpoint; no invented selfhash. Original receipt timestamps remain historical.",
-    "final_status": "All11originalrequirementsopen/signed0;70sourcecommentsrepaired/0new/current768stableproductd452fb1unpublished;SOURCEG2stillmissingstamp+force-stageclassificationuntilownerintegration. OWNERf18430995847COMPLETED5of5/noNEWfindings but2storedflagsfalse/stampmissing;332candidateCI. LEAD70path finalgatesPASS/strictG2ONLYstampmissing. Whole-serviceSAST8legacyHIGHMED/funding0slot509643885/positivechainblocked; no merge/waiver/completion.",
+    "receipt_syntax_checkpoint": {"provenance": "Actual parent Eval json.loads consumer observation, not a fabricated shell command.", "before": "After final bookkeeping metadata append at published45f3c89, json.loads raised JSONDecodeError line170column3 because parent left one trailing comma on continuation.final_status. This was a receipt-only authoring defect, not SOURCE/runtime failure.", "repair": "Removed only the trailing comma; all original command bytes,145SOURCErows and61preexistingLEADrows preserved.", "after": "Actual Eval fullJSONparse succeeded,11originalcheckboxesopen/0checked, allLEADclaimindices valid; actual strictCLI only missing independent approval atcommands[61].", "approval": "No self-stamp, waiver or completion; missing external prerequisites unchanged."},
+    "final_status": "All11originalrequirementsopen/signed0;70sourcecommentsrepaired/0new/current768stableproductd452fb1unpublished;SOURCEG2stillmissingstamp+force-stageclassificationuntilownerintegration. OWNERf18430995847COMPLETED5of5/noNEWfindings but2storedflagsfalse/stampmissing;332candidateCI. LEAD70path finalgatesPASS/strictG2ONLYstampmissing. Whole-serviceSAST8legacyHIGHMED/funding0slot509643885/positivechainblocked; no merge/waiver/completion."
   },
   "planning_evidence_addendum": {
     "finding": "Greptile #212 finding 296100815 / PRRT_kwDOUgQ0os6q75AU",
@@ -638,6 +639,14 @@
   "duration_s": 1.72,
   "output_tail": "FinalLEADmanualbody records ownerterminal5of5+2storedfalse and latestbalance509643885; drafttrue/headdb8f5e76e8fd791028ccd7741efab3fc234e18e5, old automation block preserved pending new LEAD-head review."
 }
+,
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.24,
+  "output_tail": "AFTER parent trailing-comma correction, actual consumer receipt parser succeeds and strict G2FAIL ONLYmissing independent approved_by; no JSON/load/pointer error."
+}
   ],
   "claims": [
     {
@@ -787,6 +796,12 @@
 {
   "claim": "Final LEAD strictG2 failed only missing independentapproval, not green or self-stamp.",
   "evidence_command_index": 59,
+  "expects_failure": true
+}
+,
+{
+  "claim": "After parent receipt-only comma correction, the actual consumer parses full receipt and fails strictG2 only on independentapproval; original history remains intact.",
+  "evidence_command_index": 61,
   "expects_failure": true
 }
   ],

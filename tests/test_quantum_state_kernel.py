@@ -636,3 +636,83 @@ def test_six_unitary_channel_is_not_general_werner_projection():
     assert marginal.fidelity_pure(zero) == pytest.approx(2 / 3)
     assert marginal.fidelity_pure(QuantumStateVector.from_qubit(1, 1)) == pytest.approx(2 / 3)
     assert output.fidelity_pure(BellState("PHI_PLUS").ideal_vector()) == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    "rows",
+    (
+        ((0.5, 0.5000000008), (0.5000000016, 0.5)),
+        ((0.5, 0.5000000016), (0.5000000008, 0.5)),
+    ),
+)
+def test_tolerated_asymmetry_cannot_hide_negative_eigenvalue(rows):
+    with pytest.raises(ValueError):
+        QuantumDensityMatrix(rows)
+
+
+def test_complex_mixed_states_match_dense_single_gate_reference():
+    import random
+
+    rng = random.Random(68)
+    for qubits in range(1, 5):
+        dim = 2 ** qubits
+        for _ in range(6):
+            vectors = []
+            for _ in range(2):
+                raw = [
+                    complex(rng.uniform(-1, 1), rng.uniform(-1, 1))
+                    for _ in range(dim)
+                ]
+                norm = math.sqrt(sum(abs(value) ** 2 for value in raw))
+                vectors.append([value / norm for value in raw])
+            a, b = vectors
+            rows = tuple(
+                tuple(
+                    0.37 * a[i] * a[j].conjugate()
+                    + 0.63 * b[i] * b[j].conjugate()
+                    for j in range(dim)
+                )
+                for i in range(dim)
+            )
+            actual = QuantumDensityMatrix(rows).apply_single(H, qubits - 1)
+            unitary = [
+                [H[r & 1][c & 1] if r // 2 == c // 2 else 0j for c in range(dim)]
+                for r in range(dim)
+            ]
+            left = [
+                [sum(unitary[i][k] * rows[k][j] for k in range(dim)) for j in range(dim)]
+                for i in range(dim)
+            ]
+            expected = [
+                [
+                    sum(left[i][k] * unitary[j][k].conjugate() for k in range(dim))
+                    for j in range(dim)
+                ]
+                for i in range(dim)
+            ]
+            for i in range(dim):
+                for j in range(dim):
+                    assert actual.rows[i][j] == pytest.approx(
+                        expected[i][j], rel=0, abs=5e-12
+                    )
+
+
+@pytest.mark.parametrize("delta", (-6e-10, 6e-10))
+def test_near_unit_trace_keeps_positive_rare_born_tail(delta):
+    rho = QuantumDensityMatrix(((1 + delta - 1e-14, 0), (0, 1e-14)))
+    assert rho.measure_z((0,), ScriptedRNG([1 - 4e-15])).bits == (1,)
+
+
+def test_conditioning_rejects_amplified_nonphysical_positive_branch():
+    p = 1e-14
+    coherence = 5e-10
+    rho = QuantumDensityMatrix(
+        (
+            (1 - p, 0, 0, 0),
+            (0, 0, 0, 0),
+            (0, 0, p / 2, coherence),
+            (0, 0, coherence, p / 2),
+        )
+    )
+    with pytest.raises(ValueError):
+        rho.branches_z((0,))

@@ -85,7 +85,6 @@ _BELL_FRAMES = {
     "PSI_MINUS": (1, 1),
 }
 
-Gate2 = Tuple[Tuple[complex, complex], Tuple[Tuple[complex, complex], Tuple[complex, complex]]]  # noqa: E501
 Gate2 = Tuple[Tuple[complex, complex], Tuple[complex, complex]]
 
 I: Gate2 = ((1 + 0j, 0j), (0j, 1 + 0j))
@@ -253,13 +252,15 @@ def _hermitian_min_eigenvalue(rows: Sequence[Sequence[complex]]) -> float:
     Maps the ``n``-dimensional Hermitian input to its ``2n``-dimensional
     real symmetric representation (whose spectrum doubles each
     eigenvalue) and diagonalizes that with maximum-pivot Jacobi rotations.
+    The validity predicate uses the Hermitian part without rewriting the
+    stored rows, so tolerated asymmetry cannot make validity basis-dependent.
     """
     n = len(rows)
     size = 2 * n
     real = [[0.0] * size for _ in range(size)]
     for i in range(n):
         for j in range(n):
-            entry = complex(rows[i][j])
+            entry = 0.5 * complex(rows[i][j]) + 0.5 * complex(rows[j][i]).conjugate()
             real[i][j] = entry.real
             real[i][j + n] = -entry.imag
             real[i + n][j] = entry.imag

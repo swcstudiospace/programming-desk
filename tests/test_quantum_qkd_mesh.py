@@ -11,6 +11,7 @@ owner-capability refusal.
 """
 
 import asyncio
+import base64
 import json
 import random
 
@@ -18,13 +19,22 @@ import pytest
 
 from desk_gateway.quantum_key import (
     estimate_chsh,
-    qber_exceeds,
     reconcile_candidates,
     sample_chsh_outcome,
     toeplitz_hash,
 )
-from desk_gateway.quantum_node import QuantumNodeWorker, encode_density
-from desk_gateway.quantum_qkd_mesh import QKDProtocolEngine, QuantumTeleportationDrillSimulator
+from desk_gateway.quantum_node import (
+    QuantumNodeWorker,
+    decode_signals,
+    encode_density,
+    encode_signals,
+)
+from desk_gateway.quantum_qkd_mesh import (
+    EavesdropDetector,
+    QKDProtocolEngine,
+    QuantumChannelInterception,
+    QuantumTeleportationDrillSimulator,
+)
 from desk_gateway.quantum_teleportation import (
     BellPairPool,
     BellStateType,
@@ -306,17 +316,17 @@ def test_no_transport_fails_closed_without_keys():
 
 
 def test_qber_integer_gate_boundary():
-    assert qber_exceeds(11, 100) is False
-    assert qber_exceeds(12, 100) is True
-    assert qber_exceeds(0, 100) is False
-    assert qber_exceeds(100, 100) is True
+    assert EavesdropDetector.exceeds(11, 100) is False
+    assert EavesdropDetector.exceeds(12, 100) is True
+    assert EavesdropDetector.exceeds(0, 100) is False
+    assert EavesdropDetector.exceeds(100, 100) is True
     for bad in (
-        lambda: qber_exceeds(True, 100),
-        lambda: qber_exceeds(1, 0),
-        lambda: qber_exceeds(-1, 100),
-        lambda: qber_exceeds(101, 100),
-        lambda: qber_exceeds(float("nan"), 100),
-        lambda: qber_exceeds(1, "100"),
+        lambda: EavesdropDetector.exceeds(True, 100),
+        lambda: EavesdropDetector.exceeds(1, 0),
+        lambda: EavesdropDetector.exceeds(-1, 100),
+        lambda: EavesdropDetector.exceeds(101, 100),
+        lambda: EavesdropDetector.exceeds(float("nan"), 100),
+        lambda: EavesdropDetector.exceeds(1, "100"),
     ):
         with pytest.raises(ValueError):
             bad()
@@ -1118,5 +1128,588 @@ def test_e91_partial_swap_lost_transfer_retains_quarantine_without_retry():
             assert (await transport.inspect(node))["active_count"] == 0
         for node in (ALICE, BOB):
             await assert_keyless(transport, node, session.session_id, "partial-swap")
+
+    _run(main())
+
+
+def test_channel_interception_applies_born_resend():
+    """The live channel resends Eve's Born-measured eigenstate, deterministically."""
+    outgoing = encode_signals([0] * 200)
+    resent = decode_signals(
+        QuantumChannelInterception.apply(outgoing, random.Random(20260612)), "resent",
+    )
+    assert len(resent) == 200
+    # |0> input: a rectilinear resend is 0, a diagonal resend is |+>/|->.
+    assert set(resent) <= {0, 2, 3}
+    assert len(set(resent)) > 1
+    repeat = decode_signals(
+        QuantumChannelInterception.apply(outgoing, random.Random(20260612)), "resent",
+    )
+    assert repeat == resent
+
+
+def test_late_begin_after_abort_unknown_stays_quarantined():
+    """A delayed begin landing after an unknown_session abort stays tracked/quarantined."""
+    async def main():
+        class DelayedBegin(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.armed = True
+                self.held = None
+                self.abort_ops = []
+
+            async def qkd_step(self, node_id, **kwargs):
+                if kwargs.get("action") == "abort":
+                    self.abort_ops.append((node_id, kwargs.get("operation_id")))
+                if (
+                    self.armed
+                    and kwargs.get("action") == "begin"
+                    and node_id == ALICE
+                    and self.held is None
+                ):
+                    self.held = (node_id, dict(kwargs))
+                    raise NodeTransportAmbiguous("begin reply lost; may have applied")
+                return await super().qkd_step(node_id, **kwargs)
+
+        _events, sink = make_sink()
+        workers = make_workers()
+        transport = DelayedBegin(workers)
+        pool = BellPairPool(transport=transport)
+        mesh = QuantumRepeaterMesh(pool, rng=random.Random(911))
+        mesh.register_node(ALICE, "test-a")
+        mesh.register_node(BOB, "test-b")
+        mesh.register_link(ALICE, BOB)
+        engine = QKDProtocolEngine(
+            mesh, pool=pool, transport=transport, rng=random.Random(5), append_event=sink,
+        )
+        session = await engine.run_bb84(ALICE, BOB, 12000, requested_bits=256)
+        assert session.status == "failed"
+        assert session.reason == "key_cleanup_unconfirmed"
+        assert session.keys_agreed is False
+        assert session.key_commitment_hex is None
+        sid = session.session_id
+        # One mutation round only: the pending ALICE begin reconciles
+        # read-only after its unknown_session abort, BOB was never bound.
+        assert len(transport.abort_ops) == 2
+        assert sorted(node for node, _ in transport.abort_ops) == [ALICE, BOB]
+        # The delayed begin actually arrives after the unknown_session abort.
+        assert transport.held is not None
+        node, held_kwargs = transport.held
+        transport.armed = False
+        reply = await LocalNodeTransport.qkd_step(transport, node, **held_kwargs)
+        assert reply["ok"] is True
+        # Original scope stays tracked and quarantined: no clearance inference.
+        assert sid in engine._session_instances
+        assert set(engine._quarantined_sessions[sid]) == {ALICE}
+        late = await transport.qkd_step(
+            ALICE, operation_id="late-vault-1", session_id=sid, action="lengths", payload={},
+            instance=engine._session_instances[sid][ALICE],
+        )
+        assert late["state"] == "active" and late["key_available"] is False
+        # Read-only reconciliation never mutates again and never clears.
+        assert await engine.release_session_keys(sid, operation="drill_release") is False
+        assert len(transport.abort_ops) == 2
+        assert set(engine._quarantined_sessions[sid]) == {ALICE}
+        still_late = await transport.qkd_step(
+            ALICE, operation_id="late-vault-2", session_id=sid, action="lengths", payload={},
+            instance=engine._session_instances[sid][ALICE],
+        )
+        assert still_late["state"] == "active" and still_late["key_available"] is False
+        assert_public_clean(session.to_dict())
+
+    _run(main())
+
+
+def test_receipt_failure_aborts_exactly_once_per_node():
+    """A receipt refusal destroys both endpoint keys with a single abort round."""
+    async def main():
+        class CountingAbort(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.abort_ops = []
+
+            async def qkd_step(self, node_id, **kwargs):
+                if kwargs.get("action") == "abort":
+                    self.abort_ops.append((node_id, kwargs.get("operation_id")))
+                return await super().qkd_step(node_id, **kwargs)
+
+        workers = make_workers()
+        transport = CountingAbort(workers)
+        pool = BellPairPool(transport=transport)
+        mesh = QuantumRepeaterMesh(pool, rng=random.Random(911))
+        mesh.register_node(ALICE, "test-a")
+        mesh.register_node(BOB, "test-b")
+        mesh.register_link(ALICE, BOB)
+        seen = []
+
+        async def broken_sink(event):
+            seen.append(event)
+            raise RuntimeError("sink refused receipt")
+
+        engine = QKDProtocolEngine(
+            mesh, pool=pool, transport=transport, rng=random.Random(11),
+            append_event=broken_sink,
+        )
+        with pytest.raises(RuntimeError, match="sink refused receipt"):
+            await engine.run_bb84(ALICE, BOB, 12000, requested_bits=256)
+        assert len(seen) == 2
+        assert len(transport.abort_ops) == 2
+        assert sorted(node for node, _ in transport.abort_ops) == [ALICE, BOB]
+        assert list(engine._session_instances) != []
+        for session_id in list(engine._session_instances):
+            await assert_keyless(transport, ALICE, session_id, f"rc-a-{session_id[-4:]}")
+            await assert_keyless(transport, BOB, session_id, f"rc-b-{session_id[-4:]}")
+
+    _run(main())
+
+
+def test_receipt_failure_uncertain_abort_quarantines_without_retry():
+    """A partitioned abort during receipt failure quarantines with one mutation round."""
+    async def main():
+        class PartitionedAbort(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.abort_ops = []
+
+            async def qkd_step(self, node_id, **kwargs):
+                if kwargs.get("action") == "abort":
+                    self.abort_ops.append((node_id, kwargs.get("operation_id")))
+                if node_id == BOB and kwargs.get("action") in ("abort", "lengths"):
+                    raise NodeTransportUnavailable("abort partition")
+                return await super().qkd_step(node_id, **kwargs)
+
+        workers = make_workers()
+        transport = PartitionedAbort(workers)
+        pool = BellPairPool(transport=transport)
+        mesh = QuantumRepeaterMesh(pool, rng=random.Random(911))
+        mesh.register_node(ALICE, "test-a")
+        mesh.register_node(BOB, "test-b")
+        mesh.register_link(ALICE, BOB)
+
+        async def broken_sink(event):
+            raise RuntimeError("sink refused receipt")
+
+        engine = QKDProtocolEngine(
+            mesh, pool=pool, transport=transport, rng=random.Random(11),
+            append_event=broken_sink,
+        )
+        with pytest.raises(RuntimeError, match="sink refused receipt"):
+            await engine.run_bb84(ALICE, BOB, 12000, requested_bits=256)
+        assert len(transport.abort_ops) == 2
+        sid = next(iter(engine._session_instances))
+        assert set(engine._quarantined_sessions[sid]) == {BOB}
+        await assert_keyless(transport, ALICE, sid, "rcu-a")
+        local = LocalNodeTransport(workers)
+        bob = await local.qkd_step(
+            BOB, operation_id="rcu-observe", session_id=sid, action="lengths", payload={},
+        )
+        assert bob["key_available"] is True
+        await local.qkd_step(
+            BOB, operation_id="rcu-cleanup", session_id=sid,
+            action="abort", payload={"reason": "user_abort"},
+        )
+
+    _run(main())
+
+
+def test_e91_neutral_refusal_with_confirmed_retire_is_failed_reason_none():
+    """A neutral mid-round refusal with confirmed retirement keeps failed/reason-None."""
+    async def main():
+        class NeutralRefusal(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.refused = False
+
+            async def qkd_step(self, node_id, **kwargs):
+                if kwargs.get("action") == "measure_e91" and not self.refused:
+                    self.refused = True
+                    raise NodeCommandFailed(409, "session_step", "injected neutral refusal")
+                return await super().qkd_step(node_id, **kwargs)
+
+        workers = make_workers()
+        transport = NeutralRefusal(workers)
+        pool = BellPairPool(transport=transport)
+        mesh = QuantumRepeaterMesh(pool, rng=random.Random(911))
+        mesh.register_node(ALICE, "test-a")
+        mesh.register_node(BOB, "test-b")
+        mesh.register_link(ALICE, BOB)
+        engine = QKDProtocolEngine(mesh, pool=pool, transport=transport, rng=random.Random(4404))
+        session = await engine.run_e91(ALICE, BOB, 8000, requested_bits=256)
+        assert session.status == "failed" and session.reason is None
+        assert session.keys_agreed is False
+        assert session.extracted_bits == 0
+        assert session.key_id is None
+        assert session.commitment_alice_hex is None
+        assert session.commitment_bob_hex is None
+        assert session.key_commitment_hex is None
+        assert transport.refused is True
+        assert session.session_id not in engine._quarantined_sessions
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "neutral-refusal")
+        assert pool.list_active_pairs() == []
+        assert_public_clean(session.to_dict())
+
+    _run(main())
+
+
+def test_engine_tag_mismatch_with_admissible_qber_withholds_key():
+    """Public-syndrome tampering breaks agreement without touching signals."""
+    async def main():
+        class SyndromeTamper(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.tags = {}
+                self.extractions = 0
+
+            async def qkd_step(self, node_id, **kwargs):
+                if kwargs.get("action") == "extract":
+                    self.extractions += 1
+                if kwargs.get("action") == "correct":
+                    payload = dict(kwargs["payload"])
+                    tampered = dict(payload["syndrome"])
+                    raw = bytearray(base64.b64decode(tampered["data"]))
+                    raw[0] ^= 0x01
+                    tampered["data"] = base64.b64encode(bytes(raw)).decode()
+                    payload["syndrome"] = tampered
+                    kwargs = dict(kwargs, payload=payload)
+                reply = await super().qkd_step(node_id, **kwargs)
+                if kwargs.get("action") == "tag":
+                    self.tags[node_id] = reply["tag"]["data"]
+                return reply
+
+        _workers, transport, pool, engine = make_stack(transport_type=SyndromeTamper)
+        session = await engine.run_bb84(ALICE, BOB, 12000, requested_bits=256)
+        assert session.status == "aborted" and session.reason == "reconciliation_failed"
+        assert session.qber is not None
+        assert EavesdropDetector.exceeds(session.error_count, session.test_count) is False
+        assert transport.tags[ALICE] != transport.tags[BOB]
+        assert transport.extractions == 0
+        assert session.keys_agreed is False
+        assert session.extracted_bits == 0
+        assert session.key_id is None
+        assert session.commitment_alice_hex is None
+        assert session.commitment_bob_hex is None
+        assert session.key_commitment_hex is None
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "tag-tamper")
+        assert pool.list_active_pairs() == []
+
+    _run(main())
+
+
+
+
+def make_drill_trio(transport_type=LocalNodeTransport, pool_type=BellPairPool):
+    """Three real workers sharing one pool/mesh/protocol/engine graph."""
+    nodes = ("drill-left", "drill-mid", "drill-right")
+    workers = {
+        name: QuantumNodeWorker(name, token=TOKEN, rng=random.Random(3000 + index))
+        for index, name in enumerate(nodes)
+    }
+    transport = transport_type(workers)
+    pool = pool_type(transport=transport)
+    engine = QKDProtocolEngine(pool=pool, transport=transport, rng=random.Random(9134))
+    mesh = QuantumRepeaterMesh(pool)
+    for node in nodes:
+        mesh.register_node(node, "drill-region")
+    mesh.register_link(nodes[0], nodes[1])
+    mesh.register_link(nodes[1], nodes[2])
+    protocol = QuantumTeleportationProtocol(mesh, transport=transport)
+    return nodes, workers, transport, pool, engine, mesh, protocol
+
+
+async def _hold_caller_material(transport, pool, protocol, engine, nodes):
+    user_pair = await pool.create_pair(
+        nodes[0], nodes[2], BellStateType.PHI_PLUS, 1.0, operation_id="caller-pair",
+    )
+    user_input = await pool.create_pair(
+        nodes[0], nodes[2], BellStateType.PHI_PLUS, 1.0, operation_id="caller-teleport-input",
+    )
+    user_output = await protocol.teleport_qubit(
+        nodes[0], nodes[2], 1, 1j, bell_pair=user_input.pair_id,
+    )
+    user_key = await engine.run_bb84(nodes[0], nodes[2], 12000)
+    assert user_output.success is True
+    assert user_key.status == "established"
+    before = {
+        node: (await transport.inspect(node))["leases"] for node in nodes
+    }
+    return user_pair, user_key, user_output, before
+
+
+async def _assert_caller_material_intact(transport, pool, protocol, nodes, material):
+    user_pair, user_key, user_output, before = material
+    assert pool.status_of(user_pair.pair_id) is PairStatus.ACTIVE
+    assert protocol.outputs[user_output.session_id].status == "available"
+    for node in nodes:
+        # Exact original identities plus all live leases prove both caller
+        # isolation and cleanup of every known-owned drill allocation.
+        assert (await transport.inspect(node))["leases"] == before[node]
+    for node, commitment_field in (
+        (nodes[0], "commitment_alice_hex"), (nodes[2], "commitment_bob_hex"),
+    ):
+        held = await transport.qkd_step(
+            node, operation_id=f"caller-lengths-{node}", session_id=user_key.session_id,
+            action="lengths", payload={},
+        )
+        assert held["key_available"] is True
+        capability = await transport.qkd_owner(
+            node, operation_id=f"caller-capability-{node}", session_id=user_key.session_id,
+            action="capability", payload={},
+        )
+        outcome = await transport.qkd_owner(
+            node, operation_id=f"caller-use-{node}", session_id=user_key.session_id,
+            action="use", payload={"operation": "qkd_test", "capability": capability["capability"]},
+        )
+        assert outcome["outcome"] == "accepted"
+        assert outcome["commitment"] == getattr(user_key, commitment_field)
+    released = await protocol.release_teleport_output(
+        user_output.session_id, nodes[2], "caller-release-after-negative-drill",
+    )
+    assert released["ok"] is True
+    assert protocol.outputs[user_output.session_id].status == "released"
+
+
+def test_drill_partial_second_allocation_keeps_caller_material(tmp_path):
+    """A refused second purification pair fails the stage without touching user material."""
+    from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+
+    async def main():
+        class RefuseSecondReserve(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.reserves = 0
+                self.armed = False
+
+            async def reserve(self, node_id, **kwargs):
+                if self.armed:
+                    self.reserves += 1
+                    if self.reserves == 3:
+                        raise NodeCommandFailed(409, "worker_capacity", "injected partial refusal")
+                return await super().reserve(node_id, **kwargs)
+
+        nodes, _workers, transport, pool, engine, mesh, protocol = make_drill_trio(
+            transport_type=RefuseSecondReserve,
+        )
+        ledger = QuantumTeleportationReceiptLedger(data_dir=str(tmp_path))
+        try:
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
+            material = await _hold_caller_material(transport, pool, protocol, engine, nodes)
+            transport.armed = True
+            report = await drill.run()
+            assert report["all_passed"] is False
+            assert report["stages"]["purify"]["passed"] is False
+            assert report["stages"]["purify"]["reason"] == "worker_refused"
+            assert report["prerequisite"] == "numerical_stage_failed"
+            assert "ledger" not in report["stages"]
+            await _assert_caller_material_intact(transport, pool, protocol, nodes, material)
+        finally:
+            ledger.close()
+
+    _run(main())
+
+
+def test_drill_swap_refusal_never_fake_passes(tmp_path):
+    """A refused swap BSM fails the stage while the real purify stage still passes."""
+    from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+
+    async def main():
+        class RefuseSwapMeasure(LocalNodeTransport):
+            async def measure(self, node_id, **kwargs):
+                if "-swap" in kwargs.get("operation_id", ""):
+                    raise NodeCommandFailed(409, "worker_refused_measure", "injected swap refusal")
+                return await super().measure(node_id, **kwargs)
+
+        nodes, _workers, transport, pool, engine, mesh, protocol = make_drill_trio(
+            transport_type=RefuseSwapMeasure,
+        )
+        ledger = QuantumTeleportationReceiptLedger(data_dir=str(tmp_path))
+        try:
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
+            material = await _hold_caller_material(transport, pool, protocol, engine, nodes)
+            report = await drill.run()
+            assert report["all_passed"] is False
+            assert report["stages"]["purify"]["passed"] is True
+            assert report["stages"]["swap"]["passed"] is False
+            assert report["prerequisite"] == "numerical_stage_failed"
+            assert "ledger" not in report["stages"]
+            await _assert_caller_material_intact(transport, pool, protocol, nodes, material)
+            user_pair, _, _, _ = material
+            leftovers = [
+                pair.pair_id for pair in pool.list_active_pairs()
+                if pair.pair_id != user_pair.pair_id
+            ]
+            assert leftovers == []
+        finally:
+            ledger.close()
+
+    _run(main())
+
+
+def test_drill_teleport_below_threshold_prevents_summary_and_preserves_caller(tmp_path):
+    """Post-swap channel noise changes the actual joint rho, not a result scalar."""
+    from dataclasses import replace
+    from desk_gateway import quantum_state
+    from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+
+    async def main():
+
+        class NoisyLinkPool(BellPairPool):
+            async def activate_output(self, pair_id, *, operation_id):
+                await super().activate_output(pair_id, operation_id=operation_id)
+                record = self._records[pair_id]
+                if (record.pair.node_a, record.pair.node_b) == (nodes[0], nodes[2]):
+                    # The swap has completed; subsequent link noise degrades
+                    # its real registered density before the teleport BSM.
+                    record.pair = replace(
+                        record.pair,
+                        rho=quantum_state.BellState(record.pair.state_type.value).density(0.5),
+                    )
+
+        nodes, _workers, transport, pool, engine, mesh, protocol = make_drill_trio(pool_type=NoisyLinkPool)
+        ledger = QuantumTeleportationReceiptLedger(data_dir=str(tmp_path))
+        try:
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
+            material = await _hold_caller_material(transport, pool, protocol, engine, nodes)
+            report = await drill.run()
+            assert report["stages"]["teleport"]["passed"] is False
+            assert report["stages"]["teleport"]["reason"] == "below_threshold"
+            assert report["stages"]["teleport"]["fidelity"] < 0.95
+            for stage in ("purify", "swap", "clean_bb84", "eve"):
+                assert report["stages"][stage]["passed"] is True
+            assert report["all_passed"] is False
+            assert report["prerequisite"] == "numerical_stage_failed"
+            assert "ledger" not in report["stages"]
+            for summary in ledger.events_by_type("drill.summary"):
+                proof = ledger.inclusion_proof(summary["event_id"], ledger.tree_size)
+                assert proof.eligible is False
+                assert ledger.verify_committed_proof(proof) is True
+            await _assert_caller_material_intact(transport, pool, protocol, nodes, material)
+        finally:
+            ledger.close()
+
+    _run(main())
+
+
+def test_drill_clean_and_eve_transport_failure_never_passes(tmp_path):
+    """Refused BB84 prepares fail both QKD stages without touching user material."""
+    from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+
+    async def main():
+        class RefusePrepare(LocalNodeTransport):
+            armed = False
+
+            async def qkd_step(self, node_id, **kwargs):
+                if self.armed and kwargs.get("action") == "prepare_bb84":
+                    raise NodeTransportUnavailable("injected prepare partition")
+                return await super().qkd_step(node_id, **kwargs)
+
+        nodes, _workers, transport, pool, engine, mesh, protocol = make_drill_trio(
+            transport_type=RefusePrepare,
+        )
+        ledger = QuantumTeleportationReceiptLedger(data_dir=str(tmp_path))
+        try:
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
+            material = await _hold_caller_material(transport, pool, protocol, engine, nodes)
+            transport.armed = True
+            report = await drill.run()
+            assert report["all_passed"] is False
+            assert report["stages"]["clean_bb84"]["passed"] is False
+            assert report["stages"]["eve"]["passed"] is False
+            assert report["prerequisite"] == "numerical_stage_failed"
+            assert "ledger" not in report["stages"]
+            await _assert_caller_material_intact(transport, pool, protocol, nodes, material)
+        finally:
+            ledger.close()
+
+    _run(main())
+
+
+def test_drill_survivor_cleanup_propagates_and_sweep_stays_sticky():
+    """An unconfirmed survivor discard fails purify and is never re-released."""
+    async def main():
+        class FailFirstDiscardRelease(LocalNodeTransport):
+            def __init__(self, workers):
+                super().__init__(workers)
+                self.discard_releases = 0
+
+            async def release(self, node_id, **kwargs):
+                if "discard" in kwargs.get("operation_id", "") and self.discard_releases == 0:
+                    self.discard_releases += 1
+                    raise NodeTransportAmbiguous("survivor release reply lost")
+                return await super().release(node_id, **kwargs)
+
+        nodes, _workers, transport, pool, engine, mesh, protocol = make_drill_trio(
+            transport_type=FailFirstDiscardRelease,
+        )
+        user_pair = await pool.create_pair(
+            nodes[0], nodes[2], BellStateType.PHI_PLUS, 1.0, operation_id="user-held",
+        )
+        quarantined = []
+        real_quarantine = pool.quarantine_pairs
+
+        async def spy_quarantine(pair_ids, *, reason):
+            quarantined.extend(pair_ids)
+            return await real_quarantine(pair_ids, reason=reason)
+
+        pool.quarantine_pairs = spy_quarantine
+        drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, None, None)
+        owned: list = []
+        purify = await drill._purify(nodes[0], nodes[1], "sticky-tag", owned)
+        assert purify["passed"] is False
+        assert purify["reason"] == "cleanup_unconfirmed"
+        assert len(owned) == 3
+        survivor = owned[-1]
+        assert survivor in quarantined
+        assert pool.status_of(survivor) is PairStatus.QUARANTINED
+        assert transport.discard_releases == 1
+        # The end-of-run sweep never issues a new-op release for it.
+        assert await drill._cleanup_owned("sticky-tag", owned, [], []) is False
+        assert transport.discard_releases == 1
+        assert pool.status_of(survivor) is PairStatus.QUARANTINED
+        assert pool.status_of(owned[1]) is PairStatus.CONSUMED
+        assert pool.status_of(user_pair.pair_id) is PairStatus.ACTIVE
+
+    _run(main())
+
+
+def test_real_drill_parity_reject_prevents_summary_and_preserves_caller(tmp_path):
+    from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+
+    class OneBranchDraw:
+        def __init__(self, draw, fallback):
+            self.draw = draw
+            self.fallback = fallback
+
+        def random(self):
+            if self.draw is None:
+                return self.fallback.random()
+            result, self.draw = self.draw, None
+            return result
+
+    async def main():
+        nodes, workers, transport, pool, engine, mesh, protocol = make_drill_trio()
+        ledger = QuantumTeleportationReceiptLedger(data_dir=str(tmp_path))
+        try:
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
+            material = await _hold_caller_material(transport, pool, protocol, engine, nodes)
+            # Select a genuine positive-probability unequal BBPSSW parity branch.
+            workers[nodes[0]]._rng = OneBranchDraw(0.001, workers[nodes[0]]._rng)
+            workers[nodes[1]]._rng = OneBranchDraw(0.999, workers[nodes[1]]._rng)
+            report = await drill.run()
+            assert report["stages"]["purify"]["passed"] is False
+            assert report["stages"]["purify"]["reason"] == "purify_rejected"
+            for stage in ("swap", "teleport", "clean_bb84", "eve"):
+                assert report["stages"][stage]["passed"] is True
+            assert report["all_passed"] is False
+            assert report["prerequisite"] == "numerical_stage_failed"
+            assert "ledger" not in report["stages"]
+            for summary in ledger.events_by_type("drill.summary"):
+                proof = ledger.inclusion_proof(summary["event_id"], ledger.tree_size)
+                assert proof.eligible is False
+                assert ledger.verify_committed_proof(proof) is True
+            await _assert_caller_material_intact(transport, pool, protocol, nodes, material)
+        finally:
+            ledger.close()
 
     _run(main())

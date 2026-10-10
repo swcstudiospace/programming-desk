@@ -41,7 +41,6 @@ __all__ = [
     "binary_entropy",
     "validate_count",
     "validate_requested_bits",
-    "qber_exceeds",
     "finite_sample_budget",
     "toeplitz_hash",
     "toeplitz_extract",
@@ -134,23 +133,6 @@ def validate_requested_bits(value: object) -> int:
     return value
 
 
-def qber_exceeds(errors: object, samples: object) -> bool:
-    """Exact integer QBER admission gate: abort iff ``100*errors > 11*sample``.
-
-    Exactly 11/100 passes (``1100 > 1100`` is false); 12/100 aborts. NaN,
-    infinite, missing, negative, or inconsistent inputs raise instead of
-    ever reporting a stand-in QBER of 0.
-    """
-    for label, item in (("errors", errors), ("samples", samples)):
-        if isinstance(item, bool) or not isinstance(item, int):
-            raise ValueError(f"{label} must be an integer count")
-    if samples <= 0:  # type: ignore[operator]
-        raise ValueError("samples must be positive to estimate QBER")
-    if errors < 0 or errors > samples:  # type: ignore[operator]
-        raise ValueError("errors must lie in 0..samples")
-    return 100 * errors > 11 * samples  # type: ignore[operator]
-
-
 def finite_sample_budget(
     n: int,
     k: int,
@@ -170,7 +152,10 @@ def finite_sample_budget(
             raise ValueError(f"{label} must be a non-negative integer")
     if isinstance(q_phase, bool) or not isinstance(q_phase, (int, float)):
         raise ValueError("q_phase must be numeric")
-    q_phase = float(q_phase)
+    try:
+        q_phase = float(q_phase)
+    except OverflowError:
+        raise ValueError("q_phase must lie in [0, 1]") from None
     if not math.isfinite(q_phase) or q_phase < 0.0 or q_phase > 1.0:
         raise ValueError("q_phase must lie in [0, 1]")
     requested_bits = validate_requested_bits(requested_bits)

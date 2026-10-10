@@ -52,6 +52,7 @@ from desk_gateway.quantum_ledger import (
     EMPTY_ROOT_HEX,
     InclusionProof,
     LedgerCorruptError,
+    LedgerClosedError,
     LedgerError,
     QuantumTeleportationReceiptLedger,
     canonical_event_bytes,
@@ -2000,4 +2001,414 @@ def test_malformed_aged_status_cannot_fall_through_to_confirmation(tmp_path):
         assert fixture.methods_called("sendTransaction") == 1
     finally:
         asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+# ---------------------------------------------------------------------------
+# 69-10 gap closure: QuantumQKDReceipt cutover + committed proofs (AC-010)
+# ---------------------------------------------------------------------------
+
+
+def test_verify_committed_proof_binds_trusted_checkpoint(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        first = asyncio.run(append_teleport(ledger, "commit-a"))
+        second = asyncio.run(append_teleport(ledger, "commit-b"))
+        proof = ledger.inclusion_proof(first.receipt_id, 2)
+        assert QuantumTeleportationReceiptLedger.verify_proof(proof) is True
+        assert ledger.verify_committed_proof(proof) is True
+        forged_root = InclusionProof(
+            version=proof.version, leaf_index=proof.leaf_index, tree_size=proof.tree_size,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=("00" if not proof.expected_root_hex.startswith("00") else "ff") + proof.expected_root_hex[2:],
+            metadata=dict(proof.metadata), eligible=proof.eligible,
+            leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert ledger.verify_committed_proof(forged_root) is False
+        uncommitted = InclusionProof(
+            version=proof.version, leaf_index=proof.leaf_index, tree_size=999999,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=proof.expected_root_hex, metadata=dict(proof.metadata),
+            eligible=proof.eligible, leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert ledger.verify_committed_proof(uncommitted) is False
+        huge = InclusionProof(
+            version=proof.version, leaf_index=proof.leaf_index, tree_size=1 << 100,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=proof.expected_root_hex, metadata=dict(proof.metadata),
+            eligible=proof.eligible, leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert ledger.verify_committed_proof(huge) is False  # no OverflowError
+        assert ledger.verify_committed_proof({"bogus": True}) is False
+        assert ledger.verify_committed_proof(None) is False
+    finally:
+        ledger.close()
+
+def test_still_open_ledger_sees_sibling_commit(tmp_path):
+    shared = tmp_path / "still-open"
+    ledger_a = QuantumTeleportationReceiptLedger(shared)
+    ledger_b = QuantumTeleportationReceiptLedger(shared)
+    try:
+        assert ledger_a.tree_size == 0
+        committed = asyncio.run(ledger_b.append_event(teleport_event("sibling-1")))
+        listed = ledger_a.list_receipts(10)
+        assert [r.receipt_id for r in listed] == [committed.receipt_id]
+        seen = ledger_a.receipt(committed.receipt_id)
+        assert seen.seq == 1 and seen.leaf_digest_hex == committed.leaf_digest_hex
+        proof = ledger_a.inclusion_proof(committed.receipt_id, 1)
+        assert QuantumTeleportationReceiptLedger.verify_proof(proof) is True
+        assert ledger_a.verify_committed_proof(proof) is True
+        assert ledger_a.snapshot().tree_size == 1
+        assert ledger_a.tree_size == 1
+        signer_path, _ = write_throwaway_signer(tmp_path, name="still-open.key")
+        fixture = RpcFixture()
+        exporter = make_exporter(ledger_a, fixture, signer_path)
+        try:
+            result = asyncio.run(exporter.export_commitment(committed.receipt_id))
+            assert result.ok and result.status == "confirmed"
+            assert fixture.methods_called("sendTransaction") == 1
+        finally:
+            asyncio.run(exporter.aclose())
+    finally:
+        ledger_a.close()
+        ledger_b.close()
+
+def test_bounded_query_work_independent_of_history(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        for i in range(12):
+            asyncio.run(ledger.append_event(teleport_event(f"bounded-{i}")))
+        asyncio.run(ledger.append_event({
+            "event_type": "anchor.prepared", "session_id": "prep-1", "actor": "tester",
+            "nodes": [], "resources": [], "outcome": "prepared",
+            "payload": {"receipt_id": "receipt-target-1", "signature": "sig-target-1"},
+        }))
+
+        def count_ops(call):
+            ops = {"n": 0}
+
+            def progress():
+                ops["n"] += 1
+                return 0
+            ledger._conn.set_progress_handler(progress, 1)
+            try:
+                result = call()
+            finally:
+                ledger._conn.set_progress_handler(None, 0)
+            return ops["n"], result
+
+        small_ops, first_one = count_ops(lambda: ledger.list_receipts(1))
+        assert small_ops > 0
+        assert [r.seq for r in first_one] == [1]
+        for i in range(4096):
+            asyncio.run(ledger.append_event({
+                "event_type": "anchor.prepared", "session_id": f"prep-decoy-{i}", "actor": "tester",
+                "nodes": [], "resources": [], "outcome": "prepared",
+                "payload": {"receipt_id": f"receipt-decoy-{i}", "signature": f"sig-decoy-{i}"},
+            }))
+        asyncio.run(ledger.append_event({
+            "event_type": "anchor.prepared", "session_id": "prep-last", "actor": "tester",
+            "nodes": [], "resources": [], "outcome": "prepared",
+            "payload": {"receipt_id": "receipt-target-last", "signature": "sig-target-last"},
+        }))
+        big_ops, first_big = count_ops(lambda: ledger.list_receipts(1))
+        assert big_ops > 0
+        assert [r.seq for r in first_big] == [1]
+        assert big_ops < 4096  # indexed prefix probe, not a history scan
+        assert big_ops <= max(5000, small_ops * 4)
+        hit_ops, hit = count_ops(lambda: ledger.anchor_prepared_events("receipt-target-last"))
+        miss_ops, miss = count_ops(lambda: ledger.anchor_prepared_events("receipt-absent-xyz"))
+        assert hit_ops > 0 and miss_ops > 0
+        assert hit_ops < 4096 and miss_ops < 4096
+        assert hit[0]["payload"]["receipt_id"] == "receipt-target-last"
+        assert miss == ()
+        sig_hit_ops, sig_hit = count_ops(lambda: ledger.has_anchor_event("anchor.prepared", "sig-target-last"))
+        sig_miss_ops, sig_miss = count_ops(lambda: ledger.has_anchor_event("anchor.prepared", "sig-absent-xyz"))
+        assert sig_hit_ops > 0 and sig_miss_ops > 0
+        assert sig_hit_ops < 4096 and sig_miss_ops < 4096
+        assert sig_hit is True
+        assert sig_miss is False
+    finally:
+        try:
+            ledger._conn.set_progress_handler(None, 0)
+        except Exception:
+            pass
+        ledger.close()
+
+def test_checkpoint_insert_fault_after_event_insert_recovers_exact_prefix(tmp_path):
+    path = tmp_path / "ckpt-fault"
+    ledger = QuantumTeleportationReceiptLedger(path)
+    try:
+        first = asyncio.run(append_teleport(ledger, "fault-1"))
+        second = asyncio.run(append_teleport(ledger, "fault-2"))
+        prior_root = ledger.snapshot(2).root_hex
+        raw = sqlite3.connect(str(ledger.db_path))
+        try:
+            raw.execute(
+                "CREATE TRIGGER test_69_10_ckpt_fault BEFORE INSERT ON ledger_checkpoints"
+                " BEGIN SELECT RAISE(ABORT, 'test checkpoint fault after event insert'); END;"
+            )
+            raw.commit()
+            with pytest.raises(LedgerError):
+                asyncio.run(ledger.append_event(teleport_event("fault-3")))
+        finally:
+            try:
+                raw.execute("DROP TRIGGER IF EXISTS test_69_10_ckpt_fault;")
+                raw.commit()
+            finally:
+                raw.close()
+        probe = sqlite3.connect(str(ledger.db_path))
+        try:
+            count = probe.execute("SELECT COUNT(*) FROM ledger_events;").fetchone()[0]
+        finally:
+            probe.close()
+        assert count == 2  # event row rolled back with the checkpoint fault
+        assert ledger.tree_size == 2
+        assert ledger.snapshot(2).root_hex == prior_root
+        third = asyncio.run(ledger.append_event(teleport_event("fault-3")))
+        assert third.seq == 3  # no reset, no partial, no duplicate sequence
+        assert ledger.snapshot(3).tree_size == 3
+    finally:
+        ledger.close()
+    reopened = QuantumTeleportationReceiptLedger(path)
+    try:
+        assert reopened.tree_size == 3
+        assert reopened.receipt(first.receipt_id).leaf_digest_hex == first.leaf_digest_hex
+        assert reopened.receipt(second.receipt_id).leaf_digest_hex == second.leaf_digest_hex
+        assert QuantumTeleportationReceiptLedger.verify_proof(reopened.inclusion_proof(first.receipt_id, 3)) is True
+        assert reopened.verify_committed_proof(reopened.inclusion_proof(third.receipt_id, 3)) is True
+    finally:
+        reopened.close()
+
+def test_subprocess_termination_leaves_exact_prefix(tmp_path):
+    import subprocess
+    import sys
+    import selectors
+    path = tmp_path / "subproc"
+    ledger = QuantumTeleportationReceiptLedger(path)
+    try:
+        first = asyncio.run(append_teleport(ledger, "sub-1"))
+        second = asyncio.run(append_teleport(ledger, "sub-2"))
+        prior_root = ledger.snapshot(2).root_hex
+    finally:
+        ledger.close()
+    event = teleport_event("sub-victim")
+    child = f"""
+import asyncio
+import logging
+import sys
+import time
+logging.disable(logging.CRITICAL)
+from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger
+ledger = QuantumTeleportationReceiptLedger({str(path)!r})
+def gate():
+    sys.stdout.write("checkpoint\\n")
+    sys.stdout.flush()
+    time.sleep(30)
+    return 0
+ledger._conn.create_function("test_69_10_gate", 0, gate)
+ledger._conn.execute(
+    "CREATE TEMP TRIGGER test_69_10_gate_trigger"
+    " BEFORE INSERT ON ledger_checkpoints BEGIN SELECT test_69_10_gate(); END;"
+)
+asyncio.run(ledger.append_event({event!r}))
+"""
+    proc = subprocess.Popen(
+        [sys.executable, "-c", child], stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL, text=True,
+    )
+    try:
+        with selectors.DefaultSelector() as ready:
+            ready.register(proc.stdout, selectors.EVENT_READ)
+            assert ready.select(timeout=25), "child never reached the checkpoint INSERT"
+            assert proc.stdout.readline().strip() == "checkpoint"
+        proc.kill()  # terminate the real append after its event INSERT, before checkpoint commit
+        proc.wait(timeout=10)
+        assert proc.returncode != 0
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+        proc.stdout.close()
+    reopened = QuantumTeleportationReceiptLedger(path)
+    try:
+        assert reopened.tree_size == 2
+        assert reopened.snapshot(2).root_hex == prior_root
+        assert reopened.receipt(first.receipt_id).seq == 1
+        assert reopened.receipt(second.receipt_id).seq == 2
+        probe = sqlite3.connect(str(path / "quantum_teleportation.sqlite3"))
+        try:
+            assert probe.execute("SELECT COUNT(*) FROM ledger_events;").fetchone()[0] == 2
+            assert probe.execute("SELECT COUNT(*) FROM ledger_checkpoints;").fetchone()[0] == 2
+        finally:
+            probe.close()
+        third = asyncio.run(reopened.append_event(teleport_event("sub-3")))
+        assert third.seq == 3
+    finally:
+        reopened.close()
+
+
+
+def test_genuine_five_stage_drill_depth18_memo_refuses_before_sign_or_send(tmp_path, monkeypatch):
+    from test_quantum_teleportation_endpoints import _bearer, _phase69_runtime
+    import desk_gateway.quantum_anchor as anchor_mod
+
+    client = _phase69_runtime(tmp_path)
+    ledger = client.app.state["qteleport_ledger"]
+    try:
+        response = client.post(
+            "/v1/quantum/teleportation/drill/simulate", json={}, headers=_bearer("lead"),
+        )
+        assert response.status_code == 200
+        drill = response.json()["drill"]
+        for name in ("purify", "swap", "teleport", "clean_bb84", "eve"):
+            assert drill["stages"][name]["passed"] is True
+        assert drill["all_passed"] is False
+        assert drill["prerequisite"] == "rpc_url_not_configured"
+        receipt_id = drill["stages"]["ledger"]["receipt_id"]
+        assert all(
+            (asyncio.run(client.app.state["qteleport_orchestration"].transport.inspect(node)))["active_count"] == 0
+            for node in ("desk-alpha", "repeater-1", "desk-beta")
+        )
+
+        async def fill_committed_history():
+            for index in range(ledger.tree_size, 131073):
+                await ledger.append_event({
+                    "event_type": "test.history", "session_id": f"cap18-history-{index}",
+                    "actor": "test", "nodes": [], "resources": [],
+                    "outcome": "observed", "payload": {"index": index},
+                })
+
+        asyncio.run(fill_committed_history())
+        proof = ledger.inclusion_proof(receipt_id, 131073)
+        assert proof.eligible is True
+        assert len(proof.leaf_preimage_bytes) == 150
+        assert len(proof.siblings) == 18
+        assert ledger.verify_committed_proof(proof) is True
+        memo = encode_attestation(
+            tree_size=proof.tree_size, leaf_index=proof.leaf_index,
+            root_hex=proof.expected_root_hex, leaf=proof.leaf_preimage_bytes,
+            siblings=[digest for _, digest in proof.siblings],
+        )
+        assert len(memo.encode("utf-8")) > 1021
+        signs = []
+        real_sign = anchor_mod.sign_message
+
+        def observed_sign(seed, message):
+            signs.append(True)
+            return real_sign(seed, message)
+
+        monkeypatch.setattr(anchor_mod, "sign_message", observed_sign)
+        signer_path, _ = write_throwaway_signer(tmp_path, name="genuine-cap18.key")
+        fixture = RpcFixture()
+        exporter = make_exporter(ledger, fixture, signer_path)
+        try:
+            refused = asyncio.run(exporter.export_commitment(receipt_id, tree_size=131073))
+            assert (refused.error_code, refused.http_status) == ("payload_too_large", 413)
+            assert refused.ok is False and refused.signature is None
+            assert signs == []
+            assert fixture.methods_called("sendTransaction") == 0
+        finally:
+            asyncio.run(exporter.aclose())
+    finally:
+        ledger.close()
+        client.close()
+
+
+@pytest.mark.parametrize("failure_type", (sqlite3.OperationalError, KeyboardInterrupt))
+def test_commit_and_rollback_failure_closes_all_public_prefix_paths(tmp_path, failure_type):
+    path = tmp_path / "failed-transaction-cleanup"
+    ledger = QuantumTeleportationReceiptLedger(path)
+    peer = None
+    try:
+        first = asyncio.run(append_teleport(ledger, "committed-first"))
+        second = asyncio.run(append_teleport(ledger, "committed-second"))
+        baseline_proof = ledger.inclusion_proof(second.receipt_id, 2)
+        peer = QuantumTeleportationReceiptLedger(path)
+        native = ledger._conn
+        marker = failure_type("controlled failed commit with an actual pending prefix")
+
+        class FailedCleanup:
+            def __getattr__(self, name):
+                return getattr(native, name)
+
+            def commit(self):
+                self.pending_id = native.execute(
+                    "SELECT event_id FROM ledger_events WHERE seq=3",
+                ).fetchone()[0]
+                self.pending_checkpoint = native.execute(
+                    "SELECT tree_size FROM ledger_checkpoints WHERE tree_size=3",
+                ).fetchone()[0]
+                self.was_pending = native.in_transaction
+                raise marker
+
+            def rollback(self):
+                raise sqlite3.OperationalError("controlled failed rollback")
+
+            def close(self):
+                native.close()
+
+        fault = FailedCleanup()
+        ledger._conn = fault
+        expected_error = LedgerError if failure_type is sqlite3.OperationalError else KeyboardInterrupt
+        with pytest.raises(expected_error) as caught:
+            asyncio.run(ledger.append_event(teleport_event("pending-third")))
+        if failure_type is KeyboardInterrupt:
+            assert caught.value is marker
+        assert fault.was_pending is True
+        assert fault.pending_checkpoint == 3
+        assert peer.tree_size == 2
+        assert peer.current_root_hex == second.prefix_root_hex
+        readers = (
+            lambda: ledger.tree_size,
+            lambda: ledger.current_root_hex,
+            lambda: ledger.snapshot(3),
+            lambda: ledger.receipt(fault.pending_id),
+            lambda: ledger.inclusion_proof(fault.pending_id, 3),
+            lambda: ledger.verify_committed_proof(baseline_proof),
+            lambda: ledger.list_receipts(3),
+            lambda: ledger.events_by_type("teleport.executed"),
+            lambda: ledger.anchor_prepared_events(fault.pending_id),
+            lambda: ledger.has_anchor_event("anchor.confirmed", "uncommitted-signature"),
+            lambda: ledger.read_anchor_claim(fault.pending_id, 3),
+        )
+        for read_prefix in readers:
+            with pytest.raises(LedgerClosedError):
+                read_prefix()
+        with pytest.raises(LedgerClosedError):
+            asyncio.run(ledger.append_event(teleport_event("must-not-reuse-handle")))
+    finally:
+        ledger.close()
+        if peer is not None:
+            peer.close()
+    with QuantumTeleportationReceiptLedger(path) as reopened:
+        assert reopened.tree_size == 2
+        assert reopened.current_root_hex == second.prefix_root_hex
+        assert reopened.receipt(first.receipt_id).leaf_digest_hex == first.leaf_digest_hex
+        assert reopened.verify_committed_proof(reopened.inclusion_proof(second.receipt_id, 2)) is True
+        with pytest.raises(LookupError):
+            reopened.receipt(fault.pending_id)
+        recovered = asyncio.run(append_teleport(reopened, "recovered-third"))
+        assert recovered.seq == 3
+        assert reopened.verify_committed_proof(reopened.inclusion_proof(recovered.receipt_id, 3)) is True
+
+
+def test_exporter_closed_between_proof_and_verification_returns_typed_unavailable(tmp_path):
+    class CloseAfterProof(QuantumTeleportationReceiptLedger):
+        def inclusion_proof(self, *args, **kwargs):
+            proof = super().inclusion_proof(*args, **kwargs)
+            self.close()
+            return proof
+
+    ledger = CloseAfterProof(tmp_path / "closed-export")
+    try:
+        receipt = asyncio.run(append_teleport(ledger, "closed-export"))
+        exporter = QuantumTeleportationAnchorExporter(ledger)
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert result.status == "failed"
+        assert result.http_status == 503
+        assert result.error_code == "ledger_unavailable"
+        assert result.signature is None
+        assert result.slot is None
+    finally:
         ledger.close()

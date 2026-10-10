@@ -52,6 +52,8 @@ MAX_OUTCOME_LEN = 64
 MAX_STRING_VALUE_LEN = 4096
 MAX_CANONICAL_BYTES = 65536
 
+_SQLITE_INT_MAX = (1 << 63) - 1
+
 _TOP_LEVEL_FIELDS = (
     "event_type",
     "session_id",
@@ -125,7 +127,7 @@ class LedgerClosedError(LedgerError):
 
 
 @dataclass(frozen=True)
-class FrozenReceipt:
+class QuantumQKDReceipt:
     receipt_id: str
     seq: int
     leaf_digest_hex: str
@@ -730,6 +732,8 @@ CREATE TABLE IF NOT EXISTS ledger_anchor_claims (
     PRIMARY KEY (receipt_id)
 );
 CREATE INDEX IF NOT EXISTS ledger_events_type_seq ON ledger_events(event_type, seq);
+CREATE INDEX IF NOT EXISTS ledger_events_prepared_receipt ON ledger_events(event_type, json_extract(canonical_json, '$.payload.receipt_id'), seq);
+CREATE INDEX IF NOT EXISTS ledger_events_anchor_sig ON ledger_events(event_type, json_extract(canonical_json, '$.payload.signature'));
 CREATE TRIGGER IF NOT EXISTS ledger_no_update_events
 BEFORE UPDATE ON ledger_events
 BEGIN
@@ -836,20 +840,63 @@ class QuantumTeleportationReceiptLedger:
 
     @property
     def tree_size(self) -> int:
-        self._ensure_open()
-        return len(self._leaves)
+        with self._lock:
+            self._ensure_open()
+            self._refresh_committed_delta_locked()
+            return len(self._leaves)
 
     @property
     def current_root_hex(self) -> str:
-        self._ensure_open()
-        if not self._leaves:
-            return EMPTY_ROOT_HEX
-        return self._layers[-1][0].hex()
+        with self._lock:
+            self._ensure_open()
+            self._refresh_committed_delta_locked()
+            if not self._leaves:
+                return EMPTY_ROOT_HEX
+            return self._layers[-1][0].hex()
 
     def _ensure_open(self) -> None:
         if self._closed:
             raise LedgerClosedError("ledger is closed")
 
+    def _refresh_committed_delta_locked(self) -> None:
+        """Ingest rows committed by sibling handles on the same file.
+
+        Caller must hold ``self._lock`` and have passed ``_ensure_open``.
+        Read-only SELECTs observe only fully committed transactions, so a
+        visible delta always carries both its event row and its checkpoint
+        row. A corrupt/partial delta fails closed: in-memory state is
+        truncated back to the pre-refresh length (never reset, never
+        partially accepted, never reusing a sequence) and the error
+        propagates.
+        """
+        base_len = len(self._leaves)
+        cur = self._conn.cursor()
+        try:
+            delta = cur.execute(
+                "SELECT seq, event_id, event_type, session_id, actor, nodes_json,"
+                " resources_json, outcome, time, predecessor_hex,"
+                " canonical_json, leaf_hex, eligible, leaf_blob"
+                " FROM ledger_events WHERE seq > ? ORDER BY seq;",
+                (base_len,),
+            ).fetchall()
+        except sqlite3.Error:
+            raise LedgerError("ledger_unavailable: delta refresh failed") from None
+        if not delta:
+            return
+        try:
+            delta_checkpoints = dict(cur.execute(
+                "SELECT tree_size, root_hex FROM ledger_checkpoints WHERE tree_size > ?;",
+                (base_len,),
+            ).fetchall())
+        except sqlite3.Error:
+            raise LedgerError("ledger_unavailable: delta refresh failed") from None
+        prev = self._leaves[-1].hex() if self._leaves else GENESIS_PREDECESSOR_HEX
+        try:
+            for row in delta:
+                prev = self._ingest_committed_row(row, delta_checkpoints, prev)
+        except LedgerError:
+            self._truncate_to(base_len)
+            raise
     # -- replay -----------------------------------------------------------
     def _replay(self, rows: list[tuple], checkpoints: dict[int, str]) -> None:
         self._leaves: list[bytes] = []
@@ -1096,8 +1143,23 @@ class QuantumTeleportationReceiptLedger:
             "payload": json.loads(json.dumps(dict(payload), allow_nan=False)),
         }
 
-    async def append_event(self, event: Mapping[str, Any]) -> FrozenReceipt:
-        """Durably commit one public event; return the frozen receipt after commit."""
+    def _rollback_failed_append(self, base_len: int) -> None:
+        """Restore the prefix or irreversibly close an uncertain transaction."""
+        try:
+            self._conn.rollback()
+        except BaseException:
+            # Same-connection reads can otherwise serve pending rows as if
+            # committed. Close the public handle before any close attempt;
+            # preserve the original append error even if cleanup also fails.
+            self._closed = True
+            try:
+                self._conn.close()
+            except BaseException:
+                pass
+        self._truncate_to(base_len)
+
+    async def append_event(self, event: Mapping[str, Any]) -> QuantumQKDReceipt:
+        """Durably commit one public event; return the QuantumQKD receipt after commit."""
         with self._lock:
             self._ensure_open()
             clean = self._validate_input(event)
@@ -1187,39 +1249,21 @@ class QuantumTeleportationReceiptLedger:
                 )
                 self._conn.commit()
             except LedgerError:
-                try:
-                    self._conn.rollback()
-                except Exception:
-                    pass
-                # Roll back provisional and refreshed memory so a failed
-                # transaction never leaks into serve-side state.
-                self._truncate_to(base_len)
+                self._rollback_failed_append(base_len)
                 raise
             except sqlite3.IntegrityError:
                 # Residual race after the refresh (a commit landed between our
                 # delta read and our insert): fail closed, never surface a raw
                 # driver error and never reuse the sequence.
-                try:
-                    self._conn.rollback()
-                except Exception:
-                    pass
-                self._truncate_to(base_len)
+                self._rollback_failed_append(base_len)
                 raise LedgerError("ledger_unavailable: concurrent append conflict after refresh") from None
             except sqlite3.Error:
-                try:
-                    self._conn.rollback()
-                except Exception:
-                    pass
-                self._truncate_to(base_len)
+                self._rollback_failed_append(base_len)
                 raise LedgerError("ledger_unavailable: append transaction failed") from None
-            except Exception:
-                try:
-                    self._conn.rollback()
-                except Exception:
-                    pass
-                self._truncate_to(base_len)
+            except BaseException:
+                self._rollback_failed_append(base_len)
                 raise
-            return FrozenReceipt(
+            return QuantumQKDReceipt(
                 receipt_id=event_id,
                 seq=seq,
                 leaf_digest_hex=leaf_hex,
@@ -1233,12 +1277,12 @@ class QuantumTeleportationReceiptLedger:
             self._append_path(leaf)
 
     # -- snapshots / proofs -----------------------------------------------
-    def _receipt_for_seq(self, seq: int) -> FrozenReceipt:
+    def _receipt_for_seq(self, seq: int) -> QuantumQKDReceipt:
         leaf_hex = self._leaves[seq - 1].hex()
         layers = self._layers_for(seq)
         root_hex = layers[-1][0].hex() if layers else EMPTY_ROOT_HEX
         event_id = self._id_by_seq[seq]
-        return FrozenReceipt(
+        return QuantumQKDReceipt(
             receipt_id=event_id,
             seq=seq,
             leaf_digest_hex=leaf_hex,
@@ -1250,6 +1294,7 @@ class QuantumTeleportationReceiptLedger:
         """Frozen prefix snapshot; historical prefixes never change."""
         with self._lock:
             self._ensure_open()
+            self._refresh_committed_delta_locked()
             size = len(self._leaves) if tree_size is None else tree_size
             if type(size) is not int or size < 0 or size > len(self._leaves):
                 raise ValueError("tree_size out of range")
@@ -1259,7 +1304,7 @@ class QuantumTeleportationReceiptLedger:
             root_hex = layers[-1][0].hex()
             id_by_seq = {s: self._id_by_seq[s] for s in range(1, size + 1)}
             receipts = tuple(
-                FrozenReceipt(
+                QuantumQKDReceipt(
                     receipt_id=id_by_seq[s],
                     seq=s,
                     leaf_digest_hex=self._leaves[s - 1].hex(),
@@ -1270,9 +1315,10 @@ class QuantumTeleportationReceiptLedger:
             )
             return FrozenSnapshot(tree_size=size, root_hex=root_hex, receipts=receipts)
 
-    def receipt(self, receipt_id: str) -> FrozenReceipt:
+    def receipt(self, receipt_id: str) -> QuantumQKDReceipt:
         with self._lock:
             self._ensure_open()
+            self._refresh_committed_delta_locked()
             seq = self._by_id.get(receipt_id)
             if seq is None:
                 raise LookupError("unknown receipt_id")
@@ -1281,6 +1327,7 @@ class QuantumTeleportationReceiptLedger:
     def inclusion_proof(self, receipt_id: str, tree_size: int) -> InclusionProof:
         with self._lock:
             self._ensure_open()
+            self._refresh_committed_delta_locked()
             seq = self._by_id.get(receipt_id)
             if seq is None:
                 raise LookupError("unknown receipt_id")
@@ -1418,6 +1465,54 @@ class QuantumTeleportationReceiptLedger:
         except (ValueError, LedgerError, KeyError, AttributeError, TypeError):
             return False
 
+    def verify_committed_proof(self, proof: Mapping[str, Any] | InclusionProof) -> bool:
+        """Verify a proof against the trusted committed checkpoint.
+
+        The claimed ``tree_size``/``expected_root_hex`` must exactly match the
+        stored ``ledger_checkpoints`` row (bounded single-row lookup); the
+        remaining membership/metadata/index/duplicate-last checks reuse the
+        algebraic :meth:`verify_proof`. Uncommitted sizes, unknown prefixes,
+        malformed shapes, and integers outside the SQLite range return False
+        (never raise on content, never OverflowError). Only a closed ledger
+        raises.
+        """
+        try:
+            if isinstance(proof, Mapping):
+                size = proof.get("tree_size")
+                expected = proof.get("expected_root_hex")
+            else:
+                size = proof.tree_size  # type: ignore[union-attr]
+                expected = proof.expected_root_hex  # type: ignore[union-attr]
+        except (AttributeError, TypeError):
+            return False
+        if type(size) is not int or size <= 0 or size > _SQLITE_INT_MAX:
+            return False
+        if not isinstance(expected, str) or len(expected) != 64:
+            return False
+        try:
+            expected_norm = expected.lower()
+            bytes.fromhex(expected_norm)
+        except ValueError:
+            return False
+        with self._lock:
+            self._ensure_open()
+            try:
+                row = self._conn.execute(
+                    "SELECT root_hex FROM ledger_checkpoints WHERE tree_size = ?;",
+                    (size,),
+                ).fetchone()
+            except sqlite3.Error:
+                return False
+            if row is None:
+                return False
+            try:
+                stored_norm = str(row[0]).lower()
+            except (IndexError, TypeError, ValueError):
+                return False
+            if stored_norm != expected_norm:
+                return False
+        return QuantumTeleportationReceiptLedger.verify_proof(proof)
+
     @staticmethod
     def _summary_for_static(metadata: Mapping[str, Any]) -> dict[str, Any] | None:
         try:
@@ -1494,7 +1589,7 @@ class QuantumTeleportationReceiptLedger:
             except ValueError:
                 raise LedgerCorruptError("stored event unreadable") from None
 
-    def list_receipts(self, limit: int) -> tuple[FrozenReceipt, ...]:
+    def list_receipts(self, limit: int) -> tuple[QuantumQKDReceipt, ...]:
         """First at most ``limit`` receipts in sequence order.
 
         Bounded joined query over the indexed prefix — never a full snapshot,
@@ -1517,7 +1612,7 @@ class QuantumTeleportationReceiptLedger:
             except sqlite3.Error:
                 raise LedgerError("ledger_unavailable: receipt listing failed") from None
             return tuple(
-                FrozenReceipt(
+                QuantumQKDReceipt(
                     receipt_id=event_id,
                     seq=seq,
                     leaf_digest_hex=leaf_hex,
@@ -1760,7 +1855,7 @@ def proof_from_jsonable(data: Mapping[str, Any]) -> InclusionProof:
 
 __all__ = [
     "QuantumTeleportationReceiptLedger",
-    "FrozenReceipt",
+    "QuantumQKDReceipt",
     "FrozenSnapshot",
     "InclusionProof",
     "LedgerError",

@@ -3,7 +3,7 @@
   "bot": "bot-01-systems-backend",
   "branch": "bot-01-systems-backend/v5.1-faithful-simulator",
   "started_at": "2026-10-10T04:19:39Z",
-  "completed_at": "2026-10-10T07:23:28Z",
+  "completed_at": "2026-10-10T12:35:50Z",
   "commands": [
     {
       "cmd": "curl --silent --show-error --max-time 25 --include --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"requestAirdrop\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",10000000,{\"commitment\":\"finalized\"}]}' https://api.devnet.solana.com",
@@ -332,6 +332,416 @@
     "duration_s": 17.00,
     "output_tail": "299 passed in 15.89s",
     "result": "Final gate self-tests passed; full raw output retained in artifact://953."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-integration-boundary-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 7.42,
+    "output_tail": "{\"cancelled_release\":{\"first\":\"CancelledError\",\"release_attempts\":2,\"retry\":\"success\",\"status_before_retry\":\"available\"},\"e91_cleanup_fault\":{\"status\":\"established\",\"reason\":null,\"extracted_bits\":256,\"pair_status\":\"quarantined\",\"nodes\":{\"desk-alpha\":{\"active_count\":1,\"key_available\":true},\"desk-beta\":{\"active_count\":1,\"key_available\":true}}},\"gateway_decoder_recursion\":{\"status\":404},\"limit_long\":{\"exception\":\"ValueError\"},\"limit_unicode\":{\"exception\":\"ValueError\"},\"worker_decoder_recursion\":{\"exception\":\"RecursionError\"}}",
+    "result": "Final integration failing-before boundary observations. Decoder error is an injected supported3.12 seam; actual query conversion, applied worker release/cancellation and E91 cleanup effects are real. Gateway first probe used a nonexistent route and is not ingress proof; corrected next command. Public projection only."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-ingress-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1.91,
+    "output_tail": "{\"exception\":\"RecursionError\"}",
+    "result": "Correct authenticated existing gateway QKD route exposed supported decoder RecursionError instead of typed400; injected decoder seam, not a full3.12gateway run."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no tests/test_quantum_node_transport.py::test_worker_decoder_depth_failure_is_typed_after_auth tests/test_quantum_teleportation_endpoints.py::test_gateway_decoder_depth_failure_is_typed_after_auth tests/test_quantum_teleportation_endpoints.py::test_receipt_listing_is_bounded_by_limit",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 2.89,
+    "output_tail": "3 passed in 1.91s",
+    "result": "Parent-owned W1/W2 regressions passed before source executors began: authentication precedes injected decoder-depth failure, which becomes400invalid_json; superscript and5000-digit limits become typed400, valid bounded listing preserved."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-ingress-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 2.06,
+    "output_tail": "{\"code\":\"invalid_json\",\"status\":400}",
+    "result": "Same authenticated QKD gateway route now converts the supported decoder-depth seam into typed400invalid_json; not a fullPython3.12gateway execution."
+  },
+  {
+    "cmd": "git add services/desk-gateway/src/desk_gateway/server.py services/desk-gateway/src/desk_gateway/quantum_node.py tests/test_quantum_node_transport.py tests/test_quantum_teleportation_endpoints.py && git commit -m \"fix(quantum): normalize authenticated decoder and limit failures\"",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.34,
+    "output_tail": "44fdc46; 4 files changed,59insertions,5deletions",
+    "result": "Atomic source/test admission repair committed on the feature branch; no push, merge or approval."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-integration-boundary-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 2.26,
+    "output_tail": "{\"cancelled_release\":{\"first\":\"CancelledError\",\"release_attempts\":1,\"retry\":\"output_quarantined\",\"status_before_retry\":\"quarantined\"},\"e91_cleanup_fault\":{\"extracted_bits\":0,\"nodes\":{\"desk-alpha\":{\"active_count\":1,\"key_available\":false},\"desk-beta\":{\"active_count\":1,\"key_available\":false}},\"pair_status\":\"quarantined\",\"reason\":\"resource_cleanup_unconfirmed\",\"status\":\"failed\"},\"gateway_decoder_recursion\":{\"status\":400},\"limit_long\":{\"status\":400},\"limit_unicode\":{\"status\":400},\"worker_decoder_recursion\":{\"status\":400}}",
+    "result": "Same before/after public boundary probe: applied release cancellation remains quarantined with exactlyone mutation; first E91 terminal cleanup ambiguity fails keylessly onbothowners andretainsquarantine. Unresolvedleases remain1/1, not falsely freed. Typed admission guards return400. Full-count repeaterTCP and finalwhole-suite evidence stillpending."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 353.69,
+    "output_tail": "667 passed in352.21s (0:05:52)",
+    "result": "Complete post-68-08/69-08 consumer suite passed. Includes unchanged original consumer suite plus typed ingress, both cancellation/interrupt cases and18E91route/cleanup boundary cases, including a genuine full20000-round registered four-node Local worker run. Separate actualCLI/gatewayTCP proof remains running."
+  },
+  {
+    "cmd": "git add services/desk-gateway/src/desk_gateway/quantum_teleportation.py tests/test_quantum_teleportation.py tests/test_quantum_node_transport.py services/desk-gateway/README.md && git commit -m \"fix(quantum): quarantine interrupted output release and activate session record\"",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.31,
+    "output_tail": "9131f4d;4fileschanged,61insertions,19deletions",
+    "result": "Atomic cancellation and canonical active-session cutover, after complete667consumer proof and actual boundary smoke."
+  },
+  {
+    "cmd": "git add services/desk-gateway/src/desk_gateway/quantum_qkd_mesh.py tests/test_quantum_qkd_mesh.py services/desk-gateway/src/desk_gateway/server.py tests/test_quantum_teleportation_endpoints.py services/desk-gateway/README.md && git commit -m \"fix(qkd): consume registered repeater resources and require cleanup confirmation\"",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.34,
+    "output_tail": "ede41cd;5fileschanged,542insertions,86deletions",
+    "result": "Atomic repeater-E91/cleanup/canonical-QKD-types cutover with every gateway/test consumer and behavior documentation migrated; no aliases."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-final-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1368.88,
+    "output_tail": "20000 repeater-only E91 rounds; established256bits; S=2.846911724058252/S_lower=2.3957541668335933; witness2537/2573/2417/2473; 4000 phase samples/0errors; owner one-shot acceptance; active leases0at all four workers after normal cleanup",
+    "result": "Genuine four separate CLI workers and gateway over TCP, topology alpha-repeater1-repeater2-beta with no direct alpha-beta edge. Original instances recorded; distinct successful mutation acknowledgements alpha86005/beta80943/repeater1100000/repeater2135012, all below fixed261056 cap. Counters observe successful distinct mutation replies, not inaccessible private history fields.1352 capacity samples: sampled peaks alpha1/beta1/repeaters2, not exhaustive peak proof. Both owners independently accepted use; cross-capability403 and second-use409. Selected PSI_MINUS complex teleport fidelity0.98 with input consumed and normal release replay/new-op409. Actual malformed limits/deep JSON400. This fresh stochastic drill returned all_passed=false/numerical_stage_failed on actual purification parity rejection; other numerical results were swap/teleport near1, clean BB84 established256 and Eve aborted qber0.24833555259653795. Caller resource counts3/3/0/0 unchanged. No anchor reached in this fresh drill, no chain acceptance. Public full JSON retained in artifact987; earlier command29, not this run, proves two five-stage numerical drills refused by insufficient_balance."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple pip-audit --help",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 2.4,
+    "output_tail": "pip-audit usage; isolated standard audit-tool environment prepared",
+    "result": "Scanner tooling only; no product manifest, lockfile, SDK or product dependency edit."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple pip-audit --path .venv/lib/python3.14/site-packages --skip-editable --strict --progress-spinner off --format json --output /tmp/desk-v51-dependency-audit.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 1.55,
+    "output_tail": "ERROR:pip_audit._cli:desk-gateway: distribution marked as editable",
+    "result": "Dependency collection failed despite skip-editable. No vulnerability pass; collect exact installed noneditable pins and audit them without dependency resolution or automatic fixes."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.81,
+    "output_tail": "JSON output written to /tmp/desk-v51-sast.json",
+    "result": "Actual whole-service SAST completed with findings, not a whole-service pass. No medium/high result in the v5.1 quantum implementation files or gateway; low cleanup/assert findings need independent disposition. Other service files have pre-existing medium/high findings outside this milestone; no risk accepted."
+  },
+  {
+    "cmd": "uv pip freeze --exclude-editable",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.18,
+    "output_tail": "Exact installed noneditable Python dependency pins collected",
+    "result": "Observed installed-environment provenance, not a vulnerability verdict; the local editable product is separately source-scanned."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple pip-audit --requirement /tmp/desk-v51-audit-dependencies.txt --no-deps --disable-pip --strict --progress-spinner off --format json --output /tmp/desk-v51-dependency-audit.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1.52,
+    "output_tail": "No known vulnerabilities in 47 exact installed noneditable package versions; fixes empty",
+    "result": "Actual pinned-version dependency audit passed. The earlier editable collection failed; this succeeding version audit does not attest artifact/hash integrity or replace source SAST."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-current-gaps-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1.88,
+    "output_tail": "Actual pre-remediation worker/ledger/gateway counterexamples recorded",
+    "result": "Before current gap fixes: pre-effect purification released both input leases; definite owner failure quarantined; competing owner release overwrote acknowledgement; replacement absence falsely confirmed; duplicate release partially deleted; unrelated E91 lease accepted; late begin untracked; peer receipt unreadable; genuine same-depth prefix mutations verified; huge numeric conversions raised OverflowError."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-budget-boundary-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 6.27,
+    "output_tail": "21 genuine short BB84 sessions searched; independent locked arithmetic matched actual 120/128-bit candidate boundaries",
+    "result": "Before numeric admission repair huge q_phase raised OverflowError. Real raw4900 candidate120 aborted insufficient_entropy/extracted0; raw5000 candidate128 established/extracted128. Independent stdlib epsilon/charge formula matched public budgets; no fake candidates or key bytes."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-current-gaps-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 2.11,
+    "output_tail": "After gap remediation actual original counterexamples now preserve custody, reject malformed scope/numbers/prefixes and retain late-begin uncertainty",
+    "result": "Inputs stay active with leases2/2; definite owner failure stays available then release succeeds; competing owner never reaches transport and confirmed replay survives; replacement release addresses original scope and remains quarantined; duplicate400 preserves both leases then unique release succeeds; E91 scope409 leaves candidate0; late begin remains keyless failed/key_cleanup_unconfirmed with quarantine; peer receipt/proof readable; genuine3->4 and5->6 mutations false/authentic true; huge fidelity/amplitude typed400."
+  }
+,
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.19,
+    "output_tail": "Earlier integrated whole-service scan:57257loc/HIGH2/MEDIUM6/LOW112/errors[]/no skips. Failed, not security approval; predates final custody and ledger repair.",
+    "result": "Earlier integrated whole-service scan:57257loc/HIGH2/MEDIUM6/LOW112/errors[]/no skips. Failed, not security approval; predates final custody and ledger repair."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 396.94,
+    "output_tail": "11failed/728passed395.52s: genuine applied first reserve timeout lost original pending scope; seven missing PairStatus test imports and three invalid fixture/API assumptions also failed. This run is not a pass.",
+    "result": "11failed/728passed395.52s: genuine applied first reserve timeout lost original pending scope; seven missing PairStatus test imports and three invalid fixture/API assumptions also failed. This run is not a pass."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-last-custody-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.46,
+    "output_tail": "Before custody repair: actual first applied purify/swap/teleport measurement interruption left inputs ACTIVE; fresh held grant untracked; unknown original lease falsely acknowledged. Identical interruption/no-follow-up observed.",
+    "result": "Before custody repair: actual first applied purify/swap/teleport measurement interruption left inputs ACTIVE; fresh held grant untracked; unknown original lease falsely acknowledged. Identical interruption/no-follow-up observed."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-last-custody-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.52,
+    "output_tail": "After custody repair: selected inputs QUARANTINED/unselectable with identical interruption/no follow-up; fresh grant original pending scope retained; unknown owner lease worker_refused/available/no ACK.",
+    "result": "After custody repair: selected inputs QUARANTINED/unselectable with identical interruption/no follow-up; fresh grant original pending scope retained; unknown owner lease worker_refused/available/no ACK."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no tests/test_quantum_teleportation.py tests/test_quantum_teleportation_endpoints.py tests/test_quantum_qkd_mesh.py tests/test_quantum_ledger_anchor.py -k 'whole_operation_interruption or different_original_instances or overall_deadline or late_begin_after or engine_tag_mismatch or bounded_query_work or verify_committed_proof_binds or failed_fresh_grant or first_applied_reserve or interruption_during_failed_teleport or owner_unknown_lease or real_drill_parity or drill_teleport_below_threshold'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 11.78,
+    "output_tail": "3failed/20passed/298deselected10.72s; invalid TestClient.workers fixture access and canonical five-field receipt event_type assertions repaired; no pass inferred.",
+    "result": "3failed/20passed/298deselected10.72s; invalid TestClient.workers fixture access and canonical five-field receipt event_type assertions repaired; no pass inferred."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.44,
+    "output_tail": "Integrated pre-final-release scan:57301loc/HIGH2/MEDIUM6/LOW111/errors[]/no skips/nosec0; no medium/high in exact v5.1 core/gateway/config. Whole-service FAILED; independent disposition required.",
+    "result": "Integrated pre-final-release scan:57301loc/HIGH2/MEDIUM6/LOW111/errors[]/no skips/nosec0; no medium/high in exact v5.1 core/gateway/config. Whole-service FAILED; independent disposition required."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-budget-boundary-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 6.63,
+    "output_tail": "21 genuine BB84 sessions searched; independent stdlib locked arithmetic matched actual120/128bit candidate boundaries. raw4900 candidate120 abortinsufficient_entropy/extract0; raw5000 candidate128 established/extract128; huge q_phase now ValueError. No fake candidates/key bytes.",
+    "result": "21 genuine BB84 sessions searched; independent stdlib locked arithmetic matched actual120/128bit candidate boundaries. raw4900 candidate120 abortinsufficient_entropy/extract0; raw5000 candidate128 established/extract128; huge q_phase now ValueError. No fake candidates/key bytes."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 409.49,
+    "output_tail": "4failed/744passed408.07s: failed drill.summary is authentic but ineligible rather than absent; incidental pending-count and pre-send cancellation test assumptions repaired/deleted. This run is not green.",
+    "result": "4failed/744passed408.07s: failed drill.summary is authentic but ineligible rather than absent; incidental pending-count and pre-send cancellation test assumptions repaired/deleted. This run is not green."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-admission-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 1.77,
+    "output_tail": "Actual two-worker/gateway admission partial: four applied Alpha reserves/Beta0, six fifth mutations429 and unauth401/denied403/no extra effects. Harness treated void terminal cleanup return as bool and failed before timeout scenario; no complete smoke pass.",
+    "result": "Actual two-worker/gateway admission partial: four applied Alpha reserves/Beta0, six fifth mutations429 and unauth401/denied403/no extra effects. Harness treated void terminal cleanup return as bool and failed before timeout scenario; no complete smoke pass."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-release-no-retry-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.43,
+    "output_tail": "Before original-release guard: first input release actually applied then acknowledgement lost; same original lease release reissued2times,total4,uncertainty0,pairquarantined,workers0/0.",
+    "result": "Before original-release guard: first input release actually applied then acknowledgement lost; same original lease release reissued2times,total4,uncertainty0,pairquarantined,workers0/0."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-release-no-retry-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.57,
+    "output_tail": "After common primitive/terminal guard: same original release request count1,total owned releases3,original uncertainty1,pairquarantined,workers0/0. Worker absence does not clear retained ambiguity.",
+    "result": "After common primitive/terminal guard: same original release request count1,total owned releases3,original uncertainty1,pairquarantined,workers0/0. Worker absence does not clear retained ambiguity."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-admission-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 2.22,
+    "output_tail": "Actual six429/auth ordering and504 after first applied reserve; original scope retained/Alpha1Beta0,next200 recovers slot/Alpha2Beta1. Harness final operator cleanup failed; no complete pass.",
+    "result": "Actual six429/auth ordering and504 after first applied reserve; original scope retained/Alpha1Beta0,next200 recovers slot/Alpha2Beta1. Harness final operator cleanup failed; no complete pass."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no tests/test_quantum_teleportation.py tests/test_quantum_teleportation_endpoints.py tests/test_quantum_qkd_mesh.py tests/test_quantum_ledger_anchor.py tests/test_quantum_key_budget.py -k 'whole_operation_interruption or different_original_instances or overall_deadline or late_begin_after or engine_tag_mismatch or bounded_query_work or verify_committed_proof_binds or failed_fresh_grant or first_applied_reserve or interruption_during_failed_teleport or owner_unknown_lease or real_drill_parity or drill_teleport_below_threshold or applied_lost_release or oracle or yield or cancellation'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 12.8,
+    "output_tail": "5failed/32passed/312deselected11.82s; test assumptions fixed: retain every outstanding original scope, not count1; failed summary proof requires explicit prefix; disjoint teleported halves are not the ambiguous input lease. Product source unchanged by these corrections.",
+    "result": "5failed/32passed/312deselected11.82s; test assumptions fixed: retain every outstanding original scope, not count1; failed summary proof requires explicit prefix; disjoint teleported halves are not the ambiguous input lease. Product source unchanged by these corrections."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-admission-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 2.04,
+    "output_tail": "Six-family429/auth, actual504 original custody and next200 observed; final explicit operator cleanup still failed. No complete smoke pass; parent subsequently diagnosed repeated operator operation IDs.",
+    "result": "Six-family429/auth, actual504 original custody and next200 observed; final explicit operator cleanup still failed. No complete smoke pass; parent subsequently diagnosed repeated operator operation IDs."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.11,
+    "output_tail": "57349loc/HIGH2/MEDIUM6/LOW111/errors[]/no skips/nosec0; exact core/gateway/config16LOW and0medium/high. Whole-service FAILED, no waiver. Predates independently discovered failed-rollback source boundary and final repair.",
+    "result": "57349loc/HIGH2/MEDIUM6/LOW111/errors[]/no skips/nosec0; exact core/gateway/config16LOW and0medium/high. Whole-service FAILED, no waiver. Predates independently discovered failed-rollback source boundary and final repair."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-final-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1125.58,
+    "output_tail": "Actual four distinct CLI workers/gateway,no direct endpoint link,20000 repeater-only E91 rounds,256bit endpoint keys,qber0,CHSH2.828630008762767/lower2.3775443874507514,owner first use accepted/second409/cross403,zero active leases allnodes before/after,peaks1/1/2/2. Distinct mutation ACKs86005/80993/100000/134967. All five numerical drill stages true; actual anchor insufficient_balance/signature-slotnull/all_passedfalse; user capacities3/3/0/0 unchanged; bounded REST/frozen proofs. Started before final error-only release guard and ledger rollback repair; not unqualified final-head proof.",
+    "result": "Actual four distinct CLI workers/gateway,no direct endpoint link,20000 repeater-only E91 rounds,256bit endpoint keys,qber0,CHSH2.828630008762767/lower2.3775443874507514,owner first use accepted/second409/cross403,zero active leases allnodes before/after,peaks1/1/2/2. Distinct mutation ACKs86005/80993/100000/134967. All five numerical drill stages true; actual anchor insufficient_balance/signature-slotnull/all_passedfalse; user capacities3/3/0/0 unchanged; bounded REST/frozen proofs. Started before final error-only release guard and ledger rollback repair; not unqualified final-head proof."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-admission-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 2.03,
+    "output_tail": "Complete admission/deadline observations; safe diagnostic identified final harness cleanup typed QuantumResourceError/NodeCommandFailed at pair-release after reused operation IDs. Parent changed only harness IDs to original pair-specific unique scopes.",
+    "result": "Complete admission/deadline observations; safe diagnostic identified final harness cleanup typed QuantumResourceError/NodeCommandFailed at pair-release after reused operation IDs. Parent changed only harness IDs to original pair-specific unique scopes."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 405.82,
+    "output_tail": "749passed404.40s. Complete consumer checkpoint before independently identified failed-COMMIT+failed-ROLLBACK repair and later strengthened negative-drill output isolation; not final-source acceptance.",
+    "result": "749passed404.40s. Complete consumer checkpoint before independently identified failed-COMMIT+failed-ROLLBACK repair and later strengthened negative-drill output isolation; not final-source acceptance."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-admission-tcp-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 2.68,
+    "output_tail": "Current two actual CLI workers+gateway: four applied Alpha reservations/Beta0, six immediate fifth-family429/auth401/403/no extra effects;504orchestration_timeout after applied first reserve retains original scope/Alpha1Beta0;next200 returns capacity/Alpha2Beta1; explicit operator cleanup final0/0. No production timeout truncation or fake worker effect.",
+    "result": "Current two actual CLI workers+gateway: four applied Alpha reservations/Beta0, six immediate fifth-family429/auth401/403/no extra effects;504orchestration_timeout after applied first reserve retains original scope/Alpha1Beta0;next200 returns capacity/Alpha2Beta1; explicit operator cleanup final0/0. No production timeout truncation or fake worker effect."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --show-capture=no tests/test_quantum_qkd_mesh.py -k 'drill_partial_second_allocation or drill_swap_refusal or drill_teleport_below_threshold or drill_clean_and_eve_transport_failure or real_drill_parity'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 14.24,
+    "output_tail": "5failed/44deselected13.75s. Exact caller lease/output preservation and key availability assertions reached; new private owner probe operation caller-probe was not allowlisted. Fixture corrected to existing qkd_test; product allowlist unchanged. Raw private test payloads not copied into this receipt.",
+    "result": "5failed/44deselected13.75s. Exact caller lease/output preservation and key availability assertions reached; new private owner probe operation caller-probe was not allowlisted. Fixture corrected to existing qkd_test; product allowlist unchanged. Raw private test payloads not copied into this receipt."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-ledger-rollback-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.35,
+    "output_tail": "Before fail-closed fix: actual native SQLite event+checkpoint3 pending,COMMIT failed,ROLLBACK failed. Independent reader sees committed2; writer serves all10public prefix paths and verifies pending proof as committedtrue. Closing/reopening restores exact committed2/root. Independently identified source defect confirmed, not inferred.",
+    "result": "Before fail-closed fix: actual native SQLite event+checkpoint3 pending,COMMIT failed,ROLLBACK failed. Independent reader sees committed2; writer serves all10public prefix paths and verifies pending proof as committedtrue. Closing/reopening restores exact committed2/root. Independently identified source defect confirmed, not inferred."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_qkd_mesh.py -k 'drill_partial_second_allocation or drill_swap_refusal or drill_teleport_below_threshold or drill_clean_and_eve_transport_failure or real_drill_parity'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 13.87,
+    "output_tail": "5passed/44deselected13.41s. All five actual negative exits now preserve caller Bell pair, exact ALL original worker lease projections, retained teleport output and dual-owner key usability; each owner consumes original key and releases original output successfully. Known-owned drill allocations fully cleaned; no fake chain result.",
+    "result": "5passed/44deselected13.41s. All five actual negative exits now preserve caller Bell pair, exact ALL original worker lease projections, retained teleport output and dual-owner key usability; each owner consumes original key and releases original output successfully. Known-owned drill allocations fully cleaned; no fake chain result."
+  }
+,
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-ledger-rollback-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.48,
+    "output_tail": "After fail-closed transaction repair: native pending event/checkpoint3 and failed COMMIT/ROLLBACK; all10public receipt/root/snapshot/lookup/proof paths closed, pending committed verifier closed; independent reader2 and clean reopened exact2/root. No uncommitted prefix served.",
+    "result": "After fail-closed transaction repair: native pending event/checkpoint3 and failed COMMIT/ROLLBACK; all10public receipt/root/snapshot/lookup/proof paths closed, pending committed verifier closed; independent reader2 and clean reopened exact2/root. No uncommitted prefix served."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_ledger_anchor.py -k 'commit_and_rollback_failure or checkpoint_insert_fault or subprocess_termination or bounded_query_work'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 2.96,
+    "output_tail": "2failed/3passed/168deselected2.37s. Every new transaction/public-close assertion reached; only clean-reopen missing receipt expectation used ValueError instead of existing LookupError. Test API expectation corrected; source guard unchanged.",
+    "result": "2failed/3passed/168deselected2.37s. Every new transaction/public-close assertion reached; only clean-reopen missing receipt expectation used ValueError instead of existing LookupError. Test API expectation corrected; source guard unchanged."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.42,
+    "output_tail": "57344loc/HIGH2/MEDIUM6/LOW107/errors[]/skips0/nosec0. Exact v5.1 core/gateway/config12LOW/noMEDHIGH; whole-serviceFAILED/notwaived. Source boundary repair is independently traced; scan alone is not mitigation proof.",
+    "result": "57344loc/HIGH2/MEDIUM6/LOW107/errors[]/skips0/nosec0. Exact v5.1 core/gateway/config12LOW/noMEDHIGH; whole-serviceFAILED/notwaived. Source boundary repair is independently traced; scan alone is not mitigation proof."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_ledger_anchor.py -k 'commit_and_rollback_failure or checkpoint_insert_fault or subprocess_termination or bounded_query_work'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 2.64,
+    "output_tail": "5passed/168deselected1.99s: real pending transaction IO and KeyboardInterrupt identity;11 public reads/no new append refuse; peer/reopen exact committed2, absent pending receipt, next genuineappend3; original checkpoint trigger rollback, actual childSIGKILL recovery and bounded VM methods.",
+    "result": "5passed/168deselected1.99s: real pending transaction IO and KeyboardInterrupt identity;11 public reads/no new append refuse; peer/reopen exact committed2, absent pending receipt, next genuineappend3; original checkpoint trigger rollback, actual childSIGKILL recovery and bounded VM methods."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 396.74,
+    "output_tail": "751passed395.30s complete checkpoint after failed-transaction hardening; predates final exporter closed-between-proof/verification typed error catch and new consumer regression.",
+    "result": "751passed395.30s complete checkpoint after failed-transaction hardening; predates final exporter closed-between-proof/verification typed error catch and new consumer regression."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-closed-export-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.53,
+    "output_tail": "Before final exporter consumer repair: real ledger closes after issuing genuine inclusion proof; export_commitment raises LedgerClosedError instead of existing typed ledger_unavailable503. No signing/send/live confirmation claim.",
+    "result": "Before final exporter consumer repair: real ledger closes after issuing genuine inclusion proof; export_commitment raises LedgerClosedError instead of existing typed ledger_unavailable503. No signing/send/live confirmation claim."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-closed-export-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.76,
+    "output_tail": "After final exporter consumer repair: real ledger closes after genuine proof issuance; result failed/ledger_unavailable/HTTP503/signature-null/slot-null before signer/RPC.",
+    "result": "After final exporter consumer repair: real ledger closes after genuine proof issuance; result failed/ledger_unavailable/HTTP503/signature-null/slot-null before signer/RPC."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_ledger_anchor.py -k 'commit_and_rollback_failure or exporter_closed_between_proof'",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.94,
+    "output_tail": "3passed/171deselected0.32s: both failed-transaction cases and typed closed-between-proof exporter refusal; no contract/allowlist relaxation.",
+    "result": "3passed/171deselected0.32s: both failed-transaction cases and typed closed-between-proof exporter refusal; no contract/allowlist relaxation."
+  },
+  {
+    "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 6.44,
+    "output_tail": "FINAL source scan57348loc/HIGH2/MEDIUM6/LOW107/errors[]/skips0/nosec0; exact core/gateway/config12LOW/noMEDHIGH. Whole-service remainsFAILED/notwaived:8 unrelated legacy HIGH/MEDIUM findings require Desk disposition. No whole-security pass or accepted risk.",
+    "result": "FINAL source scan57348loc/HIGH2/MEDIUM6/LOW107/errors[]/skips0/nosec0; exact core/gateway/config12LOW/noMEDHIGH. Whole-service remainsFAILED/notwaived:8 unrelated legacy HIGH/MEDIUM findings require Desk disposition. No whole-security pass or accepted risk."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 415.77,
+    "output_tail": "FINAL current integrated consumer suite752passed414.33s, exit0. Includes all current original-scope/cancellation/cleanup/provisional/admission/drill isolation/budget/tag/prefix/peer/index/oversize/SIGKILL/failed-rollback/closed-export cases. Python3.14; no signed acceptance or live Devnet claim.",
+    "result": "FINAL current integrated consumer suite752passed414.33s, exit0. Includes all current original-scope/cancellation/cleanup/provisional/admission/drill isolation/budget/tag/prefix/peer/index/oversize/SIGKILL/failed-rollback/closed-export cases. Python3.14; no signed acceptance or live Devnet claim."
+  },
+  {
+    "cmd": "date -u +%Y-%m-%dT%H:%M:%SZ",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.03,
+    "output_tail": "Observed final source verification clock2026-10-10T12:35:50Z",
+    "result": "Observed final source verification clock2026-10-10T12:35:50Z"
   }
   ],
   "claims": [
@@ -346,9 +756,9 @@
     {"claim": "Before parent integration repair, the fixture-backed fresh publisher control path returned None instead of a missing-configuration refusal; no chain RPC was used", "evidence_command_index": 8},
     {"claim": "After parent integration repair, the same receipt could not win a second claim at a later prefix across two same-file ledger objects", "evidence_command_index": 9},
     {"claim": "After parent integration repair, the fixture-backed genuine publisher returned a503 rpc_url_not_configured refusal instead of None; no chain acceptance is claimed", "evidence_command_index": 10},
-    {"claim": "Complete final consumer suite passed645tests", "evidence_command_index": 34},
-    {"claim": "Actual four-worker and gateway TCP acceptance, independent BB84/E91 owner custody, Eve abort, all five numerical drill stages, bounded REST and frozen-prefix restart proof passed", "evidence_command_index": 29},
-    {"claim": "Unfunded live publisher correctly refused both drills with insufficient_balance and no signature or slot", "evidence_command_index": 29},
+    {"claim": "Pre-68-08/69-08 complete consumer suite passed645tests", "evidence_command_index": 34},
+    {"claim": "Prior four-worker gateway TCP smoke verified independent BB84/direct-E91 owner custody, Eve abort, five numerical drill stages, bounded REST and frozen-prefix restart proof; it did not cover repeater-fed E91", "evidence_command_index": 29},
+    {"claim": "Prior unfunded live publisher correctly refused both drills with insufficient_balance and no signature or slot", "evidence_command_index": 29},
     {"claim": "Late reservation commits remain original-instance unresolved quarantine rather than falsely refuted absence", "evidence_command_index": 24},
     {"claim": "A quarantined output cannot issue a second release mutation", "evidence_command_index": 25},
     {"claim": "Final gate self-tests passed299tests", "evidence_command_index": 42},
@@ -357,14 +767,31 @@
     {"claim": "G-3 committed-diff secret scan passed", "evidence_command_index": 38},
     {"claim": "G-4 passed with no edited contract surface", "evidence_command_index": 39},
     {"claim": "G-5/G-6 passed with no deployment or destructive operations", "evidence_command_index": 40},
-    {"claim": "Strict receipt gate remains blocked only by missing independent approved_by", "evidence_command_index": 41}
+    {"claim": "Strict receipt gate remains blocked only by missing independent approved_by", "evidence_command_index": 41},
+    {"claim": "Authenticated decoder-depth failures and malformed numeric receipt limits now produce typed400 responses; missing credentials still precede body decoding", "evidence_command_index": 45},
+    {"claim": "Corrected authenticated gateway decoder-depth smoke returned400invalid_json after the repair", "evidence_command_index": 46},
+    {"claim": "After an actual worker release applies then cancellation propagates, output is quarantined and a fresh retry produces409 without another mutation", "evidence_command_index": 48},
+    {"claim": "Unconfirmed E91 pair cleanup now fails resource_cleanup_unconfirmed with zero extracted bits, no usable key at either owner and retained resource quarantine", "evidence_command_index": 48},
+    {"claim": "Post-68-08/69-08 consumer suite passed667tests, including full20000-round four-node registered-repeater E91 behavior", "evidence_command_index": 49},
+    {"claim": "Actual repeater-only full20000-round E91 over four distinct CLI workers and gateway established256-bit endpoint keys; normal cleanup left no active leases and each private owner accepted one use", "evidence_command_index": 52},
+    {"claim": "The exact47 installed noneditable package versions had no known vulnerabilities in the successful pinned-version audit; artifact/hash integrity and whole-service SAST approval are not claimed", "evidence_command_index": 57},
+    {"claim": "Actual before/after custody, late-bind, worker-scope, numeric, exact-prefix and peer-reader failure cases now exhibit truthful protected outcomes", "evidence_command_index": 60}
+,
+    {"claim": "Final current consumer suite752passed; all recorded earlier failed/intermediate checkpoints remain qualified history", "evidence_command_index": 92},
+    {"claim": "Actual failed COMMIT and ROLLBACK no longer expose pending receipts/proofs; all public paths close and reopen retains exact committed prefix", "evidence_command_index": 83},
+    {"claim": "All five actual negative numerical/transport drill exits preserve original caller leases, private key usability and retained teleport output", "evidence_command_index": 82},
+    {"claim": "Current actual two-worker gateway smoke proves six-family immediate429/auth ordering, applied-reserve504 custody, next200 slot recovery and explicit owned cleanup0/0", "evidence_command_index": 79},
+    {"claim": "Final whole-service SAST remains failed2HIGH6MEDIUM107LOW; exact milestone core/gateway/config has12LOW and noMEDHIGH, not a security gate pass", "evidence_command_index": 91},
+    {"claim": "An actual ledger close between inclusion proof and committed verification produces typed503ledger_unavailable before signer/RPC instead of uncaught LedgerClosedError", "evidence_command_index": 89}
   ],
   "unverified": [
     "Genuine Devnet Memo publication and confirmed matching readback remain unobserved: payer last observed0lamports, official airdrop429 Retry-After86400, both actual drills insufficient_balance with no signature or slot",
     "No independent Desk reviewer has approved this receipt; approved_by intentionally absent. Advisory correctness/security source reviews are not signed approval",
-    "Fresh current-head Greptile disposition remains required. Local G-1/G-3/G-4/G-5/G-6/G-7 passed and gate self-tests299passed; G-2 failed only missing independent approved_by. No merge-ready claim",
-    "Full consumer suite usedPython3.14; systemPython3.12 decoder recursion was observed, but no fullPython3.12suite or dependency/SASTscan was performed",
-    "Temporary smoke runners are continuation probes; recorded observations are retained, not portable CI entrypoints"
+    "Fresh post-gap-head Greptile disposition remains required. Pre-gap local G-1/G-3/G-4/G-5/G-6/G-7 passed and gate self-tests299passed; G-2 failed only missing independent approved_by. Final source-gap checks remain pending; no merge-ready claim",
+    "Full final consumer suite usedPython3.14; no fullPython3.12suite. Exact47 installed noneditable versions0known vulnerabilities is version-only, not artifact integrity. Final whole-serviceSASTFAILED2HIGH6MEDIUM107LOW, exactcore12LOW; independent declared-mitigation advisory is not signed Desk approval or waiver of legacy blocks",
+    "Temporary smoke runners are continuation probes; recorded observations are retained, not portable CI entrypoints",
+    "Earlier667/749/751 suites and older full-count TCP proofs remain historical with explicit source provenance. Final current fullsuite752passed and actual original-scope/admission/storage probes are recorded separately; final committed-diff gates and fresh-head Greptile still required",
+    "The earlier stochastic TCP drill rejected purification; the later1125.58s actual full20000 repeater-only run passed all five numerical stages then refused genuine publication insufficient_balance. That TCP process predates final error-only release/storage/exporter guards; changed boundaries were exercised separately and no unqualified final-head TCP claim is made"
   ],
   "files_changed": [
     ".receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
@@ -383,7 +810,8 @@
     "tests/test_quantum_qkd_mesh.py",
     "tests/test_quantum_state_kernel.py",
     "tests/test_quantum_teleportation.py",
-    "tests/test_quantum_teleportation_endpoints.py"
+    "tests/test_quantum_teleportation_endpoints.py",
+    "tests/test_quantum_key_budget.py"
   ],
   "contract_changes": [],
   "rollback_plan": null,

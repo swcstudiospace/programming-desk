@@ -1074,6 +1074,8 @@ class QuantumNodeWorker:
         for lease_id in lease_ids:
             _check_id(lease_id, "lease_id")
         self._auth(token, node, instance)
+        if len(set(lease_ids)) != len(lease_ids):
+            raise QuantumNodeError(400, "invalid_leases", "lease_ids must be distinct")
         payload = {"action": "release", "lease_ids": list(lease_ids)}
         async with self._lock:
             replay = self._idempotency(operation_id, payload, "release")
@@ -1552,6 +1554,8 @@ class QuantumNodeWorker:
         lease = self._owned(ctx["lease_id"])
         if lease.state not in ("active", "staged"):
             raise QuantumNodeError(409, "lease_unavailable", "E91 round needs an unconsumed owned lease")
+        if lease.resource_id != pair_id:
+            raise QuantumNodeError(409, "resource_mismatch", "E91 lease does not belong to the selected pair")
         density = ctx["density"]
         alice_side = record.role == "alice"
         if alice_side != (density.qubits == 2):

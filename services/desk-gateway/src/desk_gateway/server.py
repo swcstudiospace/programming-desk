@@ -6259,7 +6259,6 @@ def create_mcp(
     # replacement pairs and no second sync workflow. QKD/ledger/anchor/drill
     # routes further below stay phase-69 owned and are untouched here.
     import math as _q68_math
-    from collections import deque as _q68_deque
     from collections.abc import Mapping as _Q68Mapping
     from types import SimpleNamespace as _Q68Namespace
     from desk_gateway.quantum_node import QuantumNodeError as _Q68NodeError
@@ -6295,58 +6294,6 @@ def create_mcp(
         QuantumTeleportationDrillSimulator as _Q69Drill,
     )
 
-    class Quantum68EventCollector:
-        """In-memory bounded async event sink for phase 68.
-
-        Implements ``await append_event(mapping)`` over the shared public
-        shape (event_type/session_id/actor/nodes/resources/outcome/payload).
-        Phase 69 replaces this collector with the durable ledger through the
-        same injected ``append_event`` seam; the pool/protocol tiers never
-        import the ledger module.
-        """
-
-        REQUIRED_KEYS = ("event_type", "session_id", "actor", "nodes", "resources", "outcome", "payload")
-
-        def __init__(self, max_events: int = 1024) -> None:
-            self._events: Any = _q68_deque(maxlen=max_events)
-            self._seq = 0
-            self._total = 0
-
-        async def append_event(self, event: Any) -> dict[str, Any]:
-            if not isinstance(event, _Q68Mapping):
-                raise ValueError("quantum event must be a mapping")
-            missing = [key for key in self.REQUIRED_KEYS if key not in event]
-            if missing:
-                raise ValueError(f"quantum event missing keys: {missing}")
-            for key in ("event_type", "session_id", "actor", "outcome"):
-                if not isinstance(event[key], str) or not event[key]:
-                    raise ValueError(f"quantum event {key!r} must be a non-empty string")
-            for key in ("nodes", "resources"):
-                if not isinstance(event[key], (list, tuple)) or any(
-                    not isinstance(node, str) for node in event[key]
-                ):
-                    raise ValueError(f"quantum event {key!r} must be a string list")
-            if not isinstance(event["payload"], _Q68Mapping):
-                raise ValueError("quantum event payload must be a mapping")
-            self._total += 1
-            self._seq += 1
-            self._events.append({
-                "event_type": event["event_type"],
-                "session_id": event["session_id"],
-                "actor": event["actor"],
-                "nodes": list(event["nodes"]),
-                "resources": list(event["resources"]),
-                "outcome": event["outcome"],
-                "payload": dict(event["payload"]),
-            })
-            return {"receipt_id": f"q68-{self._seq:08d}", "seq": self._seq}
-
-        def snapshot(self) -> list[dict[str, Any]]:
-            return [dict(entry) for entry in self._events]
-
-        @property
-        def dropped(self) -> int:
-            return self._total - len(self._events)
 
     def _q68_build_runtime(quantum_settings: Settings) -> Any:
         """Assemble the single injected pool/mesh/protocol/transport/sink graph."""
@@ -6354,7 +6301,6 @@ def create_mcp(
         if rng is None:
             rng = secrets.SystemRandom()
         sink = quantum_settings.quantum_sink_override
-        collector = None
         if sink is not None:
             append_event = sink
         elif qteleport_ledger is not None:
@@ -6377,7 +6323,8 @@ def create_mcp(
         proto = _Q68Protocol(mesh, transport=transport, rng=rng, append_event=append_event)
         return _Q68Namespace(
             pool=pool, mesh=mesh, proto=proto, purifier=mesh.purifier,
-            swapper=mesh.swapper, transport=transport, collector=collector, rng=rng,
+            swapper=mesh.swapper, transport=transport, rng=rng,
+            active_operations=0, max_active_operations=4, operation_timeout_s=60.0,
         )
 
     # Quantum storage failures degrade quantum routes only: any ledger open
@@ -6442,6 +6389,7 @@ def create_mcp(
         titles = {
             400: "Bad Request", 403: "Forbidden", 404: "Not Found", 409: "Conflict",
             413: "Payload Too Large", 415: "Unsupported Media Type",
+            429: "Too Many Requests",
             502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout",
         }
         return problem_response(
@@ -6535,9 +6483,14 @@ def create_mcp(
         if name not in body:
             return default
         value = body[name]
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or not _q68_math.isfinite(float(value)):
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise _Q68Error("invalid_fidelity", f"{name} must be a finite number", status=400)
-        result = float(value)
+        try:
+            result = float(value)
+        except OverflowError:
+            raise _Q68Error("invalid_fidelity", f"{name} must be a finite number", status=400) from None
+        if not _q68_math.isfinite(result):
+            raise _Q68Error("invalid_fidelity", f"{name} must be a finite number", status=400)
         if not 0.0 <= result <= 1.0:
             raise _Q68Error("invalid_fidelity", f"{name} must lie in [0, 1]", status=400)
         return result
@@ -6595,9 +6548,15 @@ def create_mcp(
         parts = []
         for key in ("real", "imag"):
             value = raw[key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not _q68_math.isfinite(float(value)):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
                 raise _Q68Error("invalid_amplitude", f"{name}.{key} must be a finite number", status=400)
-            parts.append(float(value))
+            try:
+                part = float(value)
+            except OverflowError:
+                raise _Q68Error("invalid_amplitude", f"{name}.{key} must be a finite number", status=400) from None
+            if not _q68_math.isfinite(part):
+                raise _Q68Error("invalid_amplitude", f"{name}.{key} must be a finite number", status=400)
+            parts.append(part)
         return complex(parts[0], parts[1])
 
     def _q68_kind(body: dict[str, Any], name: str, *, default: str) -> Any:
@@ -6620,7 +6579,7 @@ def create_mcp(
 
     def _q68_domain_error(request: Request, exc: Exception) -> Response:
         if isinstance(exc, _Q68Error):
-            status = exc.status if exc.status in (400, 403, 404, 409, 503, 504) else 409
+            status = exc.status if exc.status in (400, 403, 404, 409, 429, 503, 504) else 409
             return _q68_error(request, status, exc.code, exc.detail)
         if isinstance(exc, _Q68Deadline):
             return _q68_error(request, 504, "transport_deadline", f"Node deadline exceeded: {exc}")
@@ -6635,6 +6594,27 @@ def create_mcp(
             return _q68_error(request, status, exc.code, exc.detail)
         raise exc
 
+    @contextlib.asynccontextmanager
+    async def _q68_orchestration():
+        # One app/event-loop owns this counter. Admission never suspends or
+        # queues before claiming a slot; QKD/drill use their separate bounds.
+        if q68.active_operations >= q68.max_active_operations:
+            raise _Q68Error("orchestration_busy", "Quantum orchestration capacity is busy.", status=429)
+        q68.active_operations += 1
+        deadline = asyncio.timeout(q68.operation_timeout_s)
+        try:
+            async with deadline:
+                yield
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            raise _Q68Error(
+                "orchestration_timeout", "Quantum orchestration exceeded its overall deadline.",
+                status=504,
+            ) from None
+        finally:
+            q68.active_operations -= 1
+
     @mcp.custom_route("/v1/quantum/teleportation/bell-pair/create", methods=["POST"])
     async def quantum_bell_pair_create_route(request: Request) -> Response:
         _, auth_error = _q68_auth(request, mutation=True)
@@ -6648,7 +6628,8 @@ def create_mcp(
             node_b = _q68_str(body, "node_b", default="desk-beta", max_len=64)
             kind = _q68_kind(body, "state_type", default="PHI_PLUS")
             fidelity = _q68_fidelity(body, "initial_fidelity", default=0.99)
-            pair = await qteleport_pool.create_pair(node_a, node_b, kind, fidelity)
+            async with _q68_orchestration():
+                pair = await qteleport_pool.create_pair(node_a, node_b, kind, fidelity)
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         return JSONResponse({"ok": True, "bell_pair": pair.to_dict()})
@@ -6664,7 +6645,8 @@ def create_mcp(
         try:
             pair_id_1 = _q68_str(body, "pair_id_1", max_len=128)
             pair_id_2 = _q68_str(body, "pair_id_2", max_len=128)
-            result = await q68.purifier.purify(pair_id_1, pair_id_2)
+            async with _q68_orchestration():
+                result = await q68.purifier.purify(pair_id_1, pair_id_2)
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         if result.accepted:
@@ -6717,9 +6699,10 @@ def create_mcp(
             purify = _q68_bool(body, "purify", default=True)
             # Empty and over-long routes must not crash: the mesh reports them
             # as unsuccessful outcomes with logs (zero-count safe-abort style).
-            ok, pair, logs = await qteleport_mesh.establish_multi_hop_entanglement(
-                node_path, base_fidelity, purify,
-            )
+            async with _q68_orchestration():
+                ok, pair, logs = await qteleport_mesh.establish_multi_hop_entanglement(
+                    node_path, base_fidelity, purify,
+                )
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         return JSONResponse({
@@ -6739,7 +6722,8 @@ def create_mcp(
         try:
             pair_id_ab = _q68_str(body, "pair_id_ab", max_len=128)
             pair_id_bc = _q68_str(body, "pair_id_bc", max_len=128)
-            result = await q68.swapper.swap(pair_id_ab, pair_id_bc)
+            async with _q68_orchestration():
+                result = await q68.swapper.swap(pair_id_ab, pair_id_bc)
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         output = qteleport_pool.get_pair(result.output_pair_id or "")
@@ -6798,10 +6782,11 @@ def create_mcp(
             # A selected pair combined with fresh-hop allocation is rejected
             # by the protocol itself (invalid_selection, 400): an invalid
             # selection never summons a hidden replacement pair.
-            result = await qteleport_proto.teleport_qubit(
-                source_node, target_node, alpha, beta,
-                bell_pair=selected, intermediate_hops=hops,
-            )
+            async with _q68_orchestration():
+                result = await qteleport_proto.teleport_qubit(
+                    source_node, target_node, alpha, beta,
+                    bell_pair=selected, intermediate_hops=hops,
+                )
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         receipt = result.receipt
@@ -6840,7 +6825,8 @@ def create_mcp(
             session_id = _q68_str(body, "session_id", max_len=128)
             receiver = _q68_str(body, "receiver", max_len=64)
             operation_id = _q68_str(body, "operation_id", max_len=128)
-            released = await qteleport_proto.release_teleport_output(session_id, receiver, operation_id)
+            async with _q68_orchestration():
+                released = await qteleport_proto.release_teleport_output(session_id, receiver, operation_id)
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         return JSONResponse({
@@ -7109,7 +7095,11 @@ def create_mcp(
             proof = _q69_proof_from(body)
         except (KeyError, TypeError, ValueError):
             return _q68_error(request, 400, "invalid_proof", "Proof shape was rejected.")
-        return JSONResponse({"ok": True, "valid": bool(qteleport_ledger.verify_proof(proof))})
+        try:
+            valid = qteleport_ledger.verify_committed_proof(proof)
+        except _Q69LedgerError:
+            return _q68_error(request, 503, "ledger_unavailable", "Quantum receipt ledger is unavailable.")
+        return JSONResponse({"ok": True, "valid": bool(valid)})
 
     @mcp.custom_route("/v1/quantum/teleportation/anchor/export", methods=["POST"])
     async def quantum_teleportation_anchor_export_route(request: Request) -> Response:
@@ -11397,6 +11387,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         "quantum_ledger": getattr(mcp, "_quantum_ledger", None),
         "quantum_anchor_exporter": getattr(mcp, "_quantum_anchor_exporter", None),
         "qteleport_pool": getattr(mcp, "_qteleport_pool", None),
+        "qteleport_orchestration": getattr(mcp, "_quantum68", None),
         "qteleport_mesh": getattr(mcp, "_qteleport_mesh", None),
         "qteleport_proto": getattr(mcp, "_qteleport_proto", None),
         "qkd_engine": getattr(mcp, "_qkd_engine", None),

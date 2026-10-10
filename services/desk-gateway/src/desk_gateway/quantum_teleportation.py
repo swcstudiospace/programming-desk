@@ -47,6 +47,7 @@ from desk_gateway import quantum_state
 from desk_gateway.quantum_transport import (
     NodeCommandFailed,
     NodeTransportAmbiguous,
+    NodeTransportDeadline,
     NodeTransportError,
     NodeTransportUnavailable,
 )
@@ -264,6 +265,11 @@ class _PairRecord:
     status: PairStatus = PairStatus.ACTIVE
     holder: str | None = None
     leases: dict[str, str] = field(default_factory=dict)
+    # Reservation-time worker scope per node. Every worker call addressing an
+    # existing pair uses these original instances, never a rediscovery: a
+    # replacement worker's unknown_lease/stale_instance is non-proof and never
+    # releases the original obligation.
+    instances: dict[str, str] = field(default_factory=dict)
     history: list[str] = field(default_factory=list)
 
 
@@ -392,6 +398,13 @@ class BellPairPool:
                 node, operation_id=operation_id, resource_id=resource_id,
                 count=count, session_id=session_id, instance=instances.get(node),
             )
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            self._sync_track_uncertain(
+                (operation_id, resource_id),
+                {"node": node, "instance_id": instances[node], "count": count,
+                 "session_id": session_id, "status": "unresolved"},
+            )
+            raise
         except NodeTransportUnavailable as exc:
             raise QuantumResourceError(
                 "worker_unavailable", f"worker {node} unavailable for reserve: {exc}", status=503,
@@ -407,22 +420,84 @@ class BellPairPool:
             raise QuantumResourceError("worker_refused", f"worker {node} refused reserve: {exc}") from exc
         return list(response["leases"])
 
+    def _sync_retain_release(
+        self, node: str, *, operation_id: str, lease_ids: Sequence[str],
+        instances: Mapping[str, str], resource_id: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        """Retain one obligation per original lease without inventing a retry."""
+        instance = instances[node]
+        pending_leases: set[str] = set()
+        for entry in self._uncertain.values():
+            if (
+                entry.get("kind") == "release"
+                and entry.get("status") == "unresolved"
+                and entry.get("node") == node
+                and entry.get("instance_id") == instance
+            ):
+                pending_leases.update(entry.get("lease_ids", ()))
+        if resource_id is not None:
+            untracked = [lease_id for lease_id in lease_ids if lease_id not in pending_leases]
+            if untracked:
+                self._sync_track_uncertain(
+                    (operation_id, resource_id),
+                    {"node": node, "instance_id": instance, "count": len(untracked),
+                     "session_id": session_id, "status": "unresolved",
+                     "kind": "release", "lease_ids": untracked},
+                )
+                pending_leases.update(untracked)
+        for record in self._records.values():
+            lease_id = record.leases.get(node)
+            if lease_id is not None and lease_id in lease_ids:
+                if lease_id not in pending_leases:
+                    self._sync_track_uncertain(
+                        (operation_id, record.pair.pair_id),
+                        {"node": node, "instance_id": instance, "count": 1,
+                         "session_id": session_id, "status": "unresolved",
+                         "kind": "release", "lease_ids": [lease_id]},
+                    )
+                    pending_leases.add(lease_id)
+                self._sync_quarantine((record.pair.pair_id,), reason=f"{operation_id}-release-unconfirmed")
+
     async def _release_worker(
         self, node: str, *, operation_id: str, lease_ids: Sequence[str],
-        instances: Mapping[str, str],
+        instances: Mapping[str, str], resource_id: str | None = None,
+        session_id: str | None = None,
     ) -> None:
         if self._transport is None:
             return
+        instance = instances[node]
+        for entry in self._uncertain.values():
+            if (
+                entry.get("kind") == "release"
+                and entry.get("status") == "unresolved"
+                and entry.get("node") == node
+                and entry.get("instance_id") == instance
+                and any(lease_id in entry.get("lease_ids", ()) for lease_id in lease_ids)
+            ):
+                raise QuantumResourceError("transport_ambiguous", "original release remains unconfirmed")
+
+
         try:
             await self._transport.release(
                 node, operation_id=operation_id, lease_ids=list(lease_ids),
-                instance=instances.get(node),
+                instance=instance,
             )
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            self._sync_retain_release(
+                node, operation_id=operation_id, lease_ids=lease_ids, instances=instances,
+                resource_id=resource_id, session_id=session_id,
+            )
+            raise
         except NodeCommandFailed as exc:
-            if exc.code in ("already_released", "unknown_lease"):
+            if exc.code == "already_released":
                 return
             raise QuantumResourceError("worker_refused", f"worker {node} refused release") from exc
-        except NodeTransportAmbiguous as exc:
+        except (NodeTransportAmbiguous, NodeTransportDeadline) as exc:
+            self._sync_retain_release(
+                node, operation_id=operation_id, lease_ids=lease_ids, instances=instances,
+                resource_id=resource_id, session_id=session_id,
+            )
             raise QuantumResourceError("transport_ambiguous", f"worker {node} release is ambiguous") from exc
         except NodeTransportUnavailable as exc:
             raise QuantumResourceError("worker_unavailable", f"worker {node} unavailable for release", status=503) from exc
@@ -435,7 +510,16 @@ class BellPairPool:
     ) -> list[str]:
         """Adopt positively identified leases; never refute a pending effect."""
         key = (operation_id, resource_id)
+        # Pending-effect marker written synchronously BEFORE the read-only
+        # inspection await: if this await is cancelled, the original-scope
+        # uncertainty is still tracked for later explicit reconciliation and
+        # never treated as absence-based proof of a free worker.
+        self._uncertain[key] = {
+            "node": node, "instance_id": instance, "count": count,
+            "session_id": session_id, "status": "unresolved",
+        }
         try:
+
             info = await self._transport.inspect(node, instance=instance, resource_ids=[resource_id])
             if info.get("instance_id") != instance:
                 raise NodeTransportAmbiguous("reserve inspection changed worker instance")
@@ -477,6 +561,58 @@ class BellPairPool:
     def uncertain_reserves(self) -> dict[tuple[str, str], dict[str, Any]]:
         """Copy of the (operation ID, resource ID) uncertainty ledger."""
         return {key: dict(entry) for key, entry in self._uncertain.items()}
+    # -- synchronous cancel-path marking (no awaits: never extends a deadline)
+    #
+    # Cancellation handlers MUST NOT await anything -- no worker mutation, no
+    # read-only reconciliation, no sink emit. Every pool critical section in
+    # this file is await-free while holding the lock, so these direct writes
+    # are atomic and safe to run inside an ``except CancelledError`` block
+    # before a bare re-raise. Later explicit read-only reconciliation may
+    # prove the terminal state; the cancel path only retains custody.
+
+    def _sync_track_uncertain(self, key: tuple[str, str], entry: dict[str, Any]) -> None:
+        """Retain original-scoped uncertainty without awaiting (cancel-safe)."""
+        self._uncertain[key] = dict(entry)
+
+    def _sync_release_reservation(self, pair_ids: Sequence[str], *, operation_id: str) -> None:
+        """Synchronously return RESERVED records held by this operation to ACTIVE."""
+        for pair_id in pair_ids:
+            record = self._records.get(pair_id)
+            if record is not None and record.status is PairStatus.RESERVED and record.holder == operation_id:
+                record.status = PairStatus.ACTIVE
+                record.holder = None
+                record.history.append(f"released:{operation_id}")
+
+    def _sync_quarantine(self, pair_ids: Sequence[str], *, reason: str) -> None:
+        """Synchronously flag records QUARANTINED (cancel-safe terminal mark)."""
+        for pair_id in pair_ids:
+            record = self._records.get(pair_id)
+            if record is None:
+                continue
+            record.status = PairStatus.QUARANTINED
+            record.holder = None
+            record.history.append(f"quarantined:{reason}")
+
+    def _original_instances(self, pair_ids: Sequence[str]) -> dict[str, str]:
+        """Merged reservation-time node->instance map for existing pairs."""
+        merged: dict[str, str] = {}
+        for pair_id in pair_ids:
+            record = self._records.get(pair_id)
+            if record is None:
+                continue
+            if self._transport is not None:
+                for node, lease_id in record.leases.items():
+                    if lease_id and not record.instances.get(node):
+                        raise QuantumResourceError(
+                            "worker_instance_unknown", f"pair {pair_id} has no original instance for {node}",
+                        )
+            for node, instance in record.instances.items():
+                if node in merged and merged[node] != instance:
+                    raise QuantumResourceError(
+                        "worker_instance_mismatch", f"selected pairs belong to different instances of {node}",
+                    )
+                merged[node] = instance
+        return merged
 
     async def _release_reservation_quiet(self, pair_ids: Sequence[str], *, operation_id: str) -> None:
         try:
@@ -492,17 +628,33 @@ class BellPairPool:
 
     async def _release_granted_quiet(
         self, granted: Sequence[tuple[str, str]], *, operation_id: str,
-        instances: Mapping[str, str],
+        instances: Mapping[str, str], resource_id: str | None = None,
+        session_id: str | None = None, resource_lease_id: str | None = None,
     ) -> None:
-        """Best-effort terminal cleanup of worker leases this operation owns."""
+        """Cleanup owned grants, retaining every unproven original obligation."""
+        def retain(node: str, lease_id: str, index: int) -> None:
+            self._sync_retain_release(
+                node, operation_id=f"{operation_id}-cleanup-{index}", lease_ids=(lease_id,),
+                instances=instances,
+                resource_id=resource_id if resource_lease_id is None or resource_lease_id == lease_id else None,
+                session_id=session_id,
+            )
+
         for index, (node, lease_id) in enumerate(granted):
             try:
                 await self._release_worker(
                     node, operation_id=f"{operation_id}-cleanup-{index}",
                     lease_ids=[lease_id], instances=instances,
+                    resource_id=resource_id if resource_lease_id is None or resource_lease_id == lease_id else None,
+                    session_id=session_id,
                 )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                for remaining in range(index, len(granted)):
+                    next_node, next_lease = granted[remaining]
+                    retain(next_node, next_lease, remaining)
+                raise
             except Exception:
-                pass
+                retain(node, lease_id, index)
 
     async def detach_lease(self, pair_id: str, node: str) -> str | None:
         """Move one node's lease off a terminal record to an output owner.
@@ -573,29 +725,68 @@ class BellPairPool:
                 if held:
                     leases[node] = held[0]
                     granted.append((node, held[0]))
-        except BaseException:
-            await self._release_granted_quiet(granted, operation_id=op_id, instances=instances)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Cancel-safe: no further awaits of any kind (no worker release,
+            # no read-only reconciliation, no sink emit). Retain the
+            # original-scoped custody for later explicit reconciliation,
+            # then bare-reraise the identical interruption.
+            for node, lease_id in granted:
+                self._sync_track_uncertain(
+                    (f"{op_id}-{node}", pair_id),
+                    {"node": node, "instance_id": instances.get(node, ""),
+                     "count": 1, "session_id": None, "status": "unresolved",
+                     "lease_ids": [lease_id]},
+                )
             raise
-        async with self._lock:
-            self._records[pair_id] = _PairRecord(pair=pair, status=PairStatus.ACTIVE, leases=leases, history=["created"])
-            for key, entry in self._uncertain.items():
-                if key[1] == pair_id and entry.get("status") == "adopted":
-                    self._records[pair_id].history.append(f"uncertain-reserve-adopted:{key[0]}")
+        except BaseException:
+            await self._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=pair_id)
+            raise
+        # Sink-commit gating: the new Bell stays unavailable to
+        # list/select/reserve until the creation event commits, so the emit
+        # happens BEFORE the pool record exists and no provisional output is
+        # ever visible. A refused commit releases the fresh leases and leaves
+        # no usable record behind.
+        if self._append_event is not None:
+            try:
+                receipt = await self._emit(
+                    "bell.created", session_id=op_id, actor="pool",
+                    nodes=[node_a, node_b], resources=[pair_id], outcome="created",
+                    payload={"state_type": kind.value, "fidelity": pair.fidelity},
+                )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                # Commit interrupted after the worker effects applied: retain
+                # custody synchronously as quarantined with zero further
+                # awaits, then bare-reraise.
+                self._records[pair_id] = _PairRecord(
+                    pair=pair, status=PairStatus.QUARANTINED, leases=leases,
+                    instances=dict(instances),
+                    history=["created", f"quarantined:{op_id}-cancelled"],
+                )
+                raise
+            except QuantumResourceError:
+                await self._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=pair_id)
+                raise
+            except Exception as exc:
+                await self._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=pair_id)
+                raise QuantumResourceError("receipt_failed", f"event sink refused bell.created: {exc}") from exc
+            if receipt is None:
+                await self._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=pair_id)
+                raise QuantumResourceError("receipt_failed", "event sink refused bell.created")
+        record = _PairRecord(
+            pair=pair, status=PairStatus.ACTIVE, leases=leases,
+            instances=dict(instances), history=["created"],
+        )
         try:
-            await self._emit(
-                "bell.created", session_id=op_id, actor="pool",
-                nodes=[node_a, node_b], resources=[pair_id], outcome="created",
-                payload={"state_type": kind.value, "fidelity": pair.fidelity},
-            )
-        except BaseException as exc:
             async with self._lock:
-                self._records.pop(pair_id, None)
-            await self._release_granted_quiet(granted, operation_id=op_id, instances=instances)
-            if isinstance(exc, asyncio.CancelledError):
-                raise
-            if isinstance(exc, QuantumResourceError):
-                raise
-            raise QuantumResourceError("receipt_failed", f"event sink refused bell.created: {exc}") from exc
+                self._records[pair_id] = record
+                for key, entry in self._uncertain.items():
+                    if key[1] == pair_id and entry.get("status") == "adopted":
+                        record.history.append(f"uncertain-reserve-adopted:{key[0]}")
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            record.status = PairStatus.QUARANTINED
+            record.history.append(f"quarantined:{op_id}-cancelled")
+            self._records[pair_id] = record
+            raise
         return pair
 
     async def reserve_pairs(
@@ -617,6 +808,9 @@ class BellPairPool:
                         "pair_unavailable", f"pair {pair_id} is {record.status.value}, not active", status=409,
                     )
                 records.append(record)
+            # Original scope must be complete/consistent before any
+            # reservation changes. There is no live-worker legacy fallback.
+            self._original_instances(pair_ids)
             for record in records:
                 record.status = PairStatus.RESERVED
                 record.holder = operation_id
@@ -674,6 +868,16 @@ class BellPairPool:
         self, pair: EntangledBellPair, *, input_ids: Sequence[str], leases: Mapping[str, str],
         operation_id: str, terminal: PairStatus = PairStatus.CONSUMED,
     ) -> None:
+        """Retire inputs and stage the survivor output as receipt-pending.
+
+        Signature unchanged: output instances are derived from the
+        transferred input lease IDs, matching each output lease value to the
+        input record that held it. The output is created RESERVED under this
+        operation -- unavailable to list/select/reserve -- until the caller
+        commits the completion event and activates it via
+        :meth:`activate_output`. A replacement worker's unknown_lease can
+        never satisfy this path: only original-scoped custody transfers.
+        """
         async with self._lock:
             if pair.pair_id in self._records:
                 raise QuantumResourceError("duplicate_pair", f"pair {pair.pair_id} already exists")
@@ -684,8 +888,17 @@ class BellPairPool:
             # Survivor transfer: leases moving to the output leave the retired
             # inputs at registration time, so each lease has exactly one
             # owning live record and a later input cleanup can never release
-            # a live output lease.
+            # a live output lease. Instances travel atomically with the
+            # leases, derived from the same transferred input lease IDs.
             transferred = set(dict(leases).values())
+            output_instances: dict[str, str] = {}
+            for node, lease_id in dict(leases).items():
+                for input_id in set(input_ids):
+                    source = self._records.get(input_id)
+                    if source is not None and source.leases.get(node) == lease_id:
+                        if source.instances.get(node) is not None:
+                            output_instances[node] = source.instances[node]
+                        break
             for input_id in set(input_ids):
                 record = self._records.get(input_id)
                 if record is not None:
@@ -694,10 +907,30 @@ class BellPairPool:
                         if lease_id not in transferred
                     }
             self._records[pair.pair_id] = _PairRecord(
-                pair=pair, status=PairStatus.ACTIVE, leases=dict(leases), history=["created"],
+                pair=pair, status=PairStatus.RESERVED, holder=operation_id,
+                leases=dict(leases), instances=output_instances,
+                history=["created-pending"],
             )
 
+    async def activate_output(self, pair_id: str, *, operation_id: str) -> None:
+        """Commit a receipt-pending output to ACTIVE after its event commits."""
+        async with self._lock:
+            record = self._records.get(pair_id)
+            if record is None or record.status is not PairStatus.RESERVED or record.holder != operation_id:
+                raise QuantumResourceError("pair_unavailable", f"pair {pair_id} has no pending output for this operation")
+            record.status = PairStatus.ACTIVE
+            record.holder = None
+            record.history.append(f"activated:{operation_id}")
+
     async def release_pair_leases(self, pair_id: str, *, operation_id: str) -> None:
+        """Release terminal-pair worker leases against ORIGINAL instances.
+
+        Strict verification: only ``already_released`` (proof the same worker
+        finished this lease before) counts as success. ``unknown_lease``,
+        ``stale_instance`` and every other refusal raise, so a replacement
+        worker's absence can never confirm the original obligation -- the
+        caller must quarantine instead.
+        """
         _check_id(operation_id, "operation_id")
         async with self._lock:
             record = self._records.get(pair_id)
@@ -706,12 +939,13 @@ class BellPairPool:
             if record.status in (PairStatus.ACTIVE, PairStatus.RESERVED):
                 raise QuantumResourceError("pair_unavailable", "only terminal pairs release worker leases")
             leases = dict(record.leases)
+            instances = self._original_instances((pair_id,))
         if self._transport is None:
             return
-        instances = await self._instances(tuple(leases))
         for node, lease_id in leases.items():
             await self._release_worker(
-                node, operation_id=f"{operation_id}-{node}", lease_ids=[lease_id], instances=instances,
+                node, operation_id=f"{operation_id}-{node}", lease_ids=(lease_id,),
+                instances=instances, resource_id=pair_id,
             )
 
     def leases_of(self, pair_id: str) -> dict[str, str]:
@@ -719,6 +953,13 @@ class BellPairPool:
         if record is None:
             raise QuantumResourceError("unknown_pair", f"pair {pair_id} is unknown", status=404)
         return dict(record.leases)
+
+    def instances_of(self, pair_id: str) -> dict[str, str]:
+        """Reservation-time node->instance map for one pair (original scope)."""
+        record = self._records.get(pair_id)
+        if record is None:
+            raise QuantumResourceError("unknown_pair", f"pair {pair_id} is unknown", status=404)
+        return dict(record.instances)
 
 
 def _canonicalize_to_phi_plus(rho: Any, kind: BellStateType) -> Any:
@@ -781,14 +1022,15 @@ class EntanglementPurifier:
             branch.probability for branch in joint.branches_z((2, 3)) if branch.bits[0] == branch.bits[1]
         )
         leases = {pair_id_1: self.pool.leases_of(pair_id_1), pair_id_2: self.pool.leases_of(pair_id_2)}
-        try:
-            instances = await self.pool._instances((node_a, node_b))  # noqa: SLF001 - pool-owned plumbing
-        except (QuantumResourceError, NodeTransportError):
-            await self.pool._release_reservation_quiet((pair_id_1, pair_id_2), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
-            raise
-        # Worker leases this operation currently owns; cleared only by an
-        # explicit worker release or by register_output moving ownership to
-        # the pool. Anything left here on failure is terminal-cleaned.
+        # Original-scope worker addressing: reservation-time instances, never
+        # rediscovery. A replacement worker's absence is non-proof and never
+        # releases the original obligation.
+        instances = self.pool._original_instances((pair_id_1, pair_id_2))  # noqa: SLF001 - pool-owned plumbing
+        # Custody split: input leases are PRE-EXISTING custody, not new
+        # grants. This operation acquires no new worker leases, so a definite
+        # pre-effect failure preserves every input lease and frees only the
+        # pool reservation; worker leases are terminal-cleaned only after a
+        # real effect.
         granted: list[tuple[str, str]] = [
             (node, lease_id)
             for pid in (pair_id_1, pair_id_2) for node, lease_id in leases[pid].items()
@@ -799,11 +1041,15 @@ class EntanglementPurifier:
         output_registered = False
         try:
             first_branches = joint.branches_z((2,))
-            first_pick = await self.pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
-                node=node_a, operation_id=f"{op_id}-meas-a",
-                lease_ids=[leases[pair_id_2][node_a]] if leases[pair_id_2].get(node_a) else [],
-                branches=first_branches, instances=instances, rng=self._rng,
-            )
+            try:
+                first_pick = await self.pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
+                    node=node_a, operation_id=f"{op_id}-meas-a",
+                    lease_ids=[leases[pair_id_2][node_a]] if leases[pair_id_2].get(node_a) else [],
+                    branches=first_branches, instances=instances, rng=self._rng,
+                )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                worker_mutated = True
+                raise
             worker_mutated = True
             conditioned = first_pick.state
             second_branches = conditioned.branches_z((3,))
@@ -862,11 +1108,15 @@ class EntanglementPurifier:
                                  "branch_probability": branch_probability,
                                  "p_accept": p_accept, "output_fidelity": output_fidelity},
                     )
+                except (asyncio.CancelledError, KeyboardInterrupt):
+                    self.pool._sync_quarantine((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - cancel-safe, no awaits
+                    raise
                 except Exception:
                     receipt = None
                 if self.pool._append_event is not None and receipt is None:  # noqa: SLF001 - pool-owned plumbing
                     await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-receipt-failed")  # noqa: SLF001 - pool-owned plumbing
                     raise QuantumResourceError("receipt_failed", "event sink refused purify.accepted")
+                await self.pool.activate_output(output_id, operation_id=op_id)  # noqa: SLF001 - sink committed
                 return PurificationResult(
                     protocol=PurificationProtocol.BBPSSW.value, accepted=True,
                     pair_ids=(pair_id_1, pair_id_2), output_pair_id=output_id,
@@ -906,34 +1156,44 @@ class EntanglementPurifier:
                 branch_probability=branch_probability, output_fidelity=None,
                 reason="parity_reject", receipt=receipt,
             )
-        except asyncio.CancelledError:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Deadline-safe: zero awaits (no worker mutation, no read-only
+            # reconciliation, no sink emit). Retain custody synchronously,
+            # then bare-reraise the identical interruption.
             if output_registered:
-                await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
+                self.pool._sync_quarantine((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated:
-                await self.pool._quarantine_quiet((pair_id_1, pair_id_2), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
+                self.pool._sync_quarantine((pair_id_1, pair_id_2), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
             else:
-                await self.pool._release_reservation_quiet((pair_id_1, pair_id_2), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
+                # Definitely pre-effect: preserve every pre-existing input
+                # lease worker-side; free only the pool reservation.
+                self.pool._sync_release_reservation((pair_id_1, pair_id_2), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
         except (QuantumResourceError, NodeTransportAmbiguous) as exc:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
             code = exc.code if isinstance(exc, QuantumResourceError) else "transport_ambiguous"
             if output_registered:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-failed")  # noqa: SLF001 - pool-owned plumbing
             elif code in _AMBIGUOUS_CODES:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_1, pair_id_2), reason=f"{op_id}-ambiguous")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated or code == "measurement_mismatch":
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_1, pair_id_2), reason=f"{op_id}-failed")  # noqa: SLF001 - pool-owned plumbing
             else:
+                # Definite pre-effect failure: preserve every pre-existing
+                # input lease; no new leases were acquired, so only the pool
+                # reservation is freed.
                 await self.pool._release_reservation_quiet((pair_id_1, pair_id_2), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             if code in _AMBIGUOUS_CODES:
                 raise QuantumResourceError("transport_ambiguous", f"purify ambiguous: {exc}") from exc
             raise
         except Exception:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
             if output_registered:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-unknown")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_1, pair_id_2), reason=f"{op_id}-unknown")  # noqa: SLF001 - pool-owned plumbing
             else:
                 await self.pool._release_reservation_quiet((pair_id_1, pair_id_2), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
@@ -996,14 +1256,15 @@ class EntanglementSwapper:
         joint = rho_ab.tensor(rho_bc).apply_cnot(1, 2).apply_single(quantum_state.H, 1)
         branches = joint.branches_z((1, 2))
         leases = {pair_id_ab: self.pool.leases_of(pair_id_ab), pair_id_bc: self.pool.leases_of(pair_id_bc)}
-        try:
-            instances = await self.pool._instances((node_a, repeater, node_c))  # noqa: SLF001
-        except (QuantumResourceError, NodeTransportError):
-            await self.pool._release_reservation_quiet((pair_id_ab, pair_id_bc), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
-            raise
-        # Worker leases this operation currently owns; cleared only by an
-        # explicit worker release or by register_output moving ownership to
-        # the pool. Anything left here on failure is terminal-cleaned.
+        # Original-scope worker addressing: reservation-time instances, never
+        # rediscovery. A replacement worker's absence is non-proof and never
+        # releases the original obligation.
+        instances = self.pool._original_instances((pair_id_ab, pair_id_bc))  # noqa: SLF001 - pool-owned plumbing
+        # Custody split: input leases are PRE-EXISTING custody, not new
+        # grants. This operation acquires no new worker leases, so a definite
+        # pre-effect failure preserves every input lease and frees only the
+        # pool reservation; worker leases are terminal-cleaned only after a
+        # real effect.
         granted: list[tuple[str, str]] = [
             (node, lease_id)
             for pid in (pair_id_ab, pair_id_bc) for node, lease_id in leases[pid].items()
@@ -1014,10 +1275,14 @@ class EntanglementSwapper:
         output_registered = False
         try:
             repeater_leases = [lid for lid in (leases[pair_id_ab].get(repeater), leases[pair_id_bc].get(repeater)) if lid]
-            pick = await self.pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
-                node=repeater, operation_id=f"{op_id}-bsm",
-                lease_ids=repeater_leases, branches=branches, instances=instances, rng=self._rng,
-            )
+            try:
+                pick = await self.pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
+                    node=repeater, operation_id=f"{op_id}-bsm",
+                    lease_ids=repeater_leases, branches=branches, instances=instances, rng=self._rng,
+                )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                worker_mutated = True
+                raise
             worker_mutated = True
             m_z, m_x = pick.bits
             x1, z1 = first.frame
@@ -1097,11 +1362,15 @@ class EntanglementSwapper:
                              "gate_x": gate_x, "gate_z": gate_z, "correction_origin": origin,
                              "output_fidelity": output.fidelity},
                 )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                self.pool._sync_quarantine((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - cancel-safe, no awaits
+                raise
             except Exception:
                 receipt = None
             if self.pool._append_event is not None and receipt is None:  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-receipt-failed")  # noqa: SLF001 - pool-owned plumbing
                 raise QuantumResourceError("receipt_failed", "event sink refused swap.completed")
+            await self.pool.activate_output(output_id, operation_id=op_id)  # noqa: SLF001 - sink committed
             return SwapResult(
                 accepted=True, input_ids=(pair_id_ab, pair_id_bc), output_pair_id=output_id,
                 bsm_bits=(m_z, m_x), bsm_probability=pick.probability,
@@ -1109,34 +1378,44 @@ class EntanglementSwapper:
                 gate_x=gate_x, gate_z=gate_z, correction_origin=origin,
                 output_fidelity=output.fidelity, reason="bsm_completed", receipt=receipt,
             )
-        except asyncio.CancelledError:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Deadline-safe: zero awaits (no worker mutation, no read-only
+            # reconciliation, no sink emit). Retain custody synchronously,
+            # then bare-reraise the identical interruption.
             if output_registered:
-                await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
+                self.pool._sync_quarantine((output_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated:
-                await self.pool._quarantine_quiet((pair_id_ab, pair_id_bc), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
+                self.pool._sync_quarantine((pair_id_ab, pair_id_bc), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
             else:
-                await self.pool._release_reservation_quiet((pair_id_ab, pair_id_bc), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
+                # Definitely pre-effect: preserve every pre-existing input
+                # lease worker-side; free only the pool reservation.
+                self.pool._sync_release_reservation((pair_id_ab, pair_id_bc), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
         except (QuantumResourceError, NodeTransportAmbiguous) as exc:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
             code = exc.code if isinstance(exc, QuantumResourceError) else "transport_ambiguous"
             if output_registered:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-failed")  # noqa: SLF001 - pool-owned plumbing
             elif code in _AMBIGUOUS_CODES:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_ab, pair_id_bc), reason=f"{op_id}-ambiguous")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated or code == "measurement_mismatch":
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_ab, pair_id_bc), reason=f"{op_id}-failed")  # noqa: SLF001 - pool-owned plumbing
             else:
+                # Definite pre-effect failure: preserve every pre-existing
+                # input lease; no new leases were acquired, so only the pool
+                # reservation is freed.
                 await self.pool._release_reservation_quiet((pair_id_ab, pair_id_bc), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             if code in _AMBIGUOUS_CODES:
                 raise QuantumResourceError("transport_ambiguous", f"swap ambiguous: {exc}") from exc
             raise
         except Exception:
-            await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
             if output_registered:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((output_id,), reason=f"{op_id}-unknown")  # noqa: SLF001 - pool-owned plumbing
             elif worker_mutated:
+                await self.pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
                 await self.pool._quarantine_quiet((pair_id_ab, pair_id_bc), reason=f"{op_id}-unknown")  # noqa: SLF001 - pool-owned plumbing
             else:
                 await self.pool._release_reservation_quiet((pair_id_ab, pair_id_bc), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
@@ -1208,11 +1487,31 @@ class QuantumRepeaterMesh:
             except (QuantumResourceError, NodeTransportError):
                 pass
             # Quarantined or already-terminal hops skip the reservation above
-            # but still hold worker leases; release those resource-bound.
+            # but still hold worker leases; release those resource-bound
+            # against ORIGINAL instances. A replacement worker's unknown_lease
+            # or stale scope is non-proof: the obligation is NOT released and
+            # the record is quarantined instead of falsely discarded.
             try:
                 await self.bell_pool.release_pair_leases(pair_id, operation_id=cleanup_op)
             except (QuantumResourceError, NodeTransportError):
-                pass
+                try:
+                    await self.bell_pool.quarantine_pairs((pair_id,), reason=cleanup_op)
+                except (QuantumResourceError, NodeTransportError):
+                    pass
+
+    def _sync_quarantine_hops(self, hop_ids: Sequence[str], *, operation_id: str) -> None:
+        """Cancel-safe whole-operation mark: zero awaits, then bare-reraise.
+
+        Retains every changed hop as quarantined with original-scoped leases
+        still attached; later explicit read-only reconciliation may prove the
+        terminal state, but the cancel path never extends the deadline.
+        """
+        seen: set[str] = set()
+        for pair_id in hop_ids:
+            if pair_id in seen:
+                continue
+            seen.add(pair_id)
+            self.bell_pool._sync_quarantine((pair_id,), reason=f"{operation_id}-cancelled")  # noqa: SLF001 - cancel-safe, no awaits
 
     async def establish_multi_hop_entanglement(
         self,
@@ -1272,8 +1571,8 @@ class QuantumRepeaterMesh:
                     )
                     hop_pairs.append(pair)
                     hop_ids.append(pair.pair_id)
-        except asyncio.CancelledError:
-            await self._cleanup_hops(hop_ids, operation_id=op_id)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            self._sync_quarantine_hops(hop_ids, operation_id=op_id)
             raise
         except QuantumResourceError as exc:
             await self._cleanup_hops(hop_ids, operation_id=op_id)
@@ -1294,8 +1593,8 @@ class QuantumRepeaterMesh:
                 logs.append(f"Swapped entanglement linking {resolved.node_a} <-> {resolved.node_b}")
                 swap_outputs.append(resolved.pair_id)
                 current = resolved
-        except asyncio.CancelledError:
-            await self._cleanup_hops([*hop_ids, *swap_outputs], operation_id=op_id)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            self._sync_quarantine_hops([*hop_ids, *swap_outputs], operation_id=op_id)
             raise
         except QuantumResourceError as exc:
             # Swap consumes its inputs and quarantines on ambiguity; the
@@ -1417,6 +1716,20 @@ class QuantumTeleportationProtocol:
         # Saved release acknowledgements keyed by (session, operation):
         # a same-operation retry replays its ack without another mutation.
         self._release_acks: dict[tuple[str, str], dict[str, Any]] = {}
+        # Per-session release serialization: each session owns one lock so a
+        # read -> worker-await -> terminal-write sequence is atomic per
+        # session. Confirmed releases are never overwritten by a competing
+        # failure, and unrelated sessions never block each other (no global
+        # lock across owners).
+        self._release_locks: dict[str, asyncio.Lock] = {}
+
+    def _release_lock_for(self, session_id: str) -> asyncio.Lock:
+        """Return (creating on first use) the lock serializing one session."""
+        lock = self._release_locks.get(session_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._release_locks[session_id] = lock
+        return lock
 
     async def teleport_qubit(
         self,
@@ -1476,15 +1789,18 @@ class QuantumTeleportationProtocol:
         await self.pool.reserve_pairs((pair.pair_id,), operation_id=op_id)
         pool = self.pool
         transport = self._transport
-        instances: dict[str, str] = {}
+        # Original-scope addressing: the pair's reservation-time instances,
+        # never a rediscovery. The fresh input slot is reserved under that
+        # same original scope so a replacement worker cannot split custody.
+        instances: dict[str, str] = dict(pool._original_instances((pair.pair_id,)))  # noqa: SLF001 - pool-owned plumbing
         input_lease: str | None = None
-        # Worker leases this operation currently owns; cleared only by an
-        # explicit worker release or by output registration moving ownership
-        # to the session. Anything left here on failure is terminal-cleaned.
+        # Custody split: input_lease is the ONLY newly acquired worker lease;
+        # the pair halves appended below are pre-existing custody. A definite
+        # pre-effect failure rolls back the new slot alone and preserves
+        # every pre-existing input lease.
         granted: list[tuple[str, str]] = []
         try:
             if transport is not None:
-                instances = await pool._instances((source_node, target_node))  # noqa: SLF001
                 held = await pool._reserve_worker(  # noqa: SLF001 - pool-owned plumbing
                     source_node, operation_id=f"{op_id}-input", resource_id=f"input-{session}",
                     count=1, session_id=session, instances=instances,
@@ -1492,12 +1808,21 @@ class QuantumTeleportationProtocol:
                 if held:
                     input_lease = held[0]
                     granted.append((source_node, input_lease))
-        except asyncio.CancelledError:
-            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
-            await pool._release_reservation_quiet((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Cancel-safe: zero awaits. The new slot (if any) is retained as
+            # original-scope uncertainty, the reservation is freed
+            # synchronously, pre-existing inputs are untouched. Bare-reraise.
+            if input_lease is not None:
+                pool._sync_track_uncertain(  # noqa: SLF001 - pool-owned plumbing
+                    (f"{op_id}-input", f"input-{session}"),
+                    {"node": source_node, "instance_id": instances.get(source_node, ""),
+                     "count": 1, "session_id": session, "status": "unresolved",
+                     "lease_ids": [input_lease]},
+                )
+            pool._sync_release_reservation((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
         except (QuantumResourceError, NodeTransportError):
-            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
+            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
             await pool._release_reservation_quiet((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
 
@@ -1516,10 +1841,14 @@ class QuantumTeleportationProtocol:
             joint = joint.apply_cnot(0, 1).apply_single(quantum_state.H, 0)
             branches = joint.branches_z((0, 1))
             sender_leases = [lid for lid in (input_lease, sender_half) if lid]
-            pick = await pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
-                node=source_node, operation_id=f"{op_id}-bsm",
-                lease_ids=sender_leases, branches=branches, instances=instances, rng=self._rng,
-            )
+            try:
+                pick = await pool._worker_branch(  # noqa: SLF001 - pool-owned plumbing
+                    node=source_node, operation_id=f"{op_id}-bsm",
+                    lease_ids=sender_leases, branches=branches, instances=instances, rng=self._rng,
+                )
+            except (asyncio.CancelledError, KeyboardInterrupt):
+                worker_mutated = True
+                raise
             worker_mutated = True
             m_z, m_x = pick.bits
             conditional = pick.state.partial_trace((2,))
@@ -1588,6 +1917,8 @@ class QuantumTeleportationProtocol:
                     await pool._release_worker(  # noqa: SLF001 - pool-owned plumbing
                         node, operation_id=f"{op_id}-rel-{release_index}",
                         lease_ids=[lease_id], instances=instances,
+                        resource_id=f"input-{session}" if lease_id == input_lease else pair.pair_id,
+                        session_id=session,
                     )
                     granted[:] = [item for item in granted if item[1] != lease_id]
                     release_index += 1
@@ -1669,17 +2000,33 @@ class QuantumTeleportationProtocol:
             )
             self.sessions[session] = result
             return result
-        except asyncio.CancelledError:
-            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            # Deadline-safe: zero awaits (no worker mutation, no read-only
+            # reconciliation, no sink emit). Restore any detached-but-unowned
+            # receiver custody synchronously, retain terminal marks, then
+            # bare-reraise the identical interruption.
+            record = pool._records.get(pair.pair_id)  # noqa: SLF001 - cancel-safe synchronous retain
+            if record is not None and receiver_half and record.leases.get(target_node) != receiver_half:
+                record.leases[target_node] = receiver_half
+            if input_lease is not None:
+                pool._sync_track_uncertain(  # noqa: SLF001 - pool-owned plumbing
+                    (f"{op_id}-input", f"input-{session}"),
+                    {"node": source_node, "instance_id": instances[source_node],
+                     "count": 1, "session_id": session, "status": "unresolved",
+                     "lease_ids": [input_lease]},
+                )
             if worker_mutated:
-                await pool._quarantine_quiet((pair.pair_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
+                pool._sync_quarantine((pair.pair_id,), reason=f"{op_id}-cancelled")  # noqa: SLF001 - pool-owned plumbing
             else:
-                await pool._release_reservation_quiet((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
+                # Definitely pre-effect: the new input slot is retained as
+                # original-scope uncertainty while every pre-existing pair
+                # lease stays held; only the pool reservation is freed.
+                pool._sync_release_reservation((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
         except (NodeTransportAmbiguous, QuantumResourceError) as exc:
-            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
             code = exc.code if isinstance(exc, QuantumResourceError) else "transport_ambiguous"
             if code in _AMBIGUOUS_CODES:
+                await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
                 await pool._quarantine_quiet((pair.pair_id,), reason=f"{op_id}-ambiguous")  # noqa: SLF001 - pool-owned plumbing
                 try:
                     await pool._emit(  # noqa: SLF001 - pool-owned plumbing
@@ -1691,16 +2038,25 @@ class QuantumTeleportationProtocol:
                     pass
                 raise QuantumResourceError("transport_ambiguous", f"teleport ambiguous: {exc}") from exc
             if worker_mutated or code == "measurement_mismatch":
+                await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
                 await pool._quarantine_quiet((pair.pair_id,), reason=f"{op_id}-failed")  # noqa: SLF001 - pool-owned plumbing
             else:
+                # Definite pre-effect failure: roll back ONLY the newly
+                # acquired input slot; every pre-existing pair lease stays
+                # held and the pair returns to ACTIVE.
+                new_granted = [(node, lid) for node, lid in granted if lid == input_lease] if input_lease else []
+                await pool._release_granted_quiet(new_granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
                 await pool._release_reservation_quiet((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
         except Exception:
             # Unknown failure: never resurrect inputs; mutated state quarantines.
-            await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances)  # noqa: SLF001 - pool-owned plumbing
+            # Pre-effect unknown failures still preserve pre-existing custody.
             if worker_mutated:
+                await pool._release_granted_quiet(granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
                 await pool._quarantine_quiet((pair.pair_id,), reason=f"{op_id}-unknown")  # noqa: SLF001 - pool-owned plumbing
             else:
+                new_granted = [(node, lid) for node, lid in granted if lid == input_lease] if input_lease else []
+                await pool._release_granted_quiet(new_granted, operation_id=op_id, instances=instances, resource_id=f"input-{session}", session_id=session, resource_lease_id=input_lease)  # noqa: SLF001 - pool-owned plumbing
                 await pool._release_reservation_quiet((pair.pair_id,), operation_id=op_id)  # noqa: SLF001 - pool-owned plumbing
             raise
 
@@ -1717,13 +2073,20 @@ class QuantumTeleportationProtocol:
     ) -> dict[str, Any]:
         """Release one successful teleport output back to its receiver worker.
 
-        Ownership-checked owner release: the output persists under its
-        session until this call. Unknown sessions report 404, a receiver
+        Ownership-checked owner release, serialized per session as
+        read -> worker-await -> terminal-write: the output persists under
+        its session until this call. Unknown sessions report 404, a receiver
         that does not own the session reports 403, and a second release
         under a new operation reports 409. A same-operation retry returns
         its saved acknowledgement without another worker mutation. The
-        worker release reuses ``operation_id`` verbatim. An unconfirmed
-        release quarantines the output and refuses every subsequent attempt.
+        worker release reuses ``operation_id`` verbatim.
+
+        Truthful outcomes: a definite pre-send ``NodeTransportUnavailable``
+        or a definite worker refusal preserves ``available`` so the owner
+        can retry; an ambiguous, deadline, or interrupted release
+        quarantines the output and refuses every subsequent attempt. A
+        confirmed ``released`` record (or its replay) is never overwritten
+        by a competing failure, and unrelated sessions proceed in parallel.
 
         Returns ``{"ok": True, "acknowledgement": ..., "output": {...}}``
         with ``output={session_id, receiver, resource_id, lease_id,
@@ -1732,51 +2095,66 @@ class QuantumTeleportationProtocol:
         _check_id(session_id, "session_id")
         _check_node(receiver, "receiver")
         _check_id(operation_id, "operation_id")
-        record = self.outputs.get(session_id)
-        if record is None:
-            raise QuantumResourceError("unknown_session", f"session {session_id} has no teleport output", status=404)
-        if record.receiver != receiver:
-            raise QuantumResourceError(
-                "receiver_mismatch", f"session {session_id} output belongs to {record.receiver}", status=403,
-            )
-        if record.status == "released":
-            saved = self._release_acks.get((session_id, operation_id))
-            if saved is not None:
-                return {"ok": True, "acknowledgement": saved["acknowledgement"], "output": dict(saved["output"])}
-            raise QuantumResourceError(
-                "already_released", f"session {session_id} output is already released", status=409,
-            )
-        if record.status == "quarantined":
-            raise QuantumResourceError(
-                "output_quarantined", f"session {session_id} output release remains unconfirmed", status=409,
-            )
-        transport = self._transport
-        if transport is not None and record.lease_id:
-            try:
-                await transport.release(
-                    receiver, operation_id=operation_id, lease_ids=[record.lease_id],
-                    instance=record.instance_id or None,
-                )
-            except (asyncio.CancelledError, KeyboardInterrupt):
-                self._set_output_status(record, "quarantined")
-                raise
-            except NodeTransportAmbiguous as exc:
-                self._set_output_status(record, "quarantined")
+        async with self._release_lock_for(session_id):
+            record = self.outputs.get(session_id)
+            if record is None:
+                raise QuantumResourceError("unknown_session", f"session {session_id} has no teleport output", status=404)
+            if record.receiver != receiver:
                 raise QuantumResourceError(
-                    "transport_ambiguous", f"output release ambiguous: {exc}",
-                ) from exc
-            except NodeCommandFailed as exc:
-                if exc.code not in ("already_released", "unknown_lease"):
+                    "receiver_mismatch", f"session {session_id} output belongs to {record.receiver}", status=403,
+                )
+            if record.status == "released":
+                saved = self._release_acks.get((session_id, operation_id))
+                if saved is not None:
+                    return {"ok": True, "acknowledgement": saved["acknowledgement"], "output": dict(saved["output"])}
+                raise QuantumResourceError(
+                    "already_released", f"session {session_id} output is already released", status=409,
+                )
+            if record.status == "quarantined":
+                raise QuantumResourceError(
+                    "output_quarantined", f"session {session_id} output release remains unconfirmed", status=409,
+                )
+            transport = self._transport
+            if transport is not None and record.lease_id:
+                try:
+                    await transport.release(
+                        receiver, operation_id=operation_id, lease_ids=[record.lease_id],
+                        instance=record.instance_id or None,
+                    )
+                except (asyncio.CancelledError, KeyboardInterrupt):
+                    self._set_output_status(record, "quarantined")
+                    raise
+                except NodeTransportAmbiguous as exc:
+                    self._set_output_status(record, "quarantined")
+                    raise QuantumResourceError(
+                        "transport_ambiguous", f"output release ambiguous: {exc}",
+                    ) from exc
+                except NodeTransportDeadline as exc:
+                    self._set_output_status(record, "quarantined")
+                    raise QuantumResourceError(
+                        "transport_ambiguous", f"output release deadline exceeded: {exc}",
+                    ) from exc
+                except NodeTransportUnavailable as exc:
+                    # Definite pre-send proof: nothing was applied, so the
+                    # output stays available and the owner retries freely.
+                    raise QuantumResourceError(
+                        "worker_unavailable", f"output release could not send: {exc}", status=503,
+                    ) from exc
+                except NodeCommandFailed as exc:
+                    if exc.code == "already_released":
+                        pass
+                    else:
+                        # Definite worker refusal: nothing was applied, so
+                        # the output stays available for an owner retry.
+                        raise QuantumResourceError("worker_refused", f"output release refused: {exc}") from exc
+                except NodeTransportError as exc:
                     self._set_output_status(record, "quarantined")
                     raise QuantumResourceError("worker_refused", f"output release refused: {exc}") from exc
-            except NodeTransportError as exc:
-                self._set_output_status(record, "quarantined")
-                raise QuantumResourceError("worker_refused", f"output release refused: {exc}") from exc
-        released = self._set_output_status(record, "released")
-        result = {
-            "ok": True,
-            "acknowledgement": f"ack-{operation_id}",
-            "output": released.to_dict(),
-        }
-        self._release_acks[(session_id, operation_id)] = result
-        return {"ok": True, "acknowledgement": result["acknowledgement"], "output": dict(result["output"])}
+            released = self._set_output_status(record, "released")
+            result = {
+                "ok": True,
+                "acknowledgement": f"ack-{operation_id}",
+                "output": released.to_dict(),
+            }
+            self._release_acks[(session_id, operation_id)] = result
+            return {"ok": True, "acknowledgement": result["acknowledgement"], "output": dict(result["output"])}

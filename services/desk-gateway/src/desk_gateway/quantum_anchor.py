@@ -783,7 +783,11 @@ class QuantumTeleportationAnchorExporter:
                 "ineligible_leaf", "receipt is not a successful execution leaf", 400,
                 proof, size, current_size, current_root,
             )
-        if not self._ledger.verify_proof(proof):
+        try:
+            proof_valid = self._ledger.verify_committed_proof(proof)
+        except LedgerError:
+            return self._empty_fail("ledger_unavailable", "receipt ledger unavailable", 503)
+        if not proof_valid:
             return self._anchored_fail(
                 "invalid_proof", "receipt inclusion proof failed validation", 400,
                 proof, size, current_size, current_root,

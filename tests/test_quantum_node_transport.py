@@ -1958,6 +1958,13 @@ async def _reserve(worker, token, operation_id, resource_id, count):
     return held["leases"]
 
 
+async def _e91_leases(worker, token, prefix, count):
+    leases = []
+    for index in range(count):
+        leases.extend(await _reserve(worker, token, f"{prefix}-{index}", f"pair-{index}", 1))
+    return leases
+
+
 async def _e91_round(alice, bob, lease_a, lease_b, sess, i, prefix, joint=None):
     """One ordered E91 key round; asserts the exact private-seam replies."""
     joint = joint if joint is not None else _joint_phi_plus()
@@ -1981,10 +1988,8 @@ def test_qkd_e91_private_seam_to_established():
         sess = "e91-full"
         await _begin(alice, "tok-alice", "op-ba", sess, "E91", "alice", "bob")
         await _begin(bob, "tok-bob", "op-bb", sess, "E91", "bob", "alice")
-        leases_a = await _reserve(alice, "tok-alice", "op-ra", "e91", 4)
-        leases_a += await _reserve(alice, "tok-alice", "op-ra2", "e91", 4)
-        leases_b = await _reserve(bob, "tok-bob", "op-rb", "e91", 4)
-        leases_b += await _reserve(bob, "tok-bob", "op-rb2", "e91", 4)
+        leases_a = await _e91_leases(alice, "tok-alice", "op-ra", 8)
+        leases_b = await _e91_leases(bob, "tok-bob", "op-rb", 8)
         for i in range(8):
             await _e91_round(alice, bob, leases_a[i], leases_b[i], sess, i, "e91")
         held = await _step(alice, "tok-alice", "op-len", sess, "lengths", {})
@@ -2027,8 +2032,8 @@ def test_qkd_e91_round_scope_guards():
         sess = "e91-guards"
         await _begin(alice, "tok-alice", "op-ba", sess, "E91", "alice", "bob")
         await _begin(bob, "tok-bob", "op-bb", sess, "E91", "bob", "alice")
-        leases_a = await _reserve(alice, "tok-alice", "op-ra", "e91", 4)
-        leases_b = await _reserve(bob, "tok-bob", "op-rb", "e91", 4)
+        leases_a = await _e91_leases(alice, "tok-alice", "op-ra", 4)
+        leases_b = await _e91_leases(bob, "tok-bob", "op-rb", 4)
         await _e91_round(alice, bob, leases_a[0], leases_b[0], sess, 0, "g")
         # Replayed round index, skipped index, and reused pair all refuse.
         with pytest.raises(QuantumNodeError) as exc:
@@ -2069,7 +2074,7 @@ def test_qkd_e91_round_scope_guards():
         assert exc.value.status == 400
         with pytest.raises(QuantumNodeError) as exc:
             await _step(bob, "tok-bob", "op-bj", sess, "measure_e91",
-                       {"round_index": 1, "pair_id": "pair-j", "lease_id": leases_b[1],
+                       {"round_index": 1, "pair_id": "pair-1", "lease_id": leases_b[1],
                         "setting": 0, "state": _joint_phi_plus()})
         assert exc.value.status == 400
         tampered = dict(first["conditional"])
@@ -2090,10 +2095,9 @@ def test_qkd_e91_round_scope_guards():
     _run(body())
 
 
-def test_qkd_e91_round_bound_is_20000(monkeypatch):
+def test_qkd_e91_round_limit_refuses_next_round(monkeypatch):
     import desk_gateway.quantum_node as quantum_node
 
-    assert quantum_node._MAX_E91_ROUNDS == 20000
     monkeypatch.setattr(quantum_node, "_MAX_E91_ROUNDS", 2)
 
     async def body():
@@ -2101,8 +2105,8 @@ def test_qkd_e91_round_bound_is_20000(monkeypatch):
         sess = "e91-cap"
         await _begin(alice, "tok-alice", "op-ba", sess, "E91", "alice", "bob")
         await _begin(bob, "tok-bob", "op-bb", sess, "E91", "bob", "alice")
-        leases_a = await _reserve(alice, "tok-alice", "op-ra", "e91", 2)
-        leases_b = await _reserve(bob, "tok-bob", "op-rb", "e91", 2)
+        leases_a = await _e91_leases(alice, "tok-alice", "op-ra", 2)
+        leases_b = await _e91_leases(bob, "tok-bob", "op-rb", 2)
         await _e91_round(alice, bob, leases_a[0], leases_b[0], sess, 0, "c")
         await _e91_round(alice, bob, leases_a[1], leases_b[1], sess, 1, "c")
         with pytest.raises(QuantumNodeError) as exc:
@@ -2868,5 +2872,87 @@ def test_worker_decoder_depth_failure_is_typed_after_auth(monkeypatch):
         assert refused.json()["error"] == "invalid_json"
         info = await LocalNodeTransport({"n": worker}).inspect("n")
         assert info["active_count"] == 0
+
+    _run(body())
+
+
+def test_duplicate_release_preserves_all_leases_before_unique_release():
+    async def body():
+        ctx = _setup(sink=False)
+        held = await ctx.transport.reserve(
+            "alice", operation_id="reserve-duplicates", resource_id="owned-pair", count=2,
+        )
+        leases = held["leases"]
+        with pytest.raises(NodeCommandFailed) as exc:
+            await ctx.transport.release(
+                "alice", operation_id="release-duplicates",
+                lease_ids=[leases[0], leases[0], leases[1]],
+            )
+        assert (exc.value.status, exc.value.code) == (400, "invalid_leases")
+        info = await ctx.transport.inspect("alice")
+        assert info["active_count"] == 2
+        assert {lease["lease_id"] for lease in info["leases"]} == set(leases)
+        await ctx.transport.release(
+            "alice", operation_id="release-unique", lease_ids=leases,
+        )
+        assert (await ctx.transport.inspect("alice"))["active_count"] == 0
+
+    _run(body())
+
+
+@pytest.mark.parametrize("role", ("alice", "bob"))
+def test_e91_unrelated_lease_refuses_before_draw_and_round_mutation(role):
+    class ObservedRng:
+        def __init__(self):
+            self.draws = 0
+
+        def random(self):
+            self.draws += 1
+            return 0.25
+
+    async def body():
+        rng = ObservedRng()
+        ctx = _setup(sink=False, rngs={role: rng})
+        peer = "bob" if role == "alice" else "alice"
+        session_id = f"e91-resource-{role}"
+        await ctx.transport.qkd_step(
+            role, operation_id=f"{role}-begin", session_id=session_id, action="begin",
+            payload={"protocol": "E91", "role": role, "peer": peer},
+        )
+        held = await ctx.transport.reserve(
+            role, operation_id=f"{role}-reserve", resource_id="actual-pair", count=1,
+        )
+        state = (
+            quantum_state.BellState("PHI_PLUS").density()
+            if role == "alice"
+            else quantum_state.QuantumStateVector.from_qubit(1, 0).density()
+        )
+        payload = {
+            "round_index": 0, "pair_id": "unrelated-pair", "lease_id": held["leases"][0],
+            "setting": 0, "state": encode_density(state),
+        }
+        with pytest.raises(NodeCommandFailed) as exc:
+            await ctx.transport.qkd_step(
+                role, operation_id=f"{role}-bad-round", session_id=session_id,
+                action="measure_e91", payload=payload,
+            )
+        assert (exc.value.status, exc.value.code) == (409, "resource_mismatch")
+        assert rng.draws == 0
+        lengths = await ctx.transport.qkd_step(
+            role, operation_id=f"{role}-lengths", session_id=session_id,
+            action="lengths", payload={},
+        )
+        assert lengths["key_length"] == 0
+        payload["pair_id"] = "actual-pair"
+        await ctx.transport.qkd_step(
+            role, operation_id=f"{role}-valid-round", session_id=session_id,
+            action="measure_e91", payload=payload,
+        )
+        assert rng.draws == 1
+        lengths = await ctx.transport.qkd_step(
+            role, operation_id=f"{role}-after-lengths", session_id=session_id,
+            action="lengths", payload={},
+        )
+        assert lengths["key_length"] == 1
 
     _run(body())

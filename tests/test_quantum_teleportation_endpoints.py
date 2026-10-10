@@ -45,7 +45,7 @@ def _bearer(seat):
     return {"Authorization": f"Bearer {_SEATS[seat]}"}
 
 
-def _app(nodes, links, worker_rngs, tmp_path, capacities=None):
+def _app(nodes, links, worker_rngs, tmp_path, capacities=None, *, transport_factory=LocalNodeTransport):
     # All gateway QKD/teleport work flows through one LocalNodeTransport
     # built from the same operator topology the lifespan mesh registers.
     # No worker/test-hook bindings are passed to the engine: build_app wires
@@ -59,7 +59,7 @@ def _app(nodes, links, worker_rngs, tmp_path, capacities=None):
             token=f"tok-{name}",
             rng=ScriptedRng(list(draws)),
         )
-    transport = LocalNodeTransport(workers)
+    transport = transport_factory(workers)
     endpoints = {name: f"http://127.0.0.1:{19001 + pos}" for pos, name in enumerate(nodes)}
     settings = Settings(
         seat_passphrases=dict(_SEATS),
@@ -1088,3 +1088,199 @@ def test_gateway_decoder_depth_failure_is_typed_after_auth(pair_app, monkeypatch
     assert missing.status_code == 401
     assert refused.status_code == 400
     assert refused.json()["error"] == "invalid_json"
+
+
+@pytest.mark.parametrize(
+    ("route", "payload", "error"),
+    (
+        ("/v1/quantum/teleportation/bell-pair/create",
+         {"node_a": ALPHA, "node_b": BETA, "initial_fidelity": 10**400}, "invalid_fidelity"),
+        ("/v1/quantum/repeater/route",
+         {"node_path": [ALPHA, BETA], "base_fidelity": -(10**400)}, "invalid_fidelity"),
+        ("/v1/quantum/teleportation/teleport",
+         {"source_node": ALPHA, "target_node": BETA,
+          "alpha": {"real": 10**400, "imag": 0}}, "invalid_amplitude"),
+        ("/v1/quantum/teleportation/teleport",
+         {"source_node": ALPHA, "target_node": BETA,
+          "beta": {"real": 0, "imag": -(10**400)}}, "invalid_amplitude"),
+    ),
+)
+def test_huge_json_numeric_conversion_is_typed_before_effects(pair_app, route, payload, error):
+    transport = pair_app.app.state["qteleport_orchestration"].transport
+    before = list(transport.calls)
+    response = pair_app.post(route, json=payload, headers=_bearer("lead"))
+    assert response.status_code == 400
+    assert response.json()["error"] == error
+    assert transport.calls == before
+    assert pair_app.app.state["qteleport_pool"].list_active_pairs() == []
+
+
+@pytest.mark.parametrize(("size", "forged_size"), ((3, 4), (5, 6)))
+def test_public_proof_verification_binds_same_depth_to_exact_committed_prefix(pair_app, size, forged_size):
+    for _ in range(size):
+        created = pair_app.post(
+            "/v1/quantum/teleportation/bell-pair/create",
+            json={"node_a": ALPHA, "node_b": BETA}, headers=_bearer("lead"),
+        )
+        assert created.status_code == 200
+    ledger = pair_app.app.state["qteleport_ledger"]
+    receipt = ledger.list_receipts(1)[0]
+    proof = pair_app.get(
+        "/v1/quantum/teleportation/ledger/proof",
+        params={"receipt_id": receipt.receipt_id, "tree_size": str(size)},
+        headers=_bearer("lead"),
+    ).json()["proof"]
+    authentic = pair_app.post(
+        "/v1/quantum/teleportation/ledger/proof/verify", json=proof, headers=_bearer("lead"),
+    )
+    assert authentic.status_code == 200 and authentic.json()["valid"] is True
+    proof["tree_size"] = forged_size
+    forged = pair_app.post(
+        "/v1/quantum/teleportation/ledger/proof/verify", json=proof, headers=_bearer("lead"),
+    )
+    assert forged.status_code == 200 and forged.json()["valid"] is False
+
+
+def test_shared_admission_refuses_all_six_mutations_without_queue_and_recovers(tmp_path):
+    import asyncio
+    import httpx
+
+    class HeldReserve(LocalNodeTransport):
+        def __init__(self, workers):
+            super().__init__(workers)
+            self.hold = True
+            self.entered = 0
+            self.all_entered = asyncio.Event()
+            self.resume = asyncio.Event()
+
+        async def reserve(self, node, **kwargs):
+            response = await super().reserve(node, **kwargs)
+            if node == ALPHA and self.hold:
+                self.entered += 1
+                if self.entered == 4:
+                    self.all_entered.set()
+                await self.resume.wait()
+            return response
+
+    fixture = _app(
+        (ALPHA, BETA), [(ALPHA, BETA)], None, tmp_path,
+        transport_factory=HeldReserve,
+    )
+    transport = fixture.app.state["qteleport_orchestration"].transport
+    create_route = "/v1/quantum/teleportation/bell-pair/create"
+    create_payload = {"node_a": ALPHA, "node_b": BETA}
+    mutations = (
+        (create_route, create_payload),
+        ("/v1/quantum/teleportation/purify", {"pair_id_1": "left", "pair_id_2": "right"}),
+        ("/v1/quantum/repeater/route", {"node_path": [ALPHA, BETA], "purify": False}),
+        ("/v1/quantum/teleportation/swap", {"pair_id_ab": "left", "pair_id_bc": "right"}),
+        ("/v1/quantum/teleportation/teleport", {"source_node": ALPHA, "target_node": BETA}),
+        ("/v1/quantum/teleportation/outputs/release",
+         {"session_id": "unknown", "receiver": BETA, "operation_id": "release-busy"}),
+    )
+
+    async def body():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fixture.app), base_url="http://testserver",
+        ) as client:
+            pending = [
+                asyncio.create_task(client.post(create_route, json=create_payload, headers=_bearer("lead")))
+                for _ in range(4)
+            ]
+            try:
+                await asyncio.wait_for(transport.all_entered.wait(), 3)
+                before = list(transport.calls)
+                for route, payload in mutations:
+                    busy = await asyncio.wait_for(
+                        client.post(route, json=payload, headers=_bearer("lead")), 1,
+                    )
+                    assert busy.status_code == 429 and busy.json()["error"] == "orchestration_busy"
+                    unauthenticated = await client.post(
+                        route, content=b"not-json", headers={"Content-Type": "application/json"},
+                    )
+                    denied = await client.post(
+                        route, content=b"not-json",
+                        headers={"Content-Type": "application/json", **_bearer("web")},
+                    )
+                    assert unauthenticated.status_code == 401
+                    assert denied.status_code == 403
+                assert transport.calls == before
+                transport.hold = False
+                transport.resume.set()
+                completed = await asyncio.wait_for(asyncio.gather(*pending), 3)
+                assert all(response.status_code == 200 for response in completed)
+                after = await client.post(create_route, json=create_payload, headers=_bearer("lead"))
+                assert after.status_code == 200
+                assert (await transport.inspect(ALPHA))["active_count"] == 5
+                assert (await transport.inspect(BETA))["active_count"] == 5
+            finally:
+                transport.resume.set()
+                await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), 3)
+
+    try:
+        asyncio.run(body())
+    finally:
+        fixture.app.state["qteleport_ledger"].close()
+        fixture.close()
+
+
+def test_overall_deadline_after_real_reserve_keeps_uncertainty_and_releases_admission(tmp_path):
+    import asyncio
+    import httpx
+
+    class StalledReply(LocalNodeTransport):
+        def __init__(self, workers):
+            super().__init__(workers)
+            self.hold = True
+            self.resume = asyncio.Event()
+            self.effects = []
+
+        async def reserve(self, node, **kwargs):
+            response = await super().reserve(node, **kwargs)
+            self.effects.append(("reserve", node))
+            if node == ALPHA and self.hold:
+                await self.resume.wait()
+            return response
+
+        async def release(self, node, **kwargs):
+            self.effects.append(("release", node))
+            return await super().release(node, **kwargs)
+
+    fixture = _app(
+        (ALPHA, BETA), [(ALPHA, BETA)], None, tmp_path,
+        transport_factory=StalledReply,
+    )
+    runtime = fixture.app.state["qteleport_orchestration"]
+    runtime.operation_timeout_s = 0.05
+    transport = runtime.transport
+    route = "/v1/quantum/teleportation/bell-pair/create"
+    payload = {"node_a": ALPHA, "node_b": BETA}
+
+    async def body():
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=fixture.app), base_url="http://testserver",
+        ) as client:
+            timed_out = await asyncio.wait_for(
+                client.post(route, json=payload, headers=_bearer("lead")), 1,
+            )
+            assert timed_out.status_code == 504
+            assert timed_out.json()["error"] == "orchestration_timeout"
+            assert transport.effects == [("reserve", ALPHA)]
+            assert (await transport.inspect(ALPHA))["active_count"] == 1
+            assert (await transport.inspect(BETA))["active_count"] == 0
+            assert runtime.pool.list_active_pairs() == []
+            unresolved = list(runtime.pool.uncertain_reserves().values())
+            assert len(unresolved) == 1
+            assert unresolved[0]["status"] == "unresolved"
+            assert unresolved[0]["instance_id"] == (await transport.inspect(ALPHA))["instance_id"]
+            transport.hold = False
+            next_request = await client.post(route, json=payload, headers=_bearer("lead"))
+            assert next_request.status_code == 200
+            assert (await transport.inspect(ALPHA))["active_count"] == 2
+            assert (await transport.inspect(BETA))["active_count"] == 1
+
+    try:
+        asyncio.run(body())
+    finally:
+        fixture.app.state["qteleport_ledger"].close()
+        fixture.close()

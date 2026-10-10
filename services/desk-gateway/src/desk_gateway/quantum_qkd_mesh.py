@@ -32,7 +32,6 @@ from .quantum_key import (
     bb84_state,
     estimate_chsh,
     finite_sample_budget,
-    qber_exceeds,
     sample_chsh_outcome,
     validate_count,
     validate_requested_bits,
@@ -51,10 +50,11 @@ from .quantum_teleportation import (
     MAX_ROUTE_NODES,
     BellPairPool,
     BellStateType,
+    PairStatus,
     QuantumRepeaterMesh,
     QuantumResourceError,
 )
-from .quantum_transport import NodeCommandFailed, NodeTransportAmbiguous
+from .quantum_transport import NodeCommandFailed, NodeTransportAmbiguous, NodeTransportUnavailable
 
 
 class QuantumBasis(str, enum.Enum):
@@ -96,6 +96,54 @@ def _worker_abort_reason(session_reason: Optional[str]) -> str:
         if mapped in QKD_ABORT_REASONS:
             return mapped
     return "protocol_error"
+
+class EavesdropDetector:
+    """Exact-integer intercept-resend abort predicate (REQ-QTELEPORT-007).
+
+    The original Phase-69 detector name is the live admission gate: abort
+    iff ``100*errors > 11*samples`` on exact integer counts. Exactly 11%
+    passes; anything above aborts. Missing or invalid samples raise instead
+    of ever reporting a stand-in QBER of 0. No float threshold.
+    """
+
+    ABORT_NUMERATOR = 11
+    ABORT_DENOMINATOR = 100
+
+    @classmethod
+    def exceeds(cls, errors: object, samples: object) -> bool:
+        """Abort iff ``100*errors > 11*samples`` on exact integer counts."""
+        for label, item in (("errors", errors), ("samples", samples)):
+            if isinstance(item, bool) or not isinstance(item, int):
+                raise ValueError(f"{label} must be an integer count")
+        if samples <= 0:  # type: ignore[operator]
+            raise ValueError("samples must be positive to estimate QBER")
+        if errors < 0 or errors > samples:  # type: ignore[operator]
+            raise ValueError("errors must lie in 0..samples")
+        return 100 * errors > 11 * samples  # type: ignore[operator]
+
+
+class QuantumChannelInterception:
+    """Actual Born-measured intercept-resend transform (REQ-QTELEPORT-007).
+
+    Eve measures every signal in a random basis with the channel RNG and
+    resends the measured eigenstate: a rectilinear click resends ``|0>`` /
+    ``|1>``, a diagonal click resends ``|+>`` / ``|->``. Alice's bits stay
+    in her vault; only the encoded signals DTO is transformed.
+    """
+
+    @staticmethod
+    def apply(signals_dto: Mapping[str, Any], rng: Any) -> Dict[str, Any]:
+        """Resend every encoded signal through Eve's random-basis probe."""
+        raw = decode_signals(signals_dto, "signals")
+        resent: List[int] = []
+        for value in raw:
+            basis = QuantumBasis.RECTILINEAR if value < 2 else QuantumBasis.DIAGONAL
+            vec = bb84_state(value & 1, basis.value)
+            eve_basis = rng.choice(tuple(QuantumBasis))
+            probed = vec.apply_single(H, 0) if eve_basis is QuantumBasis.DIAGONAL else vec
+            eve_bit = int(probed.density().measure_z((0,), rng).bits[0])
+            resent.append(eve_bit + (0 if eve_basis is QuantumBasis.RECTILINEAR else 2))
+        return encode_signals(resent)
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +258,7 @@ class QKDProtocolEngine:
         self.sessions: Dict[str, QKDKeyExchangeSession] = {}
         self._session_instances: Dict[str, Dict[str, str]] = {}
         self._quarantined_sessions: Dict[str, Dict[str, str]] = {}
+        self._pending_binds: Dict[str, Dict[str, str]] = {}
 
     def _require_transport(self) -> Any:
         transport = self.transport
@@ -291,22 +340,39 @@ class QKDProtocolEngine:
     async def _bind(
         self, session_id: str, sender: str, receiver: str, protocol: QKDProtocolType, instances: Mapping[str, str]
     ) -> bool:
-        """Bind role/session/ownership on both endpoint workers."""
+        """Bind role/session/ownership on both endpoint workers.
+
+        A sent-but-unacked begin stays pending: ambiguity never retries and
+        never infers absence. Definitive pre-send failures and explicit
+        worker refusals clear the pending mark; anything uncertain keeps it
+        so a later abort reconciles read-only instead of claiming clearance.
+        """
+        pending = self._pending_binds.setdefault(session_id, {})
         try:
             for node, role, peer in (
                 (sender, "alice", receiver),
                 (receiver, "bob", sender),
             ):
-                await self._step(
-                    node, session_id, f"{session_id}-begin-{node}", "begin",
-                    {"protocol": protocol.value, "role": role, "peer": peer},
-                    instances,
-                )
+                pending[node] = instances[node]
+                try:
+                    await self._step(
+                        node, session_id, f"{session_id}-begin-{node}", "begin",
+                        {"protocol": protocol.value, "role": role, "peer": peer},
+                        instances,
+                    )
+                except NodeTransportUnavailable:
+                    pending.pop(node, None)
+                    return False
+                except NodeCommandFailed:
+                    pending.pop(node, None)
+                    return False
+                except Exception:
+                    # Ambiguous or unknown effect: keep pending, never retry.
+                    return False
+                pending.pop(node, None)
         except (asyncio.CancelledError, KeyboardInterrupt):
             await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
             raise
-        except Exception:
-            return False
         return True
 
     async def _abort_workers(
@@ -317,32 +383,59 @@ class QKDProtocolEngine:
         reason: str,
         instances: Optional[Mapping[str, str]] = None,
     ) -> bool:
-        """Destroy owned buffers or retain the original scope as quarantined."""
+        """Destroy owned buffers or retain the original scope as quarantined.
+
+        A sent-but-unacked begin is never cleared by an ``unknown_session``
+        abort: the original scope stays tracked and quarantined because
+        absence of a record is never proof the delayed begin did not land.
+        Once a session is quarantined, repeats issue no second mutating
+        abort; only read-only original-instance terminal reconciliation may
+        establish true cleanup.
+        """
         pinned = dict(instances) if instances else {}
-        if not pinned:
+        pending = self._pending_binds.get(session_id, {})
+        prior = self._quarantined_sessions.get(session_id)
+        scope = dict(pending)
+        for node, inst in pinned.items():
+            scope.setdefault(node, inst)
+        if prior:
+            for node, inst in prior.items():
+                scope.setdefault(node, inst)
+        if not scope:
             return True  # No endpoint effects preceded authenticated discovery.
+        frozen = bool(prior)
         unconfirmed: Dict[str, str] = {}
         transport = self.transport
         for node in (sender, receiver):
+            inst = scope.get(node)
+            if inst is None:
+                continue
+            if frozen and node not in prior and node not in pending:
+                continue  # Previously cleared: no new mutation, no re-quarantine.
+            uncertain = frozen or node in pending
             cleared = False
             if transport is not None:
-                try:
-                    await transport.qkd_step(
-                        node, operation_id=f"{session_id}-abort-{node}",
-                        session_id=session_id, action="abort", payload={"reason": reason},
-                        instance=pinned.get(node),
-                    )
-                    cleared = True
-                except NodeCommandFailed as exc:
-                    cleared = exc.code in ("unknown_session", "already_aborted", "already_used")
-                except Exception:
-                    pass
+                if not uncertain or not frozen:
+                    try:
+                        await transport.qkd_step(
+                            node, operation_id=f"{session_id}-abort-{node}",
+                            session_id=session_id, action="abort", payload={"reason": reason},
+                            instance=inst,
+                        )
+                        cleared = True
+                    except NodeCommandFailed as exc:
+                        cleared = (
+                            exc.code in ("unknown_session", "already_aborted", "already_used")
+                            and node not in pending
+                        )
+                    except Exception:
+                        pass
                 if not cleared:
                     try:
                         state = await transport.qkd_step(
                             node, operation_id=f"{session_id}-abort-state-{node}",
                             session_id=session_id, action="lengths", payload={},
-                            instance=pinned.get(node),
+                            instance=inst,
                         )
                         cleared = (
                             state["state"] in ("used", "aborted")
@@ -353,9 +446,12 @@ class QKDProtocolEngine:
                     except Exception:
                         pass
             if not cleared:
-                unconfirmed[node] = pinned[node]
+                unconfirmed[node] = inst
+        self._pending_binds.pop(session_id, None)
         if unconfirmed:
-            self._quarantined_sessions[session_id] = unconfirmed
+            merged = dict(prior) if prior else {}
+            merged.update(unconfirmed)
+            self._quarantined_sessions[session_id] = merged
             return False
         self._quarantined_sessions.pop(session_id, None)
         return True
@@ -527,9 +623,9 @@ class QKDProtocolEngine:
             raise
         except Exception:
             return await self._fail(sender, receiver, QKDProtocolType.BB84.value, bit_length, t0, prefix="qkd-bb84", session_id=session_id)
+        self._session_instances[session_id] = dict(instances)
         if not await self._bind(session_id, sender, receiver, QKDProtocolType.BB84, instances):
             return await self._fail(sender, receiver, QKDProtocolType.BB84.value, bit_length, t0, prefix="qkd-bb84", session_id=session_id, instances=instances)
-        self._session_instances[session_id] = dict(instances)
         rng = self._rng
         try:
             prepared = await self._step(
@@ -539,18 +635,9 @@ class QKDProtocolEngine:
             signals_dto = prepared["signals"]
             bases_a = decode_bits(prepared["bases"], "bases")
             if intercept:
-                # Numerical intercept-resend on the encoded signals. Eve's
-                # click is the attack sample; Alice's bits stay in her vault.
-                raw = decode_signals(signals_dto, "signals")
-                resent = []
-                for value in raw:
-                    basis = QuantumBasis.RECTILINEAR if value < 2 else QuantumBasis.DIAGONAL
-                    vec = bb84_state(value & 1, basis.value)
-                    eve_basis = rng.choice(tuple(QuantumBasis))
-                    probed = vec.apply_single(H, 0) if eve_basis is QuantumBasis.DIAGONAL else vec
-                    eve_bit = int(probed.density().measure_z((0,), rng).bits[0])
-                    resent.append(eve_bit + (0 if eve_basis is QuantumBasis.RECTILINEAR else 2))
-                signals_dto = encode_signals(resent)
+                # Actual intercept-resend channel: Eve's Born-measured click
+                # is the attack sample; Alice's bits stay in her vault.
+                signals_dto = QuantumChannelInterception.apply(signals_dto, rng)
             measured = await self._step(
                 receiver, session_id, f"{session_id}-measure", "measure_bb84",
                 {"signals": signals_dto}, instances,
@@ -648,9 +735,9 @@ class QKDProtocolEngine:
             raise
         except Exception:
             return await self._fail(sender, receiver, QKDProtocolType.E91.value, pair_count, t0, prefix="qkd-e91", session_id=session_id)
+        self._session_instances[session_id] = dict(instances)
         if not await self._bind(session_id, sender, receiver, QKDProtocolType.E91, instances):
             return await self._fail(sender, receiver, QKDProtocolType.E91.value, pair_count, t0, prefix="qkd-e91", session_id=session_id, instances=instances)
-        self._session_instances[session_id] = dict(instances)
         rng = self._rng
         # Pre-randomized disjoint round classes: CHSH witness, key (Z/Z),
         # and phase-test (X/X). pair_count is not simultaneous qubit count:
@@ -748,7 +835,6 @@ class QKDProtocolEngine:
             return await self._fail(
                 sender, receiver, QKDProtocolType.E91.value, pair_count, t0,
                 prefix="qkd-e91", session_id=session_id, instances=instances,
-                reason="resource_cleanup_unconfirmed",
             )
         try:
             empty = encode_indices([])
@@ -857,7 +943,7 @@ class QKDProtocolEngine:
             )
         qber = errors / float(k)
         # Exact integer admission before any float serialization.
-        if qber_exceeds(errors, k):
+        if EavesdropDetector.exceeds(errors, k):
             return await self._abort(
                 sender, receiver, protocol, raw_count, "qber_exceeded",
                 requested_bits, t0, prefix=prefix, bound=True,
@@ -953,7 +1039,6 @@ class QKDProtocolEngine:
             await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
             raise
         except Exception:
-            await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
             return await self._abort(
                 sender, receiver, protocol, raw_count, "receipt_failed",
                 requested_bits, t0, prefix=prefix, bound=True,
@@ -1152,9 +1237,16 @@ class QuantumTeleportationDrillSimulator:
         return _drill_report(confirmed, code, stages)
 
     async def _discard_pairs(self, tag: str, pair_ids: Sequence[str]) -> bool:
-        """Discard owned pairs; quarantine any unconfirmed lease cleanup."""
+        """Discard owned pairs; quarantine any unconfirmed lease cleanup.
+
+        Pairs already quarantined stay untouched: the end-of-run sweep never
+        issues a new-op release for an ambiguous resource.
+        """
         confirmed = True
         for index, pair_id in enumerate(dict.fromkeys(pair_ids)):
+            if self.pool.status_of(pair_id) is PairStatus.QUARANTINED:
+                confirmed = False
+                continue
             op = f"{tag}-discard-{index}-{pair_id[-8:]}"
             try:
                 await self.pool.reserve_pairs([pair_id], operation_id=op)
@@ -1215,7 +1307,13 @@ class QuantumTeleportationDrillSimulator:
         # The demonstration survivor is measured, then discarded at once so
         # no drill lease lingers; the end-of-run sweep covers any residue.
         owned.append(result.output_pair_id)
-        await self._discard_pairs(tag, [result.output_pair_id])
+        if not await self._discard_pairs(tag, [result.output_pair_id]):
+            return {
+                "passed": False,
+                "reason": "cleanup_unconfirmed",
+                "baseline_fidelity": 0.90,
+                "output_fidelity": result.output_fidelity,
+            }
         return {
             "passed": True,
             "reason": None,

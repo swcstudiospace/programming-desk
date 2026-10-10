@@ -1,0 +1,1 @@
+User explicitly approved the existing SPL Memo publisher as the real Solana Devnet publication alternative. Require genuine signed submission, observed confirmation and matching on-chain root/proof; no fake slots/local hashes or raw key material. Confirmed history is irreversible; no production deployment or review approval implied.

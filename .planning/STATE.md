@@ -2,66 +2,63 @@
 gsd_state_version: "1.0"
 milestone: v5.1
 milestone_name: Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
-status: unknown
-last_updated: "2026-10-10T03:05:00.000Z"
-state_head: 42d4ae18a9a2aaceb747437c430608b569807a99
+status: blocked
+last_updated: "2026-10-10T17:54:09.000Z"
+state_head: 52026b74d76dac754ed057efadfd80d530fc89f0
+source_head: dac2fdf99daa8ca1b9a6c3ce6e0db9edc59631b3
+source_local_head: "d6b7789"
+source_local_product_head: "d452fb1"
+source_local_receipt_head: "d6b7789"
 progress:
   total_phases: 2
   completed_phases: 0
-  total_plans: 6
+  total_plans: 20
   completed_plans: 0
+  source_implemented_plans: 20
+  local_task_rows_verified: 48
   percent: 0
 current_phase_name: Quantum Key Distribution BB84/E91, Entangled State Ledger & Solana Devnet Anchoring
 ---
 
-# State: Milestone v5.1 — Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
+# State: Milestone v5.1
 
 ## Current Position
 
-Plan: 3 of 3 in current phase (source-complete; acceptance open)
-Status: Phase 69-03 source complete — live Devnet confirmation still blocks acceptance
-Last activity: 2026-10-10 — 69-03 route-gap tests pushed as `fa210d5` on draft PR #214. Dedicated payer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv` balance 0 lamports at confirmed slot 509400169. Live Devnet confirmation still unobserved.
+The current phase has 10 of 10 source plans implemented. Across phases 68 and 69, the inventory is 20 checked source plans, 20 summaries and 48 named task rows locally exercised (25 in phase 68 and 23 in phase 69). Source implementation and SUMMARY coverage are not original or signed completion: signed acceptance remains 0/11 and completed phases remain 0/2.
 
+Status: **BLOCKED on genuine Devnet publication/drill and independent review gates**. Published source draft PR #214 remains at `dac2fdf` (historical product `6c7d8ef`). Repaired product **`d452fb1`** has seven owned source/test/README files and **768 stable consumer passes**; the parent then committed its own source receipt as **`d6b7789`**, now the **local source HEAD**, exit 0/tool **0.38 s**. Neither local commit is pushed. All 70 comments have independent correct/repaired dispositions (49 + 21), zero actionable source findings; signed/remote approval remains absent. Source G1/G3/G4/G5/G6/G7 passed; its old checker retains two G2 blockers. Published QUALITY checker `2bea6d1` in draft #215 leaves only missing `approved_by` when applied to the real source receipt, but is **not integrated into default or source**. Owner integration, independent approval, final-head review, genuine funding and legacy scanner disposition remain unresolved; source push is held. Metadata `last_updated` records observed **2026-10-10 17:54:09 UTC**, `state_head` retains planning baseline `52026b7…`, and `source_head` retains published `dac2fdf`; additional local-head fields distinguish unpublished product/receipt evidence. No history rewrite, user-checkout edit, merge or waiver is claimed.
 
-## Current Status
+## Current Evidence
 
-- Canonical milestone: **v5.1**, as named by ROADMAP.md, REQUIREMENTS.md and `init.milestone-op`; stale state JSON's v2.0 is not the active milestone and was not rewritten by this audit.
-- Phases: **68 and 69 — acceptance reopened, unverified**. `init.milestone-op` reports two phases and zero complete.
-- Branch: `bot-00-programming-lead/v5.1-completion-audit`
-- Audit snapshot: main `2229570`, isolated worktree `/tmp/desk-v51-audit`.
-- Audit status: **`gaps_found`**; requirements 0/11 fully verified, phases 0/2, required flows 0/5.
-- Report: [v5.1-MILESTONE-AUDIT.md](v5.1-MILESTONE-AUDIT.md).
-- Receipt: [v5.1-completion-audit.json](../.receipts/bot-00-programming-lead/v5.1-completion-audit.json).
-- Verification scope: completed read-only source integration audit plus one parent-observed diagnostic (exit 0, 0.17 s tool wall time); no suite-wide, REST, physical-channel or real Solana acceptance claim.
-- Quality gates: **not established by this audit**; previous “all passing” assertion is not current evidence. Parent will run documentation gates and prepare a draft PR separately.
-- Approval: **blocked/pending independent review**; no self-approval, no signed AgentSwarm acceptance available (current artifacts advisory). Receipt approvals and loop acknowledgements are empty.
+- The canonical milestone remains v5.1. Stale v2.0 state JSON is not rewritten; no milestone ledger, archive, tag or release is modified.
+- Phases 68 and 69 each have 10 plans and 10 summaries. The complete Nyquist map covers 25 + 23 = 48 tasks; all seven automatable adversarial gaps were resolved, with none skipped. Phase 68 has validated coverage; phase 69 remains partial for original live requirements 009/010. All eleven original descriptions and checkboxes remain unchanged and open.
+- Historical consumer checkpoint on code `6c7d8ef`: **752 passed in 414.33 s**, exit 0, tool duration 415.77 s, Python 3.14 only. Gate self-tests at that checkpoint: **299 passed in 17.66 s**, tool duration 18.81 s. These predate the fresh-review repairs and are not final passes for the repaired tree.
+- Historical G1/G3/G4/G5/G6/G7 passed at `6c7d8ef`; corrected strict G2 at that checkpoint lacked independent `approved_by`. Earlier failures remain historical. `bg_218` recorded **759 passed in 416.36 s**, exit 0/tool **417.86 s**, Python 3.14, before teleport/proof corrections; semantically unchanged after-start index formatting had separate smoke **2.23 s**. `bg_228` recorded **765 passed in 412.69 s**, exit 0/tool **414.06 s**, Python 3.14, before `claim_anchor` correction. Current CI recorded **299 passed in 15.53 s** (tool **16.07 s**), distinct from the earlier 299 checkpoint. Three new claim regressions passed in **0.57 s** (tool **1.32 s**). The final stable claim/source-union consumer run **`bg_235` completed: 768 passed in 425.51 s**, exit **0**, tool **427.04 s**, Python **3.14**. This is a real stable product-suite pass; it does not establish live-chain acceptance, signed gates, scanner approval or final-head Greptile approval.
+- **Current source gates versus published QUALITY owner fix:** Unpublished product `d452fb1` passed source G1 manifest/21-path attribution, G7, G3 secrets/21 paths, G4, G5 and G6. Its old checker still records strict **G2 FAILED** for missing independent `approved_by` and historical command **94**, `git add -f --`, matching `-f\s+--` despite mandated ignored-receipt staging. QUALITY checker code **`2bea6d1`** is now published in **[draft PR #215](https://github.com/swcstudiospace/programming-desk/pull/215)**, branch `bot06/v5.1-receipt-staging`, published owner receipt head **`6d19119`** (docs/receipt `c7d7c14`), isolated worktree `/tmp/desk-v51-quality-gate` from `origin/main` `c9040a4`. It is **not integrated into default or source branches**. Actual candidate-checker run against the real source receipt (`bg_247`) exited **1/tool 0.29 s** with **only missing `approved_by`** after correction of the absent `files_changed` receipt key; command 94 stays verbatim. Owner CI passed **326 in 17.37 s**, exit **0/tool 17.86 s**, no skips. Compilation failed at 0.20 s then passed after the literal-brace fix at 0.22 s; advisory review found zero actionable defects. QUALITY G1/G3/G4/G5/G6/G7 passed; its own strict G2 lacks only the independent LEAD/human stamp. Neither owner publication nor candidate proof applies the fix to source or authorizes its push. Original history remains exact; no bypass waiver, signed approval or merge is claimed.
+- Parent's actual teleport/proof post-correction boundary smoke took **2.39 s**. All four typed/generic failure × cancellation/KeyboardInterrupt cases restored the selected pair to ACTIVE and allowed a real subsequent teleportation; both original halves remained held at 1/1, the new sender-input uncertainty obligation stayed sticky, the identical interruption marker was preserved and no follow-up effect occurred. GET ledger/proof returned 503 on native storage outage, with control 200/authentication 401/invalid input 400 preserved. Six new consumer regressions passed in **1.94 s** (tool **2.97 s**). Only new guard/test ranges were formatted (tool 0.60/0.56 s). These repairs are covered by the 765-pass checkpoint, which still predates correction of the new `claim_anchor` P2.
+- Actual TCP evidence used four distinct CLI workers and a gateway, with no endpoint-direct link: 20,000 repeater-only E91 rounds produced independent 256-bit endpoint keys, QBER 0 and CHSH 2.828630008762767 (lower bound 2.3775443874507514). Active leases were zero before/after, with peaks 1/1/2/2 across 1,109 samples; distinct mutation ACK counts were 86,005/80,993/100,000/134,967. Owner first use was accepted, second use returned 409 and cross-owner use returned 403. Tool duration was 1,125.58 s. This run began before the final error-only release/storage/exporter guards and before the fresh-review repairs; it is not unqualified repaired-head TCP evidence.
+- That run passed all five actual numerical drill stages, then returned genuine `insufficient_balance`, null signature/slot and `all_passed=false`. Caller capacities 3/3/0/0 were preserved. Separate negative-boundary evidence covers all five failures preserving exact caller leases, dual key usability and retained output; it does not establish positive chain acceptance.
+- Actual two-worker/gateway admission smoke took 2.68 s: four Alpha reserves applied and none for Beta; all six fifth requests returned 429, authentication returned 401/403, and there were no extra worker effects. A 504 after the first applied reserve retained its original scope (Alpha 1/Beta 0); the next 200 recovered the slot (Alpha 2/Beta 1). Explicit operator cleanup ended at 0/0.
+- Earlier failed COMMIT/ROLLBACK smoke exposed pending writer size 3 and a true proof against peer size 2 (0.35 s); after repair, public paths closed and peer/reopen remained exactly size 2 (0.48 s). IO, KeyboardInterrupt, eleven-guard, no-append and next-append-at-3 regressions passed. Exporter closure between proof reads now returns typed 503 before signing/RPC. These are checkpoint observations, not substitute final-head results.
+- Earlier independent correctness review reported zero actionable findings. The pre-fresh-review ASVS-L2 register has 50 unique threat IDs/57 occurrences (phase 68: 22; phase 69: 28), all advisory-closed, no open high/medium entries and no accepted risks. Advisory closure is not signed security or QUALITY approval.
+- The checkpoint dependency audit covered 47 installed noneditable versions with zero known vulnerabilities, not artifact/hash integrity. Earlier whole-service Bandit checkpoints failed with 2 HIGH/6 MEDIUM/107 LOW across 57,348 LOC and then 57,374 LOC (exit 1/tool 7.19 s). The latest whole-service result remains **FAILED**, with the same severity counts across **57,408 LOC**, tool **6.81 s**. The exact core/gateway/config subset has 12 LOW and no MEDIUM/HIGH. Eight legacy HIGH/MEDIUM findings still require owner/QUALITY disposition; no waiver exists.
+- Source draft PR #214 remains OPEN/DRAFT at `dac2fdf`; repaired product `d452fb1` is committed but unpublished. Greptile `30954537` completed at the published head with confidence **3/5**, not approval. Repairs cover odd-width proof verification, unknown-output locks, release-history traversal, typed ledger errors and later teleport-cleanup/proof-HTTP holes. The historical teleport P1 left the pair RESERVED with untouched original halves and sticky new-input uncertainty; synchronous `finally` restoration now preserves the interruption without new network awaits. The extra `claim_anchor` rollback P2 is repaired with actual ten-path/closed next-claim access, identical KeyboardInterrupt, prior-authority/reopened-root and absent-pending-claim evidence; consumer advisory disposition found no additional defect. Independent disposition covers **all 70 comments (49 + 21), zero remaining actionable source findings**, and the stable product suite now has **768 passes**. Remote **70 addressed flags remain false**. Older `30925102` (confidence 0/5, ten comments) stays historical. Signed approval, both G2 blockers, legacy scanner disposition and final-head review are not satisfied by local source evidence.
+- Fresh parent evidence preserves the first focused failure: 282 passed/1 failed in 85.92 s (tool 87.81 s), caused by an assertion that incorrectly expected a physically held lease after release applied and its ACK was lost. The corrected assertion retains the original pool quarantine/unresolved obligation despite an empty worker, without adding a retry. The corrected focused union passed **283 tests in 82.94 s** (tool **84.41 s**). Actual boundary smoke took 2.18 s before repair, 2.85 s after the first wave and **2.28 s** after the fixture/index correction; post-format smoke later exited 0 in **2.23 s**. The 2.28 s smoke used 257 actual adopted records: genuine four-to-three proof forgery rejected by both verifiers/authentic proof accepted, zero historical release traversal, 128 unknown IDs retaining zero locks, both HTTP reads returning 503 `ledger_unavailable`, and workers ending at 0/0. These observations predate both subsequent source-gap corrections; they do not establish final post-correction suite/gate/review acceptance.
+- Audit/report: [.planning/v5.1-MILESTONE-AUDIT.md](v5.1-MILESTONE-AUDIT.md). Exact source commands are recorded in `.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json`; the parent refreshes the LEAD receipt and new execution results separately.
 
-## Acceptance Blockers
+## Original Acceptance
 
-- Three plans per phase, CONTEXT, RESEARCH, interface details and draft VALIDATION now exist. Both plan sets passed independent advisory checks. Execution summaries, full phase VERIFICATION/SECURITY and compliant acceptance are not yet established.
-- All eleven requirement checkboxes remain reopened under the strict three-source audit; none has complete phase acceptance evidence.
-- The numerical kernel now has 30 passing regressions and parent-observed mixed-state/Born/conditioning smoke. Source/runtime receipt: `.receipts/bot-01-systems-backend/v5.1-kernel-postreview-verification.json` in the SYSTEMS worktree; G-2 reports only missing independent approval. Worker/pool/transport, durable ledger/publisher, QKD, and the shared drill/API are source-complete on draft PR #214 (`5e22296`, 87 passed). Live chain confirmation is still outstanding.
-- Original diagnostic failures are retained as before-fix evidence, not rerun to confirm. Kernel cutoff, squared-norm, integer-bit and finite-spectrum faults were reproduced and repaired; original resource/empty-QKD/fake-anchor regressions still require the integrated replacement.
-- Draft validation strategies do not establish Nyquist or security acceptance. Dedicated funding, actual Devnet readback and independent quality/security dispositions remain external gates.
+Runtime evidence covers 9/11 original requirements: phase 68 requirements 001–005 have 5/5 runtime coverage; phase 69 requirements 006/007/008/011 have 4/6. Original 009 and 010 still need genuine positive chain observations, not control fixtures. Signed acceptance remains 0/11. Of five required flows, three numerical flows are complete and two positive-chain flows are blocked. Of twelve seams, eleven are wired and one genuine completion is missing. Nineteen routes/authenticated callers are covered, with no orphan or unprotected route claim beyond the recorded checkpoint evidence.
 
-## Required Decisions and Evidence
+## External Blockers
 
-- User chose the faithful distributed numerical simulator and real SPL Memo Devnet publisher without an acceptance waiver. Joint-state, lease/transport, strict fidelity, independent QKD and original REST criteria remain mandatory; no physical/DI-security claim.
-- Dedicated payer funding choice is intent only; last observed balance zero. The publisher must pin Devnet, sign/send once, observe confirmation and verify exact on-chain proof/root. No fake slot or local-validator acceptance substitute.
-- Durable canonical event/preimage/proof and private-key/authorization contracts are locked in the reviewed interfaces. Runtime implementation must enforce them; no raw keys, private blinds or capabilities enter public outputs.
-- Capture criterion-matching mathematical, integration, runtime and externally observed publication evidence; then obtain independent quality/security review and phase artifacts. Do not check off requirements based on release metadata or fabricated exporter responses.
+- The dedicated public payer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv` was most recently observed at **0 lamports**, confirmed slot **509600313** (read-only exit 0, tool duration **0.25 s**). Earlier official `requestAirdrop` attempts returned JSON-RPC -32603, then HTTP 429 with `Retry-After: 86400`. This continuation made **no new funding request**; no retry is due before the full cooldown expires around **2026-10-11 04:32 UTC**.
+- The parent needs genuine funding of that exact payer, then the dedicated signer must make one SPL Memo send, observe confirmed/finalized status with `err=null`, and read back the exact root/full proof before a positive `all_passed` drill. The private payer file is retained securely and is never read, printed or deleted by these document/review agents.
+- Funding can come from a human using QuickNode's free-base Devnet faucet (human bot verification, 12-hour wallet interval), or privately provisioned, already-existing eligible provider access. A names-only check found `HELIUS_API_KEY`, `QUICKNODE_API_KEY`, `CHAINSTACK_API_KEY`, `TRITON_API_KEY`, `ALCHEMY_API_KEY`, `HELIUS_DEVNET_RPC_URL`, `QUICKNODE_DEVNET_RPC_URL` and `TRITON_DEVNET_RPC_URL` absent; no secret values were read. No mounted Chainstack tools are available. Helius faucet/RPC airdrops require a paid plan. Chainstack requires `CHAINSTACK_API_KEY` and Solana-recipient eligibility (at least 0.8 SOL on mainnet plus historical holdings); its MCP faucet is not an eligibility bypass. QuickNode has no documented unattended faucet API, and no independently usable public Triton faucet was verified. Do not substitute signup, payment, mainnet transfers, CAPTCHA automation, proxies, aliases, rate-limit evasion or local validators.
+- Independent Desk `approved_by` remains absent; advisory reviews are not signatures. QUALITY disposition of the legacy whole-service scanner findings and final-head Greptile findings is mandatory. No risk acceptance, completion or merge-ready claim is made.
 
-## Release and Repository Boundaries
+## Decisions and Repository Boundaries
 
-- A published `v5.1.0` already exists, but is **not acceptance proof**.
-- No archive, tag, release, merge, auto-merge, force-push or branch deletion. Historical milestone metadata and published releases are not acceptance evidence.
-- Repository policy permits feature branches and **draft PRs only**. Planning draft #212 exists; the product draft follows owned source verification. Closure remains blocked by acceptance and independent approval gates.
+The user selected a faithful classical numerical simulator without waiving any original criterion, and genuine SPL Memo Devnet publication as the anchoring alternative. Joint-state evolution, original resource custody, the 0.95 fidelity threshold, independent reconciliation/extraction, abort behavior and REST criteria remain unchanged. No physical/hardware, device-independent or composable-secrecy claim is made.
 
-## Decisions
-
-- [Phase 68]: User selected a faithful distributed quantum simulator for original v5.1 REQ-QTELEPORT-001–011; preserve joint-state evolution, node ownership/transport, fidelity and protocol acceptance. No physical hardware/security claims or scope waiver.
-- [Phase 69]: User explicitly approved the existing SPL Memo publisher as the real Solana Devnet publication alternative. Require genuine signed submission, observed confirmation and matching on-chain root/proof; no fake slots/local hashes or raw key material. Confirmed history is irreversible; no production deployment or review approval implied.
-
-### Blockers
-
-- Live Devnet anchoring still needs funded dedicated signer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv`: rechecked 2026-10-10, balance 0 lamports at confirmed slot 509400169 (earlier airdrop failed at slot 509319960). User selected external funding; that selection is not observed funding. No live Memo was sent. Remote QKD commands are not on the worker HTTP surface, so a dedicated-process drill cannot run the key stages. No local-validator or mocked-confirmation acceptance shortcut.
+Only feature branches and draft PRs are used: source #214 and planning #212 are updated separately in isolated worktrees. No merge, auto-merge, force-push, branch deletion, production deployment, archive, tag or release is authorized. Published `v5.1.0` is not acceptance evidence.

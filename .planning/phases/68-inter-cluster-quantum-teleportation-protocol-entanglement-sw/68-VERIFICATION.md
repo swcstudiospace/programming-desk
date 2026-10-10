@@ -1,54 +1,67 @@
 ---
 phase: 68-inter-cluster-quantum-teleportation-protocol-entanglement-sw
-verified: 2026-10-10T03:13:24Z
+verified: 2026-10-10T12:35:50Z
 status: human_needed
-score: 5/6 must-haves verified
-covered_files:
-  - .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-PLAN.md
-  - .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-SUMMARY.md
-  - services/desk-gateway/src/desk_gateway/server.py
-  - tests/test_quantum_teleportation_endpoints.py
-behavior_unverified: 1
-behavior_unverified_items:
-  - truth: "Phase 68 routes and the phase 69 drill share one pool, mesh, protocol, and transport with no second runtime"
-    test: "Run the drill against three dedicated worker processes, not the in-process worker hook"
-    expected: "Bell, purify, swap, and teleport receipts come from those processes"
-    why_human: "QKD and the drill key stages still require in-process workers. Remote processes cover teleport commands only."
+score: 5/5 original requirements locally behaviorally verified; signed acceptance pending
+behavior_unverified: 0
+behavior_unverified_items: []
+independent_approval: pending
+source_commits: [6c7d8ef, dac2fdf, d452fb1]
 ---
 
-# Phase 68: Inter-Cluster Teleportation Verification Report
+# Phase 68 — Original numerical teleportation and lifecycle verification
 
-**Phase Goal:** Numerical Bell distribution, repeater swap, teleportation at F >= 0.95, purification, and the phase-68 REST families.
-**Verified:** 2026-10-10T03:13:24Z
-**Status:** human_needed
+Original REQ-QTELEPORT-001–005 remain unchanged under the user's approved faithful classical simulator. All five behaviors have numerical, process and API evidence at the checkpoint below; signed acceptance remains 0/5. The phase has ten plans, ten summaries and 25 task coverage rows. No physical, device-independent (DI) or secrecy claim is made.
 
-## Goal Achievement
+| Original requirement | Observed behavior | Acceptance boundary |
+|---|---|---|
+| REQ-QTELEPORT-001 | Four Bell kinds, gate generation, marginals and dense oracles; requested-state-derived fidelity; distinct actual endpoint workers | Independent signed Desk receipt pending |
+| REQ-QTELEPORT-002 | Registered four-node route with no direct endpoint link; real intermediary Bell-state measurement (BSM); actual state, frame and fidelity; original custody and consumption | Independent signed Desk receipt pending |
+| REQ-QTELEPORT-003 | Selected PSI_MINUS with complex input; receiver Pauli corrections; fidelity 0.98; input destroyed and resource consumed; reuse returns 409; retained owner output is single-use | Independent signed Desk receipt pending |
+| REQ-QTELEPORT-004 | Distinct-input BBPSSW with actual acceptance and rejection, untwirled retained density and improvement; real unequal-parity failure is never eligible | Independent signed Desk receipt pending |
+| REQ-QTELEPORT-005 | Actual TCP selected-pair, authentication, body, type, resource and owner-release behavior; all six mutations return immediate 429 with four slots occupied; authentication ordering and overall 504 preserve custody and recovery | Independent signed Desk receipt pending |
 
-### Observable Truths
+## Checkpoint original-custody and terminal invariants
 
-| # | Truth | Status | Evidence |
-|---|-------|--------|----------|
-| 1 | Bad, unknown, and consumed pair selections fail closed | ✓ VERIFIED | Endpoint suite in the 87 passed run on `5e22296` |
-| 2 | Bodies are bounded JSON with unknown-field and finite checks | ✓ VERIFIED | Same endpoint suite |
-| 3 | A retried consumption conflicts instead of succeeding twice | ✓ VERIFIED | Same endpoint suite |
-| 4 | Mutations require lead or systems; reads accept any authenticated seat | ✓ VERIFIED | 401/403 tests in that suite, plus the `fa210d5` ledger read check |
-| 5 | Create, purify, repeater, and teleport share the injected runtime | ✓ VERIFIED | Gateway builds one phase-68 runtime and the drill receives it |
-| 6 | The same graph runs on dedicated worker processes for every consumer, including the drill | ⚠️ PRESENT_BEHAVIOR_UNVERIFIED | Remote transport exists for teleport commands. The drill's QKD stages do not use it |
+Original worker instances survive transfers and cleanup. Replacement absence or an unknown lease is not proof of release. The checkpoint tests cover pre-effect input preservation and interruptions after an applied reserve or measurement, with original obligations retained and the identical exception re-raised. The later composed probe exposed definite first-measurement refusal followed by interrupted fresh-input cleanup stranding an untouched pair as `RESERVED`. After correction, all four typed/generic × cancellation/keyboard-interruption cases preserved exact original halves and fresh-input uncertainty, restored the pair to `ACTIVE`, and allowed an actual subsequent teleport. This closes that narrow rollback defect with observed evidence, not a final full-suite or signed acceptance claim. An ambiguous lease cannot be reissued under a new operation. Per-session owner-release serialization preserves confirmed acknowledgements, replay and unrelated parallelism; definite refusal and pre-send failure leave release available. Provisional outputs activate only after commit.
 
-**Score:** 5/6 truths verified (1 present, behavior unverified)
+## CHECKPOINT — Parent execution and provenance
 
-### Requirements Coverage
+- Checkpoint source commit: `6c7d8ef`; source receipt/gate publication head: `dac2fdf` on [draft PR214](https://github.com/swcstudiospace/programming-desk/pull/214). The user checkout was untouched. These results precede fresh review `30954537` and its repair union; they do not establish that the new tree is green.
+- Complete checkpoint consumer suite: **752 passed in 414.33 s**, exit 0, tool wall time 415.77 s. Command: `TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests` from `/tmp/desk-v51-implementation`.
+- Checkpoint gate self-tests: **299 passed in 17.66 s**, exit 0, tool wall time 18.81 s. Committed-source G1/G3/G4/G5/G6/G7 passed; corrected strict G2 failed solely for missing independent `approved_by`.
+- C_TCP used four distinct CLI workers and a gateway, with no direct endpoint link: **20000 repeater-only E91 rounds**, 256-bit endpoint keys, QBER 0, CHSH 2.828630008762767 and lower bound 2.3775443874507514. Original one-shot owner use was observed; final active leases were 0 on all nodes. Tool wall time was 1125.58 s. The process started before the final error-only release, storage and exporter guards; this is normal-flow evidence with explicit provenance, not an unqualified final-head execution claim.
+- All five numerical drill stages passed. The genuine publisher then refused with `insufficient_balance`, null signature and slot, and `all_passed=false`. Unrelated user capacities 3/3/0/0 stayed unchanged.
+- Checkpoint two-worker/gateway HTTP smoke: exit 0, tool wall time 2.68 s. All six busy mutations returned 429 after four actual applied reserves; authentication returned 401/403 without extra effects. An applied-reserve 504 retained original custody, the next 200 showed slot recovery, and explicit operator cleanup left 0/0. Only the smoke's private timeout was shortened; the product timeout remained 60 s and E91/drill sample counts were unchanged.
+- Original failed/intermediate runs and before/after probes remain in the SYSTEMS receipt. The 752-pass checkpoint does not erase 11/728, 4/744, 5/32 or fixture/API failures. The full Python 3.12 suite was not run; the complete checkpoint suite used Python 3.14.
 
-| Requirement | Status | Blocking Issue |
-|-------------|--------|----------------|
-| REQ-QTELEPORT-001 | ? NEEDS HUMAN | Kernel and pool suites passed in earlier commits; no independent approval |
-| REQ-QTELEPORT-002 | ? NEEDS HUMAN | Same |
-| REQ-QTELEPORT-003 | ? NEEDS HUMAN | F >= 0.95 is in the protocol tests; not re-accepted here |
-| REQ-QTELEPORT-004 | ? NEEDS HUMAN | Purification tests exist; not re-accepted here |
-| REQ-QTELEPORT-005 | ? NEEDS HUMAN | Route tests passed; requirement checkbox stays open |
+## Current review — Boundary corrections and complete local union passed
 
-**Coverage:** 0/5 requirements accepted
+Fresh Greptile review `30954537` completed on `dac2fdf` with confidence 3/5 and was not approved. The earlier repair wave addressed unknown-session release lock retention, history-dependent worker-instance index work, odd-width duplicate-last algebraic proof binding and raw SQLite errors escaping the HTTP receipt/snapshot boundary. Exact committed-prefix verification remained protected.
 
-## Not claimed
+The initial after-repair smoke exited 0 in 2.85 s: unknown-session locks fell from 128 to 0 and history-index visits from 257 (514 with doubled history) to 0. At that intermediate point, the authentic proof remained true and the 4-to-3 forgery was still algebraically true but rejected by committed verification. The later final boundary smoke exited 0 in 2.28 s: both algebraic and committed verification rejected the forgery, authentic verification stayed true, history traversal and unknown-session locks stayed at 0, receipt/snapshot returned typed 503 `ledger_unavailable`, and workers ended at 0/0.
 
-Phase 68 checkboxes stay open. This report does not accept the milestone.
+The first focused union was **1 failed, 282 passed in 85.92 s**, tool wall time 87.81 s. Its fixture incorrectly expected a physically held lease after release had actually applied and its acknowledgement was lost. That fixture was corrected while preserving original-scope quarantine, unresolved obligations and the no-retry guard. The corrected focused union then observed **283 passed in 82.94 s**, exit 0, tool wall time 84.41 s. The complete consumer suite subsequently observed **759 passed in 416.36 s**, exit 0, tool wall time 417.86 s, on Python 3.14. These are real checkpoints before the two additional source boundaries below, not final current-behavior acceptance. Earlier 749-, 751- and 752-pass checkpoints and the failed first union remain historical evidence.
+
+1. **Phase 68 pre-effect rollback defect, P1, corrected and narrowly verified:** definite first-measurement refusal previously entered typed or generic exception cleanup whose await could skip reservation release on `CancelledError` or `KeyboardInterrupt`. Separate refusal and cleanup-interruption tests had missed this composition. The new composed regression and actual after probe now cover both branches and both interruption classes, preserve exact original halves and fresh-input uncertainty, propagate the identical interruption, restore `ACTIVE` and demonstrate real subsequent teleport success.
+2. **Phase 69 proof-read storage defect, corrected and narrowly verified:** authenticated GET proof previously let storage-outage `LedgerError` escape. Native connection closure now returns typed 503 `ledger_unavailable`; authentic proof 200, auth-first 401 and invalid-query 400 remain observed. This distinct GET boundary is covered independently of receipt/snapshot guards.
+
+The parent's actual before-correction probe (job `bg_224`, `artifact://1154`) exited 0 in 2.23 s and reproduced both defects. All four typed/generic × cancellation/keyboard-interruption cases preserved exception identity, fresh-input uncertainty, no later transport effects and exact original pair custody, with worker leases 1/1; nevertheless the pair remained `RESERVED` and a real subsequent teleport returned `pair_unavailable`. Authentic GET proof first returned 200, then native connection closure caused authenticated GET proof to raise `LedgerError`; unauthenticated and invalid-query requests still returned 401 and 400. Successful execution of a defect-reproducing probe is not a product pass.
+
+The parent's actual after-correction probe (`bg_225`, `artifact://1160`) exited 0 with tool wall time 2.39 s. All four composed cases restored the pair to `ACTIVE` and an actual next teleport succeeded with `teleported`; exact original halves/leases 1/1, identical interruption marker, no later transport effects and the new input's original uncertain obligation were retained. Native proof-read outage returned 503 `ledger_unavailable`, with controls 200/401/400. Parent execution of the six targeted consumer regressions (`bg_226`) then passed: **6 passed, 106 deselected in 1.94 s**, exit 0, tool wall time 2.97 s. This closes the two narrow source warnings with observed proof.
+
+The parent subsequently applied scoped formatting only to the new guards and test blocks, with no unrelated restyling. The complete post-format consumer suite (`bg_228`) observed **765 passed in 412.69 s**, exit 0, tool wall time 414.06 s, on Python 3.14. This is valid local phase 68 evidence after the teleport and proof-HTTP corrections. The phase 68 independent stored-comment cohort reviewed all 49 comments and reported 49 correct/repaired with 0 new findings; this is advisory, not signed approval. The 765-pass checkpoint is not final integrated acceptance: a later phase 69 review found a new `claim_anchor` rollback-failure defect, described below.
+
+**Later phase 69 claim rollback boundary, P2, corrected and narrowly verified:** rollback-error suppression in `claim_anchor` could leave the handle open with an uncommitted claim and retained transaction (`quantum_ledger.py`, reviewed lines 1669–1682; rows 69-04-2 and 69-10-2). The actual after-correction probe observed three fault cases in 0.62 s: all public ledger paths closed, peer/reopened committed state remained authoritative and keyboard-interruption identity was preserved. Parent execution `bg_234` observed **3 passed, 177 deselected in 0.57 s**, exit 0, tool wall time 1.32 s. This closes the narrow claim rollback warning. The 765-pass checkpoint remains pre-claim evidence; it is not retroactively credited with that regression.
+
+The complete stable post-claim consumer suite (`bg_235`) observed **768 passed in 425.51 s**, exit 0, tool wall time 427.04 s, on Python 3.14 at local product commit `d452fb1`. It includes the corrected teleport cleanup composition, proof GET outage boundary and claim rollback guards. This locally observed final source union supersedes the pending-suite state, not historical failures or the explicitly pre-claim 765-pass checkpoint. The product commit is local and unpublished.
+
+Latest CI self-tests observed **299 passed in 15.53 s**, exit 0, tool wall time 16.07 s. All 70 independently reviewed source comments (49 phase 68 plus 21 phase 69), including the extra claim P2 root, are repaired/correct with 0 new findings. Phase 68 local Nyquist coverage is now compliant across all 25 task rows and five original behaviors; phase 69 remains partial only for genuine live original 009/010. These are advisory coverage/dispositions, not signed gate approval. All eleven original checkboxes remain open and signed acceptance remains 0/11.
+
+## Independent reviews and blocking gates
+
+Independent ASVS-L2 review retains 50 advisory-closed threats across 57 occurrences (phase 68: 22/29; phase 69: 28/28), with 0 open threats, no accepted risks and no waivers; the whole security gate remains blocked. Latest whole-service SAST scanned **57419 lines** and **FAILED** with **2 HIGH, 6 MEDIUM and 105 LOW**, exit 1, tool wall time 7.91 s; exact core findings are **10 LOW**. Eight legacy HIGH/MEDIUM findings are unchanged and need owner/QUALITY disposition. Earlier 57374-line/107-LOW and 12-core-LOW scans remain historical.
+
+Current source strict G2 failed for both missing independent `approved_by` and a false positive involving an old command; the isolated QUALITY-owned gate repair is active and pushing is held. The earlier checkpoint's stamp-only G2 failure is not the current disposition. Type diagnostics have a limitation and are not claimed clean. The product `d452fb1` is local/unpublished; final published-head Greptile approval, signed G2/QUALITY security approval and independent receipt remain missing. Local 768-pass behavior and compliant phase 68 Nyquist coverage do not establish release or merge readiness. Requirements remain open; no milestone completion, archive, merge, auto-merge or force-push is claimed.
+
+Across the original deliverable, signed acceptance remains 0/11. Original REQ-QTELEPORT-009 and positive REQ-QTELEPORT-010 remain blocked on genuine funded Devnet publication and exact confirmed readback, followed by positive `all_passed` for the five-stage drill. The latest supplied balance is 0 lamports at confirmed slot 509600313; the earlier 0-balance slot 509555447 remains historical evidence. Official `requestAirdrop` returned 429 with `Retry-After: 86400`, requiring the full interval until 2026-10-11. Local controls and numerical-stage success do not substitute for that live evidence.

@@ -7,6 +7,103 @@
   "audit_status": "gaps_found",
   "source_snapshot": "main 2229570",
   "branch": "bot-00-programming-lead/v5.1-completion-audit",
+  "historical_baseline": {
+    "scope": "Original October 9 diagnostic and planning-discovery observations at main 2229570 only; not current source status.",
+    "timestamp_provenance": "Top-level started_at/completed_at remain the original historical baseline. No current continuation timestamp is invented.",
+    "original_command_indices": [0, 1, 2, 3, 4, 5],
+    "original_claim_scope": "The original claims and historical_unverified list describe only the October 9 baseline, including missing code/artifacts and unexecuted workflows. Original command rows, indices, timestamps and timings are unchanged."
+  },
+  "continuation": {
+    "provenance": "Actual parent observations supplied in local://v51-fresh-review-context.json and subsequent parent messages; this document worker executed no commands.",
+    "published_source_head": "dac2fdf99daa8ca1b9a6c3ce6e0db9edc59631b3",
+    "published_code_checkpoint": "6c7d8ef",
+    "current_committed_source_head": "d6b7789",
+    "current_product_source_commit": "d452fb1",
+    "latest_local_source_receipt_head": "d6b7789",
+    "source_receipt_commit_command_index": 28,
+    "source_receipt_commit_observation": "Actual parent local/unpublished receiptcommitd6b7789; productd452fb1 unchanged. Exact SOURCEcmd94 entiredict preserved/correct19declaredfiles/final768/PR215dependency/SAST recorded; current remoteDACunchanged/sourcepushhelduntil215ownerintegration+signature. Parent supplied current verification observation time17:54:09Z; historical top-level started/completed timestamps unchanged.",
+    "source_commit_observation": "Parent product-only seven owned source paths committed with fix(quantum): close custody proof and claim recovery boundaries, exit0/tool.25s; bot01 branch confirmed. Exact path list not supplied here, so no synthetic command row. Not pushed; published head remains dac2fdf.",
+    "current_source_gates": {
+      "provenance": "Actual parent observations; exact commands not supplied here, no fabricated rows.",
+      "passed": [{"gate": "G1 manifest", "duration_s": 0.77}, {"gate": "G1 attribution", "duration_s": 0.77, "files": 21}, {"gate": "G7", "duration_s": 0.87}, {"gate": "G3 secrets", "duration_s": 1.57, "files": 21}, {"gate": "G4", "duration_s": 0.76}, {"gate": "G5/G6", "duration_s": 0.87}],
+      "G2": {"status": "FAILED", "duration_s": 0.79, "blockers": ["Independent approved_by absent", "Source receipt historical commands[94] contains git add -f --; generic -f\\s+-- bypass regex matches despite mandatory receipt force-add. Cross-seat checker/policy disposition under parent investigation."]},
+      "qualification": "Historical exact source command retained; no rewrite to hide flag, self-waiver, downgrade or only-stamp claim. Source push held; LEAD final planning gates still pending."
+    },
+    "source_receipt_metadata_correction": "Parent actual21-net-path enumeration/tool.22s/artifact1203 found missingquantum_key.py; SOURCE receipt files_changed corrected. Historical SOURCEcommands[94] entiredict verbatim preserved; all15 actual staged targets now declared in19-file primaryscope. Metadata scope correction, not force-add classifier waiver. LEAD files_changed70 union unchanged.",
+    "quality_owner_correction_progress": "QUALITY literal classifier at2bea6d1 independentlyreviewed0actionable/supersededparserremoved; actual afterpycompileclean/tool.22s follows original.20s bracefailure retained. PatchedQUALITY strictCLIindex26 exit1/tool.29s ONLYmissingapproved_by, forceaddfalsepositivegone with history intact. QUALITYfullselftestsindex27 326pass17.37s/tool17.86s/no skips. SOURCEoldcheckerunintegrated/no SOURCEcurrentpass/pushheld.",
+    "parent_inventory_parse_observation": "Actual parent Eval parse checked original11open,20plans/20summaries,20reqempty; no execution command fabricated and no acceptance inferred.",
+    "quality_patched_cli_command_index": 26,
+    "quality_full_selftests_command_index": 27,
+    "cross_seat_qualification": "QUALITY2bea6d1 owner-branch proof only; patched CLI still FAILED absent approval. Not SOURCEbranch checker integration/pass/stamp or SAST approval. Source prior two-blocker observation preserved until owner integration.",
+    "quality_owner_dependency": {
+      "draft_pr": 215,
+      "url": "https://github.com/swcstudiospace/programming-desk/pull/215",
+      "code_commit": "2bea6d1",
+      "docs_owner_receipt_commit": "c7d7c14",
+      "latest_owner_receipt_commit": "6d19119",
+      "parent_observations": "Owner branch push pipeline exit0/tool2.33s; gh draft PR creation againstmain exit0/tool2.38s. Exact commands not supplied; no invented rows.",
+      "gates": "QUALITYG1/G3/G4/G5G6/G7 passed5paths; strictG2FAILED ONLYmissingindependentLEAD/human approval,not ownerapproval.",
+      "boundary": "SOURCE checker NOTintegrated/defaultunmerged/sourcepushheld; planning draft can publish independently. No merge/automerge/stamp/waiver."
+    },
+    "planning_command_indices": [6, 7, 8, 9, 10, 11],
+    "delivery_enumeration_command_index": 12,
+    "full_suite_checkpoint_command_index": 13,
+    "post_format_smoke_command_index": 14,
+    "two_boundary_before_probe_command_index": 15,
+    "latest_read_only_balance_command_index": 16,
+    "source_corrective_status": "All70 sourcecomments49+21 repaired/0new and extraP2actualclosed; finalconsumer768passed atstableproductd452fb1. Historical765 preclaimfix retained. Remote70flagsfalse/signed0; G2stilltwo blockers/SASTlegacy/livefunding blocked.",
+    "inventory": {"plans": 20, "summaries": 20, "tasks": 48, "phase68_tasks": 25, "phase69_tasks": 23, "original_criteria": 11, "signed_acceptance": 0, "required_workflows": 5, "seams": 12, "source_wired_seams": 11, "routes": 19, "mutations": 12, "reads": 7, "threats": 50, "threat_occurrences": 57, "accepted_risks": 0},
+    "fresh_review": {"id": "30954537", "status": "COMPLETED", "confidence": "3/5", "approved": false, "working_boundaries_repaired": 4, "stored_p2_comments": ["296576775", "296576776", "296576777"], "stored_p2_addressed": false},
+    "unresolved_source_findings": 0,
+    "findings_status_qualification": "0 currently identified source findings after complete49+21 cohorts and extraP2consumer closure; not finalgreen or remoteapproval. Claimrecovery actual AFTERindex22 closes allten publicpaths/nextclaim in allthree cases; full765 still before correction.",
+    "two_boundary_after_probe_command_index": 17,
+    "focused_corrective_tests_command_index": 18,
+    "gate_selftests_command_index": 19,
+    "new_full_suite_checkpoint_command_index": 20,
+    "anchor_claim_before_probe_command_index": 21,
+    "anchor_claim_after_probe_command_index": 22,
+    "claim_regression_tests_command_index": 23,
+    "post_claim_sast_command_index": 24,
+    "post_claim_regression_tests": "3passed.57s/177deselected/exit0/tool1.32s; focused claimrecovery regression coverage, not full suite.",
+    "latest_source_sast": {"exit_code": 1, "duration_s": 7.91, "loc": 57419, "high": 2, "medium": 6, "low": 105, "errors": [], "skips": 0, "nosec": 0, "core_gateway_config_low": 10, "qualification": "FAILED; unchanged eight legacy HIGH/MEDIUM findings need owner/QUALITY disposition,no waiver."},
+    "parent_tool_observations": [{"method": "Parent actual Eval using PyYAML safe_load, not a shell command", "finding": "All20 plans parse; all must-have truths are strings; no errors. Current69 matrix has six rows/four exact Runtime verified statuses. Two older PR212 findings already repaired by current quoting and real REQ006 row.", "qualification": "Tool observation only; no invented command row, duration or signed approval."}],
+    "final_full_suite": {"job": "bg_235", "status": "COMPLETED", "command_index": 25, "passed": 768, "pytest_duration_s": 425.51, "tool_duration_s": 427.04, "exit_code": 0, "source_head": "d452fb1", "python": "3.14 only", "qualification": "Stable product during execution; commit changed git index only, no source churn. Final consumer pass is not chain acceptance/signedapproval/G2 or SAST waiver."},
+    "quality_owner_branch_observation": "Parent created isolated /tmp/desk-v51-quality-gate from origin/main c904, worktree command exit0/tool1.33s. QUALITY owner fix for forced receipt staging false positive forthcoming, not integrated/pass/waiver. Exact command not supplied, no fabricated row. Source push held.",
+    "anchor_claim_keyboard_provenance": "BEFORE artifact1171 observes pending/uncommitted writer claim, open same-handle behavior and identical KeyboardInterrupt. rollback_attempt_saw_native_transaction is observed after later same-handle retry, not a separately timed initial Keyboard rollback/count. Initial Keyboard rollback omission is [SOURCE INFERENCE] from sqlite-only except, not an initial-call metric. I/O rollback failure is actual observed behavior.",
+    "new_full_suite_checkpoint": "765passed412.69s/exit0/tool414.06s,Python3.14 only; AFTER Qt+HTTP guards, BEFORE new claim_anchor failed-rollback P2 correction. Not final source-head or chain acceptance.",
+    "previous_source_sast_57408": {"duration_s": 6.81, "loc": 57408, "high": 2, "medium": 6, "low": 107, "core_gateway_config_low": 12, "qualification": "Prior parent projection retained, not pass; no supplied exit/other fields."},
+    "latest_independent_review": "All70 sourcecomments49+21 repaired/0new/extraP2actualclosure; storedremote70flagsfalse/signed0. Stableproductd452fb1 final768consumerpass; localG1/G3/G4/G5/G6/G7pass, strictG2two blockers persists untilQUALITY ownerintegration+stamp. SAST8legacyHIGHMED/livefunding blocked.",
+    "focused_checkpoint": "First union exit 1: 1 failed/282 passed in85.92s/tool87.81s; fixture physically-held expectation corrected without erasing original ACK-loss quarantine. Corrected union 283 passed82.94s/tool84.41s.",
+    "actual_boundary_smoke_checkpoint": "Before2.18s: genuine4to3 algebraic forgery accepted/514 history visits/128 locks/native HTTP error; after2.28s: genuine forgery both false/authentic true,257 actual adopted records,0 release history visits,128 unknownIDs/0 locks,both HTTP503 ledger_unavailable,workers0/0.",
+    "full_suite_checkpoint": "759 passed416.36s/exit0/tool417.86s,Python3.14 only; BEFORE newly discovered P1 corrective fix. Not final corrected-head or genuine-chain acceptance.",
+    "published_checkpoint_qualification": "752 passed414.33s/tool415.77s, ci299 passed17.66s/tool18.81s and G1/G3/G4/G5/G6/G7 at6c7d8ef predate fresh30954537 repairs; strictG2 only missing independent stamp. Four-worker1125.58s process began before final error-only guards. These remain valid qualified checkpoints, not final acceptance.",
+    "security_checkpoint": "50 ASVS-L2 unique threats/57 occurrences,phase6822/phase6928 advisoryclosed,0 accepted risks,not signed approval.47 exact installed noneditable versions0known/fixes empty,version-only not artifact integrity.",
+    "fresh_sast": {"exit_code": 1, "duration_s": 7.19, "loc": 57374, "high": 2, "medium": 6, "low": 107, "errors": [], "skips": 0, "nosec": 0, "core_gateway_config_low": 12, "qualification": "FAILED; eight unchanged legacy HIGH/MEDIUM findings need owner/QUALITY disposition, no waiver. Historical57348LOC scan remains historical."},
+    "funding": {
+      "public_payer": "52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv",
+      "balance_lamports": 0,
+      "confirmed_slot": 509600313,
+      "latest_balance_tool_duration_s": 0.25,
+      "previous_read_only_balance": {"lamports": 0, "confirmed_slot": 509555447, "tool_duration_s": 0.37},
+      "new_funding_request": false,
+      "official_cooldown": "Earlier JSONRPC-32603 then HTTP429 Retry-After86400; no retry before full approximately2026-10-11 04:32Z interval.",
+      "needs": "Manually fund exact payer through QuickNode free-base human verification, or privately provision already-existing eligible provider access. No signup/payment/mainnet transfer/CAPTCHA automation/proxy/aliases/rate evasion/validator/mock substitute.",
+      "routes": [
+        {"url": "https://solana.com/docs/rpc/http/requestairdrop", "eligibility": "Supported Devnet requestAirdrop; provider rate limits and full observed cooldown."},
+        {"url": "https://solana.com/developers/cookbook/development/airdrops-and-faucets", "eligibility": "Official alternatives, not unconditionally machine-available."},
+        {"url": "https://docs.chainstack.com/reference/chainstack-faucet-get-tokens-rpc-method", "eligibility": "POST https://api.chainstack.com/v1/faucet/solana with address/Bearer CHAINSTACK_API_KEY; no mounted Chainstack tools."},
+        {"url": "https://faucet.chainstack.com/solana-devnet-faucet", "eligibility": "Solana recipient >=0.8SOL mainnet plus historicalholdings; topupDevnetto1SOL/24h.0.08ETH is EVM,notSolana.MCPrequest_testnet_funds samekey/eligibility,not bypass."},
+        {"url": "https://www.helius.dev/docs/rpc/devnet-sol", "eligibility": "Paid plan required for faucet and RPC airdrops."},
+        {"url": "https://faucet.quicknode.com/solana/devnet", "eligibility": "Free-base human bot verification,12h/wallet,no documented unattended API; base no account/mainnetminimum/Xpost required."},
+        {"url": "https://docs.pinestake.com/api/faucet", "eligibility": "POST https://api.pinestake.com/faucet address+cfToken; GitHub OAuth session/Turnstile/allowed origins,8h/account."},
+        {"url": "https://www.devnetfaucet.org", "eligibility": "GitHub contributor verification,human20SOLflow,no documented unattended publicAPI."},
+        {"url": "https://docs.triton.one/chains/solana", "eligibility": "Customer/token/private RPC required; no verified public independent faucet."}
+      ],
+      "credentials_discovery": "Names only: HELIUS_API_KEY,QUICKNODE_API_KEY,CHAINSTACK_API_KEY,TRITON_API_KEY,ALCHEMY_API_KEY,HELIUS_DEVNET_RPC_URL,QUICKNODE_DEVNET_RPC_URL,TRITON_DEVNET_RPC_URL absent; no values read/printed."
+    },
+    "delivery_enumeration_provenance": "Actual parent command at index12, raw observed artifact://1143:40 nettrackedpaths plus30 newuntrackedpaths; union deduplicated into files_changed. Excludes inherited AGENTS/.cursor/QUALITY paths; not final ownership-gate proof.",
+    "final_status": "Original11open; all70sourcecommentsrepaired/0new/final768consumerpassstableproductd452fb1, no signedapproval. Source notpushed; G2two blockers untilQUALITYownerintegration+stamp; localothergatespass/SAST8legacyHIGHMED/funding0slot509600313/positivechainmissing persist. No merge/waiver."
+  },
   "planning_evidence_addendum": {
     "finding": "Greptile #212 finding 296100815 / PRRT_kwDOUgQ0os6q75AU",
     "provenance": "New read-only observations by delegated audit documentation worker; original started_at, completed_at and commands[0] diagnostic timing/provenance are unchanged. These observations do not attest to earlier parent command execution.",
@@ -92,6 +189,164 @@
       "stderr": "",
       "stdout_sha256": "5d9a66e7725ed8dbc1f47930e30a6733709760711ec277cb9922158450b580ba"
     }
+    ,
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs query init.milestone-op",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.52,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "v5.1/two phases/zero complete/all_phases_completefalse/archive_count0"
+    },
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs query roadmap.analyze",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.63,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "Each phase10plans/10summaries,total20/20,diskexecuted/roadmapfalse;100percent progress is SUMMARY coverage only,not original acceptance"
+    },
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs loop render-hooks verify:post --raw",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.58,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "Nyquist/security/ui hooks rendered;rendering not workflow execution or compliance proof"
+    },
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs query init.autonomous",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.35,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "No explicit flags;converge false;excluded auto-dispatch convergence hooks"
+    },
+    {
+      "cmd": "node /root/.agents/gsd-core/bin/gsd-tools.cjs query init.manager",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.57,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "68human_needed/69gaps_found,phasecompletefalse,twoinprogress"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.48,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "LEAD attribution passed40committed-diff files before final artifacts commit;not final-untracked diff proof"
+    },
+    {
+      "cmd": "git diff --name-only origin/main -- .planning/ .receipts/bot-00-programming-lead/ && git ls-files --others --exclude-standard -- .planning/",
+      "cwd": "/tmp/desk-v51-audit", "exit_code": 0, "duration_s": 0.40,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_artifact": "artifact://1143",
+      "output_tail": "40 net tracked paths plus30 new untracked paths;deduplicated union in files_changed;not final G1 proof"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 417.86,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "759 passed in416.36s;Python3.14 only;BEFORE new independent-review P1 correction;not corrected-head final suite or genuinechain acceptance"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-current-review-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway", "exit_code": 0, "duration_s": 2.23,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "Actual post-format boundary smoke passed;guard576–606 whitespace only;BEFORE new P1 correction,not fullsuite/chain acceptance"
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-final-boundaries-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 0,
+      "duration_s": 2.23,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_artifact": "artifact://1154",
+      "output_tail": "Actual BEFORE probe: four typed/generic refusal x CancelledError/KeyboardInterrupt cases preserve originalheld1/1/custody,identicalmarker,nofollowuptransport,newinputobligation but selectedpairRESERVED/nextteleportpair_unavailable. GETledger/proof authenticcontrol200 then nativeconnclosed raisesLedgerError; unauth401/invalid400. Exit0 records defects,not passing behavior."
+    }
+    ,
+    {
+      "cmd": "curl --silent --show-error --max-time 20 https://api.devnet.solana.com --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",{\"commitment\":\"confirmed\"}]}'",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 0,
+      "duration_s": 0.25,
+      "observed_by": "parent bot-00-programming-lead",
+      "stdout_projection": {"result": {"context": {"slot": 509600313}, "value": 0}},
+      "stdout_filter": "Exact supplied result.context.slot and result.value only; other response fields not supplied.",
+      "output_tail": "Latest read-only getBalance:0lamports/confirmedcontext.slot509600313;no new funding request or chain publication."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-final-boundaries-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway", "exit_code": 0, "duration_s": 2.39,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "Actual AFTER: all4typed/generic x CancelledError/KeyboardInterrupt cases pairACTIVE/nextactualteleportsuccess; oldhalves unchanged/NEWinputobligation/noawait/identicalmarker preserved. Proofnativeoutage503/auth401/invalid400/authenticcontrol200. Narrowbehaviorrepaired,no waiver/not finalhead acceptance."
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_teleportation.py tests/test_quantum_teleportation_endpoints.py -k 'preeffect_cleanup_interruption_restores_reservation or closed_storage_proof_returns_typed_ledger_unavailable'",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 2.97,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "6passed in1.94s/106deselected; focusedcorrective boundaries only,not complete suite."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 16.07,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "299passed in15.53s; gateselftests,not committed-diff gatepass/QUALITY approval."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 414.06,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "765passed in412.69s;Python3.14 only;AFTERQt+HTTPguards,BEFORE newP2claim_anchorfailedrollback correction. Valid fullconsumercheckpoint,not all-sourcegreen/finalhead/genuinechain acceptance."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-anchor-claim-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway", "exit_code": 0, "duration_s": 0.42,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_artifact": "artifact://1171",
+      "output_tail": "Actual BEFORE threecases: commitIO/rollbackfailure, identical KeyboardInterrupt commit interruption, conflictrollbackFalse; writerpendingclaim/tenpublicpathsserved vspeerabsent incommitcases, samehandlenextclaimLedgerError/native transaction stranded. Peer/reopen exactoriginalroot+authorityintact. Diagnosticexit0 reproduces gap,not productpass."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-anchor-claim-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway", "exit_code": 0, "duration_s": 0.62,
+      "observed_by": "parent bot-00-programming-lead", "output_artifact": "artifact://1179",
+      "output_tail": "Actual AFTER same3nativecases: all10publicpaths/nextclaimclosed; SQLLedgerError/Keyboardidentity, conflictfailedrollbackLedgerClosedErrornotfalse. Peer/reopenexactroot/oldauthority,pendingclaimabsent incommitcases; correctnewwinner+duplicateFalse. Narrowactualrecoveryrepair,not final3target/full/SASTgategreen/approval."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no tests/test_quantum_ledger_anchor.py -k 'claim_commit_and_rollback_failure or duplicate_claim_rollback_failure'",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 1.32,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "3passed in.57s/177deselected; claimrecovery focused regressions only,not complete suite."
+    },
+    {
+      "cmd": "uvx --default-index https://pypi.org/simple bandit -r src/desk_gateway -f json -o /tmp/desk-v51-sast.json",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway", "exit_code": 1, "duration_s": 7.91,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "57419LOC/HIGH2MED6LOW105/errors[]/skips0/nosec0/core10LOW; unchanged8legacyHIGHMED. FAILED,no waiver/not signed pass."
+    }
+    ,
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --tb=short --show-capture=no --junitxml=/tmp/desk-v51-gateway.xml tests",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 427.04,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "768passed in425.51s/Python3.14 atstableproductd452fb1; commitduringrun changedgitindexonly/no sourcechurn. Finalconsumerpass,not signedacceptance/genuinechain/G2/SAST waiver."
+    }
+    ,
+    {
+      "cmd": "python3 /tmp/desk-v51-quality-gate/ci/gates/check_receipt.py --receipt /tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+      "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 1, "duration_s": 0.29,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "QUALITYpatched2bea6d1 strictCLI FAILED ONLYmissingapproved_by; forceaddfalsepositivegone/no historyrewrite/fake stamp. SOURCEoldcheckerunintegrated/pushheld; not SOURCEcurrentCIpass."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+      "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 0, "duration_s": 17.86,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "326passed in17.37s/no skips onQUALITYownerbranch; not SOURCEintegration/approval."
+    }
+    ,
+    {
+      "cmd": "git add -f .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json && git commit --only -m 'chore(verification): record final v5.1 product and owner dependency' -- .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+      "cwd": "/tmp/desk-v51-implementation", "exit_code": 0, "duration_s": 0.38,
+      "observed_by": "parent bot-00-programming-lead",
+      "output_tail": "Local/unpublished SOURCEreceiptcommitd6b7789; exactcmd94entiredictpreserved/correct19declaredfiles/productd452fb1/final768/ownerPR215/SAST. Literal receiptforce-add/gitmetadata,no stamp/historyrewrite; sourcepushhelduntilownerintegration+signature."
+    }
   ],
   "claims": [
     {
@@ -133,9 +388,57 @@
     {
       "claim": "New verify:post hook rendering lists Nyquist validate-phase producing VALIDATION.md, security secure-phase producing SECURITY.md, and UI ui-review producing UI-REVIEW.md. Hook discovery is not hook execution or a compliance/security pass.",
       "evidence_command_index": 4
+    },
+    {"claim": "Actual continuation init identifies v5.1/two phases/zero complete/all_phases_completefalse/archive_count0.", "evidence_command_index": 6
+    },
+    {"claim": "Actual continuation roadmap records20plans/20summaries;100percent is SUMMARY coverage,not original acceptance.", "evidence_command_index": 7
+    },
+    {"claim": "Continuation Nyquist/security/UI hooks rendered;not workflow execution or compliance.", "evidence_command_index": 8
+    },
+    {"claim": "Actual autonomous query had no explicit flags/convergefalse;excluded auto-dispatch convergence hooks.", "evidence_command_index": 9
+    },
+    {"claim": "Actual manager query retained68human_needed/69gaps_found,twoinprogress/phasecompletefalse.", "evidence_command_index": 10
+    },
+    {"claim": "LEAD attribution passed40committed-diff paths before final artifacts commit;not finaluntracked ownership.", "evidence_command_index": 11
+    },
+    {"claim": "Actual delivery enumeration provides70tracked/untracked LEAD artifactpaths including20plans/20summaries;files_changed records deduplicated union,not final G1pass.", "evidence_command_index": 12
+    },
+    {"claim": "New-tree complete gateway checkpoint759passed416.36s/tool417.86s Python3.14 only;predates new P1 correction,not final corrected-head or genuinechain acceptance.", "evidence_command_index": 13
+    },
+    {"claim": "Actual post-format boundary smoke completedexit0/tool2.23s;not corrected-P1/fullsuite/chain acceptance.", "evidence_command_index": 14
     }
+    ,
+    {
+      "claim": "Actual BEFORE probe reproduces both remaining source defects: reserved selected pair after interrupted new-slot cleanup in four cases, and GETledger/proof escaping LedgerError after native connection closure. Existing original custody/interruption/auth/invalid guards preserved; diagnostic exit0 is not correctness.",
+      "evidence_command_index": 15
+    }
+    ,
+    {
+      "claim": "Latest actual read-only public-payer getBalance returned0lamports at confirmedslot509600313;no new funding request or genuine publication.",
+      "evidence_command_index": 16
+    }
+    ,
+    {"claim": "Actual AFTER probe behavior-repairs all4reservation cases with pairACTIVE/nextteleport success while preserving originalcustody/newinputobligation/identicalinterruption/nofollowup; proofnativeoutage503/auth401/invalid400/control200. Narrow repairs only,independentfinal disposition pending.", "evidence_command_index": 17},
+    {"claim": "Focused corrective tests6passed1.94s/106deselected/tool2.97s;not complete suite.", "evidence_command_index": 18},
+    {"claim": "Gate selftests299passed15.53s/tool16.07s;not final committed-diff gates or approval.", "evidence_command_index": 19}
+    ,
+    {"claim": "Actual complete consumer checkpoint765passed412.69s/tool414.06s Python3.14 afterQt+HTTPguards,BEFORE new claim_anchor failedrollback P2 correction;not finalsourcehead/all-sourcegreen/chain acceptance.", "evidence_command_index": 20}
+    ,
+    {"claim": "Actual BEFORE anchor-claim recovery probe reproduces allthreecases of pendingclaim/publicread exposure or conflict strandedtransaction while peer/reopen originalroot/authority remain intact;exit0 diagnostic,not productpass or genuinechain acceptance.", "evidence_command_index": 21}
+    ,
+    {"claim": "Actual anchorclaim AFTER closes allten publicpaths/nextclaim on same3nativefaultcases, preserves SQLLedgerError/Keyboardidentity and peer/reopenroot/authority; conflictrecoveryfailsclosedLedgerClosedError,correctnewwinner/duplicateFalse. Narrow repair evidence,not finalgreen/approval.", "evidence_command_index": 22}
+    ,
+    {"claim": "Actual claimrecovery regression selection3passed.57s/177deselected/tool1.32s;focused boundaries,not whole suite.", "evidence_command_index": 23},
+    {"claim": "Postclaim whole-service Bandit FAILED exit1/tool7.91s:57419LOC/2HIGH6MED105LOW/core10LOW,errors[]skips0nosec0;eight legacyHIGHMEDunchanged,no waiver.", "evidence_command_index": 24, "expects_failure": true}
+    ,
+    {"claim": "Final complete gateway consumer suite768passed425.51s/tool427.04s atstableproductd452fb1/Python3.14 only; commitduringrun gitindexonly/no sourcechurn. Not signedapproval/chainacceptance or waiver ofG2/SAST.", "evidence_command_index": 25}
+    ,
+    {"claim": "QUALITYpatched2bea6d1 strictCLI FAILED only missingapproved_by; forceaddfalsepositive removed without rewriting history/fakingstamp. Cross-seat proof not SOURCEintegration or pass.", "evidence_command_index": 26, "expects_failure": true},
+    {"claim": "QUALITYownerbranch selftests326passed17.37s/tool17.86s/no skips;not SOURCEintegration/signedapproval.", "evidence_command_index": 27}
+    ,
+    {"claim": "Actual SOURCEreceipt-only commitd6b7789 local/unpublished preserves exact historicalcmd94 and correct19declaredfiles/final768/PR215dependency/SAST,productd452fb1 unchanged; no push/stamp/historyrewrite.", "evidence_command_index": 28}
   ],
-  "unverified": [
+  "historical_unverified": [
     "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",
     "Phase 68/69 directories, plans, SUMMARY, VERIFICATION, VALIDATION and SECURITY artifacts are missing; none was fabricated. Newly recorded verify:post rendering identifies Nyquist/security step hooks, but their workflows were not invoked, their conditional applicability was not evaluated and no validation/security pass is established.",
     "Real Bell-state distribution, three-qubit evolution, BSM/correction and measured fidelity >=0.95 are not established; execution backend APIs, node/qubit identifiers, topology and transport/classical-channel choices remain undecided.",
@@ -149,12 +452,86 @@
     "Independent quality/security review and signed acceptance approval are absent; current AgentSwarm artifacts are advisory/unavailable for acceptance.",
     "Existing published v5.1.0 is not acceptance proof. No archive, tag, release, merge, auto-merge, force-push or PR operation was performed by this audit worker."
   ],
+  "unverified": [
+    "Original009/010: exact public payer unfunded (latest0lamports/confirmedslot509600313; prior509555447 retained). Genuine signed Devnet Memo submission,confirmed null-error status,exact frozen root/fullproof readback and positive all_passed remain unobserved. No new funding request;full official429/86400 cooldown honored.",
+    "All eleven original checkboxes remain open and signedacceptance0; independentapproved_by/QUALITY verdict absent. Hook rendering,20SUMMARIES and50advisoryclosed threats do not constitute approval.",
+    "Postclaim whole-service SAST FAILED(index24):57419LOC/2HIGH6MED105LOW/tool7.91s/core10LOW/errors[]skips0nosec0; eight legacyHIGH/MED owner/QUALITY dispositions remain,no waiver. Previous57408/57374/57348 checkpoints preserved;47versions0known version-only.",
+    "Complete70sourcecomment cohorts49+21 repaired/0new/extraP2actualclosed and3focusedclaimregressionspass; storedremote70flagsfalse/noapproval. Parent actual Eval20planPyYAMLtruthstrings/no errors/current69sixrow4Runtimeverified observation is not shell or approval.",
+    "Sourcefinal768passstableproductd452fb1, oldSOURCEchecker stilltwo-blockerG2 untilownerintegration. QUALITYpatched2bea6d1 strictCLIindex26 failsONLYmissingapproved_by and326selftestsindex27pass; no SOURCEcurrentCIpass/push. Historicalsourcecmd94 preserved/no stamp/selfwaiver. LEADplanninggatespending/publisheddac2fdf/funding0slot509600313 retained.",
+    "No commands/tests/build/lint/format/scan/gates/compilation/commits by this document worker. OriginalOct9 missingcode/artifact/unexecuted claims are historical only.",
+    "No archival/completion/merge/auto-merge/force-push/release/tag/branchdeletion; existingv5.1.0 release is not acceptance. No private signer access or secret printing."
+  ],
   "files_changed": [
-    ".planning/v5.1-MILESTONE-AUDIT.md",
-    ".planning/STATE.md",
-    ".planning/ROADMAP.md",
     ".planning/REQUIREMENTS.md",
-    ".receipts/bot-00-programming-lead/v5.1-completion-audit.json"
+    ".planning/ROADMAP.md",
+    ".planning/STATE.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-CONTEXT.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-INTERFACES.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PATTERNS.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PLAN-REVIEW.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-RESEARCH.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-SECURITY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VALIDATION.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VERIFICATION.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-CONTEXT.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-INTERFACE-CONTRACT.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PATTERNS.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PLAN-REVIEW.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-RESEARCH.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-SECURITY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VALIDATION.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VERIFICATION.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/COVERAGE.md",
+    ".planning/state.json",
+    ".planning/tmp/68-edge-reqs.json",
+    ".planning/tmp/69-edge-reqs.json",
+    ".planning/tmp/v51-decision-68.txt",
+    ".planning/tmp/v51-decision-69.txt",
+    ".planning/tmp/v51-funding-blocker.txt",
+    ".planning/v5.1-MILESTONE-AUDIT.md",
+    ".receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-PLAN.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-SUMMARY.md",
+    ".planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-GAP-INTERFACE.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-PLAN.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-SUMMARY.md",
+    ".planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-GAP-INTERFACE.md"
   ],
   "contract_changes": [],
   "rollback_plan": null,

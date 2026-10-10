@@ -62,6 +62,20 @@ is exactly why it is evidence.
 **Path:** `.receipts/<bot-id>/<task-id>.json` — your own directory. You own it; no other
 bot may write there, which keeps one bot from editing another's evidence.
 
+Git ignores `.receipts/**/*.json`; stage the real receipt with
+`git add -f .receipts/<bot-id>/<task-id>.json`. G-2 recognizes only literal
+leading `git add` force-staging of the authoring bot's receipt, with canonical
+unquoted paths and any additional staged paths declared in `files_changed`.
+An `&&` tail is checked normally; force-push, skipped hooks/tests, masked
+failures and unsupported shell forms are not exempt. Record the actual
+command unchanged. Force-staging never supplies the independent `approved_by`.
+
+Force-staging targets must be existing regular files under the checked root;
+directories, missing files and symlink components fail closed. When using a
+detached gate script, pass `--repo <actual-checkout-or-export-root>` explicitly.
+The default is the gate script's repository root; a symlink mirror is not a
+supported force-staging context. No historical-file-state fallback is inferred.
+
 ```json
 {
   "task_id": "fix-pagination-offset",

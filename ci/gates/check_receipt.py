@@ -17,6 +17,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shlex
+import stat
 import sys
 from pathlib import Path
 
@@ -44,6 +46,171 @@ BYPASS_PATTERNS: list[tuple[str, str]] = [
     (r"pytest.*--co\b",               "collect-only: no tests actually ran"),
     (r"--dry-run(?!=server)",         "dry run: nothing actually executed"),
 ]
+
+# The two force-option patterns in BYPASS_PATTERNS above are the only ones
+# eligible for the mandated-staging exemption below. Every other bypass
+# pattern always runs against the original, unmodified command text.
+_FORCE_BYPASS_PATTERNS = frozenset({r"--force\b", r"-f\s+--"})
+
+
+# `git add -f/--force -- <paths>` is how a bot stages its own receipt: receipt
+# JSON lives under the gitignored `.receipts/` tree, so staging it REQUIRES a
+# force flag. That flag forces past no safety check — it does not skip tests,
+# hooks, or reviews — so flagging it as a bypass is a false positive, but only
+# for one narrow, literal, leading shape (see _scrub_exempt_git_add_force_options
+# below). Anything else carrying a force flag (`git push --force`, `npm
+# --force`, a quoted/wrapped/controlled variant, ...) stays a bypass.
+# Ambiguous input fails closed: no exemption.
+_STAGING_CHARS = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_./- "
+)
+
+# Full-command markers whose presence means the text is not a plain
+# simple-command compound: substitution, heredocs, and quoting that the
+# literal classifier below does not interpret.
+_NONLITERAL_MARKERS = ("$(", "${", "`", "<<")
+
+
+def _resolve_root(root: Path | str | None) -> Path | None:
+    """Resolved repo root, or None when it cannot be established (fail closed)."""
+    try:
+        return (REPO_ROOT if root is None else Path(root)).resolve()
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
+def _is_regular_file_under_root(path: str, resolved_root: Path) -> bool:
+    """True when `path` names an actual regular file confined under `resolved_root`.
+
+    `path` must already have passed the lexical canonical-shape checks (relative,
+    no `.`/`..` components). Every component including the final one must not be
+    a symlink (lstat, conservative — no recursive resolution magic follows links
+    to a verdict); the fully resolved path must stay under `resolved_root`; and
+    the final stat must be a regular file. Directories (recursive staging),
+    missing paths, escaping links, and any stat/resolve error fail closed: no
+    exemption. No git subprocess or historical tracking guess is consulted —
+    only the filesystem as it is when the checker runs.
+    """
+    try:
+        parts = Path(path).parts
+        if not parts or any(p in ("", ".", "..") for p in parts):
+            return False
+        cur = resolved_root
+        for part in parts:
+            cur = cur / part
+            try:
+                if cur.is_symlink():
+                    return False
+            except OSError:
+                return False
+        try:
+            resolved = (resolved_root / path).resolve()
+        except (OSError, ValueError, RuntimeError):
+            return False
+        try:
+            resolved.relative_to(resolved_root)
+        except ValueError:
+            return False
+        try:
+            if resolved.is_symlink():
+                return False
+            st = resolved.stat()
+        except OSError:
+            return False
+        return stat.S_ISREG(st.st_mode)
+    except (OSError, ValueError, RuntimeError):
+        return False
+
+
+def _is_canonical_staged_path(
+    path: str, bot: object, declared: set[str], root: Path | str | None = None
+) -> bool:
+    """True for the bot's own receipt file or a `files_changed`-declared path
+    that is also an actual regular file under `root` (default REPO_ROOT)."""
+    if not isinstance(path, str) or not path:
+        return False
+    if path.startswith("/") or ".." in path.split("/") or "." in path.split("/"):
+        return False
+    if path.startswith(".receipts/"):
+        if not isinstance(bot, str) or not bot:
+            return False
+        seat, sep, name = path[len(".receipts/") :].partition("/")
+        if not sep or not name or "/" in name or seat != bot:
+            return False
+        if not name.endswith(".json"):
+            return False
+    elif path not in declared:
+        return False
+    resolved_root = _resolve_root(root)
+    if resolved_root is None:
+        return False
+    return _is_regular_file_under_root(path, resolved_root)
+
+
+def _scrub_exempt_git_add_force_options(
+    cmd: str, bot: object, declared: set[str], root: Path | str | None = None
+) -> str:
+    """Copy of `cmd` with exempted git-add force flags blanked out.
+
+    The exemption is one narrow, literal shape: a LEADING, unquoted `git add`
+    with force-only options (`-f`/`--force`), an optional literal `--`, and
+    canonical literal paths including the bot's own receipt, every other path
+    declared in `files_changed` — each one an actual regular file under `root`
+    (default REPO_ROOT); an exact `&&` tail may follow and is kept
+    byte-for-byte, unexempted. Only the force-option spans inside the leading
+    prefix are blanked, and the result feeds ONLY the two force bypass
+    patterns. Everything else — other patterns, the tail, the reported text —
+    uses the original command. A fake `git add` inside a comment, an
+    if/loop/subshell, or substitution cannot qualify, because the prefix is
+    not a literal `git add`. Anything else fails closed.
+    """
+    for marker in _NONLITERAL_MARKERS:
+        if marker in cmd:
+            return cmd
+    try:
+        # Balance check only: unbalanced quotes fail closed. The parse result
+        # is unused — no AST is interpreted.
+        shlex.split(cmd, posix=True)
+    except ValueError:
+        return cmd
+    prefix, sep, tail = cmd.partition("&&")
+    if not prefix.startswith("git add "):
+        return cmd
+    rest = prefix[len("git add ") :].rstrip(" ")
+    if not rest or any(c not in _STAGING_CHARS for c in rest):
+        return cmd
+    tokens = rest.split(" ")
+    if any(t == "" for t in tokens):
+        return cmd
+    if "--" in tokens:
+        cut = tokens.index("--")
+        opts, paths = tokens[:cut], tokens[cut + 1 :]
+    else:
+        opts = [t for t in tokens if t.startswith("-")]
+        paths = [t for t in tokens if not t.startswith("-")]
+    if not opts or any(o not in ("-f", "--force") for o in opts):
+        return cmd
+    if not paths or not isinstance(bot, str) or not bot:
+        return cmd
+    if not any(p.startswith(f".receipts/{bot}/") for p in paths):
+        return cmd
+    for p in paths:
+        if not _is_canonical_staged_path(p, bot, declared, root):
+            return cmd
+    # Blank only the leading force-option spans. Single-space token layout is
+    # guaranteed by the checks above, so these spans are exact; paths and the
+    # `&&` tail keep their bytes, and a force-looking filename after `--`
+    # keeps matching.
+    chars = list(prefix)
+    pos = len("git add ")
+    for tok in opts:
+        end = pos + len(tok)
+        if "".join(chars[pos:end]) != tok:
+            return cmd
+        chars[pos:end] = [" "] * len(tok)
+        pos = end + 1
+    return "".join(chars) + sep + tail
+
 
 REQUIRED_FIELDS = ["task_id", "bot", "commands", "claims", "unverified"]
 
@@ -386,9 +553,15 @@ def load(path: Path) -> dict:
         raise ReceiptError(f"receipt is not valid JSON: {exc}") from exc
 
 
-def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list[str]:
+def check(
+    receipt: dict,
+    expected_bot: str | None,
+    strict: bool = False,
+    root: Path | str | None = None,
+) -> list[str]:
+    """Validate a receipt. `root` bounds the mandated-staging exemption: staged
+    paths must be actual regular files under it (default REPO_ROOT)."""
     problems: list[str] = []
-
     for field in REQUIRED_FIELDS:
         if field not in receipt:
             problems.append(f"missing required field '{field}'")
@@ -423,10 +596,16 @@ def check(receipt: dict, expected_bot: str | None, strict: bool = False) -> list
         )
 
     # --- bypass commands -------------------------------------------------
+    files_changed = receipt.get("files_changed")
+    declared_files = {f for f in files_changed if isinstance(f, str)} \
+        if isinstance(files_changed, list) else set()
     for i, cmd in enumerate(commands if isinstance(commands, list) else []):
         cmd_str = cmd.get("cmd", "") if isinstance(cmd, dict) else str(cmd)
+        scrubbed = _scrub_exempt_git_add_force_options(
+            cmd_str, receipt.get("bot"), declared_files, root)
         for pattern, why in BYPASS_PATTERNS:
-            if re.search(pattern, cmd_str):
+            haystack = scrubbed if pattern in _FORCE_BYPASS_PATTERNS else cmd_str
+            if re.search(pattern, haystack):
                 problems.append(
                     f"command[{i}] contains a bypass: {cmd_str!r}\n"
                     f"    matched {pattern!r} — {why}"
@@ -714,6 +893,8 @@ def main() -> int:
     ap.add_argument("--bot", help="Expected bot id")
     ap.add_argument("--strict", action="store_true",
                     help="Also flag exhaustive claims backed by thin evidence")
+    ap.add_argument("--repo", type=Path, default=REPO_ROOT,
+                    help="Repo root staged paths must exist under as regular files")
     args = ap.parse_args()
 
     try:
@@ -722,7 +903,7 @@ def main() -> int:
         print(f"G-2 FAIL — {exc}", file=sys.stderr)
         return 1
 
-    problems = check(receipt, args.bot, strict=args.strict)
+    problems = check(receipt, args.bot, strict=args.strict, root=args.repo)
 
     if problems:
         print(f"G-2 FAIL — {args.receipt}", file=sys.stderr)

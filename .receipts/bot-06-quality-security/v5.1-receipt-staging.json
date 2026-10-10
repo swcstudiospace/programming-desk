@@ -1,0 +1,323 @@
+{
+  "task_id": "v5.1-receipt-staging",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/v5.1-receipt-staging",
+  "started_at": "2026-10-10T17:18:40Z",
+  "completed_at": "2026-10-10T19:13:00Z",
+  "timestamp_basis": "Started_at is observed isolated-worktree birth, completed_at is parent observed verification UTC; command durations actual whole-tool wall times.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 1,
+      "duration_s": 0.79,
+      "output_tail": "BEFORE unchanged SOURCE receipt: missingindependentapproved_by PLUS mandatorygitadd-f--cmd94falsepositive; artifact1192"
+    },
+    {
+      "cmd": "git worktree add -b bot-06-quality-security/v5.1-receipt-staging /tmp/desk-v51-quality-gate origin/main",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 0,
+      "duration_s": 1.33,
+      "output_tail": "IsolatedQUALITYbranch/worktree atc9040a4, no usercheckoutfileedit; FICLONEfallbackcheckout"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "GenuineSyntaxErrornewfstringtestline1480singleliteralclosingbrace; sourceintentnotweakened, authorfixedescaped}}"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.22,
+      "output_tail": "Correctedcheckerandconsumertestmodulescompileclean"
+    },
+    {
+      "cmd": "uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 49-152 ci/gates/check_receipt.py && uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 1257-1484 ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.41,
+      "output_tail": "FormattedonlyNEWliteralclassifier/testblocks, no unrelatedrestyle"
+    },
+    {
+      "cmd": "git commit --only -m 'fix(gates): classify mandated receipt force staging narrowly' -- ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.24,
+      "output_tail": "2bea6d1only2QUALITYfiles347insertions1deletion; HEADcandidate committed BEFOREcandidate-run tests"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 17.86,
+      "output_tail": "326passed17.37s/no skipped cases;27newcandidateCLIcases plus299existing"
+    },
+    {
+      "cmd": "python3 /tmp/desk-v51-quality-gate/ci/gates/check_receipt.py --receipt /tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 1,
+      "duration_s": 0.29,
+      "output_tail": "AFTERsameSOURCEreceiptactualCLI: ONLYmissingindependentapproved_by, mandatory-stagefalsepositivegoneunderisolatedQUALITYchecker; cmd94dictverbatimpreserved/no fakeapproval"
+    },
+    {
+      "cmd": "stat -c %w /tmp/desk-v51-quality-gate && date -u +%Y-%m-%dT%H:%M:%SZ",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "Worktreeactualbirth2026-10-10T17:18:40.071538673+0000;observedverificationUTC2026-10-10T17:54:09Z"
+    }
+,
+{
+  "cmd": "git add -f .receipts/bot-06-quality-security/v5.1-receipt-staging.json && git commit --only -m 'docs(gates): record literal staging contract and verification' -- docs/quality-gates.md skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.41,
+  "output_tail": "c7d7c14docsandownreceiptcommittedonly3paths;mandatoryforce-stagerecordedverbatim,nohookbypass"
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.57,
+  "output_tail": "G1QUALITY5committedpathsPASS"
+},
+{
+  "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.47,
+  "output_tail": "G3QUALITY5pathsPASS/nosecrets"
+},
+{
+  "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.74,
+  "output_tail": "G7PASS7rosters8packs22prompts7templates"
+},
+{
+  "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.47,
+  "output_tail": "G4PASSnocontractsurface"
+},
+{
+  "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.57,
+  "output_tail": "G5G6PASSnodeploysordestructiveoperations"
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json --bot bot-06-quality-security --strict",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 0.57,
+  "output_tail": "G2QUALITYFAILONLYmissingindependentLEAD/humanapproved_by;no selfstamp"
+}
+,
+{
+  "cmd": "python3 /tmp/desk-v51-staging-directory-smoke.py",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.59,
+  "output_tail": "BEFORE: actual git force-add staged an ignored nested fixture file via directory target; fixture checker exit0 accepted exemption. Synthetic fixture approval only, never real-change approval."
+},
+{
+  "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.4,
+  "output_tail": "After regular-file/root/symlink hardening, checker and consumer tests compiled clean."
+},
+{
+  "cmd": "python3 /tmp/desk-v51-staging-directory-smoke.py",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.48,
+  "output_tail": "AFTER: smoke uses new explicit --repo temp-root argument; actual git still stages ignored nested fixture file, but checker exit1 rejects the force exemption. Same directory scenario, not identical before/after checker argv; no real approval."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --repo /tmp/desk-v51-implementation --receipt /tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 0.46,
+  "output_tail": "Real unchanged SOURCE receipt under explicit SOURCE repository context: ONLY missing independent approved_by. Original cmd94 retained; isolated owner checker is not SOURCE/default integration."
+},
+{
+  "cmd": "uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 74-149 ci/gates/check_receipt.py && uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 1276-1598 ci/tests/test_gates.py",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.4,
+  "output_tail": "Only new/changed file-scope helper and staging-test blocks formatted; checker unchanged, test file reformatted."
+},
+{
+  "cmd": "git commit --only -m 'fix(gates): bound force staging to real repository files' -- ci/gates/check_receipt.py ci/tests/test_gates.py",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.22,
+  "output_tail": "0a6f77d committed only two QUALITY code/test paths before candidate CLI full-suite run; 203 insertions,29 deletions."
+},
+{
+  "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 19.49,
+  "output_tail": "332 passed in18.77s; complete candidate-HEAD gate suite, no skipped cases."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json --bot bot-06-quality-security --strict",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 0.44,
+  "output_tail": "Current known-file classifier/default-root real owner receipt: ONLY missing independent LEAD/human approved_by."
+},
+{
+  "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.41,
+  "output_tail": "G3 PASS5 committed paths scanned, no secrets detected; prior doc wording at this checkpoint, repo-context doc addition follows."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.42,
+  "output_tail": "G1 PASS5 committed QUALITY-owned paths."
+},
+{
+  "cmd": "date -u +%Y-%m-%dT%H:%M:%SZ",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.04,
+  "output_tail": "Observed verification UTC2026-10-10T19:13:00Z."
+}
+,
+{
+  "cmd": "git commit --only -m 'docs(gates): record file-only staging proof and repo context' -- docs/quality-gates.md skills/verification-receipts/SKILL.md .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.21,
+  "output_tail": "9033d18 committed only three QUALITY documentation/receipt paths after observed332-suite and filesystem smoke."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 1.49,
+  "output_tail": "Final committed owner union: G1PASS5paths/G3PASS5paths7templatesclean/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; duration is whole pipeline, not individual gate timings."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-06-quality-security/v5.1-receipt-staging.json --bot bot-06-quality-security --strict",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 0.32,
+  "output_tail": "Final updated owner receipt: G2FAIL ONLYmissing independent approved_by, no other schema/bypass/claim failure."
+}
+  ],
+  "claims": [
+    {
+      "claim": "Originalreceiptvalidatorrejected compulsoryignoredreceiptstagingalongside correctlymissingapproval",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "CorrectedgateandnewCLIconsumerregressionscompileaftergenuinesyntaxfaultrepair",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "CandidateHEADgatesuite326passedincluding27newlegit-force-stage/reject-bypassCLIcases",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Patchedownercheckerremovesrealhistoricalforce-stagefalsepositivebutstillrefusestheunsignedSOURCEreceipt; originalcommandhistorypreserved",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    }
+,
+{"claim": "QUALITYownershipG1passed5ownedcommittedpaths", "evidence_command_index": 10},
+{"claim": "QUALITYG3committedsecretsscanpassed5paths", "evidence_command_index": 11},
+{"claim": "QUALITYdeskG7integritypassed", "evidence_command_index": 12},
+{"claim": "QUALITYG4passedwithnocontractsurfacechanges", "evidence_command_index": 13},
+{"claim": "QUALITYG5G6passedwithnodeployordestructiveoperations", "evidence_command_index": 14},
+{"claim": "StrictQUALITYreceiptgatefailedONLYmissingindependentLEADorhumanapproval; no selfstamp", "evidence_command_index": 15, "expects_failure": true}
+,
+{
+  "claim": "Real directory force staging can recurse into ignored files; initial classifier accepted that fixture, establishing the defect. Fixture approval is synthetic only.",
+  "evidence_command_index": 16
+},
+{
+  "claim": "File-scope classifier rejects the directory fixture even though actual Git still recurses; explicit temp-root context required by new CLI.",
+  "evidence_command_index": 18
+},
+{
+  "claim": "Explicit real SOURCE root permits exact original file-only history but still refuses missing independent approval; no integration or waiver asserted.",
+  "evidence_command_index": 19,
+  "expects_failure": true
+},
+{
+  "claim": "Final candidate-HEAD full gate consumer suite passed332 tests.",
+  "evidence_command_index": 22
+},
+{
+  "claim": "Known-file owner strict G2 still rejects absent independent approval.",
+  "evidence_command_index": 23,
+  "expects_failure": true
+}
+,
+{
+  "claim": "Final committed owner G1/G3/G4/G5/G6/G7 pipeline passed with five owned files and no secrets/contract/deploy/destructive surface.",
+  "evidence_command_index": 28
+},
+{
+  "claim": "Final updated owner strict G2 rejects only the absent independent approval; not a pass or self-stamp.",
+  "evidence_command_index": 29,
+  "expects_failure": true
+}
+  ],
+  "unverified": [
+    "No independent LEAD/human approved_by for this QUALITY-authoredchange; authornever selfstamps, reviewer advisory is not signed approval.",
+    "Source branch still contains the old gate; isolated patched-checker after proof is not Source CI integration. Owner draft requires review/integration before SOURCE publish hold clears; no merge permitted in this session.",
+    "Greptile30986481 completed against prior published6d19119, confidence4/5, with two valid nonblocking directory/test-coverage findings. Both are corrected and locally verified in0a6f77d/332tests; new terminal draft-head review and actual remote gates remain pending, no waiver or merge-ready claim.",
+    "Classifier intentionally conservative: leading literal unquoted force-only git add, canonical ASCII explicit own-seat receipt and declared file paths; every target must currently exist as a regular file within the checked root with no symlink component. Use --repo for a detached checker and actual checkout/export; symlink mirrors and unknown/historical filesystem state fail closed. Unsupported wrappers/quoting/controlflow/extra options remain blocked; other bypass checks inspect the original command.",
+    "No live Devnet funding/publication, production deploy, risk waiver or original milestone acceptance is asserted by this gate-only change."
+  ],
+  "files_changed": [
+    "ci/gates/check_receipt.py",
+    "ci/tests/test_gates.py",
+    "docs/quality-gates.md",
+    "skills/verification-receipts/SKILL.md",
+    ".receipts/bot-06-quality-security/v5.1-receipt-staging.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "independent_source_review": {
+    "scope": "advisory only",
+    "reviewer": "ReviewQualityReceiptExemption",
+    "result": "zero remaining actionable source defects after literal classifier replaced mini-shell parser; priorunsafe-option/quote/controlflow findings superseded, no signed approval"
+  },
+  "current_file_scope_review": {
+    "scope": "advisory only, not independent Desk approval",
+    "reviewer": "ReviewQualityFileScope",
+    "result": "No remaining actionable source finding after file-only containment, conservative symlink refusal, explicit CLI repo context and main parser restoration; parent actual332-suite and directory/real-receipt smoke observed",
+    "greptile_prior_review_id": "30986481",
+    "greptile_prior_head": "6d191198ee5907bf4251b0cc20a30a2b8efca8bc",
+    "local_verified_product": "0a6f77d",
+    "fresh_draft_head_review": "pending",
+    "signed_approval": false
+  },
+  "source_history_boundary": {
+    "receipt": "/tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+    "original_command_index": 94,
+    "raw_command_preserved": true,
+    "corrected_declared_missing_path": "services/desk-gateway/src/desk_gateway/quantum_key.py",
+    "scope": "Path actually changed in SOURCE netdiff; metadata correction did not mutate command history or approval"
+  }
+}

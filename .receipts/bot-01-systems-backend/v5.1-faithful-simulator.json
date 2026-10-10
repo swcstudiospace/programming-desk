@@ -268,6 +268,70 @@
     "duration_s": 81.61,
     "output_tail": "645 passed in80.31s (0:01:20)",
     "result": "Final complete Python3.14 consumer suite including excessive-nesting typed reply regressions."
+  },
+  {
+    "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.57,
+    "output_tail": "7 bots, 115 rules",
+    "result": "G-1 ownership manifest validation passed."
+  },
+  {
+    "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.59,
+    "output_tail": "20 files owned",
+    "result": "G-1 SYSTEMS attribution passed for the committed implementation diff."
+  },
+  {
+    "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.59,
+    "output_tail": "7 rosters, 8 packs, 22 prompts; 7 templates",
+    "result": "G-7 desk integrity passed."
+  },
+  {
+    "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 1.08,
+    "output_tail": "20 files scanned; no secrets",
+    "result": "G-3 committed-diff secret scan passed."
+  },
+  {
+    "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.60,
+    "output_tail": "no contract surfaces",
+    "result": "G-4 passed; no contracts/ surface was edited."
+  },
+  {
+    "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.63,
+    "output_tail": "no deployments or destructive operations",
+    "result": "G-5/G-6 receipt rollback and deployment scope passed."
+  },
+  {
+    "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 0.67,
+    "output_tail": "missing approved_by",
+    "result": "G-2 blocked only by absent independent reviewer stamp; no self-approval."
+  },
+  {
+    "cmd": "python3 -m pytest ci/tests/ -v",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 17.00,
+    "output_tail": "299 passed in 15.89s",
+    "result": "Final gate self-tests passed; full raw output retained in artifact://953."
   }
   ],
   "claims": [
@@ -286,12 +350,19 @@
     {"claim": "Actual four-worker and gateway TCP acceptance, independent BB84/E91 owner custody, Eve abort, all five numerical drill stages, bounded REST and frozen-prefix restart proof passed", "evidence_command_index": 29},
     {"claim": "Unfunded live publisher correctly refused both drills with insufficient_balance and no signature or slot", "evidence_command_index": 29},
     {"claim": "Late reservation commits remain original-instance unresolved quarantine rather than falsely refuted absence", "evidence_command_index": 24},
-    {"claim": "A quarantined output cannot issue a second release mutation", "evidence_command_index": 25}
+    {"claim": "A quarantined output cannot issue a second release mutation", "evidence_command_index": 25},
+    {"claim": "Final gate self-tests passed299tests", "evidence_command_index": 42},
+    {"claim": "G-1 SYSTEMS ownership attribution passed for20committed-diff paths", "evidence_command_index": 36},
+    {"claim": "G-7 desk integrity passed", "evidence_command_index": 37},
+    {"claim": "G-3 committed-diff secret scan passed", "evidence_command_index": 38},
+    {"claim": "G-4 passed with no edited contract surface", "evidence_command_index": 39},
+    {"claim": "G-5/G-6 passed with no deployment or destructive operations", "evidence_command_index": 40},
+    {"claim": "Strict receipt gate remains blocked only by missing independent approved_by", "evidence_command_index": 41}
   ],
   "unverified": [
     "Genuine Devnet Memo publication and confirmed matching readback remain unobserved: payer last observed0lamports, official airdrop429 Retry-After86400, both actual drills insufficient_balance with no signature or slot",
     "No independent Desk reviewer has approved this receipt; approved_by intentionally absent. Advisory correctness/security source reviews are not signed approval",
-    "Current-head repository gates and fresh Greptile dispositions remain to be recorded; no merge-ready claim",
+    "Fresh current-head Greptile disposition remains required. Local G-1/G-3/G-4/G-5/G-6/G-7 passed and gate self-tests299passed; G-2 failed only missing independent approved_by. No merge-ready claim",
     "Full consumer suite usedPython3.14; systemPython3.12 decoder recursion was observed, but no fullPython3.12suite or dependency/SASTscan was performed",
     "Temporary smoke runners are continuation probes; recorded observations are retained, not portable CI entrypoints"
   ],

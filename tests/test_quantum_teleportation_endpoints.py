@@ -46,6 +46,10 @@ def _bearer(seat):
 
 
 def _app(nodes, links, worker_rngs, tmp_path, capacities=None):
+    # All gateway QKD/teleport work flows through one LocalNodeTransport
+    # built from the same operator topology the lifespan mesh registers.
+    # No worker/test-hook bindings are passed to the engine: build_app wires
+    # the transport graph only.
     workers = {}
     for pos, name in enumerate(nodes):
         draws = (worker_rngs or {}).get(name, [0.5])
@@ -65,7 +69,6 @@ def _app(nodes, links, worker_rngs, tmp_path, capacities=None):
         quantum_node_links=[list(link) for link in links],
         quantum_transport_override=transport,
         quantum_rng_override=ScriptedRng([0.5] * 256),
-        quantum_workers_override=workers,
     )
     app, _ = build_app(settings)
     return TestClient(app)
@@ -140,7 +143,9 @@ def test_create_pair_success_reports_requested_kind_and_fidelity(pair_app):
             headers=_bearer(seat),
         )
         assert resp.status_code == 200
-        body = resp.json()
+        created = resp.json()["bell_pair"]
+        assert created["state_type"] == "PSI_MINUS"
+        assert created["fidelity"] == pytest.approx(0.97, abs=1e-9)
     cases = [
         {"state_type": "BELL_NOPE"},
         {"state_type": "phi_plus"},
@@ -494,6 +499,114 @@ def test_teleport_selection_and_input_errors(pair_app):
     )
     assert ghost_route.status_code == 404
 
+# --------------------------------------------------------------------------
+# receiver output release
+
+
+def _teleported_session(client):
+    pair = client.post(
+        "/v1/quantum/teleportation/bell-pair/create",
+        json={"node_a": ALPHA, "node_b": BETA, "initial_fidelity": 1.0},
+        headers=_bearer("lead"),
+    ).json()["bell_pair"]
+    resp = client.post(
+        "/v1/quantum/teleportation/teleport",
+        json={
+            "source_node": ALPHA,
+            "target_node": BETA,
+            "alpha": {"real": 0.6, "imag": 0.0},
+            "beta": {"real": 0.8, "imag": 0.0},
+            "bell_pair": pair["pair_id"],
+        },
+        headers=_bearer("lead"),
+    )
+    assert resp.status_code == 200 and resp.json()["ok"] is True
+    return resp.json()["result"]["session_id"]
+
+
+def test_output_release_auth_precedes_parse(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
+    assert client.post("/v1/quantum/teleportation/outputs/release").status_code == 401
+    malformed = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        content=b"{not-json",
+        headers={"content-type": "application/json", **_bearer("web")},
+    )
+    assert malformed.status_code == 403
+
+
+def test_output_release_success_replay_and_conflicts(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
+    session_id = _teleported_session(client)
+    release = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": session_id, "receiver": BETA, "operation_id": "op-release-1"},
+        headers=_bearer("systems"),
+    )
+    assert release.status_code == 200
+    first = release.json()
+    assert first["ok"] is True
+    assert first["acknowledgement"] == "ack-op-release-1"
+    assert first["output"]["session_id"] == session_id
+    assert first["output"]["receiver"] == BETA
+    assert first["output"]["status"] == "released"
+    assert set(first["output"]) == {
+        "session_id", "receiver", "resource_id", "lease_id", "instance_id", "status",
+    }
+    replay = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": session_id, "receiver": BETA, "operation_id": "op-release-1"},
+        headers=_bearer("lead"),
+    )
+    assert replay.status_code == 200
+    assert replay.json() == first
+    conflict = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": session_id, "receiver": BETA, "operation_id": "op-release-2"},
+        headers=_bearer("lead"),
+    )
+    assert conflict.status_code == 409
+
+
+def test_output_release_unknown_session_and_receiver_mismatch(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
+    session_id = _teleported_session(client)
+    unknown = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": "session-missing", "receiver": BETA, "operation_id": "op-x"},
+        headers=_bearer("lead"),
+    )
+    assert unknown.status_code == 404
+    mismatch = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": session_id, "receiver": ALPHA, "operation_id": "op-x"},
+        headers=_bearer("lead"),
+    )
+    assert mismatch.status_code == 403
+    assert mismatch.json()["error"] == "receiver_mismatch"
+
+
+def test_output_release_below_threshold_session_has_no_output(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
+    pair = client.post(
+        "/v1/quantum/teleportation/bell-pair/create",
+        json={"node_a": ALPHA, "node_b": BETA, "initial_fidelity": 0.90},
+        headers=_bearer("lead"),
+    ).json()["bell_pair"]
+    resp = client.post(
+        "/v1/quantum/teleportation/teleport",
+        json={"source_node": ALPHA, "target_node": BETA, "bell_pair": pair["pair_id"]},
+        headers=_bearer("systems"),
+    )
+    assert resp.json()["ok"] is False
+    session_id = resp.json()["result"]["session_id"]
+    missing = client.post(
+        "/v1/quantum/teleportation/outputs/release",
+        json={"session_id": session_id, "receiver": BETA, "operation_id": "op-x"},
+        headers=_bearer("lead"),
+    )
+    assert missing.status_code == 404
+
 
 # --------------------------------------------------------------------------
 # worker inspect and config surface
@@ -648,6 +761,65 @@ def test_qkd_without_worker_binding_is_unavailable(tmp_path):
     assert resp.status_code == 503
     assert resp.json()["error"] == "worker_plane_unavailable"
 
+def test_qkd_unknown_endpoints_are_unavailable(pair_app):
+    ghost = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"sender": "ghost-node", "receiver": BETA, "bit_length": 8},
+        headers=_bearer("lead"),
+    )
+    assert ghost.status_code == 503
+    assert ghost.json()["error"] == "worker_plane_unavailable"
+    ghost_e91 = pair_app.post(
+        "/v1/quantum/qkd/e91",
+        json={"sender": ALPHA, "receiver": "ghost-node", "pair_count": 8},
+        headers=_bearer("systems"),
+    )
+    assert ghost_e91.status_code == 503
+    assert ghost_e91.json()["error"] == "worker_plane_unavailable"
+
+
+def test_workerless_drill_is_200_with_prerequisite_not_503(tmp_path):
+    # Exact split: no worker plane makes QKD 503 while the drill stays 200
+    # with all_passed=false and the missing prerequisite named.
+    settings = Settings(
+        seat_passphrases=dict(_SEATS),
+        data_dir=tmp_path / "workerless",
+    )
+    client = TestClient(build_app(settings)[0])
+    qkd = client.post(
+        "/v1/quantum/qkd/bb84",
+        json={"sender": ALPHA, "receiver": BETA, "bit_length": 8},
+        headers=_bearer("lead"),
+    )
+    assert qkd.status_code == 503
+    assert qkd.json()["error"] == "worker_plane_unavailable"
+    drill = client.post(
+        "/v1/quantum/teleportation/drill/simulate", json={}, headers=_bearer("lead")
+    )
+    assert drill.status_code == 200
+    assert drill.json()["ok"] is False
+    assert drill.json()["drill"]["all_passed"] is False
+    assert drill.json()["drill"]["prerequisite"] == "route_needs_three_nodes"
+    assert all(marker not in _json_text(drill.json()) for marker in _SECRET_MARKERS)
+
+
+def test_oversized_body_is_413_after_auth(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], None, tmp_path)
+    huge = b'{"node_a": "' + b"x" * 70000 + b'"}'
+    denied = client.post(
+        "/v1/quantum/teleportation/bell-pair/create",
+        content=huge,
+        headers={"content-type": "application/json"},
+    )
+    assert denied.status_code == 401
+    oversized = client.post(
+        "/v1/quantum/teleportation/bell-pair/create",
+        content=huge,
+        headers={"content-type": "application/json", **_bearer("lead")},
+    )
+    assert oversized.status_code == 413
+    assert oversized.json()["error"] == "body_too_large"
+
 
 def test_ledger_proof_round_trip_and_unfunded_anchor(tmp_path):
     client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
@@ -706,6 +878,90 @@ def test_ledger_proof_round_trip_and_unfunded_anchor(tmp_path):
     assert anchor["slot"] is None
     assert all(marker not in _json_text(exported.json()) for marker in _SECRET_MARKERS)
 
+def test_unopenable_storage_degrades_quantum_routes_only(tmp_path):
+    # A directory blocking the ledger DB file makes SQLite open fail while
+    # the data dir itself stays usable: an open (not corrupt) failure.
+    data_dir = tmp_path / "unopenable-data"
+    data_dir.mkdir()
+    (data_dir / "quantum_teleportation.sqlite3").mkdir()
+    settings = Settings(
+        seat_passphrases=dict(_SEATS),
+        data_dir=data_dir,
+        quantum_node_endpoints={ALPHA: "http://127.0.0.1:19001"},
+        quantum_node_tokens={ALPHA: "tok-alpha"},
+    )
+    client = TestClient(build_app(settings)[0])
+    assert client.get("/health").status_code == 200
+    receipts = client.get("/v1/quantum/teleportation/ledger/receipts", headers=_bearer("web"))
+    assert receipts.status_code == 503
+    assert receipts.json()["error"] == "ledger_unavailable"
+    qkd = client.post(
+        "/v1/quantum/qkd/bb84",
+        json={"sender": ALPHA, "receiver": BETA, "bit_length": 8},
+        headers=_bearer("lead"),
+    )
+    assert qkd.status_code == 503
+    assert qkd.json()["error"] == "ledger_unavailable"
+
+
+def test_corrupt_storage_degrades_quantum_routes_only(tmp_path):
+    data_dir = tmp_path / "corrupt-data"
+    data_dir.mkdir()
+    (data_dir / "quantum_teleportation.sqlite3").write_bytes(b"\x00" * 512)
+    settings = Settings(
+        seat_passphrases=dict(_SEATS),
+        data_dir=data_dir,
+        quantum_node_endpoints={ALPHA: "http://127.0.0.1:19001"},
+        quantum_node_tokens={ALPHA: "tok-alpha"},
+    )
+    client = TestClient(build_app(settings)[0])
+    assert client.get("/health").status_code == 200
+    receipts = client.get("/v1/quantum/teleportation/ledger/receipts", headers=_bearer("web"))
+    assert receipts.status_code == 503
+    assert receipts.json()["error"] == "ledger_unavailable"
+
+
+def test_receipt_listing_is_bounded_by_limit(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3, 0.3, 0.3]}, tmp_path)
+    for _ in range(3):
+        pair = client.post(
+            "/v1/quantum/teleportation/bell-pair/create",
+            json={"node_a": ALPHA, "node_b": BETA, "initial_fidelity": 1.0},
+            headers=_bearer("lead"),
+        ).json()["bell_pair"]
+        tele = client.post(
+            "/v1/quantum/teleportation/teleport",
+            json={
+                "source_node": ALPHA,
+                "target_node": BETA,
+                "alpha": {"real": 0.6, "imag": 0.0},
+                "beta": {"real": 0.8, "imag": 0.0},
+                "bell_pair": pair["pair_id"],
+            },
+            headers=_bearer("lead"),
+        )
+        assert tele.status_code == 200
+    one = client.get(
+        "/v1/quantum/teleportation/ledger/receipts",
+        params={"limit": "1"},
+        headers=_bearer("web"),
+    ).json()
+    assert one["count"] == 1 and len(one["receipts"]) == 1
+    two = client.get(
+        "/v1/quantum/teleportation/ledger/receipts",
+        params={"limit": "2"},
+        headers=_bearer("quality"),
+    ).json()
+    assert two["count"] == 2 and len(two["receipts"]) == 2
+    assert one["receipts"][0] == two["receipts"][0]
+    for bad in ("0", "1001", "many", "-1"):
+        rejected = client.get(
+            "/v1/quantum/teleportation/ledger/receipts",
+            params={"limit": bad},
+            headers=_bearer("lead"),
+        )
+        assert rejected.status_code == 400
+
 
 def _phase69_runtime(tmp_path, *, rpc_client=None, signer_path="", rpc_url=""):
     import random
@@ -741,7 +997,6 @@ def _phase69_runtime(tmp_path, *, rpc_client=None, signer_path="", rpc_url=""):
         quantum_node_links=[[ALPHA, REPEATER], [REPEATER, BETA]],
         quantum_transport_override=transport,
         quantum_rng_override=Rng((), 7),
-        quantum_workers_override=workers,
         quantum_solana_rpc_url=rpc_url,
         quantum_solana_signer_path=signer_path,
         quantum_rpc_client_override=rpc_client,

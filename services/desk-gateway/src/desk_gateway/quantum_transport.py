@@ -103,7 +103,8 @@ def _normalize_endpoint(node_id: str, raw_url: str) -> str:
     if path not in ("", "/"):
         raise ValueError(f"node {node_id!r} endpoint must not carry a path")
     port = f":{parts.port}" if parts.port else ""
-    return f"{parts.scheme}://{parts.hostname}{port}"
+    host_part = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"{parts.scheme}://{host_part}{port}"
 
 
 @dataclass
@@ -254,15 +255,84 @@ class LocalNodeTransport:
         self._note(node_id, "release", operation_id, response)
         return response
 
-    async def inspect(self, node_id: str, *, instance: str | None = None) -> dict[str, Any]:
-        worker, token, default_instance = self._scope(node_id)
+    async def inspect(self, node_id: str, *, instance: str | None = None,
+                      lease_offset: int = 0, lease_limit: int = 64,
+                      resource_ids: list[str] | None = None) -> dict[str, Any]:
+        worker, token, _ = self._scope(node_id)
         try:
             return await worker.inspect(
-                token=token, node=node_id,
-                instance=default_instance if instance is None else instance,
+                token=token, node=node_id, instance=instance,
+                lease_offset=lease_offset, lease_limit=lease_limit,
+                resource_ids=resource_ids,
             )
         except QuantumNodeError as exc:
             raise self._failed(exc) from exc
+
+    def _qkd_envelope(self, node_id: str, *, operation_id: str, session_id: str,
+                      action: str, payload: Mapping[str, Any],
+                      instance: str | None) -> tuple[QuantumNodeWorker, str, dict[str, Any]]:
+        """Build one QKD envelope through the exact wire codec.
+
+        The envelope is serialized and measured exactly as the remote path
+        sends it (64 KiB actual-bytes admission, JSON normalization), then
+        dispatched to the worker; there is no in-process validation bypass.
+        """
+        if not isinstance(action, str):
+            raise ValueError("qkd action must be a string")
+        if not isinstance(payload, Mapping):
+            raise ValueError("qkd payload must be a mapping of wire DTOs")
+        worker, token, default_instance = self._scope(node_id)
+        envelope = {
+            "node": node_id,
+            "instance": default_instance if instance is None else instance,
+            "operation_id": operation_id,
+            "session_id": session_id,
+            "action": action,
+            "payload": dict(payload),
+        }
+        wire = json.loads(_encode_body(envelope).decode("utf-8"))
+        return worker, token, wire
+
+    async def qkd_step(self, node_id: str, *, operation_id: str, session_id: str,
+                       action: str, payload: Mapping[str, Any],
+                       instance: str | None = None) -> dict[str, Any]:
+        """Coordinator QKD step over the fixed ``qkd_step`` envelope."""
+        worker, token, wire = self._qkd_envelope(
+            node_id, operation_id=operation_id, session_id=session_id,
+            action=action, payload=payload, instance=instance,
+        )
+        try:
+            response = await worker.qkd_step(
+                operation_id=wire["operation_id"], session_id=wire["session_id"],
+                action=wire["action"], payload=wire["payload"],
+                token=token, node=node_id, instance=wire["instance"],
+            )
+        except QuantumNodeError as exc:
+            raise self._failed(exc) from exc
+        self._note(node_id, "qkd_step", operation_id, response)
+        return response
+
+    async def qkd_owner(self, node_id: str, *, operation_id: str, session_id: str,
+                        action: str, payload: Mapping[str, Any],
+                        instance: str | None = None) -> dict[str, Any]:
+        """Owner-private capability path over the fixed ``qkd_owner`` envelope.
+
+        Same wire codec as the remote path; the gateway never proxies this.
+        """
+        worker, token, wire = self._qkd_envelope(
+            node_id, operation_id=operation_id, session_id=session_id,
+            action=action, payload=payload, instance=instance,
+        )
+        try:
+            response = await worker.qkd_owner(
+                operation_id=wire["operation_id"], session_id=wire["session_id"],
+                action=wire["action"], payload=wire["payload"],
+                token=token, node=node_id, instance=wire["instance"],
+            )
+        except QuantumNodeError as exc:
+            raise self._failed(exc) from exc
+        self._note(node_id, "qkd_owner", operation_id, response)
+        return response
 
     async def aclose(self) -> None:
         self.calls.clear()
@@ -351,18 +421,76 @@ class RemoteNodeTransport:
         raw = _encode_body(body)
         url = base + NODE_PATHS[action]
         client = await self._acquire()
+        # Decode ourselves: httpx's aiter_bytes may inflate one compressed
+        # wire chunk without a bound before yielding it to our byte check.
+        # Only advertised codecs are admitted; raw and decoded bytes each
+        # have a hard cap, with at most one bounded chunk beyond that cap.
+        import zlib
+
+        deadline_at = time.monotonic() + self.deadline
+
+        def bad_reply(detail: str) -> NodeTransportError:
+            failure = NodeTransportUnavailable if readonly else NodeTransportAmbiguous
+            return failure(f"node {node_id!r} {action} {detail}")
+
+        async def receive() -> tuple[int, bytearray]:
+            data = bytearray()
+            raw_count = 0
+            chunk_size = 4096
+
+            def admit(chunk: bytes) -> None:
+                if time.monotonic() >= deadline_at:
+                    raise asyncio.TimeoutError
+                if len(data) + len(chunk) > MAX_BODY_BYTES:
+                    raise bad_reply("returned an oversized reply")
+                data.extend(chunk)
+
+            async with client.stream(
+                "POST", url, content=raw,
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                    "Accept-Encoding": "gzip, deflate, identity",
+                },
+            ) as response:
+                encoding = response.headers.get("content-encoding", "identity").strip().lower()
+                if encoding not in ("identity", "gzip", "deflate"):
+                    raise bad_reply("returned an unsupported reply encoding")
+                # Injected transports can supply an already-read response.
+                # Its content is already decoded; admit before copying it.
+                if response.is_stream_consumed:
+                    admit(response.content)
+                    return response.status_code, data
+                decoder = None if encoding == "identity" else zlib.decompressobj(
+                    16 + zlib.MAX_WBITS if encoding == "gzip" else zlib.MAX_WBITS
+                )
+                async for chunk in response.aiter_raw(chunk_size=chunk_size):
+                    if time.monotonic() >= deadline_at:
+                        raise asyncio.TimeoutError
+                    raw_count += len(chunk)
+                    if raw_count > MAX_BODY_BYTES:
+                        raise bad_reply("returned an oversized reply")
+                    if decoder is None:
+                        admit(chunk)
+                        continue
+                    try:
+                        pending = chunk
+                        while True:
+                            decoded = decoder.decompress(pending, chunk_size)
+                            admit(decoded)
+                            pending = decoder.unconsumed_tail
+                            if decoder.unused_data:
+                                raise bad_reply("returned an invalid compressed reply")
+                            if not pending and len(decoded) < chunk_size:
+                                break
+                    except zlib.error as exc:
+                        raise bad_reply("returned an invalid compressed reply") from exc
+                if decoder is not None and not decoder.eof:
+                    raise bad_reply("returned an incomplete compressed reply")
+                return response.status_code, data
+
         try:
-            response = await asyncio.wait_for(
-                client.post(
-                    url,
-                    content=raw,
-                    headers={
-                        "Authorization": f"Bearer {token}",
-                        "Content-Type": "application/json",
-                    },
-                ),
-                timeout=self.deadline,
-            )
+            status, response_bytes = await asyncio.wait_for(receive(), timeout=self.deadline)
         except asyncio.CancelledError:
             raise
         except (asyncio.TimeoutError, TimeoutError) as exc:
@@ -377,27 +505,34 @@ class RemoteNodeTransport:
             raise NodeTransportAmbiguous(
                 f"node {node_id!r} {action} timed out and may have applied"
             ) from exc
-        except httpx.NetworkError as exc:
+        except httpx.ConnectError as exc:
+            # Definitive pre-send failure (DNS / refused / connect-timeout):
+            # nothing was sent, so the operation was not applied.
             raise NodeTransportUnavailable(f"node {node_id!r} unreachable: {type(exc).__name__}") from exc
-        except httpx.HTTPError as exc:
+        except httpx.NetworkError as exc:
+            # Post-send ReadError / WriteError / CloseError: the command may
+            # have applied. Mutating calls quarantine (ambiguous); the
+            # read-only probe carries no effect, so it stays unavailable.
+            if readonly:
+                raise NodeTransportUnavailable(f"node {node_id!r} unreachable: {type(exc).__name__}") from exc
             raise NodeTransportAmbiguous(
                 f"node {node_id!r} {action} failed ambiguously: {type(exc).__name__}"
             ) from exc
-        if response.status_code >= 500:
-            if readonly:
-                raise NodeTransportUnavailable(f"node {node_id!r} {action} failed with {response.status_code}")
-            raise NodeTransportAmbiguous(
-                f"node {node_id!r} {action} failed with {response.status_code} and may have applied"
-            )
+        except httpx.HTTPError as exc:
+            raise bad_reply(f"failed: {type(exc).__name__}") from exc
+        if status >= 500:
+            raise bad_reply(f"failed with {status}")
         try:
-            payload = response.json()
-        except ValueError as exc:
-            raise NodeTransportAmbiguous(f"node {node_id!r} {action} returned invalid JSON") from exc
+            payload = json.loads(response_bytes)
+        except (ValueError, UnicodeDecodeError) as exc:
+            raise bad_reply("returned invalid JSON") from exc
         if not isinstance(payload, dict):
-            raise NodeTransportAmbiguous(f"node {node_id!r} {action} returned a non-object payload")
-        if response.status_code >= 400 or payload.get("ok") is False:
+            raise bad_reply("returned a non-object payload")
+        if payload.get("ok") is not True and payload.get("ok") is not False:
+            raise bad_reply("returned a malformed acknowledgement")
+        if status >= 400 or payload.get("ok") is False:
             raise NodeCommandFailed(
-                response.status_code,
+                status,
                 str(payload.get("error", "remote_refused")),
                 str(payload.get("detail", "worker refused the command")),
             )
@@ -413,13 +548,20 @@ class RemoteNodeTransport:
                 f"node {node_id!r} instance unknown: inspect the worker first"
             ) from exc
 
-    async def inspect(self, node_id: str, *, instance: str | None = None) -> dict[str, Any]:
-        body: dict[str, Any] = {"node": node_id, "instance": instance or ""}
-        # Unscoped probe: the worker still enforces auth + instance binding.
-        probe_token_instance = self._instances.get(node_id, "")
-        body["instance"] = probe_token_instance if instance is None else instance
+    async def inspect(self, node_id: str, *, instance: str | None = None,
+                      lease_offset: int = 0, lease_limit: int = 64,
+                      resource_ids: list[str] | None = None) -> dict[str, Any]:
+        # Discovery never carries a cached instance; explicit inspection
+        # keeps its original pin. Snapshots do not refute in-flight effects.
+        if resource_ids is not None and not isinstance(resource_ids, list):
+            raise NodeCommandFailed(400, "invalid_resources", "resource_ids must be a list")
+        body: dict[str, Any] = {
+            "node": node_id, "instance": instance if instance is not None else "",
+            "lease_offset": lease_offset, "lease_limit": lease_limit,
+            "resource_ids": resource_ids,
+        }
         payload = await self._post(node_id, "inspect", body, operation_id=None, readonly=True)
-        if isinstance(payload.get("instance_id"), str):
+        if instance in (None, "") and isinstance(payload.get("instance_id"), str):
             self._instances[node_id] = payload["instance_id"]
         return payload
 
@@ -478,3 +620,40 @@ class RemoteNodeTransport:
                       instance: str | None = None) -> dict[str, Any]:
         return await self._mutate(node_id, "release", {"lease_ids": list(lease_ids)},
                                   operation_id=operation_id, instance=instance)
+
+    async def _qkd_post(self, node_id: str, path: str, *, operation_id: str, session_id: str,
+                        action: str, payload: Mapping[str, Any],
+                        instance: str | None, readonly: bool) -> dict[str, Any]:
+        """One fixed QKD envelope: pinned original instance, measured caps.
+
+        The coordinator names the node only; token and base URL stay in
+        operator configuration. ``lengths`` and ``capability`` are readonly
+        (deadline semantics); every other QKD action is a pinned mutation.
+        """
+        if not isinstance(action, str):
+            raise ValueError("qkd action must be a string")
+        if not isinstance(payload, Mapping):
+            raise ValueError("qkd payload must be a mapping of wire DTOs")
+        body = {"node": node_id, "instance": self._instance(node_id, instance),
+                "operation_id": operation_id, "session_id": session_id,
+                "action": action, "payload": dict(payload)}
+        return await self._post(node_id, path, body, operation_id=operation_id, readonly=readonly)
+
+    async def qkd_step(self, node_id: str, *, operation_id: str, session_id: str,
+                       action: str, payload: Mapping[str, Any],
+                       instance: str | None = None) -> dict[str, Any]:
+        """Coordinator QKD step over ``POST /v1/node/qkd_step``."""
+        return await self._qkd_post(node_id, "qkd_step", operation_id=operation_id,
+                                    session_id=session_id, action=action, payload=payload,
+                                    instance=instance, readonly=action == "lengths")
+
+    async def qkd_owner(self, node_id: str, *, operation_id: str, session_id: str,
+                        action: str, payload: Mapping[str, Any],
+                        instance: str | None = None) -> dict[str, Any]:
+        """Owner-private capability path over ``POST /v1/node/qkd_owner``.
+
+        Transport-level only; the gateway never proxies this path.
+        """
+        return await self._qkd_post(node_id, "qkd_owner", operation_id=operation_id,
+                                    session_id=session_id, action=action, payload=payload,
+                                    instance=instance, readonly=action == "capability")

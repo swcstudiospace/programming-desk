@@ -15,6 +15,7 @@ import pytest
 
 from desk_gateway import quantum_state
 from desk_gateway.quantum_node import QuantumNodeWorker
+from desk_gateway.quantum_transport import LocalNodeTransport, NodeCommandFailed, NodeTransportAmbiguous
 from desk_gateway.quantum_teleportation import (
     BellPairPool,
     BellStateType,
@@ -102,6 +103,9 @@ def test_pool_create_snapshot_and_status():
         assert [s.pair_id for s in active] == [pair.pair_id]
         assert ctx.pool.snapshot("bell-missing") is None
         assert ctx.pool.status_of("bell-missing") is None
+
+    _run(body())
+
 
 def test_pool_consume_is_single_use():
     async def body():
@@ -427,5 +431,580 @@ def test_snapshot_is_immutable_and_tracks_lifecycle():
         assert third.fidelity == pytest.approx(0.97, abs=1e-9)
         # The earlier snapshot still reports the lifecycle moment it captured.
         assert first.status.value == "active"
+
+    _run(body())
+
+
+# --------------------------------------------------------------------------
+# gap-closure helpers: scripted transports and sinks (68-06)
+
+
+def _ctx_with(transport_factory, nodes=("alice", "bob"), worker_draws=None, sink=True):
+    workers = {}
+    for name in nodes:
+        draws = (worker_draws or {}).get(name, [0.5])
+        workers[name] = QuantumNodeWorker(
+            name, capacity=8, token=f"tok-{name}", rng=ScriptedRng(list(draws)),
+        )
+    transport = transport_factory(workers)
+    events = []
+
+    async def append_event(event):
+        events.append(dict(event))
+        return {"receipt_id": f"r-{len(events)}", "seq": len(events)}
+
+    pool = BellPairPool(
+        rng=ScriptedRng([0.5] * 64),
+        transport=transport,
+        append_event=append_event if sink else None,
+    )
+    ctx = {"workers": workers, "transport": transport, "pool": pool, "events": events}
+    return type("Ctx", (), ctx)()
+
+
+class _CancelOnCall(LocalNodeTransport):
+    """Raises CancelledError on the Nth call of one method, delegates otherwise."""
+
+    def __init__(self, workers, *, method, fail_on=1):
+        super().__init__(workers)
+        self._method = method
+        self._fail_on = fail_on
+        self._calls = 0
+
+    async def _maybe_cancel(self):
+        self._calls += 1
+        if self._calls == self._fail_on:
+            raise asyncio.CancelledError()
+
+    async def reserve(self, node_id, **kwargs):
+        if self._method == "reserve":
+            await self._maybe_cancel()
+        return await super().reserve(node_id, **kwargs)
+
+    async def measure(self, node_id, **kwargs):
+        if self._method == "measure":
+            await self._maybe_cancel()
+        return await super().measure(node_id, **kwargs)
+
+
+class _AmbiguousMeasure(LocalNodeTransport):
+    async def measure(self, node_id, **kwargs):
+        raise NodeTransportAmbiguous("scripted post-send timeout")
+
+
+class _AmbiguousStage(LocalNodeTransport):
+    async def stage_conditional_state(self, node_id, **kwargs):
+        raise NodeTransportAmbiguous("scripted post-send timeout")
+
+
+class _LostReplyReserve(LocalNodeTransport):
+    """Applies the first reserve worker-side, then reports a lost reply."""
+
+    def __init__(self, workers):
+        super().__init__(workers)
+        self._lost = False
+
+    async def reserve(self, node_id, **kwargs):
+        if not self._lost:
+            self._lost = True
+            await super().reserve(node_id, **kwargs)
+            raise NodeTransportAmbiguous("scripted reply lost after apply")
+        return await super().reserve(node_id, **kwargs)
+
+
+async def _failing_sink(event):
+    raise RuntimeError("ledger down")
+
+
+# --------------------------------------------------------------------------
+# whole-batch atomicity and survivor ownership (Task 1)
+
+
+def test_rejected_batches_leave_every_record_untouched():
+    async def body():
+        ctx = _setup()
+        first = await _pair(ctx.pool)
+        second = await _pair(ctx.pool)
+        await ctx.pool.reserve_pairs((first.pair_id, second.pair_id), operation_id="op-1")
+        with pytest.raises(QuantumResourceError):
+            await ctx.pool.consume_pairs((first.pair_id, "bell-missing"), operation_id="op-1")
+        assert ctx.pool.status_of(first.pair_id).value == "reserved"
+        assert ctx.pool.status_of(second.pair_id).value == "reserved"
+        with pytest.raises(QuantumResourceError):
+            await ctx.pool.release_reservation((first.pair_id, second.pair_id), operation_id="op-2")
+        assert ctx.pool.status_of(first.pair_id).value == "reserved"
+        assert ctx.pool.status_of(second.pair_id).value == "reserved"
+        # The holding operation still owns both records: clean consume works.
+        await ctx.pool.consume_pairs((first.pair_id, second.pair_id), operation_id="op-1")
+        assert ctx.pool.status_of(first.pair_id).value == "consumed"
+        assert ctx.pool.status_of(second.pair_id).value == "consumed"
+
+    _run(body())
+
+
+def test_register_output_strips_survivor_leases_from_inputs():
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.1], "bob": [0.5]})
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        result = await purifier.purify(first.pair_id, second.pair_id)
+        assert result.accepted is True
+        output_id = result.output_pair_id
+        assert ctx.pool.leases_of(first.pair_id) == {}
+        output_leases = ctx.pool.leases_of(output_id)
+        assert set(output_leases) == {"alice", "bob"}
+        info = await ctx.transport.inspect("bob")
+        assert any(entry["resource_id"] == output_id for entry in info["leases"])
+        # Releasing a consumed input can no longer disturb its live output.
+        await ctx.pool.release_pair_leases(first.pair_id, operation_id="op-clean")
+        assert ctx.pool.status_of(output_id).value == "active"
+        assert ctx.pool.leases_of(output_id) == output_leases
+        info = await ctx.transport.inspect("bob")
+        assert any(entry["resource_id"] == output_id for entry in info["leases"])
+
+    _run(body())
+
+
+# --------------------------------------------------------------------------
+# whole-operation failure, ambiguity, and cancellation guards (Task 2)
+
+
+def test_create_pair_cancellation_releases_granted_lease():
+    async def body():
+        ctx = _ctx_with(lambda workers: _CancelOnCall(workers, method="reserve", fail_on=2))
+        caught = None
+        try:
+            await ctx.pool.create_pair("alice", "bob", BellStateType.PHI_PLUS, 1.0)
+        except asyncio.CancelledError as exc:
+            caught = exc
+        assert caught is not None
+        assert ctx.pool.list_active_pairs() == []
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+def test_purify_cancellation_before_mutation_releases():
+    async def body():
+        ctx = _ctx_with(
+            lambda workers: _CancelOnCall(workers, method="measure", fail_on=1),
+            worker_draws={"alice": [0.1], "bob": [0.5]},
+        )
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        caught = None
+        try:
+            await purifier.purify(first.pair_id, second.pair_id)
+        except asyncio.CancelledError as exc:
+            caught = exc
+        assert caught is not None
+        assert ctx.pool.status_of(first.pair_id).value == "active"
+        assert ctx.pool.status_of(second.pair_id).value == "active"
+
+    _run(body())
+
+
+def test_purify_cancellation_after_mutation_quarantines():
+    async def body():
+        ctx = _ctx_with(
+            lambda workers: _CancelOnCall(workers, method="measure", fail_on=2),
+            worker_draws={"alice": [0.1], "bob": [0.5]},
+        )
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        caught = None
+        try:
+            await purifier.purify(first.pair_id, second.pair_id)
+        except asyncio.CancelledError as exc:
+            caught = exc
+        assert caught is not None
+        assert ctx.pool.status_of(first.pair_id).value == "quarantined"
+        assert ctx.pool.status_of(second.pair_id).value == "quarantined"
+
+    _run(body())
+
+
+def test_purify_ambiguous_measurement_quarantines_without_retry():
+    async def body():
+        ctx = _ctx_with(
+            lambda workers: _AmbiguousMeasure(workers),
+            worker_draws={"alice": [0.1], "bob": [0.5]},
+        )
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        with pytest.raises(QuantumResourceError) as exc:
+            await purifier.purify(first.pair_id, second.pair_id)
+        assert exc.value.code == "transport_ambiguous"
+        assert ctx.pool.status_of(first.pair_id).value == "quarantined"
+        assert ctx.pool.status_of(second.pair_id).value == "quarantined"
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+class _RefuseTransfer(LocalNodeTransport):
+    async def transfer(self, node_id, **kwargs):
+        raise NodeCommandFailed(409, "lease_unavailable", "scripted split transfer")
+
+
+def test_purify_failed_transfer_quarantines_without_splitting_ownership():
+    async def body():
+        ctx = _ctx_with(
+            lambda workers: _RefuseTransfer(workers),
+            worker_draws={"alice": [0.1], "bob": [0.5]},
+        )
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        with pytest.raises(QuantumResourceError) as exc:
+            await purifier.purify(first.pair_id, second.pair_id)
+        assert exc.value.code == "transport_ambiguous"
+        assert ctx.pool.status_of(first.pair_id).value == "quarantined"
+        assert ctx.pool.status_of(second.pair_id).value == "quarantined"
+        assert ctx.pool.list_active_pairs() == []
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+def test_uncertain_reserve_is_adopted_through_inspection():
+    async def body():
+        ctx = _ctx_with(lambda workers: _LostReplyReserve(workers))
+        pair = await ctx.pool.create_pair("alice", "bob", BellStateType.PHI_PLUS, 1.0)
+        assert ctx.pool.status_of(pair.pair_id).value == "active"
+        assert set(ctx.pool.leases_of(pair.pair_id)) == {"alice", "bob"}
+        ledger = ctx.pool.uncertain_reserves()
+        assert len(ledger) == 1
+        (key_op, key_resource), entry = next(iter(ledger.items()))
+        assert key_resource == pair.pair_id
+        assert entry["status"] == "adopted"
+        assert len(entry["lease_ids"]) == 1
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 1
+
+    _run(body())
+
+
+def test_purify_receipt_failure_quarantines_output():
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.1], "bob": [0.5]})
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        ctx.pool._append_event = _failing_sink
+        with pytest.raises(QuantumResourceError) as exc:
+            await purifier.purify(first.pair_id, second.pair_id)
+        assert exc.value.code == "receipt_failed"
+        assert ctx.pool.status_of(first.pair_id).value == "consumed"
+        assert ctx.pool.status_of(second.pair_id).value == "consumed"
+        quarantined = [
+            pair_id for pair_id, record in ctx.pool._records.items()
+            if record.status.value == "quarantined"
+        ]
+        assert len(quarantined) == 1
+        assert ctx.pool.leases_of(quarantined[0]) != {}
+
+    _run(body())
+
+
+def test_route_four_nodes_tracks_hops_with_indexed_swaps():
+    async def body():
+        ctx = _setup(
+            nodes=("a", "r1", "r2", "b"),
+            worker_rngs={"a": [0.5], "r1": [0.3], "r2": [0.3], "b": [0.5]},
+        )
+        mesh = QuantumRepeaterMesh(ctx.pool)
+        for node in ("a", "r1", "r2", "b"):
+            mesh.register_node(node, "test")
+        mesh.register_link("a", "r1")
+        mesh.register_link("r1", "r2")
+        mesh.register_link("r2", "b")
+        ok, pair, logs = await mesh.establish_multi_hop_entanglement(
+            ["a", "r1", "r2", "b"], base_fidelity=0.98, purify_hops=False,
+        )
+        assert ok is True
+        assert pair is not None
+        assert {pair.node_a, pair.node_b} == {"a", "b"}
+        bsm_ops = [c.operation_id for c in ctx.transport.calls if c.action == "measure"]
+        assert len(bsm_ops) == 2
+        assert "-swap-0-" in bsm_ops[0]
+        assert "-swap-1-" in bsm_ops[1]
+        assert bsm_ops[0] != bsm_ops[1]
+        live = ctx.pool.list_active_pairs()
+        assert [snap.pair_id for snap in live] == [pair.pair_id]
+        for node, want in (("a", 1), ("b", 1), ("r1", 0), ("r2", 0)):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == want
+
+    _run(body())
+
+
+def test_route_purified_four_nodes_succeeds():
+    async def body():
+        ctx = _setup(
+            nodes=("a", "r1", "r2", "b"),
+            worker_rngs={"a": [0.1], "r1": [0.5, 0.1, 0.3], "r2": [0.5, 0.1, 0.3], "b": [0.5]},
+        )
+        mesh = QuantumRepeaterMesh(ctx.pool)
+        for node in ("a", "r1", "r2", "b"):
+            mesh.register_node(node, "test")
+        mesh.register_link("a", "r1")
+        mesh.register_link("r1", "r2")
+        mesh.register_link("r2", "b")
+        ok, pair, logs = await mesh.establish_multi_hop_entanglement(
+            ["a", "r1", "r2", "b"], base_fidelity=0.98, purify_hops=True,
+        )
+        assert ok is True
+        assert pair is not None
+        assert {pair.node_a, pair.node_b} == {"a", "b"}
+        live = ctx.pool.list_active_pairs()
+        assert [snap.pair_id for snap in live] == [pair.pair_id]
+
+    _run(body())
+
+
+def test_route_purify_reject_aborts_without_stranded_capacity():
+    async def body():
+        ctx = _setup(
+            nodes=("a", "r1", "r2", "b"),
+            worker_rngs={"a": [0.6], "r1": [0.01], "r2": [0.5], "b": [0.5]},
+        )
+        mesh = QuantumRepeaterMesh(ctx.pool)
+        for node in ("a", "r1", "r2", "b"):
+            mesh.register_node(node, "test")
+        mesh.register_link("a", "r1")
+        mesh.register_link("r1", "r2")
+        mesh.register_link("r2", "b")
+        ok, pair, logs = await mesh.establish_multi_hop_entanglement(
+            ["a", "r1", "r2", "b"], base_fidelity=0.98, purify_hops=True,
+        )
+        assert ok is False
+        assert pair is None
+        assert any("abort" in entry for entry in logs)
+        assert ctx.pool.list_active_pairs() == []
+        for node in ("a", "r1", "r2", "b"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+def test_teleport_stage_ambiguity_quarantines_and_reclaims_leases():
+    async def body():
+        ctx = _ctx_with(
+            lambda workers: _AmbiguousStage(workers),
+            worker_draws={"alice": [0.1]},
+        )
+        proto = QuantumTeleportationProtocol(pool=ctx.pool)
+        pair = await _pair(ctx.pool, fidelity=1.0)
+        with pytest.raises(QuantumResourceError) as exc:
+            await proto.teleport_qubit("alice", "bob", 1.0 + 0j, 0.0j, bell_pair=pair.pair_id)
+        assert exc.value.code == "transport_ambiguous"
+        assert ctx.pool.status_of(pair.pair_id).value == "quarantined"
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+# --------------------------------------------------------------------------
+# output ownership, truthful physics, and release (Task 3)
+
+
+def test_release_teleport_output_lifecycle():
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.3]})
+        mesh = QuantumRepeaterMesh(ctx.pool)
+        proto = QuantumTeleportationProtocol(mesh, transport=ctx.transport)
+        pair = await _pair(ctx.pool, fidelity=1.0)
+        result = await proto.teleport_qubit("alice", "bob", 1.0 + 0j, 0.0j, bell_pair=pair.pair_id)
+        assert result.success is True
+        session = result.session_id
+        stored = proto.outputs[session]
+        assert stored.status == "available"
+        assert stored.receiver == "bob"
+        with pytest.raises(QuantumResourceError) as exc:
+            await proto.release_teleport_output(session, "carol", "rel-0")
+        assert exc.value.code == "receiver_mismatch"
+        assert exc.value.status == 403
+        with pytest.raises(QuantumResourceError) as exc:
+            await proto.release_teleport_output("teleport-missing", "bob", "rel-0")
+        assert exc.value.code == "unknown_session"
+        assert exc.value.status == 404
+        first = await proto.release_teleport_output(session, "bob", "rel-1")
+        assert first["ok"] is True
+        assert first["acknowledgement"] == "ack-rel-1"
+        assert set(first["output"]) == {
+            "session_id", "receiver", "resource_id", "lease_id", "instance_id", "status",
+        }
+        assert first["output"]["status"] == "released"
+        assert first["output"]["session_id"] == session
+        assert "tok-" not in json.dumps(first)
+        assert proto.outputs[session].status == "released"
+        info = await ctx.transport.inspect("bob")
+        assert info["active_count"] == 0
+        with pytest.raises(QuantumResourceError) as exc:
+            await proto.release_teleport_output(session, "bob", "rel-2")
+        assert exc.value.code == "already_released"
+        assert exc.value.status == 409
+        replay = await proto.release_teleport_output(session, "bob", "rel-1")
+        assert replay == first
+        releases = [c for c in ctx.transport.calls if c.action == "release" and c.operation_id == "rel-1"]
+        assert len(releases) == 1
+
+    _run(body())
+
+
+def test_below_threshold_output_is_reclaimed_not_owned():
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.3]})
+        mesh = QuantumRepeaterMesh(ctx.pool)
+        proto = QuantumTeleportationProtocol(mesh, transport=ctx.transport)
+        pair = await _pair(ctx.pool, fidelity=0.90)
+        result = await proto.teleport_qubit(
+            "alice", "bob", complex(0.6, 0.0), complex(0.8, 0.0), bell_pair=pair.pair_id,
+        )
+        assert result.success is False
+        assert result.reason == "below_threshold"
+        assert proto.outputs == {}
+        with pytest.raises(QuantumResourceError) as exc:
+            await proto.release_teleport_output(result.session_id, "bob", "rel-1")
+        assert exc.value.code == "unknown_session"
+        assert exc.value.status == 404
+        for node in ("alice", "bob"):
+            info = await ctx.transport.inspect(node)
+            assert info["active_count"] == 0
+
+    _run(body())
+
+
+def test_repeated_purification_reports_actual_branch_odds():
+    async def body():
+        ctx = _setup(worker_rngs={"alice": [0.1, 0.6], "bob": [0.5, 0.05]})
+        purifier = EntanglementPurifier(ctx.pool)
+        first = await _pair(ctx.pool, fidelity=0.90)
+        second = await _pair(ctx.pool, fidelity=0.92)
+        round_one = await purifier.purify(first.pair_id, second.pair_id)
+        assert round_one.accepted is True
+        survivor = ctx.pool.get_pair(round_one.output_pair_id)
+        assert survivor is not None
+        fresh = await _pair(ctx.pool, fidelity=0.90)
+        round_two = await purifier.purify(survivor.pair_id, fresh.pair_id)
+        rho_kept = survivor.oriented("alice", "bob")
+        rho_fresh = fresh.oriented("alice", "bob")
+        joint = rho_kept.tensor(rho_fresh).apply_cnot(0, 2).apply_cnot(1, 3)
+        oracle = math.fsum(
+            branch.probability for branch in joint.branches_z((2, 3)) if branch.bits[0] == branch.bits[1]
+        )
+        assert round_two.p_accept == pytest.approx(oracle, abs=1e-12)
+
+    _run(body())
+
+
+def test_math_mode_receiver_matrix_is_corrected_state():
+    async def body():
+        events = []
+
+        async def append_event(event):
+            events.append(dict(event))
+            return {"receipt_id": f"r-{len(events)}", "seq": len(events)}
+
+        pool = BellPairPool(rng=ScriptedRng([0.5]), transport=None, append_event=append_event)
+        proto = QuantumTeleportationProtocol(pool=pool)
+        pair = await pool.create_pair("alice", "bob", BellStateType.PHI_PLUS, 1.0)
+        result = await proto.teleport_qubit("alice", "bob", 1.0 + 0j, 0.0j, bell_pair=pair.pair_id)
+        assert result.acknowledged is False
+        assert result.reason == "unacknowledged"
+        want = quantum_state.QuantumStateVector.from_qubit(1.0 + 0j, 0.0j).density().to_public_matrix()
+        worst = max(
+            abs(result.receiver_matrix[i][j][k] - want[i][j][k])
+            for i in range(2) for j in range(2) for k in range(2)
+        )
+        assert worst <= 1e-9
+        assert proto.outputs == {}
+
+    _run(body())
+
+
+def test_late_reservation_commit_remains_original_instance_quarantine():
+    async def body():
+        ctx = _setup()
+        ready = asyncio.Event()
+
+        class LateReserve(LocalNodeTransport):
+            pending = None
+
+            async def reserve(self, node_id, **kwargs):
+                if node_id != "alice":
+                    return await super().reserve(node_id, **kwargs)
+
+                async def commit_after_timeout():
+                    await ready.wait()
+                    return await LocalNodeTransport.reserve(self, node_id, **kwargs)
+
+                self.pending = asyncio.create_task(commit_after_timeout())
+                raise NodeTransportAmbiguous("handler still pending")
+
+        transport = LateReserve(ctx.workers)
+        pool = BellPairPool(transport=transport)
+        with pytest.raises(QuantumResourceError) as caught:
+            await pool.create_pair("alice", "bob", BellStateType.PHI_PLUS, 1.0)
+        assert caught.value.code == "transport_ambiguous"
+        uncertainty = next(iter(pool.uncertain_reserves().values()))
+        assert uncertainty["status"] == "unresolved"
+        assert uncertainty["instance_id"] == ctx.workers["alice"].instance_id
+        ready.set()
+        granted = await transport.pending
+        info = await transport.inspect("alice", instance=uncertainty["instance_id"])
+        assert info["active_count"] == 1
+        assert next(iter(pool.uncertain_reserves().values()))["status"] == "unresolved"
+        await LocalNodeTransport.release(
+            transport, "alice", operation_id="late-test-cleanup",
+            lease_ids=granted["leases"], instance=uncertainty["instance_id"],
+        )
+
+    _run(body())
+
+
+def test_quarantined_output_release_cannot_issue_another_mutation():
+    async def body():
+        ctx = _setup()
+        pair = await _pair(ctx.pool)
+        protocol = QuantumTeleportationProtocol(pool=ctx.pool)
+        result = await protocol.teleport_qubit("alice", "bob", 1, 1j, pair.pair_id)
+
+        class DroppedRelease(LocalNodeTransport):
+            attempts = 0
+
+            async def release(self, node_id, **kwargs):
+                self.attempts += 1
+                await super().release(node_id, **kwargs)
+                raise NodeTransportAmbiguous("terminal release reply lost")
+
+        transport = DroppedRelease(ctx.workers)
+        protocol._transport = transport
+        with pytest.raises(QuantumResourceError) as first:
+            await protocol.release_teleport_output(result.session_id, "bob", "release-first")
+        assert first.value.code == "transport_ambiguous"
+        for operation in ("release-first", "release-new"):
+            with pytest.raises(QuantumResourceError) as retry:
+                await protocol.release_teleport_output(result.session_id, "bob", operation)
+            assert retry.value.code == "output_quarantined" and retry.value.status == 409
+        assert transport.attempts == 1
+        assert protocol.sessions[result.session_id].output.status == "quarantined"
+        worker = await ctx.transport.inspect("bob")
+        assert all(lease["lease_id"] != result.output.lease_id for lease in worker["leases"])
 
     _run(body())

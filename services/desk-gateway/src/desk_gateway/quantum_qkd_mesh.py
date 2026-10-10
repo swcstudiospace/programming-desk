@@ -32,12 +32,19 @@ from .quantum_key import (
     estimate_chsh,
     finite_sample_budget,
     qber_exceeds,
-    random_bits,
     sample_chsh_outcome,
     validate_count,
     validate_requested_bits,
 )
-from .quantum_node import QuantumNodeError, deposit_correlated_key_bits
+from .quantum_node import (
+    QKD_ABORT_REASONS,
+    QuantumNodeError,
+    decode_bits,
+    decode_signals,
+    encode_density,
+    encode_indices,
+    encode_signals,
+)
 from .quantum_state import BellState, H, X, Z
 from .quantum_teleportation import (
     BellPairPool,
@@ -45,6 +52,7 @@ from .quantum_teleportation import (
     QuantumRepeaterMesh,
     QuantumResourceError,
 )
+from .quantum_transport import NodeCommandFailed, NodeTransportAmbiguous
 
 
 class QuantumBasis(str, enum.Enum):
@@ -68,22 +76,20 @@ def _check_endpoint(value: object, name: str) -> str:
     return value
 
 
-def _normalize_flips(value: object) -> tuple:
-    """Test-hook flip positions (post-permutation candidate indices)."""
-    if value is None:
-        return ()
-    try:
-        items = tuple(value)
-    except TypeError:
-        raise ValueError("_flip_bob must be a sequence of candidate indices") from None
-    for pos in items:
-        if isinstance(pos, bool) or not isinstance(pos, int) or pos < 0:
-            raise ValueError("_flip_bob entries must be non-negative integers")
-    return items
+class _WorkerPlaneUnavailable(Exception):
+    """No QKD transport is bound (fail-closed, no key)."""
 
 
-class _WorkerBindingError(Exception):
-    """No in-process worker is bound for an endpoint (fail-closed, no key)."""
+_ABORT_MAP = {"entanglement_witness_failed": "witness_failed"}
+
+
+def _worker_abort_reason(session_reason: Optional[str]) -> str:
+    """Map an engine session reason onto a fixed worker abort code."""
+    if session_reason is not None:
+        mapped = _ABORT_MAP.get(session_reason, session_reason)
+        if mapped in QKD_ABORT_REASONS:
+            return mapped
+    return "protocol_error"
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,8 +170,11 @@ class QKDProtocolEngine:
     Trusted-device simulator numerical budget only: no physical,
     device-independent, or production-secrecy claim. ``QKDProtocolEngine(mesh)``
     constructs without running a session, without I/O, and without raising.
-    Remote QKD transport is not in this slice; key delivery uses in-process
-    worker references passed as ``workers={node_id: worker}``.
+    All endpoint work runs through the shared ``qkd_step``/``qkd_owner``
+    transport; this object holds no worker references and supplies no
+    private endpoint draws. ``rng`` is the channel/test RNG only (Eve
+    resend, public index shuffles, disclosed CHSH/phase test rounds);
+    raw bits, bases, outcomes, and blinding are worker-local.
     """
 
     def __init__(
@@ -176,8 +185,6 @@ class QKDProtocolEngine:
         transport: Any = None,
         rng: Any = None,
         append_event: Any = None,
-        workers: Optional[Mapping[str, Any]] = None,
-        worker_tokens: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.mesh = mesh
         self.repeater_mesh = mesh
@@ -189,77 +196,125 @@ class QKDProtocolEngine:
                 BellPairPool(transport=transport) if transport is not None else BellPairPool()
             )
         self.pool: BellPairPool = resolved
+        if transport is None:
+            transport = getattr(resolved, "_transport", None)
         self.transport = transport
         self._rng = rng if rng is not None else secrets.SystemRandom()
         self._append_event = append_event
-        self._workers: Dict[str, Any] = dict(workers) if workers else {}
-        self._worker_tokens: Dict[str, str] = dict(worker_tokens) if worker_tokens else {}
         self.sessions: Dict[str, QKDSession] = {}
+        self._session_instances: Dict[str, Dict[str, str]] = {}
+        self._quarantined_sessions: Dict[str, Dict[str, str]] = {}
 
-    def _scope(self, node: str) -> tuple:
-        worker = self._workers.get(node)
-        if worker is None:
-            raise _WorkerBindingError(f"no worker bound for {node}")
-        token = self._worker_tokens.get(node, getattr(worker, "_token", ""))
-        return worker, token, worker.instance_id
+    def _require_transport(self) -> Any:
+        transport = self.transport
+        if transport is None:
+            raise _WorkerPlaneUnavailable("no QKD transport bound")
+        return transport
 
-    async def _bind(self, session_id: str, sender: str, receiver: str) -> bool:
+    async def _discover(self, sender: str, receiver: str) -> Dict[str, str]:
+        """Pin both nodes' original instances once per session.
+
+        Authenticated read-only discovery runs before any RNG draw or
+        worker effect; every later step reuses these pinned instances.
+        """
+        transport = self._require_transport()
+        instances: Dict[str, str] = {}
+        for node in (sender, receiver):
+            info = await transport.inspect(node)
+            instances[node] = info["instance_id"]
+        return instances
+
+    async def _step(
+        self,
+        node: str,
+        session_id: str,
+        operation_id: str,
+        action: str,
+        payload: Mapping[str, Any],
+        instances: Mapping[str, str],
+    ) -> Dict[str, Any]:
+        """One coordinator step over the shared transport (same Local/Remote codec)."""
+        transport = self._require_transport()
+        return await transport.qkd_step(
+            node,
+            operation_id=operation_id,
+            session_id=session_id,
+            action=action,
+            payload=payload,
+            instance=instances.get(node),
+        )
+
+    async def _bind(
+        self, session_id: str, sender: str, receiver: str, protocol: str, instances: Mapping[str, str]
+    ) -> bool:
         """Bind role/session/ownership on both endpoint workers."""
         try:
             for node, role, peer in (
                 (sender, "alice", receiver),
                 (receiver, "bob", sender),
             ):
-                worker, token, instance = self._scope(node)
-                await worker.begin_qkd(
-                    operation_id=f"{session_id}-begin-{node}",
-                    session_id=session_id,
-                    role=role,
-                    peer=peer,
-                    owner=node,
-                    token=token,
-                    node=node,
-                    instance=instance,
+                await self._step(
+                    node, session_id, f"{session_id}-begin-{node}", "begin",
+                    {"protocol": protocol, "role": role, "peer": peer},
+                    instances,
                 )
         except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
             raise
         except Exception:
             return False
         return True
 
-    async def _mirror(self, sender: str, receiver: str, session_id: str, op: str, method: str, **kwargs: Any) -> bool:
-        """Invoke a session-scoped step on both endpoint workers."""
-        try:
-            for node in (sender, receiver):
-                worker, token, instance = self._scope(node)
-                await getattr(worker, method)(
-                    operation_id=f"{session_id}-{op}-{node}",
-                    session_id=session_id,
-                    token=token,
-                    node=node,
-                    instance=instance,
-                    **kwargs,
-                )
-        except (asyncio.CancelledError, KeyboardInterrupt):
-            raise
-        except Exception:
-            return False
-        return True
-
-    async def _abort_workers(self, sender: str, receiver: str, session_id: str) -> None:
-        """Best-effort key-availability destruction on both workers."""
+    async def _abort_workers(
+        self,
+        sender: str,
+        receiver: str,
+        session_id: str,
+        reason: str,
+        instances: Optional[Mapping[str, str]] = None,
+    ) -> bool:
+        """Destroy owned buffers or retain the original scope as quarantined."""
+        pinned = dict(instances) if instances else {}
+        if not pinned:
+            return True  # No endpoint effects preceded authenticated discovery.
+        unconfirmed: Dict[str, str] = {}
+        transport = self.transport
         for node in (sender, receiver):
-            try:
-                worker, token, instance = self._scope(node)
-                await worker.abort(
-                    operation_id=f"{session_id}-abort-{node}",
-                    session_id=session_id,
-                    token=token,
-                    node=node,
-                    instance=instance,
-                )
-            except Exception:
-                continue
+            cleared = False
+            if transport is not None:
+                try:
+                    await transport.qkd_step(
+                        node, operation_id=f"{session_id}-abort-{node}",
+                        session_id=session_id, action="abort", payload={"reason": reason},
+                        instance=pinned.get(node),
+                    )
+                    cleared = True
+                except NodeCommandFailed as exc:
+                    cleared = exc.code in ("unknown_session", "already_aborted", "already_used")
+                except Exception:
+                    pass
+                if not cleared:
+                    try:
+                        state = await transport.qkd_step(
+                            node, operation_id=f"{session_id}-abort-state-{node}",
+                            session_id=session_id, action="lengths", payload={},
+                            instance=pinned.get(node),
+                        )
+                        cleared = (
+                            state["state"] in ("used", "aborted")
+                            and state["key_available"] is False
+                            and state["key_length"] == 0
+                            and state["phase_length"] == 0
+                        )
+                    except Exception:
+                        pass
+            if not cleared:
+                unconfirmed[node] = pinned[node]
+        if unconfirmed:
+            self._quarantined_sessions[session_id] = unconfirmed
+            return False
+        self._quarantined_sessions.pop(session_id, None)
+        return True
 
     async def _emit(self, session: QKDSession) -> Optional[str]:
         if self._append_event is None:
@@ -297,7 +352,7 @@ class QKDProtocolEngine:
         if chsh is not None:
             body["chsh_S"] = chsh.get("S")
             body["chsh_S_lower"] = chsh.get("S_lower")
-            body["chsh_counts"] = dict(chsh.get("counts", {}))
+            body["chsh_counts"] = {str(key): value for key, value in dict(chsh.get("counts", {})).items()}
         return body
 
     async def _abort(
@@ -322,15 +377,17 @@ class QKDProtocolEngine:
         budget: Optional[Dict[str, Any]] = None,
         chsh: Optional[Dict[str, Any]] = None,
         session_id: Optional[str] = None,
+        instances: Optional[Mapping[str, str]] = None,
     ) -> QKDSession:
         sid = session_id or f"{prefix}-{secrets.token_hex(8)}"
-        if bound:
-            await self._abort_workers(sender, receiver, sid)
+        cleanup_confirmed = not bound or await self._abort_workers(
+            sender, receiver, sid, _worker_abort_reason(reason), instances,
+        )
         session = QKDSession(
             session_id=sid,
             protocol=protocol,
-            status="aborted",
-            reason=reason,
+            status="aborted" if cleanup_confirmed else "failed",
+            reason=reason if cleanup_confirmed else "key_cleanup_unconfirmed",
             sender=sender,
             receiver=receiver,
             raw_count=raw_count,
@@ -368,14 +425,15 @@ class QKDProtocolEngine:
         *,
         prefix: str,
         session_id: Optional[str] = None,
+        instances: Optional[Mapping[str, str]] = None,
     ) -> QKDSession:
         sid = session_id or f"{prefix}-{secrets.token_hex(8)}"
-        await self._abort_workers(sender, receiver, sid)
+        cleanup_confirmed = await self._abort_workers(sender, receiver, sid, "protocol_error", instances)
         session = QKDSession(
             session_id=sid,
             protocol=protocol,
             status="failed",
-            reason=None,
+            reason=None if cleanup_confirmed else "key_cleanup_unconfirmed",
             sender=sender,
             receiver=receiver,
             raw_count=raw_count,
@@ -395,9 +453,14 @@ class QKDProtocolEngine:
         *,
         intercept: bool = False,
         requested_bits: int = 256,
-        _flip_bob: Optional[Sequence[int]] = None,
     ) -> QKDSession:
-        """Run one BB84 session: kernel preparation, Born measurement, sifting."""
+        """Run one BB84 session over the shared transport.
+
+        Alice prepares private bits/bases, Bob independently chooses and
+        measures his bases; the engine sifts on the returned public bases
+        and both endpoints adopt disjoint phase/key indices. Bob reconciles
+        his own candidate; nothing is copied from Alice.
+        """
         t0 = time.perf_counter()
         sender = _check_endpoint(sender, "sender")
         receiver = _check_endpoint(receiver, "receiver")
@@ -407,81 +470,70 @@ class QKDProtocolEngine:
         requested_bits = validate_requested_bits(requested_bits)
         if not isinstance(intercept, bool):
             raise ValueError("intercept must be a bool")
-        flips = _normalize_flips(_flip_bob)
         if bit_length == 0:
             return await self._abort(
                 sender, receiver, "BB84", 0, "insufficient_sample",
                 requested_bits, t0, prefix="qkd-bb84",
             )
         session_id = f"qkd-bb84-{secrets.token_hex(8)}"
-        if not await self._bind(session_id, sender, receiver):
+        try:
+            instances = await self._discover(sender, receiver)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            raise
+        except Exception:
             return await self._fail(sender, receiver, "BB84", bit_length, t0, prefix="qkd-bb84", session_id=session_id)
+        if not await self._bind(session_id, sender, receiver, "BB84", instances):
+            return await self._fail(sender, receiver, "BB84", bit_length, t0, prefix="qkd-bb84", session_id=session_id, instances=instances)
+        self._session_instances[session_id] = dict(instances)
         rng = self._rng
         try:
-            alice, token_a, inst_a = self._scope(sender)
-            bob, token_b, inst_b = self._scope(receiver)
-            prepared = await alice.qkd_prepare_bb84(
-                operation_id=f"{session_id}-prepare",
-                session_id=session_id,
-                count=bit_length,
-                rng=rng,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            prepared = await self._step(
+                sender, session_id, f"{session_id}-prepare", "prepare_bb84",
+                {"count": bit_length}, instances,
             )
-            states = prepared["states"]
-            bases_a = prepared["bases"]
+            signals_dto = prepared["signals"]
+            bases_a = decode_bits(prepared["bases"], "bases")
             if intercept:
-                # Numerical intercept-resend. Eve's click is the attack sample;
-                # Alice's bits stay in her vault.
+                # Numerical intercept-resend on the encoded signals. Eve's
+                # click is the attack sample; Alice's bits stay in her vault.
+                raw = decode_signals(signals_dto, "signals")
                 resent = []
-                for vec in states:
+                for value in raw:
+                    vec = bb84_state(value & 1, "+" if value < 2 else "x")
                     eve_basis = rng.choice(("+", "x"))
                     probed = vec.apply_single(H, 0) if eve_basis == "x" else vec
                     eve_bit = int(probed.density().measure_z((0,), rng).bits[0])
-                    resent.append(bb84_state(eve_bit, eve_basis))
-                states = resent
-            bases_b = [rng.choice(("+", "x")) for _ in range(bit_length)]
-            await bob.qkd_measure_bb84(
-                operation_id=f"{session_id}-measure",
-                session_id=session_id,
-                states=states,
-                bases=bases_b,
-                rng=rng,
-                token=token_b,
-                node=receiver,
-                instance=inst_b,
+                    resent.append(eve_bit + (0 if eve_basis == "+" else 2))
+                signals_dto = encode_signals(resent)
+            measured = await self._step(
+                receiver, session_id, f"{session_id}-measure", "measure_bb84",
+                {"signals": signals_dto}, instances,
             )
-            del states
+            bases_b = decode_bits(measured["bases"], "bases")
             # Sift on basis match. The matching indices are shuffled before the
             # Z/X split so the phase sample is not a first-N prefix.
             sifted = [i for i in range(bit_length) if bases_a[i] == bases_b[i]]
             order = list(sifted)
             rng.shuffle(order)
-            key_idx = [i for i in order if bases_a[i] == "+"]
-            phase_idx = [i for i in order if bases_a[i] == "x"]
-            part_a = await alice.qkd_adopt_indices(
-                operation_id=f"{session_id}-sift-a",
-                session_id=session_id,
-                key_indices=key_idx,
-                phase_indices=phase_idx,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            key_idx = [i for i in order if bases_a[i] == 0]
+            phase_idx = [i for i in order if bases_a[i] == 1]
+            keep_dto = encode_indices(key_idx)
+            phase_dto = encode_indices(phase_idx)
+            part_a = await self._step(
+                sender, session_id, f"{session_id}-sift-a", "adopt_indices",
+                {"keep": keep_dto, "phase": phase_dto}, instances,
             )
-            part_b = await bob.qkd_adopt_indices(
-                operation_id=f"{session_id}-sift-b",
-                session_id=session_id,
-                key_indices=key_idx,
-                phase_indices=phase_idx,
-                token=token_b,
-                node=receiver,
-                instance=inst_b,
+            part_b = await self._step(
+                receiver, session_id, f"{session_id}-sift-b", "adopt_indices",
+                {"keep": keep_dto, "phase": phase_dto}, instances,
             )
+            phase_a = decode_bits(part_a["phase_sample"], "phase_sample")
+            phase_b = decode_bits(part_b["phase_sample"], "phase_sample")
         except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
             raise
         except Exception:
-            return await self._fail(sender, receiver, "BB84", bit_length, t0, prefix="qkd-bb84", session_id=session_id)
+            return await self._fail(sender, receiver, "BB84", bit_length, t0, prefix="qkd-bb84", session_id=session_id, instances=instances)
         return await self._finish(
             sender=sender,
             receiver=receiver,
@@ -489,11 +541,11 @@ class QKDProtocolEngine:
             session_id=session_id,
             raw_count=bit_length,
             sifted_count=len(sifted),
-            phase_a=part_a["phase_bits"],
-            phase_b=part_b["phase_bits"],
+            phase_a=phase_a,
+            phase_b=phase_b,
             requested_bits=requested_bits,
-            flips=flips,
             t0=t0,
+            instances=instances,
         )
 
     async def run_e91(
@@ -504,7 +556,16 @@ class QKDProtocolEngine:
         *,
         requested_bits: int = 256,
     ) -> QKDSession:
-        """Run one E91 session over real pool pairs with a CHSH witness."""
+        """Run one E91 session: worker-owned key rounds plus a CHSH witness.
+
+        Key rounds are role-scoped: Alice measures her half of an owned
+        actual Bell lease and keeps only her click, forwarding the
+        conditional density; Bob measures that conditional with his own
+        worker RNG and keeps only his click. The coordinator never holds
+        both round bits. CHSH witness and X/X phase-test rounds are
+        disjoint, deliberately public samples over their own consumed
+        pool pairs with the channel/test RNG.
+        """
         t0 = time.perf_counter()
         sender = _check_endpoint(sender, "sender")
         receiver = _check_endpoint(receiver, "receiver")
@@ -518,17 +579,31 @@ class QKDProtocolEngine:
                 requested_bits, t0, prefix="qkd-e91",
             )
         session_id = f"qkd-e91-{secrets.token_hex(8)}"
-        if not await self._bind(session_id, sender, receiver):
+        try:
+            instances = await self._discover(sender, receiver)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            raise
+        except Exception:
             return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id)
+        if not await self._bind(session_id, sender, receiver, "E91", instances):
+            return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id, instances=instances)
+        self._session_instances[session_id] = dict(instances)
         rng = self._rng
         # Pre-randomized disjoint round classes: CHSH witness, key (Z/Z),
         # and phase-test (X/X). pair_count is not simultaneous qubit count:
         # pairs stream one at a time inside worker capacity.
-        order = list(range(pair_count))
-        rng.shuffle(order)
         n_chsh = pair_count // 2
         rest = pair_count - n_chsh
         n_key = rest * 3 // 5
+        n_phase = rest - n_key
+        if n_key == 0 or n_phase == 0 or finite_sample_budget(n_key, n_phase, 0.0, 0, requested_bits)["mu"] >= 0.5:
+            return await self._abort(
+                sender, receiver, "E91", pair_count, "insufficient_sample",
+                requested_bits, t0, prefix="qkd-e91", bound=True,
+                session_id=session_id, instances=instances,
+            )
+        order = list(range(pair_count))
+        rng.shuffle(order)
         kinds: Dict[int, str] = {}
         for pos, idx in enumerate(order):
             if pos < n_chsh:
@@ -541,12 +616,14 @@ class QKDProtocolEngine:
         phase_a: List[int] = []
         phase_b: List[int] = []
         chsh_records: List[tuple] = []
+        key_seq = 0
         try:
             for i in range(pair_count):
                 pair = await self.pool.create_pair(
                     sender, receiver, BellStateType.PHI_PLUS, 1.0,
                     operation_id=f"{session_id}-mk-{i}",
                 )
+                retire_op = f"{session_id}-retire-{i}"
                 try:
                     rho = pair.oriented(sender, receiver)
                     # Normalize non-Phi+ frames with local Paulis before sampling.
@@ -561,57 +638,76 @@ class QKDProtocolEngine:
                         a_bit, b_bit = sample_chsh_outcome(rho, setting // 2, setting % 2, rng)
                         chsh_records.append((setting, a_bit, b_bit))
                     elif kind == "key":
-                        alice_w, token_a, inst_a = self._scope(sender)
-                        bob_w, token_b, inst_b = self._scope(receiver)
-                        await deposit_correlated_key_bits(
-                            alice_w, bob_w, rho, session_id, rng,
-                            f"{session_id}-key-{i}",
-                            {"token": token_a, "node": sender, "instance": inst_a},
-                            {"token": token_b, "node": receiver, "instance": inst_b},
+                        leases = self.pool.leases_of(pair.pair_id)
+                        alice_round = await self._step(
+                            sender, session_id, f"{session_id}-key-{i}-a", "measure_e91",
+                            {"round_index": key_seq, "pair_id": pair.pair_id,
+                             "lease_id": leases[sender], "setting": 0,
+                             "state": encode_density(rho)},
+                            instances,
                         )
+                        await self._step(
+                            receiver, session_id, f"{session_id}-key-{i}-b", "measure_e91",
+                            {"round_index": key_seq, "pair_id": pair.pair_id,
+                             "lease_id": leases[receiver], "setting": 0,
+                             "state": alice_round["conditional"]},
+                            instances,
+                        )
+                        key_seq += 1
                     else:
                         evolved = rho.apply_single(H, 0).apply_single(H, 1)
                         branch = evolved.measure_z((0, 1), rng)
                         pa, pb = (int(v) for v in branch.bits)
                         phase_a.append(pa)
                         phase_b.append(pb)
-                finally:
-                    # Every pair is consumed once, including aborts.
-                    op = f"{session_id}-use-{i}"
-                    await self.pool.reserve_pairs([pair.pair_id], operation_id=op)
-                    await self.pool.consume_pairs([pair.pair_id], operation_id=op)
-                    await self.pool.release_pair_leases(pair.pair_id, operation_id=op)
+                except (asyncio.CancelledError, KeyboardInterrupt):
+                    await self._retire_pair(pair.pair_id, operation_id=retire_op, quarantine=True)
+                    await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
+                    raise
+                except Exception as exc:
+                    await self._retire_pair(
+                        pair.pair_id, operation_id=retire_op,
+                        quarantine=isinstance(exc, NodeTransportAmbiguous),
+                    )
+                    raise
+                await self._retire_pair(pair.pair_id, operation_id=retire_op)
         except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
             raise
         except Exception:
-            return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id)
+            return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id, instances=instances)
         try:
-            alice_w, token_a, inst_a = self._scope(sender)
-            held = await alice_w.qkd_lengths(
-                operation_id=f"{session_id}-len",
-                session_id=session_id,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            empty = encode_indices([])
+            await self._step(
+                sender, session_id, f"{session_id}-adopt-a", "adopt_indices",
+                {"keep": empty, "phase": empty}, instances,
             )
-            sifted_count = int(held["key_len"]) + len(phase_a)
+            await self._step(
+                receiver, session_id, f"{session_id}-adopt-b", "adopt_indices",
+                {"keep": empty, "phase": empty}, instances,
+            )
+            held = await self._step(
+                sender, session_id, f"{session_id}-len", "lengths", {}, instances,
+            )
+            sifted_count = int(held["key_length"]) + len(phase_a)
         except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", instances)
             raise
         except Exception:
-            return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id)
+            return await self._fail(sender, receiver, "E91", pair_count, t0, prefix="qkd-e91", session_id=session_id, instances=instances)
         try:
             chsh = estimate_chsh(chsh_records)
         except ValueError:
             return await self._abort(
                 sender, receiver, "E91", pair_count, "insufficient_sample",
                 requested_bits, t0, prefix="qkd-e91", bound=True,
-                sifted_count=sifted_count, session_id=session_id,
+                sifted_count=sifted_count, session_id=session_id, instances=instances,
             )
         if not chsh["passed"]:
             return await self._abort(
                 sender, receiver, "E91", pair_count, "entanglement_witness_failed",
                 requested_bits, t0, prefix="qkd-e91", bound=True,
-                sifted_count=sifted_count, chsh=chsh, session_id=session_id,
+                sifted_count=sifted_count, chsh=chsh, session_id=session_id, instances=instances,
             )
         return await self._finish(
             sender=sender,
@@ -623,9 +719,9 @@ class QKDProtocolEngine:
             phase_a=phase_a,
             phase_b=phase_b,
             requested_bits=requested_bits,
-            flips=(),
             t0=t0,
             chsh=chsh,
+            instances=instances,
         )
 
     async def _finish(
@@ -640,11 +736,20 @@ class QKDProtocolEngine:
         phase_a: Sequence[int],
         phase_b: Sequence[int],
         requested_bits: int,
-        flips: Sequence[int],
         t0: float,
         chsh: Optional[Dict[str, Any]] = None,
+        instances: Optional[Mapping[str, str]] = None,
     ) -> QKDSession:
-        """Reconcile and extract on the workers. This object never keeps key bytes."""
+        """Reconcile and extract on the workers. This object never keeps key bytes.
+
+        Alice announces the public syndrome and generates one fresh public
+        Toeplitz seed per tag/extraction operation; the engine transports
+        that SAME seed to Bob, who hashes his own independently reconciled
+        candidate. Blinding stays worker-local. A sink failure or
+        cancellation during emission destroys both endpoint keys (or leaves
+        explicit quarantine) before propagating; cancellation re-raises.
+        """
+        pinned = dict(instances) if instances else {}
         prefix = "qkd-bb84" if protocol == "BB84" else "qkd-e91"
         rng = self._rng
         k = len(phase_a)
@@ -653,7 +758,28 @@ class QKDProtocolEngine:
             return await self._abort(
                 sender, receiver, protocol, raw_count, "insufficient_sample",
                 requested_bits, t0, prefix=prefix, bound=True,
-                sifted_count=sifted_count, chsh=chsh, session_id=session_id,
+                sifted_count=sifted_count, chsh=chsh, session_id=session_id, instances=pinned,
+            )
+        try:
+            held = await self._step(
+                sender, session_id, f"{session_id}-keylen", "lengths", {}, pinned,
+            )
+            n = int(held["key_length"])
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
+            raise
+        except Exception:
+            return await self._fail(
+                sender, receiver, protocol, raw_count, t0, prefix=prefix,
+                session_id=session_id, instances=pinned,
+            )
+        # A trivial confidence bound cannot estimate phase error even with
+        # zero observed errors; report an unestimated, keyless short sample.
+        if n == 0 or finite_sample_budget(n, k, 0.0, 0, requested_bits)["mu"] >= 0.5:
+            return await self._abort(
+                sender, receiver, protocol, raw_count, "insufficient_sample",
+                requested_bits, t0, prefix=prefix, bound=True,
+                sifted_count=sifted_count, chsh=chsh, session_id=session_id, instances=pinned,
             )
         qber = errors / float(k)
         # Exact integer admission before any float serialization.
@@ -662,72 +788,35 @@ class QKDProtocolEngine:
                 sender, receiver, protocol, raw_count, "qber_exceeded",
                 requested_bits, t0, prefix=prefix, bound=True,
                 sifted_count=sifted_count, test_count=k, error_count=errors,
-                qber=qber, chsh=chsh, session_id=session_id,
+                qber=qber, chsh=chsh, session_id=session_id, instances=pinned,
             )
         try:
-            alice, token_a, inst_a = self._scope(sender)
-            bob, token_b, inst_b = self._scope(receiver)
-            held = await alice.qkd_lengths(
-                operation_id=f"{session_id}-keylen",
-                session_id=session_id,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
-            )
-            n = int(held["key_len"])
-            if any(isinstance(pos, bool) or not isinstance(pos, int) or pos >= n for pos in flips):
-                return await self._fail(sender, receiver, protocol, raw_count, t0, prefix=prefix, session_id=session_id)
-            if n == 0:
-                return await self._abort(
-                    sender, receiver, protocol, raw_count, "insufficient_entropy",
-                    requested_bits, t0, prefix=prefix, bound=True,
-                    sifted_count=sifted_count, test_count=k, error_count=errors,
-                    qber=qber, chsh=chsh, session_id=session_id,
-                )
             perm = list(range(n))
             rng.shuffle(perm)
-            syn = await alice.qkd_syndrome(
-                operation_id=f"{session_id}-syn",
-                session_id=session_id,
-                order=perm,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            order_dto = encode_indices(perm)
+            syn = await self._step(
+                sender, session_id, f"{session_id}-syn", "syndrome",
+                {"order": order_dto}, pinned,
             )
-            await bob.qkd_correct(
-                operation_id=f"{session_id}-correct",
-                session_id=session_id,
-                order=perm,
-                syndromes=syn["syndromes"],
-                flip_positions=tuple(flips),
-                token=token_b,
-                node=receiver,
-                instance=inst_b,
+            await self._step(
+                receiver, session_id, f"{session_id}-correct", "correct",
+                {"order": order_dto, "syndrome": syn["syndrome"]}, pinned,
             )
-            syndrome_len = int(syn["syndrome_bits"])
-            tag_seed = random_bits(rng, n + L_TAG32 - 1)
-            tag_a = await alice.qkd_tag(
-                operation_id=f"{session_id}-tag-a",
-                session_id=session_id,
-                seed=tag_seed,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            syndrome_len = int(syn["leaked"])
+            tag_a = await self._step(
+                sender, session_id, f"{session_id}-tag-a", "tag",
+                {"seed": None}, pinned,
             )
-            tag_b = await bob.qkd_tag(
-                operation_id=f"{session_id}-tag-b",
-                session_id=session_id,
-                seed=tag_seed,
-                token=token_b,
-                node=receiver,
-                instance=inst_b,
+            tag_b = await self._step(
+                receiver, session_id, f"{session_id}-tag-b", "tag",
+                {"seed": tag_a["seed"]}, pinned,
             )
             if tag_a["tag"] != tag_b["tag"]:
                 return await self._abort(
                     sender, receiver, protocol, raw_count, "reconciliation_failed",
                     requested_bits, t0, prefix=prefix, bound=True,
                     sifted_count=sifted_count, test_count=k, error_count=errors,
-                    qber=qber, syndrome_bits=syndrome_len, chsh=chsh, session_id=session_id,
+                    qber=qber, syndrome_bits=syndrome_len, chsh=chsh, session_id=session_id, instances=pinned,
                 )
             budget = finite_sample_budget(n, k, errors / float(k), syndrome_len, requested_bits)
             ell = int(budget["ell"])
@@ -738,33 +827,23 @@ class QKDProtocolEngine:
                     sifted_count=sifted_count, test_count=k, error_count=errors,
                     qber=qber, phase_error_bound=budget["q_upper"],
                     syndrome_bits=syndrome_len, tag_bits=L_TAG32,
-                    budget=budget, chsh=chsh, session_id=session_id,
+                    budget=budget, chsh=chsh, session_id=session_id, instances=pinned,
                 )
-            pa_seed = random_bits(rng, n + ell - 1)
-            ext_a = await alice.qkd_extract(
-                operation_id=f"{session_id}-extract-a",
-                session_id=session_id,
-                seed=pa_seed,
-                rng=rng,
-                token=token_a,
-                node=sender,
-                instance=inst_a,
+            ext_a = await self._step(
+                sender, session_id, f"{session_id}-extract-a", "extract",
+                {"output_length": ell, "seed": None}, pinned,
             )
-            ext_b = await bob.qkd_extract(
-                operation_id=f"{session_id}-extract-b",
-                session_id=session_id,
-                seed=pa_seed,
-                rng=rng,
-                token=token_b,
-                node=receiver,
-                instance=inst_b,
+            ext_b = await self._step(
+                receiver, session_id, f"{session_id}-extract-b", "extract",
+                {"output_length": ell, "seed": ext_a["seed"]}, pinned,
             )
         except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
             raise
         except Exception:
-            return await self._fail(sender, receiver, protocol, raw_count, t0, prefix=prefix, session_id=session_id)
-        commit_a = ext_a["commitment_hex"]
-        commit_b = ext_b["commitment_hex"]
+            return await self._fail(sender, receiver, protocol, raw_count, t0, prefix=prefix, session_id=session_id, instances=pinned)
+        commit_a = ext_a["commitment"]
+        commit_b = ext_b["commitment"]
         aggregate = aggregate_commitment(commit_a, commit_b)
         key_id = secrets.token_hex(8)
         session = QKDSession(
@@ -794,10 +873,78 @@ class QKDProtocolEngine:
             key_commitment_hex=aggregate,
             duration_ms=(time.perf_counter() - t0) * 1000.0,
         )
-        receipt_id = await self._emit(session)
+        try:
+            receipt_id = await self._emit(session)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
+            raise
+        except Exception:
+            await self._abort_workers(sender, receiver, session_id, "protocol_error", pinned)
+            return await self._abort(
+                sender, receiver, protocol, raw_count, "receipt_failed",
+                requested_bits, t0, prefix=prefix, bound=True,
+                sifted_count=sifted_count, test_count=k, error_count=errors,
+                qber=qber, phase_error_bound=budget["q_upper"],
+                syndrome_bits=syndrome_len, tag_bits=L_TAG32,
+                budget=budget, chsh=chsh, session_id=session_id, instances=pinned,
+            )
         session = replace(session, receipt_id=receipt_id)
         self.sessions[session_id] = session
         return session
+
+    async def _retire_pair(self, pair_id: str, *, operation_id: str, quarantine: bool = False) -> None:
+        """Terminal pool retirement for one E91 round pair (no retries).
+
+        Consumes the pair through sole-authority lifecycle on the happy
+        path; an ambiguous worker outcome quarantines instead. Worker
+        leases release resource-bound in both cases. Best-effort: every
+        step swallows its own failure with a distinct operation ID.
+        """
+        if quarantine:
+            try:
+                await self.pool.quarantine_pairs([pair_id], reason=operation_id)
+            except Exception:
+                pass
+        else:
+            try:
+                await self.pool.reserve_pairs([pair_id], operation_id=operation_id)
+                await self.pool.consume_pairs([pair_id], operation_id=operation_id)
+            except Exception:
+                try:
+                    await self.pool.quarantine_pairs([pair_id], reason=operation_id)
+                except Exception:
+                    pass
+        try:
+            await self.pool.release_pair_leases(pair_id, operation_id=operation_id)
+        except Exception:
+            await self.pool.quarantine_pairs([pair_id], reason=f"{operation_id}-release-unconfirmed")
+
+    async def release_session_keys(self, session_id: str, *, operation: str) -> bool:
+        """Consume owned demo keys; confirm terminal cleanup or quarantine."""
+        session = self.sessions.get(session_id)
+        if session is None:
+            return True
+        instances = self._session_instances.get(session_id, {})
+        transport = self.transport
+        if transport is not None:
+            for node in (session.sender, session.receiver):
+                try:
+                    capability = await transport.qkd_owner(
+                        node, operation_id=f"{session_id}-{operation}-{node}-cap",
+                        session_id=session_id, action="capability", payload={},
+                        instance=instances.get(node),
+                    )
+                    await transport.qkd_owner(
+                        node, operation_id=f"{session_id}-{operation}-{node}-use",
+                        session_id=session_id, action="use",
+                        payload={"operation": operation, "capability": capability["capability"]},
+                        instance=instances.get(node),
+                    )
+                except Exception:
+                    pass
+        return await self._abort_workers(
+            session.sender, session.receiver, session_id, "user_abort", instances,
+        )
 
 
 
@@ -842,30 +989,46 @@ class QuantumTeleportationDrill:
         stages: Dict[str, Any] = {}
         self._round += 1
         tag = f"drill-{self._round}"
+        owned_pairs: List[str] = []
+        owned_sessions: List[str] = []
+        owned_teleport: List[tuple] = []
         names = list(getattr(self.mesh, "nodes", {}))
         if self.ledger is None:
             return _drill_report(False, "ledger_unavailable", stages)
         if len(names) < 3:
             return _drill_report(False, "route_needs_three_nodes", stages)
         left, repeater, right = names[0], names[1], names[2]
-        bound = getattr(self.engine, "_workers", {})
-        if left not in bound or right not in bound:
+        if getattr(self.engine, "transport", None) is None:
             return _drill_report(False, "worker_plane_unavailable", stages)
 
-        purify = await self._purify(left, repeater, tag)
-        stages["purify"] = purify
-        swap = await self._swap(left, repeater, right, tag)
-        stages["swap"] = swap
-        teleport = await self._teleport(left, right, swap.get("pair_id"), tag)
-        stages["teleport"] = teleport
-        clean = await self._bb84(left, right, intercept=False)
-        stages["clean_bb84"] = clean
-        eve = await self._bb84(left, right, intercept=True)
-        stages["eve"] = eve
-        numerical = all(stage.get("passed") for stage in (purify, swap, teleport, clean, eve))
-        if not numerical:
-            await self._emit_failed("numerical_stage_failed")
-            return _drill_report(False, "numerical_stage_failed", stages)
+        try:
+            purify = await self._purify(left, repeater, tag, owned_pairs)
+            stages["purify"] = purify
+            swap = await self._swap(left, repeater, right, tag, owned_pairs)
+            stages["swap"] = swap
+            teleport = await self._teleport(left, right, swap.get("pair_id"), tag, owned_pairs, owned_teleport)
+            stages["teleport"] = teleport
+            clean = await self._bb84(left, right, tag, owned_sessions, intercept=False)
+            stages["clean_bb84"] = clean
+            eve = await self._bb84(left, right, tag, owned_sessions, intercept=True)
+            stages["eve"] = eve
+            numerical = all(stage.get("passed") for stage in (purify, swap, teleport, clean, eve))
+            if not numerical:
+                await self._cleanup_owned(tag, owned_pairs, owned_sessions, owned_teleport)
+                await self._emit_failed("numerical_stage_failed")
+                return _drill_report(False, "numerical_stage_failed", stages)
+            # Demonstration resources are released once observed: public
+            # commitments stay in the ledger summary, keys/outputs do not.
+            if not await self._cleanup_owned(tag, owned_pairs, owned_sessions, owned_teleport):
+                await self._emit_failed("cleanup_unconfirmed")
+                return _drill_report(False, "cleanup_unconfirmed", stages)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            await self._cleanup_owned(tag, owned_pairs, owned_sessions, owned_teleport)
+            raise
+        except Exception as exc:
+            await self._cleanup_owned(tag, owned_pairs, owned_sessions, owned_teleport)
+            await self._emit_failed("drill_failed")
+            return _drill_report(False, getattr(exc, "code", "drill_failed"), stages)
 
         try:
             receipt = await self.ledger.append_event(_drill_summary_event(
@@ -907,10 +1070,55 @@ class QuantumTeleportationDrill:
         code = None if confirmed else (anchor.error_code or anchor.status)
         return _drill_report(confirmed, code, stages)
 
-    async def _purify(self, left: str, repeater: str, tag: str) -> Dict[str, Any]:
+    async def _discard_pairs(self, tag: str, pair_ids: Sequence[str]) -> bool:
+        """Discard owned pairs; quarantine any unconfirmed lease cleanup."""
+        confirmed = True
+        for index, pair_id in enumerate(dict.fromkeys(pair_ids)):
+            op = f"{tag}-discard-{index}-{pair_id[-8:]}"
+            try:
+                await self.pool.reserve_pairs([pair_id], operation_id=op)
+            except Exception:
+                pass  # Terminal inputs still need their resource-bound cleanup.
+            else:
+                try:
+                    await self.pool.discard_pairs([pair_id], operation_id=op)
+                except Exception:
+                    await self.pool.quarantine_pairs([pair_id], reason=op)
+            try:
+                await self.pool.release_pair_leases(pair_id, operation_id=op)
+            except Exception:
+                confirmed = False
+                await self.pool.quarantine_pairs([pair_id], reason=f"{op}-release-unconfirmed")
+        return confirmed
+
+    async def _cleanup_owned(
+        self,
+        tag: str,
+        pair_ids: Sequence[str],
+        session_ids: Sequence[str],
+        teleport_outputs: Sequence[tuple],
+    ) -> bool:
+        """Release owned resources, retaining explicit quarantine on failure."""
+        confirmed = await self._discard_pairs(tag, pair_ids)
+        for session_id in dict.fromkeys(session_ids):
+            if not await self.engine.release_session_keys(session_id, operation="drill_release"):
+                confirmed = False
+        for entry in teleport_outputs:
+            try:
+                output_session, receiver = entry
+                await self.protocol.release_teleport_output(
+                    output_session, receiver, operation_id=f"{tag}-rel-{output_session[-8:]}",
+                )
+            except Exception:
+                confirmed = False
+        return confirmed
+
+    async def _purify(self, left: str, repeater: str, tag: str, owned: List[str]) -> Dict[str, Any]:
         try:
             first = await self.pool.create_pair(left, repeater, fidelity=0.90, operation_id=f"{tag}-pur-a")
+            owned.append(first.pair_id)
             second = await self.pool.create_pair(left, repeater, fidelity=0.92, operation_id=f"{tag}-pur-b")
+            owned.append(second.pair_id)
             result = await self.mesh.purifier.purify(first.pair_id, second.pair_id, operation_id=f"{tag}-purify")
         except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
             return {"passed": False, "reason": getattr(exc, "code", "purify_failed")}
@@ -923,6 +1131,10 @@ class QuantumTeleportationDrill:
                 "baseline_fidelity": 0.90,
                 "output_fidelity": result.output_fidelity,
             }
+        # The demonstration survivor is measured, then discarded at once so
+        # no drill lease lingers; the end-of-run sweep covers any residue.
+        owned.append(result.output_pair_id)
+        await self._discard_pairs(tag, [result.output_pair_id])
         return {
             "passed": True,
             "reason": None,
@@ -930,15 +1142,19 @@ class QuantumTeleportationDrill:
             "output_fidelity": result.output_fidelity,
         }
 
-    async def _swap(self, left: str, repeater: str, right: str, tag: str) -> Dict[str, Any]:
+    async def _swap(self, left: str, repeater: str, right: str, tag: str, owned: List[str]) -> Dict[str, Any]:
         try:
             first = await self.pool.create_pair(left, repeater, fidelity=1.0, operation_id=f"{tag}-swap-a")
+            owned.append(first.pair_id)
             second = await self.pool.create_pair(repeater, right, fidelity=1.0, operation_id=f"{tag}-swap-b")
+            owned.append(second.pair_id)
             result = await self.mesh.swapper.swap(first.pair_id, second.pair_id, operation_id=f"{tag}-swap")
         except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
             return {"passed": False, "reason": getattr(exc, "code", "swap_failed")}
         fidelity = result.output_fidelity
         passed = bool(result.accepted) and isinstance(fidelity, float) and fidelity >= 0.95
+        if result.output_pair_id is not None:
+            owned.append(result.output_pair_id)
         return {
             "passed": passed,
             "reason": None if passed else "swap_below_threshold",
@@ -946,7 +1162,10 @@ class QuantumTeleportationDrill:
             "pair_id": result.output_pair_id,
         }
 
-    async def _teleport(self, source: str, target: str, pair_id: str | None, tag: str) -> Dict[str, Any]:
+    async def _teleport(
+        self, source: str, target: str, pair_id: str | None, tag: str,
+        owned: List[str], owned_outputs: List[tuple],
+    ) -> Dict[str, Any]:
         if not pair_id:
             return {"passed": False, "reason": "no_swap_output", "payload": None}
         try:
@@ -973,13 +1192,16 @@ class QuantumTeleportationDrill:
             "fidelity": result.fidelity,
         }
         passed = bool(result.success) and isinstance(result.fidelity, float) and result.fidelity >= 0.95
+        if result.output is not None:
+            owned_outputs.append((result.session_id, target))
         return {"passed": passed, "reason": None if passed else result.reason, "payload": payload, "fidelity": result.fidelity}
 
-    async def _bb84(self, sender: str, receiver: str, *, intercept: bool) -> Dict[str, Any]:
+    async def _bb84(self, sender: str, receiver: str, tag: str, owned: List[str], *, intercept: bool) -> Dict[str, Any]:
         try:
             session = await self.engine.run_bb84(sender, receiver, 12000, intercept=intercept)
         except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
             return {"passed": False, "reason": getattr(exc, "code", "qkd_failed"), "session": None}
+        owned.append(session.session_id)
         if intercept:
             passed = (
                 session.status == "aborted"

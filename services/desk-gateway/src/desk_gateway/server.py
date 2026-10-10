@@ -6284,6 +6284,7 @@ def create_mcp(
     )
     from desk_gateway.quantum_ledger import (
         LedgerCorruptError as _Q69LedgerCorrupt,
+        LedgerError as _Q69LedgerError,
         QuantumTeleportationReceiptLedger as _Q69Ledger,
         proof_from_jsonable as _q69_proof_from,
         proof_to_jsonable as _q69_proof_to,
@@ -6379,10 +6380,17 @@ def create_mcp(
             swapper=mesh.swapper, transport=transport, collector=collector, rng=rng,
         )
 
+    # Quantum storage failures degrade quantum routes only: any ledger open
+    # failure (wrapped SQLite open errors arrive as the LedgerError base)
+    # leaves unrelated gateway routes serving. Corrupt stored state stays
+    # distinct from an unopenable path; both details stay server-side and
+    # the routes below report plain ledger_unavailable.
     qteleport_ledger = None
     try:
         qteleport_ledger = _Q69Ledger(settings.data_dir)
     except _Q69LedgerCorrupt:
+        qteleport_ledger = None
+    except _Q69LedgerError:
         qteleport_ledger = None
     q68 = _q68_build_runtime(settings)
     qteleport_pool = q68.pool
@@ -6399,14 +6407,15 @@ def create_mcp(
     qkd_sink = settings.quantum_sink_override
     if qkd_sink is None and qteleport_ledger is not None:
         qkd_sink = qteleport_ledger.append_event
+    # The engine drives QKD only through the shared lifespan transport graph
+    # (Local operator transport in tests, Remote from QUANTUM_NODE_* topology
+    # in production). No in-process worker/test-hook bindings are passed.
     qkd_engine = QKDProtocolEngine(
         qteleport_mesh,
         pool=qteleport_pool,
         transport=q68.transport,
         rng=q68.rng,
         append_event=qkd_sink,
-        workers=settings.quantum_workers_override,
-        worker_tokens=settings.quantum_node_tokens,
     )
     qteleport_drill = _Q69Drill(
         qteleport_pool, qteleport_mesh, qteleport_proto, qkd_engine,
@@ -6431,7 +6440,7 @@ def create_mcp(
 
     def _q68_error(request: Request, status: int, code: str, detail: str) -> Response:
         titles = {
-            400: "Bad Request", 404: "Not Found", 409: "Conflict",
+            400: "Bad Request", 403: "Forbidden", 404: "Not Found", 409: "Conflict",
             413: "Payload Too Large", 415: "Unsupported Media Type",
             502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout",
         }
@@ -6475,12 +6484,19 @@ def create_mcp(
                 stack.extend(current)
 
     async def _q68_body(request: Request, allowed: set[str]) -> tuple[dict[str, Any] | None, Response | None]:
+        # Stream the actual request bytes with a hard 64 KiB cap before any
+        # full parse: oversized ingress is 413, never buffered unbounded.
         try:
-            raw = await request.body()
+            chunks: list[bytes] = []
+            received = 0
+            async for chunk in request.stream():
+                received += len(chunk)
+                if received > _Q68_MAX_BODY_BYTES:
+                    return None, _q68_error(request, 413, "body_too_large", "Request body exceeds 64 KiB.")
+                chunks.append(chunk)
+            raw = b"".join(chunks)
         except Exception:
             return None, _q68_error(request, 400, "unreadable_body", "Request body could not be read.")
-        if len(raw) > _Q68_MAX_BODY_BYTES:
-            return None, _q68_error(request, 400, "body_too_large", "Request body exceeds 64 KiB.")
         if raw and "application/json" not in request.headers.get("content-type", "").lower():
             return None, _q68_error(request, 415, "unsupported_media_type", "POST bodies must be application/json.")
         if not raw:
@@ -6550,8 +6566,24 @@ def create_mcp(
         return None
 
     def _q69_workers_ready(request: Request) -> Response | None:
-        if not qkd_engine._workers:
-            return _q68_error(request, 503, "worker_plane_unavailable", "No QKD workers are configured.")
+        # Transport-only readiness over the shared lifespan graph: never
+        # engine._workers. A missing worker plane is 503 here; the drill
+        # instead returns 200 with all_passed=false and a named prerequisite.
+        if q68.transport is None:
+            return _q68_error(request, 503, "worker_plane_unavailable", "No QKD worker plane is configured.")
+        return None
+
+    def _q69_endpoints_ready(request: Request, *nodes: str) -> Response | None:
+        # Per-endpoint configured-node check against the lifespan mesh
+        # topology (registered from the operator QUANTUM_NODE_* topology);
+        # authenticated original-instance discovery itself happens inside
+        # the engine run over the same transport.
+        missing = sorted({node for node in nodes if node not in qteleport_mesh.nodes})
+        if missing:
+            return _q68_error(
+                request, 503, "worker_plane_unavailable",
+                f"No configured worker plane for nodes: {missing}.",
+            )
         return None
 
     def _q68_complex(body: dict[str, Any], name: str, *, default: complex) -> complex:
@@ -6588,7 +6620,7 @@ def create_mcp(
 
     def _q68_domain_error(request: Request, exc: Exception) -> Response:
         if isinstance(exc, _Q68Error):
-            status = exc.status if exc.status in (400, 404, 409, 503, 504) else 409
+            status = exc.status if exc.status in (400, 403, 404, 409, 503, 504) else 409
             return _q68_error(request, status, exc.code, exc.detail)
         if isinstance(exc, _Q68Deadline):
             return _q68_error(request, 504, "transport_deadline", f"Node deadline exceeded: {exc}")
@@ -6790,6 +6822,33 @@ def create_mcp(
         # the raw unrounded fidelity is exposed for audit.
         return JSONResponse({"ok": result.success, "result": result.to_dict(), "receipt": receipt_dict})
 
+    @mcp.custom_route("/v1/quantum/teleportation/outputs/release", methods=["POST"])
+    async def quantum_teleport_output_release_route(request: Request) -> Response:
+        # Owner release for one successful teleport output: auth precedes
+        # parse, only lead/systems mutate, and the protocol owns replay and
+        # ownership semantics (unknown 404, receiver mismatch 403, second
+        # release under a new operation 409, same-operation retry replays
+        # its saved acknowledgement). The response carries the public
+        # ownership/lease/status projection only, never credentials.
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(request, {"session_id", "receiver", "operation_id"})
+        if body_error is not None:
+            return body_error
+        try:
+            session_id = _q68_str(body, "session_id", max_len=128)
+            receiver = _q68_str(body, "receiver", max_len=64)
+            operation_id = _q68_str(body, "operation_id", max_len=128)
+            released = await qteleport_proto.release_teleport_output(session_id, receiver, operation_id)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        return JSONResponse({
+            "ok": True,
+            "acknowledgement": released["acknowledgement"],
+            "output": released["output"],
+        })
+
     @mcp.custom_route("/v1/quantum/teleportation/pair/{pair_id}", methods=["GET"])
     async def quantum_bell_pair_snapshot_route(request: Request) -> Response:
         _, auth_error = _q68_auth(request, mutation=False)
@@ -6831,8 +6890,18 @@ def create_mcp(
             return _q68_error(request, 400, "invalid_node", "node_id must be a 1..64 char string.")
         if q68.transport is None:
             return _q68_error(request, 503, "worker_plane_unavailable", "No worker transport is configured.")
+        raw_offset = request.query_params.get("lease_offset", "0")
+        raw_limit = request.query_params.get("lease_limit", "64")
+        if (
+            not raw_offset.isdigit() or len(raw_offset) > 20
+            or not raw_limit.isdigit() or len(raw_limit) > 20
+        ):
+            return _q68_error(request, 400, "invalid_inspection_page", "lease_offset and lease_limit must be bounded unsigned integers.")
+        lease_offset, lease_limit = int(raw_offset), int(raw_limit)
+        if not 1 <= lease_limit <= 64:
+            return _q68_error(request, 400, "invalid_inspection_page", "lease_limit must be 1..64.")
         try:
-            info = await q68.transport.inspect(node_id)
+            info = await q68.transport.inspect(node_id, lease_offset=lease_offset, lease_limit=lease_limit)
         except _Q68Unavailable as exc:
             if "unknown node" in str(exc):
                 return _q68_error(request, 404, "unknown_node", f"node {node_id} is unknown.")
@@ -6858,6 +6927,9 @@ def create_mcp(
         try:
             sender = _q68_str(body, "sender", default="desk-alpha", max_len=64)
             receiver = _q68_str(body, "receiver", default="desk-beta", max_len=64)
+            ready = _q69_endpoints_ready(request, sender, receiver)
+            if ready is not None:
+                return ready
             bit_length = _q68_count(body, "bit_length", default=128, maximum=20000)
             requested = _q68_count(body, "requested_bits", default=256, maximum=256)
             intercept = _q68_bool(body, "intercept", default=False)
@@ -6884,6 +6956,9 @@ def create_mcp(
         try:
             sender = _q68_str(body, "sender", default="desk-alpha", max_len=64)
             receiver = _q68_str(body, "receiver", default="desk-beta", max_len=64)
+            ready = _q69_endpoints_ready(request, sender, receiver)
+            if ready is not None:
+                return ready
             pair_count = _q68_count(body, "pair_count", default=100, maximum=20000)
             requested = _q68_count(body, "requested_bits", default=256, maximum=256)
             session = await qkd_engine.run_e91(sender, receiver, pair_count, requested_bits=requested)
@@ -6950,11 +7025,16 @@ def create_mcp(
         raw_limit = request.query_params.get("limit", "100")
         if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 1000:
             return _q68_error(request, 400, "invalid_limit", "limit must be an integer in 1..1000.")
-        snap = qteleport_ledger.snapshot()
         limit = int(raw_limit)
+        # Bounded joined projection costing proportionally to limit: never a
+        # full-history snapshot/tree materialization on the event loop.
+        try:
+            rows = qteleport_ledger.list_receipts(limit)
+        except _Q69LedgerError:
+            return _q68_error(request, 503, "ledger_unavailable", "Quantum receipt ledger is unavailable.")
         receipts = [
             {"receipt_id": item.receipt_id, "seq": item.seq, "leaf_digest_hex": item.leaf_digest_hex}
-            for item in snap.receipts[:limit]
+            for item in rows
         ]
         return JSONResponse({"ok": True, "receipts": receipts, "count": len(receipts)})
 

@@ -295,8 +295,6 @@ class Settings:
     quantum_transport_override: Any = field(default=None, repr=False, compare=False)
     quantum_rng_override: Any = field(default=None, repr=False, compare=False)
     quantum_sink_override: Any = field(default=None, repr=False, compare=False)
-    # Constructor-only test hooks. Never populated from the environment.
-    quantum_workers_override: Any = field(default=None, repr=False, compare=False)
     quantum_rpc_client_override: Any = field(default=None, repr=False, compare=False)
     # Dedicated Devnet publisher. Empty means unconfigured (export returns 503).
     # The signer file is not opened here.

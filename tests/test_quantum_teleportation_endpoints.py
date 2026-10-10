@@ -586,6 +586,67 @@ def test_qkd_auth_precedes_parse_and_zero_length_aborts(pair_app):
         headers=_bearer("lead"),
     )
     assert boolean.status_code == 400
+    text = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"bit_length": "8"},
+        headers=_bearer("lead"),
+    )
+    assert text.status_code == 400
+    excessive = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"bit_length": 20001},
+        headers=_bearer("lead"),
+    )
+    assert excessive.status_code == 400
+    e91 = pair_app.post(
+        "/v1/quantum/qkd/e91",
+        json={"sender": ALPHA, "receiver": BETA, "pair_count": 0},
+        headers=_bearer("systems"),
+    )
+    assert e91.status_code == 200
+    assert e91.json()["ok"] is False
+    assert e91.json()["session"]["status"] == "aborted"
+    assert e91.json()["session"]["reason"] == "insufficient_sample"
+    assert e91.json()["session"]["qber"] is None
+    missing_session = pair_app.get(
+        "/v1/quantum/qkd/session/missing-session",
+        headers=_bearer("web"),
+    )
+    assert missing_session.status_code == 404
+    unread = pair_app.get("/v1/quantum/teleportation/ledger/receipts")
+    assert unread.status_code == 401
+    denied_snapshot = pair_app.post(
+        "/v1/quantum/teleportation/ledger/snapshot",
+        json={},
+        headers=_bearer("web"),
+    )
+    assert denied_snapshot.status_code == 403
+    unknown_receipt = pair_app.get(
+        "/v1/quantum/teleportation/ledger/receipt/missing-receipt",
+        headers=_bearer("quality"),
+    )
+    assert unknown_receipt.status_code == 404
+    bad_proof = pair_app.post(
+        "/v1/quantum/teleportation/ledger/proof/verify",
+        json={},
+        headers=_bearer("lead"),
+    )
+    assert bad_proof.status_code == 400
+
+
+def test_qkd_without_worker_binding_is_unavailable(tmp_path):
+    settings = Settings(
+        seat_passphrases=dict(_SEATS),
+        data_dir=tmp_path / "unbound",
+    )
+    client = TestClient(build_app(settings)[0])
+    resp = client.post(
+        "/v1/quantum/qkd/bb84",
+        json={"bit_length": 0},
+        headers=_bearer("lead"),
+    )
+    assert resp.status_code == 503
+    assert resp.json()["error"] == "worker_plane_unavailable"
 
 
 def test_ledger_proof_round_trip_and_unfunded_anchor(tmp_path):

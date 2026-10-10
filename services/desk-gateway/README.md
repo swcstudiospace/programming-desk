@@ -59,11 +59,11 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 |---|---|
 | `HOST`, `PORT` | Listener, `127.0.0.1:8791` by default; nginx terminates TLS on `PUBLIC_HOST` |
 | `DATA_DIR` | JSON store plus `quantum_teleportation.sqlite3` (directory 0700, file 0600). The anchored prefix is immutable; a later root does not erase a published Memo |
-| `QUANTUM_NODE_ENDPOINTS` | JSON map of node id to base URL. Empty means no remote worker plane. In-process workers are a test hook, not the operator path |
+| `QUANTUM_NODE_ENDPOINTS` | JSON map of node id to base URL for teleport and repeater commands. Empty means no remote worker plane. QKD and the drill's key stages bind only in-process workers, which are a constructor test hook; without that binding those routes return 503 `worker_plane_unavailable` |
 | `QUANTUM_NODE_TOKENS` | JSON map of node id to that worker's credential |
 | `QUANTUM_NODE_LINKS` | JSON list of `[node, node]` pairs |
 | `QUANTUM_SOLANA_RPC_URL` | HTTPS Devnet RPC with no userinfo or path. Empty leaves publication unconfigured |
-| `QUANTUM_SOLANA_SIGNER_PATH` | Dedicated payer file. Settings does not open it. External funding of this address was selected and is not observed; the last recorded balance was 0. This is a trusted-device numerical simulator, not a hardware or device-independent system |
+| `QUANTUM_SOLANA_SIGNER_PATH` | Dedicated payer file. Settings does not open it. External funding was selected and is not observed; balance was 0 lamports at confirmed slot 509400169 on 2026-10-10. This is a trusted-device numerical simulator, not a hardware or device-independent system |
 | `DESK_REPO_DIR` | programming-desk checkout; read with `git show`/`git archive`, never switched or pushed |
 | `SEAT_PASSPHRASE_<SEAT>` | One distinct passphrase per seat; consent maps it to `seat:<seat>` |
 | `INTAKE_TOKENS` | `origin:token,...` accepted on `/v1/intake` |

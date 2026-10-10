@@ -14,7 +14,7 @@ Implement and verify REQ-QTELEPORT-001–005 without weakening their numerical o
 ## Implementation Decisions
 
 ### Execution model
-- **D-68-01 — User selected “Faithful distributed simulator”.** Numerically validated joint-state evolution, explicit node ownership, and classical transport are required. Metadata-only Bell labels and direct amplitude copying are unacceptable. Physical quantum-hardware or quantum-security claims are excluded.
+- **D-01 — User selected “Faithful distributed simulator”.** Numerically validated joint-state evolution, explicit node ownership, and classical transport are required. Metadata-only Bell labels and direct amplitude copying are unacceptable. Physical quantum-hardware or quantum-security claims are excluded.
 - Exercise separate simulator-node processes, not merely a single object with different node labels. A central joint-state simulator may retain correlations while remote node workers own allocations and apply received classical corrections. No cloning of the input amplitudes as the receiver reconstruction.
 - Use the existing Python gateway and existing public phase symbols where they remain meaningful. Cut over every affected caller; no deprecated aliases or re-export shims.
 

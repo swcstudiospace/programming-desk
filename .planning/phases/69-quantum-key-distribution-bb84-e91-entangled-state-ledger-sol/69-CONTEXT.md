@@ -14,8 +14,8 @@ Implement and verify original REQ-QTELEPORT-006–011: numerical BB84/E91 prepar
 ## Implementation Decisions
 
 ### Execution and publication contracts
-- **D-69-01 — User selected “Faithful distributed simulator”.** Reuse phase 68 numerical Bell states and node ownership. No physical quantum-hardware or quantum-security claims.
-- **D-69-02 — User selected “Approve SPL Memo publisher”.** This explicitly authorizes the standard existing SPL Memo program as the real Devnet publication alternative. Construct and sign a genuine transaction, submit to a verified Devnet RPC, and observe confirmation and matching on-chain memo content. A local hash, fabricated slot, mock response or pending transaction is not confirmation evidence.
+- **D-01 — User selected “Faithful distributed simulator”.** Reuse phase 68 numerical Bell states and node ownership. No physical quantum-hardware or quantum-security claims.
+- **D-02 — User selected “Approve SPL Memo publisher”.** This explicitly authorizes the standard existing SPL Memo program as the real Devnet publication alternative. Construct and sign a genuine transaction, submit to a verified Devnet RPC, and observe confirmation and matching on-chain memo content. A local hash, fabricated slot, mock response or pending transaction is not confirmation evidence.
 - Publish a versioned compact Merkle root and genuine execution-receipt inclusion proof within Solana transaction limits. No private key, QKD key, key prefix, raw sifted key bits or bearer token may enter responses, logs, receipts or the chain.
 - Signing credentials must be securely stored outside the repository. Reference resource paths/environment-variable names only. Use a dedicated ephemeral Devnet-only fee payer for the drill when funding is available; do not access an unrelated wallet or network.
 - **Reversibility: one-way.** Confirmed Memo transactions cannot be erased. Only non-secret simulator commitments may be published. Correct a bad attestation with a later explicit superseding record; never claim a destructive rollback of chain history. The user authorized this publisher, not production program deployment.

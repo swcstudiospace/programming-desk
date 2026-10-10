@@ -45,7 +45,17 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
-from desk_gateway.quantum_state import (
+from .quantum_key import (
+    ReconciliationFailed,
+    bb84_state,
+    correct_blocks,
+    node_commitment,
+    random_bytes,
+    syndrome_blocks,
+    toeplitz_extract,
+    toeplitz_hash,
+)
+from .quantum_state import (
     QuantumDensityMatrix,
     H,
     S,
@@ -171,6 +181,40 @@ class QuantumNodeLease:
         }
 
 
+@dataclass
+class _QKDRecord:
+    """Node-private QKD session vault: candidates, key, capability, use state.
+
+    Never serialized wholesale: ``inspect`` exposes leases only, pool events
+    carry no key-round bits, and ``repr`` is redacted to class + session.
+    """
+
+    session_id: str
+    role: str
+    peer: str
+    owner: str
+    steps: list = field(default_factory=list)
+    candidate_count: int = 0
+    test_count: int = 0
+    error_count: int = 0
+    syndrome_len: int = 0
+    corrections: int = 0
+    tag_ok: bool = False
+    raw_bits: list = field(default_factory=list)
+    raw_bases: list = field(default_factory=list)
+    key_bits: list = field(default_factory=list)
+    phase_bits: list = field(default_factory=list)
+    key: bytes | None = None
+    blinding: bytes | None = None
+    capability: str | None = None
+    commitment_hex: str | None = None
+    available: bool = False
+    used: bool = False
+
+    def __repr__(self) -> str:
+        return f"_QKDRecord(session={self.session_id!r})"
+
+
 def _public_matrix_to_rows(matrix: object) -> tuple[tuple[complex, ...], ...]:
     """Validate a 2x2 ``to_public_matrix`` payload and return complex rows."""
     if not isinstance(matrix, (list, tuple)) or len(matrix) != 2:
@@ -223,10 +267,15 @@ class QuantumNodeWorker:
         self.capacity = capacity
         self.instance_id = secrets.token_hex(8)
         self._leases: dict[str, QuantumNodeLease] = {}
+        self._qkd: dict[str, _QKDRecord] = {}
         self._lock = asyncio.Lock()
         self._seen_ops: dict[str, tuple[str, dict[str, Any]]] = {}
         self._corrections: dict[tuple[str, str], dict[str, Any]] = {}
         self._rng = rng if rng is not None else secrets.SystemRandom()
+
+    def __repr__(self) -> str:
+        # Redacted: identity only, never credential, lease, or key material.
+        return f"QuantumNodeWorker(node_id={self.node_id!r})"
 
     # -- internal guards -------------------------------------------------
 
@@ -366,14 +415,35 @@ class QuantumNodeWorker:
         self,
         *,
         operation_id: str,
-        lease_ids: Sequence[str],
+        lease_ids: Sequence[str] = (),
         token: str,
         node: str,
         instance: str,
         branch_probabilities: Sequence[object] | None = None,
         branch_bits: Sequence[Sequence[object]] | None = None,
+        session_id: str | None = None,
+        outcome_count: int | None = None,
     ) -> dict[str, Any]:
         operation_id = _check_id(operation_id, "operation_id")
+        if session_id is not None:
+            # QKD step branch: the engine samples through the kernel itself;
+            # the worker binds the step to the session vault (counts only).
+            session_id = _check_id(session_id, "session_id")
+            if not isinstance(lease_ids, (list, tuple)) or len(lease_ids) != 0:
+                raise QuantumNodeError(400, "invalid_leases", "QKD measure takes no lease IDs")
+            if isinstance(outcome_count, bool) or not isinstance(outcome_count, int) or outcome_count < 0:
+                raise QuantumNodeError(400, "invalid_count", "outcome_count must be a non-negative integer")
+            self._auth(token, node, instance)
+            payload = {"action": "measure", "session_id": session_id, "outcome_count": outcome_count}
+            async with self._lock:
+                replay = self._idempotency(operation_id, payload)
+                if replay is not None:
+                    return replay
+                record = self._qkd_session(session_id)
+                record.steps.append("measure")
+                response = {"ok": True, "acknowledgement": f"ack-{operation_id}", "active_count": self._active_count()}
+                self._remember(operation_id, payload, response)
+                return response
         if not isinstance(lease_ids, (list, tuple)) or not 1 <= len(lease_ids) <= MAX_LEASES_PER_OP:
             raise QuantumNodeError(400, "invalid_leases", "lease_ids must list 1..4 lease IDs")
         for lease_id in lease_ids:
@@ -636,6 +706,578 @@ class QuantumNodeWorker:
             self._remember(operation_id, payload, response)
             return response
 
+    # -- QKD session commands (node-private vault; same auth/replay/errors) --
+
+    def _qkd_session(self, session_id: str) -> _QKDRecord:
+        record = self._qkd.get(session_id)
+        if record is None:
+            raise QuantumNodeError(404, "unknown_session", "no QKD session bound on this worker")
+        return record
+
+    async def begin_qkd(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        role: str,
+        peer: str,
+        owner: str,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Bind role/session/ownership to this worker's own node. No URL selection."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if role not in ("alice", "bob"):
+            raise QuantumNodeError(400, "invalid_role", "role must be alice or bob")
+        peer = _check_node(peer, "peer")
+        owner = _check_id(owner, "owner")
+        self._auth(token, node, instance)
+        payload = {"action": "begin_qkd", "session_id": session_id, "role": role, "peer": peer, "owner": owner}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            existing = self._qkd.get(session_id)
+            if existing is not None:
+                if (existing.role, existing.peer, existing.owner) != (role, peer, owner):
+                    raise QuantumNodeError(409, "session_conflict", "QKD session already bound with different ownership")
+                return {"ok": True, "session_id": session_id}
+            self._qkd[session_id] = _QKDRecord(session_id=session_id, role=role, peer=peer, owner=owner, steps=["begin"])
+            response = {"ok": True, "session_id": session_id}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def prepare(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        count: int,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise QuantumNodeError(400, "invalid_count", "count must be a non-negative integer")
+        self._auth(token, node, instance)
+        payload = {"action": "prepare", "session_id": session_id, "count": count}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.candidate_count = count
+            record.steps.append("prepare")
+            response = {"ok": True, "acknowledgement": f"ack-{operation_id}", "active_count": self._active_count()}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def disclose_sample(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        test_count: int,
+        error_count: int,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        for label, value in (("test_count", test_count), ("error_count", error_count)):
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise QuantumNodeError(400, "invalid_count", f"{label} must be a non-negative integer")
+        if error_count > test_count:
+            raise QuantumNodeError(400, "invalid_sample", "error_count must not exceed test_count")
+        self._auth(token, node, instance)
+        payload = {"action": "disclose_sample", "session_id": session_id, "test_count": test_count, "error_count": error_count}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.test_count = test_count
+            record.error_count = error_count
+            record.steps.append("disclose_sample")
+            response = {"ok": True, "acknowledgement": f"ack-{operation_id}", "active_count": self._active_count()}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def syndrome(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        syndrome_bits_count: int,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if isinstance(syndrome_bits_count, bool) or not isinstance(syndrome_bits_count, int) or syndrome_bits_count < 0:
+            raise QuantumNodeError(400, "invalid_count", "syndrome_bits_count must be a non-negative integer")
+        self._auth(token, node, instance)
+        payload = {"action": "syndrome", "session_id": session_id, "syndrome_bits_count": syndrome_bits_count}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.syndrome_len = syndrome_bits_count
+            record.steps.append("syndrome")
+            response = {"ok": True, "acknowledgement": f"ack-{operation_id}", "active_count": self._active_count()}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def reconcile(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        corrected_count: int,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if isinstance(corrected_count, bool) or not isinstance(corrected_count, int) or corrected_count < 0:
+            raise QuantumNodeError(400, "invalid_count", "corrected_count must be a non-negative integer")
+        self._auth(token, node, instance)
+        payload = {"action": "reconcile", "session_id": session_id, "corrected_count": corrected_count}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.corrections = corrected_count
+            record.steps.append("reconcile")
+            response = {"ok": True, "acknowledgement": f"ack-{operation_id}", "active_count": self._active_count()}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def verify_tag(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        tag_ok: bool,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if not isinstance(tag_ok, bool):
+            raise QuantumNodeError(400, "invalid_tag", "tag_ok must be a boolean")
+        self._auth(token, node, instance)
+        payload = {"action": "verify_tag", "session_id": session_id, "tag_ok": tag_ok}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.tag_ok = tag_ok
+            record.steps.append("verify_tag")
+            response = {"ok": True, "verified": tag_ok, "active_count": self._active_count()}
+            self._remember(operation_id, payload, response)
+            return response
+
+    def _qkd_indices(self, values: object, limit: int, name: str) -> list[int]:
+        if not isinstance(values, (list, tuple)):
+            raise QuantumNodeError(400, "invalid_index", f"{name} must be a list of indices")
+        chosen: list[int] = []
+        seen: set[int] = set()
+        for pos, item in enumerate(values):
+            if isinstance(item, bool) or not isinstance(item, int) or not 0 <= item < limit or item in seen:
+                raise QuantumNodeError(400, "invalid_index", f"{name}[{pos}] is not a unique in-range index")
+            seen.add(item)
+            chosen.append(item)
+        return chosen
+
+    async def qkd_prepare_bb84(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        count: int,
+        rng: Any,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Draw Alice's signals. Bases are public; the state list is the channel.
+
+        The bit string stays in this vault. Returned states are not written to
+        the replay log. A second prepare on the same session is 409.
+        """
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 20000:
+            raise QuantumNodeError(400, "invalid_count", "count must be an integer in 1..20000")
+        if rng is None or not hasattr(rng, "random") or not hasattr(rng, "choice"):
+            raise QuantumNodeError(400, "invalid_rng", "rng must provide random() and choice()")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if record.role != "alice":
+                raise QuantumNodeError(403, "wrong_role", "only the sending node prepares BB84 signals")
+            if "prepare" in record.steps:
+                raise QuantumNodeError(409, "session_step", "BB84 signals were already prepared")
+            raw_bits: list[int] = []
+            raw_bases: list[str] = []
+            states: list[Any] = []
+            for _ in range(count):
+                draw = rng.random()
+                if isinstance(draw, bool) or not isinstance(draw, (int, float)) or not 0.0 <= float(draw) < 1.0:
+                    raise QuantumNodeError(503, "rng_failure", "worker RNG produced an out-of-range draw")
+                bit = 1 if float(draw) < 0.5 else 0
+                basis = rng.choice(("+", "x"))
+                if basis not in ("+", "x"):
+                    raise QuantumNodeError(503, "rng_failure", "worker RNG produced an unknown basis")
+                raw_bits.append(bit)
+                raw_bases.append(basis)
+                states.append(bb84_state(bit, basis))
+            record.raw_bits = raw_bits
+            record.raw_bases = raw_bases
+            record.candidate_count = count
+            record.steps.append("prepare")
+            return {"ok": True, "bases": list(raw_bases), "states": states}
+
+    async def qkd_measure_bb84(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        states: Sequence[Any],
+        bases: Sequence[object],
+        rng: Any,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Measure the channel states in Bob's bases and keep only his bits."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if not isinstance(states, (list, tuple)) or not isinstance(bases, (list, tuple)):
+            raise QuantumNodeError(400, "invalid_signal", "states and bases must be sequences")
+        if len(states) != len(bases) or not 1 <= len(states) <= 20000:
+            raise QuantumNodeError(400, "invalid_signal", "states and bases must share a length in 1..20000")
+        if rng is None or not hasattr(rng, "random"):
+            raise QuantumNodeError(400, "invalid_rng", "rng must provide random()")
+        self._auth(token, node, instance)
+        measured: list[int] = []
+        chosen: list[str] = []
+        for state, basis in zip(states, bases):
+            if basis not in ("+", "x"):
+                raise QuantumNodeError(400, "invalid_basis", "basis must be + or x")
+            vec = state.apply_single(H, 0) if basis == "x" else state
+            try:
+                bit = int(vec.density().measure_z((0,), rng).bits[0])
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise QuantumNodeError(400, "invalid_signal", "signal is not a one-qubit state") from exc
+            if bit not in (0, 1):
+                raise QuantumNodeError(400, "invalid_signal", "measurement did not yield a bit")
+            measured.append(bit)
+            chosen.append(str(basis))
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if record.role != "bob":
+                raise QuantumNodeError(403, "wrong_role", "only the receiving node measures BB84 signals")
+            if "measure" in record.steps:
+                raise QuantumNodeError(409, "session_step", "BB84 signals were already measured")
+            record.raw_bits = measured
+            record.raw_bases = chosen
+            record.candidate_count = len(measured)
+            record.steps.append("measure")
+            return {"ok": True, "count": len(measured)}
+
+    async def qkd_adopt_indices(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        key_indices: Sequence[int],
+        phase_indices: Sequence[int],
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Split raw bits into a private key string and a public phase sample."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if "sift" in record.steps:
+                raise QuantumNodeError(409, "session_step", "this session was already sifted")
+            keys = self._qkd_indices(key_indices, len(record.raw_bits), "key_indices")
+            phase = self._qkd_indices(phase_indices, len(record.raw_bits), "phase_indices")
+            if set(keys) & set(phase):
+                raise QuantumNodeError(400, "invalid_index", "key and phase indices must be disjoint")
+            record.key_bits = [record.raw_bits[i] for i in keys]
+            record.phase_bits = [record.raw_bits[i] for i in phase]
+            disclosed = list(record.phase_bits)
+            record.raw_bits = []
+            record.steps.append("sift")
+            return {"ok": True, "key_len": len(record.key_bits), "phase_bits": disclosed}
+
+    async def qkd_lengths(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            return {
+                "ok": True,
+                "key_len": len(record.key_bits),
+                "phase_len": len(record.phase_bits),
+            }
+
+    async def qkd_accept_bit(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        bit: int,
+        bucket: str,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Store one locally owned outcome. The response carries a count only."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if isinstance(bit, bool) or bit not in (0, 1):
+            raise QuantumNodeError(400, "invalid_bit", "bit must be 0 or 1")
+        if bucket not in ("key", "phase"):
+            raise QuantumNodeError(400, "invalid_bucket", "bucket must be key or phase")
+        self._auth(token, node, instance)
+        payload = {
+            "action": "qkd_accept_bit",
+            "session_id": session_id,
+            "bucket": bucket,
+            "bit": int(bit),
+        }
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            target = record.key_bits if bucket == "key" else record.phase_bits
+            target.append(int(bit))
+            response = {"ok": True, "count": len(target)}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def qkd_syndrome(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        order: Sequence[int],
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Return public parity checks of this node's key string. Not the bits."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if record.role != "alice":
+                raise QuantumNodeError(403, "wrong_role", "only the sending node announces the syndrome")
+            if "syndrome" in record.steps:
+                raise QuantumNodeError(409, "session_step", "syndrome was already announced")
+            try:
+                syndromes, total = syndrome_blocks(record.key_bits, order)
+            except (ReconciliationFailed, ValueError) as exc:
+                raise QuantumNodeError(400, "invalid_syndrome", "syndrome inputs were rejected") from exc
+            record.syndrome_len = total
+            record.steps.append("syndrome")
+            return {"ok": True, "syndromes": list(syndromes), "syndrome_bits": total}
+
+    async def qkd_correct(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        order: Sequence[int],
+        syndromes: Sequence[int],
+        flip_positions: Sequence[int] = (),
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Correct this node's own key string. The corrected bits stay here."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if record.role != "bob":
+                raise QuantumNodeError(403, "wrong_role", "only the receiving node applies the syndrome")
+            if "correct" in record.steps:
+                raise QuantumNodeError(409, "session_step", "syndrome was already applied")
+            try:
+                corrected, corrections = correct_blocks(
+                    record.key_bits, order, syndromes, flip_positions=flip_positions
+                )
+            except (ReconciliationFailed, ValueError) as exc:
+                raise QuantumNodeError(400, "invalid_syndrome", "syndrome inputs were rejected") from exc
+            record.key_bits = list(corrected)
+            record.corrections = corrections
+            record.steps.append("correct")
+            return {"ok": True, "corrections": corrections}
+
+    async def qkd_tag(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        seed: Sequence[int],
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """32-bit Toeplitz tag of this node's key string. The tag is public."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if "verify_tag" in record.steps:
+                raise QuantumNodeError(409, "session_step", "verification tag was already produced")
+            try:
+                tag = toeplitz_hash(seed, record.key_bits, 32)
+            except ValueError as exc:
+                raise QuantumNodeError(400, "invalid_tag", "verification seed was rejected") from exc
+            record.steps.append("verify_tag")
+            return {"ok": True, "tag": list(tag)}
+
+    async def qkd_extract(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        seed: Sequence[int],
+        rng: Any,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Extract locally. Returns the commitment and length, never the key."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        if rng is None or not hasattr(rng, "random"):
+            raise QuantumNodeError(400, "invalid_rng", "rng must provide random()")
+        self._auth(token, node, instance)
+        async with self._lock:
+            record = self._qkd_session(session_id)
+            if record.key is not None or "extract" in record.steps:
+                raise QuantumNodeError(409, "session_step", "key was already extracted")
+            try:
+                key = toeplitz_extract(seed, record.key_bits)
+                blinding = random_bytes(rng, 32)
+                commitment = node_commitment(self.node_id, session_id, blinding, key)
+            except ValueError as exc:
+                raise QuantumNodeError(400, "invalid_extract", "extraction seed was rejected") from exc
+            record.key = key
+            record.blinding = blinding
+            record.capability = secrets.token_hex(16)
+            record.commitment_hex = commitment
+            record.available = True
+            record.used = False
+            record.key_bits = []
+            record.raw_bits = []
+            record.phase_bits = []
+            record.steps.append("extract")
+            return {"ok": True, "key_length": len(key) * 8, "commitment_hex": commitment}
+
+    async def use_key(
+        self,
+        *,
+        operation_id: str,
+        owner: str,
+        session: str,
+        capability: str,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """One-shot key use: success returns no bytes; second use is 409."""
+        operation_id = _check_id(operation_id, "operation_id")
+        owner = _check_id(owner, "owner")
+        session = _check_id(session, "session")
+        self._auth(token, node, instance)
+        presented = capability if isinstance(capability, str) else ""
+        payload = {"action": "use_key", "owner": owner, "session": session}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd.get(session)
+            if record is None or record.owner != owner:
+                raise QuantumNodeError(403, "wrong_owner_or_session", "use_key is not owned by this claimant for this session")
+            if not record.available or record.key is None:
+                raise QuantumNodeError(409, "key_unavailable", "no agreed key is available for this session")
+            if record.used:
+                raise QuantumNodeError(409, "already_used", "key capability was already consumed")
+            if not presented or record.capability is None or not hmac.compare_digest(presented.encode(), record.capability.encode()):
+                raise QuantumNodeError(403, "wrong_capability", "key capability does not match")
+            record.used = True
+            response = {"ok": True, "outcome": "accepted"}
+            self._remember(operation_id, payload, response)
+            return response
+
+    async def abort(
+        self,
+        *,
+        operation_id: str,
+        session_id: str,
+        token: str,
+        node: str,
+        instance: str,
+    ) -> dict[str, Any]:
+        """Destroy key availability for a session; restart loses everything."""
+        operation_id = _check_id(operation_id, "operation_id")
+        session_id = _check_id(session_id, "session_id")
+        self._auth(token, node, instance)
+        payload = {"action": "abort", "session_id": session_id}
+        async with self._lock:
+            replay = self._idempotency(operation_id, payload)
+            if replay is not None:
+                return replay
+            record = self._qkd_session(session_id)
+            record.key = None
+            record.blinding = None
+            record.capability = None
+            record.commitment_hex = None
+            record.available = False
+            record.raw_bits = []
+            record.raw_bases = []
+            record.key_bits = []
+            record.phase_bits = []
+            record.steps.append("abort")
+            response = {"ok": True, "session_id": session_id}
+            self._remember(operation_id, payload, response)
+            return response
+
     async def inspect(self, *, token: str, node: str, instance: str | None = None) -> dict[str, Any]:
         # Read-only discovery: an empty instance returns this process identity
         # (token + node still enforced) so remotes can bind later commands.
@@ -649,6 +1291,42 @@ class QuantumNodeWorker:
                 "active_count": self._active_count(),
                 "leases": [lease.public() for lease in self._leases.values() if lease.state != "released"],
             }
+
+
+async def deposit_correlated_key_bits(
+    alice: QuantumNodeWorker,
+    bob: QuantumNodeWorker,
+    rho: Any,
+    session_id: str,
+    rng: Any,
+    operation_prefix: str,
+    alice_auth: Mapping[str, str],
+    bob_auth: Mapping[str, str],
+) -> None:
+    """Sample one shared Z round and hand each click only to its owner.
+
+    The outcomes are not returned. Callers that need a public sample (phase
+    error, CHSH) must use a disclosing measurement instead.
+    """
+    branch = rho.measure_z((0, 1), rng)
+    await alice.qkd_accept_bit(
+        operation_id=f"{operation_prefix}-a",
+        session_id=session_id,
+        bit=int(branch.bits[0]),
+        bucket="key",
+        token=alice_auth["token"],
+        node=alice_auth["node"],
+        instance=alice_auth["instance"],
+    )
+    await bob.qkd_accept_bit(
+        operation_id=f"{operation_prefix}-b",
+        session_id=session_id,
+        bit=int(branch.bits[1]),
+        bucket="key",
+        token=bob_auth["token"],
+        node=bob_auth["node"],
+        instance=bob_auth["instance"],
+    )
 
 
 # -- Starlette worker app --------------------------------------------------

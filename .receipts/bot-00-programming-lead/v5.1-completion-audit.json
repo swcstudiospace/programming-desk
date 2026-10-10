@@ -73,6 +73,17 @@
       "classifier_contract": "Only known regular files, root-contained with symlink rejection; --repo resolves actualcheckout/export. Unsupported default mirror topology fails closed.",
       "qualification": "Final candidate proof, not signed approval. Local0a6f77d unpublished/PR215still6d19119/newheadreviewpending/SOURCEcheckerunintegrated/sourcepushheld. Previous326/CLI checkpoints retained."
     },
+    "quality_owner_publication": {
+      "current_published_head": "f1841ae",
+      "product_code": "0a6f77d",
+      "docs_commit": "9033d18",
+      "publication_command_index": 41,
+      "observed": "Parent exact owner receiptcommit+push exit0/tool2.18s;32receiptnewlines/fast-forward6d19119to f1841ae. Published onPR215, not SOURCE/defaultchecker integration.",
+      "gate_observations": "Current OWNERG1/G3/G7/G4/G5G6 pipelinePASS5paths/tool1.49s; strictG2tool.32s ONLYindependentapproval. Exact pipeline commands not supplied, no invented rows.",
+      "review": "Historical6d19119review30986481 retained; new f1841ae-head review pending.",
+      "boundary": "No signedapproval/SOURCEintegration/merge/waiver. SOURCEproduct768stable/unpublishedchecker dependency retained."
+    },
+    "latest_lead_metadata_observation": "Parent actual localLEADartifactscommit071b3f0/tool.46s; finalLEADpipelinePASS70/tool1.68s, strictG2tool.51s ONLYapproval. Parent records exact rows separately; no synthetic execution rows.",
     "planning_command_indices": [6, 7, 8, 9, 10, 11],
     "delivery_enumeration_command_index": 12,
     "full_suite_checkpoint_command_index": 13,
@@ -458,6 +469,56 @@
   "observed_by": "parent bot-00-programming-lead",
   "output_tail": "Finalcandidate0a6f77d QUALITY332passed in18.77s; not SOURCEchecker integration/current-head review/independentstamp. PublishedPR215still6d19119."
 }
+,
+{
+  "cmd": "git commit --only -m 'chore(verification): record final file-only gate verdicts' -- .receipts/bot-06-quality-security/v5.1-receipt-staging.json && git push origin bot-06-quality-security/v5.1-receipt-staging",
+  "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 0, "duration_s": 2.18,
+  "observed_by": "parent bot-00-programming-lead",
+  "output_tail": "Ownerreceiptcommit+pushf1841ae/32newlines/fastforward6d19119to f1841ae; product0a6f77d/docs9033d18 publishedPR215. No SOURCE/defaultintegration/stamp;newheadreviewpending."
+}
+,
+{
+  "cmd": "git commit --only -m 'docs(v5.1): preserve final 768 and 332 evidence with live blockers' -- .planning/STATE.md .planning/ROADMAP.md .planning/REQUIREMENTS.md .planning/v5.1-MILESTONE-AUDIT.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.46,
+  "output_tail": "071b3f0 committed exactly five authored LEAD artifacts/receipt,155insertions11deletions; no user checkout/source/QUALITY product path staged."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.68,
+  "output_tail": "Final committed LEAD unionG1PASS70ownedpaths/G3PASS70paths7templatesclean/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; whole pipeline timing, not individual gate durations."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.51,
+  "output_tail": "Final strict LEAD G2FAIL ONLYmissing independent approved_by; no self-stamp or other receipt failure."
+},
+{
+  "cmd": "gh pr view 215 --repo swcstudiospace/programming-desk --json headRefOid,isDraft,state,url,baseRefName && gh pr edit 215 --repo swcstudiospace/programming-desk --body-file /tmp/desk-v51-quality-pr-body.md",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 1,
+  "duration_s": 1.49,
+  "output_tail": "Read verified OPEN/DRAFT main f1841ae9ad3377077852958db61c8e158d209be2; subsequent edit failed deprecatedGraphQL projectCards. Not auth/source failure or successful edit; direct REST fallback follows."
+},
+{
+  "cmd": "gh api repos/swcstudiospace/programming-desk/pulls/215 --jq '{number,draft,head:.head.sha,url:.html_url}'",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 0.95,
+  "output_tail": "REST confirmed exactPR215/drafttrue/headf1841ae9ad3377077852958db61c8e158d209be2 before edit recovery; no review approval."
+},
+{
+  "cmd": "gh api --method PATCH repos/swcstudiospace/programming-desk/pulls/214 -F body=@/tmp/desk-v51-source-pr-body.md --jq '{number,isDraft:.draft,state,head:.head.sha,url:.html_url}'",
+  "cwd": "/tmp/desk-v51-implementation",
+  "exit_code": 0,
+  "duration_s": 1.78,
+  "output_tail": "Source draft public narrative refreshed, preserves Greptile automation block; remote head staysdac2fdf99daa8ca1b9a6c3ce6e0db9edc59631b3/drafttrue/open. No SOURCE commit push or merge."
+}
   ],
   "claims": [
     {
@@ -562,6 +623,22 @@
 {"claim": "Repo-aware localQUALITY0a6f77d strictCLI against SOURCEreceipt FAILEDONLYmissingapproved_by; exactknownfile staging history retained,not SOURCEintegration/stamp.", "evidence_command_index": 39, "expects_failure": true}
 ,
 {"claim": "QUALITYowner finalcandidate0a6f77d fullselftests332passed18.77s/tool19.49s; knownregularfile/rootcontainment/symlinkreject/--repo actualcheckout-export/defaultmirrorsfailclosed covered,not SOURCEintegration/stamp.", "evidence_command_index": 40}
+,
+{"claim": "Actual owner receiptcommit+push publishesf1841ae(product0a6f77d/docs9033d18)fastforwardPR215; not SOURCE/defaultintegration/independentapproval, historicalreviewretained/newheadreviewpending.", "evidence_command_index": 41}
+,
+{
+  "claim": "Final committed LEAD gatesG1/G3/G4/G5/G6/G7 passed70ownedpaths; pipeline timing only.",
+  "evidence_command_index": 43
+},
+{
+  "claim": "Final strict LEAD G2 failed only absent independent approval, not a pass or self-stamp.",
+  "evidence_command_index": 44,
+  "expects_failure": true
+},
+{
+  "claim": "Source draft narrative now names unpublished local repairs distinctly; published source head unchanged and no source push.",
+  "evidence_command_index": 47
+}
   ],
   "historical_unverified": [
     "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",

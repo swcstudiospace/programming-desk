@@ -80,7 +80,7 @@
       "publication_command_index": 41,
       "observed": "Parent exact owner receiptcommit+push exit0/tool2.18s;32receiptnewlines/fast-forward6d19119to f1841ae. Published onPR215, not SOURCE/defaultchecker integration.",
       "gate_observations": "Current OWNERG1/G3/G7/G4/G5G6 pipelinePASS5paths/tool1.49s; strictG2tool.32s ONLYindependentapproval. Exact pipeline commands not supplied, no invented rows.",
-      "review": "Historical6d19119review30986481 retained; new f1841ae-head review pending.",
+      "review": "Current30995847COMPLETED/exactf1841ae9ad3377077852958db61c8e158d209be2/5of5/noNEWfindings/citations0; bothhistoricalstoredcommentsremainaddressedfalse, not signedapproval. Prior30986481head6d retained.",
       "boundary": "No signedapproval/SOURCEintegration/merge/waiver. SOURCEproduct768stable/unpublishedchecker dependency retained."
     },
     "latest_lead_metadata_observation": "Parent actual localLEADartifactscommit071b3f0/tool.46s; finalLEADpipelinePASS70/tool1.68s, strictG2tool.51s ONLYapproval. Parent records exact rows separately; no synthetic execution rows.",
@@ -165,8 +165,8 @@
       "auto_review": "30995601 SKIPPED, not pass.",
       "qualification": "Supersedes earlier owner queue/pending metadata only. SOURCEchecker still unintegrated/pushheld/G2independentstamp, SASTlegacy/livechain blocked."
     },
-    "latest_lead_publication_snapshot": "Parent actual publishedLEAD179270ef86e4a188632bc9dcaff93356a05acd39/tool2.99s; finalmetadata pushpending. Parent appended exactrows48–51; all52commandrows preserved. Original receipt started/completed remain historical, no additional commit invented.",
-    "final_status": "Original11open; all70sourcecommentsrepaired/0new/final768consumerpassstableproductd452fb1, no signedapproval. Source notpushed; G2two blockers untilQUALITYownerintegration+stamp; localothergatespass/SAST8legacyHIGHMED/funding0slot509600313/positivechainmissing persist. No merge/waiver."
+    "latest_lead_publication_snapshot": "Actual parent publishedLEADdb8f5e76e8fd791028ccd7741efab3fc234e18e5/tool2.34s atcommands[55]; earlier179270e retained. Final receipt-only evidence append follows this checkpoint; no invented selfhash. Original receipt timestamps remain historical.",
+    "final_status": "All11originalrequirementsopen/signed0;70sourcecommentsrepaired/0new/current768stableproductd452fb1unpublished;SOURCEG2stillmissingstamp+force-stageclassificationuntilownerintegration. OWNERf18430995847COMPLETED5of5/noNEWfindings but2storedflagsfalse/stampmissing;332candidateCI. LEAD70path finalgatesPASS/strictG2ONLYstampmissing. Whole-serviceSAST8legacyHIGHMED/funding0slot509643885/positivechainblocked; no merge/waiver/completion.",
   },
   "planning_evidence_addendum": {
     "finding": "Greptile #212 finding 296100815 / PRRT_kwDOUgQ0os6q75AU",
@@ -595,6 +595,49 @@
   "duration_s": 0.05,
   "output_tail": "Observed final continuation metadata timestamp2026-10-10T19:29:27Z; not invented or original baseline replacement."
 }
+,
+{
+  "cmd": "git commit --only -m 'docs(v5.1): record terminal owner review and exact live blocker' -- .planning/STATE.md .planning/ROADMAP.md .planning/REQUIREMENTS.md .planning/v5.1-MILESTONE-AUDIT.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json && git push origin bot-00-programming-lead/v5.1-completion-audit",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 2.34,
+  "output_tail": "Publisheddb8f5e76e8fd791028ccd7741efab3fc234e18e5; onlyfiveLEADpaths122insertions21deletions, fastforward179270e\u2192db8f5e7; terminalOwner5/5+stored2false+latestzero509643885/originalopen persisted. No merge/sourcepush."
+},
+{
+  "cmd": "gh api --method POST repos/swcstudiospace/programming-desk/pulls/215/comments/4238685183/replies --input /tmp/desk-v51-owner-directory-reply.json --jq '{id,url:.html_url}'",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 1.73,
+  "output_tail": "Published actualdirectory-fix/332/terminal5of5 evidence response https://github.com/swcstudiospace/programming-desk/pull/215#discussion_r4238930463; not waiver/selfapproval/storedflag clearance."
+},
+{
+  "cmd": "gh api --method POST repos/swcstudiospace/programming-desk/pulls/215/comments/4238685184/replies --input /tmp/desk-v51-owner-standalone-reply.json --jq '{id,url:.html_url}'",
+  "cwd": "/tmp/desk-v51-quality-gate",
+  "exit_code": 0,
+  "duration_s": 1.73,
+  "output_tail": "Published actualstandalonewith/withoutdelimiter/332/terminal5of5 evidence response https://github.com/swcstudiospace/programming-desk/pull/215#discussion_r4238930460; not waiver/selfapproval/storedflag clearance."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.6,
+  "output_tail": "Final publisheddb8 unionG1PASS70/G3PASS70no secrets7templatesclean/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; whole pipeline time only."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.46,
+  "output_tail": "Finaldb8 strictLEADG2FAIL ONLYmissing independent approved_by; no other receipt failure, no self-stamp."
+},
+{
+  "cmd": "gh api --method PATCH repos/swcstudiospace/programming-desk/pulls/212 --input /tmp/desk-v51-lead-pr-update.json --jq '{number,draft,head:.head.sha,url:.html_url}'",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.72,
+  "output_tail": "FinalLEADmanualbody records ownerterminal5of5+2storedfalse and latestbalance509643885; drafttrue/headdb8f5e76e8fd791028ccd7741efab3fc234e18e5, old automation block preserved pending new LEAD-head review."
+}
   ],
   "claims": [
     {
@@ -732,6 +775,20 @@
   "claim": "LEAD public narrative refreshed while drafttrue/head179270e remains; latest wallet probe supersedes the older narrative checkpoint separately.",
   "evidence_command_index": 51
 }
+,
+{
+  "claim": "Complete terminal owner review/live blocker LEAD artifacts published atdb8f5e7 withoutsourcepush/merge or narrowing original acceptance.",
+  "evidence_command_index": 55
+},
+{
+  "claim": "Final published LEAD unionG1/G3/G4/G5/G6/G7 passed70paths; whole pipeline, not fake per-gate durations.",
+  "evidence_command_index": 58
+},
+{
+  "claim": "Final LEAD strictG2 failed only missing independentapproval, not green or self-stamp.",
+  "evidence_command_index": 59,
+  "expects_failure": true
+}
   ],
   "historical_unverified": [
     "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",
@@ -752,7 +809,7 @@
     "All eleven original checkboxes remain open and signedacceptance0; independentapproved_by/QUALITY verdict absent. Hook rendering,20SUMMARIES and50advisoryclosed threats do not constitute approval.",
     "Postclaim whole-service SAST FAILED(index24):57419LOC/2HIGH6MED105LOW/tool7.91s/core10LOW/errors[]skips0nosec0; eight legacyHIGH/MED owner/QUALITY dispositions remain,no waiver. Previous57408/57374/57348 checkpoints preserved;47versions0known version-only.",
     "Complete70sourcecomment cohorts49+21 repaired/0new/extraP2actualclosed and3focusedclaimregressionspass; storedremote70flagsfalse/noapproval. Parent actual Eval20planPyYAMLtruthstrings/no errors/current69sixrow4Runtimeverified observation is not shell or approval.",
-    "Source768stableproductd452fb1/localreceiptHEADd6b7789 unpublished/DACunchanged/unintegrated/pushheld; latestfunding0slot509643885/.67s. OWNER30995847COMPLETED/exactf1841ae9ad3377077852958db61c8e158d209be2/5of5/citations0/noNEWfindings, not approval. Exactly2OWNERcomments296688336/296688337bothaddressedfalse despite repairedsource. Auto30995601SKIPPEDneverpass; SOURCEintegration/stamps/SASTlegacy/liveblockers persist. LEADpublished179270ef86e4a188632bc9dcaff93356a05acd39 finalmetadata pushpending.",
+    "Source768stableproductd452fb1/localreceiptHEADd6b7789 unpublished/DACunchanged/unintegrated/pushheld; latestfunding0slot509643885/.67s. OWNER30995847COMPLETED/exactf1841ae9ad3377077852958db61c8e158d209be2/5of5/citations0/noNEWfindings, not approval. Exactly2OWNERcomments296688336/296688337bothaddressedfalse despite repairedsource; evidence replies posted without waiver. Auto30995601SKIPPEDneverpass; SOURCEintegration/stamps/SASTlegacy/liveblockers persist. LEADpublishedcheckpointdb8f5e7; final receipt-only append/publication is parent-owned, not signedapproval.",
     "No commands/tests/build/lint/format/scan/gates/compilation/commits by this document worker. OriginalOct9 missingcode/artifact/unexecuted claims are historical only.",
     "No archival/completion/merge/auto-merge/force-push/release/tag/branchdeletion; existingv5.1.0 release is not acceptance. No private signer access or secret printing."
   ],

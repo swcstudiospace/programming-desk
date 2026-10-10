@@ -524,7 +524,7 @@ class RemoteNodeTransport:
             raise bad_reply(f"failed with {status}")
         try:
             payload = json.loads(response_bytes)
-        except (ValueError, UnicodeDecodeError) as exc:
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise bad_reply("returned invalid JSON") from exc
         if not isinstance(payload, dict):
             raise bad_reply("returned a non-object payload")

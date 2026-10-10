@@ -2815,3 +2815,30 @@ def test_qkd_missing_random_method_is_typed_failure():
         assert "missing-p" not in worker._tombstones
 
     _run(body())
+
+
+@pytest.mark.parametrize("operation", ("reserve", "inspect", "lengths"))
+def test_excessively_nested_worker_json_remains_typed_nonacknowledgement(operation):
+    async def body():
+        # Fits the byte cap, but exceeds supported Python 3.12's decoder
+        # recursion boundary. Python 3.14 can parse it; a non-object is
+        # still never an acknowledgement on either interpreter.
+        nested = b"[" * 30000 + b"0" + b"]" * 30000
+        transport, stream = _streamed_remote([nested])
+        expected = NodeTransportAmbiguous if operation == "reserve" else NodeTransportUnavailable
+        try:
+            with pytest.raises(expected):
+                if operation == "reserve":
+                    await transport.reserve(
+                        "n", operation_id="nested-r", resource_id="r", count=1, instance="i")
+                elif operation == "lengths":
+                    await transport.qkd_step(
+                        "n", operation_id="nested-l", session_id="s",
+                        action="lengths", payload={}, instance="i")
+                else:
+                    await transport.inspect("n")
+            assert stream.closed
+        finally:
+            await transport.client.aclose()
+
+    _run(body())

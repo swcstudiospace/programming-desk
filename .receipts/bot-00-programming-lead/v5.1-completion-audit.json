@@ -647,6 +647,21 @@
   "duration_s": 0.24,
   "output_tail": "AFTER parent trailing-comma correction, actual consumer receipt parser succeeds and strict G2FAIL ONLYmissing independent approved_by; no JSON/load/pointer error."
 }
+,
+{
+  "cmd": "gh pr view 212 --repo swcstudiospace/programming-desk --json headRefOid,isDraft,state,url,baseRefName && python3 ci/gates/check_secrets.py --base origin/main",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.23,
+  "output_tail": "Actualpublished309729f22611ed897b3bb44fd304463a8ebaf738/main/OPEN/DRAFT, then G3PASS70files/no secrets. Consumer-validreceiptcorrection is published; no self-approval."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.37,
+  "output_tail": "Published corrected receipt strictG2FAIL ONLYmissing independent approved_by, no JSON/load/pointer error."
+}
   ],
   "claims": [
     {

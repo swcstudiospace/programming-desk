@@ -2842,3 +2842,31 @@ def test_excessively_nested_worker_json_remains_typed_nonacknowledgement(operati
             await transport.client.aclose()
 
     _run(body())
+
+
+def test_worker_decoder_depth_failure_is_typed_after_auth(monkeypatch):
+    import httpx
+
+    async def body():
+        worker = QuantumNodeWorker("n", token="ingress-fixture")
+        app = create_node_app(worker)
+        with monkeypatch.context() as context:
+            def depth_failure(*args, **kwargs):
+                raise RecursionError("supported decoder depth boundary")
+
+            context.setattr("desk_gateway.quantum_node.json.loads", depth_failure)
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://worker",
+            ) as client:
+                missing = await client.post("/v1/node/reserve", content=b"{}")
+                refused = await client.post(
+                    "/v1/node/reserve", content=b"{}",
+                    headers={"Authorization": "Bearer ingress-fixture"},
+                )
+        assert missing.status_code == 401
+        assert refused.status_code == 400
+        assert refused.json()["error"] == "invalid_json"
+        info = await LocalNodeTransport({"n": worker}).inspect("n")
+        assert info["active_count"] == 0
+
+    _run(body())

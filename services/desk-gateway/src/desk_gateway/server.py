@@ -6508,7 +6508,7 @@ def create_mcp(
                 return None, _q68_error(request, 400, "invalid_json", "Request body must be UTF-8 JSON.")
             try:
                 body = json.loads(text, parse_constant=_q68_reject_constant)
-            except ValueError:
+            except (ValueError, RecursionError):
                 return None, _q68_error(request, 400, "invalid_json", "Request body must be a JSON object.")
             try:
                 _q68_check_finite(body)
@@ -7023,9 +7023,16 @@ def create_mcp(
         if blocked is not None:
             return blocked
         raw_limit = request.query_params.get("limit", "100")
-        if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 1000:
+        try:
+            limit = (
+                int(raw_limit)
+                if len(raw_limit) <= 4 and raw_limit.isascii() and raw_limit.isdigit()
+                else 0
+            )
+        except ValueError:
+            limit = 0
+        if not 1 <= limit <= 1000:
             return _q68_error(request, 400, "invalid_limit", "limit must be an integer in 1..1000.")
-        limit = int(raw_limit)
         # Bounded joined projection costing proportionally to limit: never a
         # full-history snapshot/tree materialization on the event loop.
         try:

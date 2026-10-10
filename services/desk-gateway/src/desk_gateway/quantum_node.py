@@ -1819,7 +1819,7 @@ def create_node_app(worker: QuantumNodeWorker):  # type: ignore[no-untyped-def]
             return {}
         try:
             return json.loads(raw.decode("utf-8"))
-        except (ValueError, UnicodeDecodeError) as exc:
+        except (ValueError, UnicodeDecodeError, RecursionError) as exc:
             raise QuantumNodeError(400, "invalid_json", "request body is not valid JSON") from exc
 
     def _creds(request: Request) -> str:

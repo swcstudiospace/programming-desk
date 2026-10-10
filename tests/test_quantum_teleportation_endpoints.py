@@ -954,7 +954,7 @@ def test_receipt_listing_is_bounded_by_limit(tmp_path):
     ).json()
     assert two["count"] == 2 and len(two["receipts"]) == 2
     assert one["receipts"][0] == two["receipts"][0]
-    for bad in ("0", "1001", "many", "-1"):
+    for bad in ("0", "1001", "many", "-1", "²", "9" * 5000):
         rejected = client.get(
             "/v1/quantum/teleportation/ledger/receipts",
             params={"limit": bad},
@@ -1069,3 +1069,22 @@ def test_second_drill_is_rejected_while_one_runs():
         assert (await first)["all_passed"] is False
 
     asyncio.run(main())
+
+
+def test_gateway_decoder_depth_failure_is_typed_after_auth(pair_app, monkeypatch):
+    def depth_failure(*args, **kwargs):
+        raise RecursionError("supported decoder depth boundary")
+
+    with monkeypatch.context() as context:
+        context.setattr("desk_gateway.server.json.loads", depth_failure)
+        missing = pair_app.post(
+            "/v1/quantum/qkd/bb84", content=b"{}",
+            headers={"Content-Type": "application/json"},
+        )
+        refused = pair_app.post(
+            "/v1/quantum/qkd/bb84", content=b"{}",
+            headers={"Content-Type": "application/json", **_bearer("lead")},
+        )
+    assert missing.status_code == 401
+    assert refused.status_code == 400
+    assert refused.json()["error"] == "invalid_json"

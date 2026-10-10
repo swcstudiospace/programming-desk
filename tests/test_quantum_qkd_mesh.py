@@ -24,15 +24,22 @@ from desk_gateway.quantum_key import (
     toeplitz_hash,
 )
 from desk_gateway.quantum_node import QuantumNodeWorker, encode_density
-from desk_gateway.quantum_qkd_mesh import QKDProtocolEngine, QuantumTeleportationDrill
+from desk_gateway.quantum_qkd_mesh import QKDProtocolEngine, QuantumTeleportationDrillSimulator
 from desk_gateway.quantum_teleportation import (
     BellPairPool,
     BellStateType,
+    PairStatus,
     QuantumRepeaterMesh,
     QuantumTeleportationProtocol,
+    QuantumResourceError,
 )
 from desk_gateway.quantum_state import QuantumStateVector
-from desk_gateway.quantum_transport import LocalNodeTransport, NodeCommandFailed
+from desk_gateway.quantum_transport import (
+    LocalNodeTransport,
+    NodeCommandFailed,
+    NodeTransportAmbiguous,
+    NodeTransportUnavailable,
+)
 
 ALICE = "desk-alpha"
 BOB = "desk-beta"
@@ -93,12 +100,17 @@ def make_workers(seed_alice=1001, seed_bob=2002):
     }
 
 
-def make_stack(seed_engine=20260612, seed_alice=1001, seed_bob=2002, sink=None):
+def make_stack(seed_engine=20260612, seed_alice=1001, seed_bob=2002, sink=None, transport_type=LocalNodeTransport):
     """One shared graph: workers, transport, pool, engine."""
     workers = make_workers(seed_alice, seed_bob)
-    transport = LocalNodeTransport(workers)
+    transport = transport_type(workers)
     pool = BellPairPool(transport=transport)
+    mesh = QuantumRepeaterMesh(pool, rng=random.Random(911))
+    mesh.register_node(ALICE, "test-a")
+    mesh.register_node(BOB, "test-b")
+    mesh.register_link(ALICE, BOB)
     engine = QKDProtocolEngine(
+        mesh,
         pool=pool,
         transport=transport,
         rng=random.Random(seed_engine),
@@ -181,6 +193,17 @@ async def assert_keyless(transport, node, session_id, tag):
 
 
 
+async def assert_unbound(transport, node, session_id, tag):
+    """Early admission never creates a private worker session."""
+    for action, method in (("lengths", transport.qkd_step), ("capability", transport.qkd_owner)):
+        with pytest.raises(NodeCommandFailed) as exc:
+            await method(
+                node, operation_id=f"{tag}-{node}-{action}",
+                session_id=session_id, action=action, payload={},
+            )
+        assert exc.value.code == "unknown_session"
+
+
 def test_clean_bb84_establishes_with_matching_commitments():
     async def main():
         events, sink = make_sink()
@@ -210,7 +233,7 @@ def test_clean_bb84_establishes_with_matching_commitments():
 
         public = session.to_dict()
         assert_public_clean(public)
-        assert repr(session) == f"QKDSession({session.session_id})"
+        assert repr(session) == f"QKDKeyExchangeSession({session.session_id})"
 
         assert len(events) == 1
         assert events[0]["event_type"] == "qkd.established"
@@ -255,7 +278,10 @@ def test_short_samples_never_report_estimated_qber(protocol):
         assert session.status == "aborted" and session.reason == "insufficient_sample"
         assert session.qber is None and session.key_commitment_hex is None
         for node in (ALICE, BOB):
-            await assert_keyless(transport, node, session.session_id, f"short-{protocol}")
+            if protocol == "E91":
+                await assert_unbound(transport, node, session.session_id, "short-e91")
+            else:
+                await assert_keyless(transport, node, session.session_id, f"short-{protocol}")
 
     _run(main())
 
@@ -269,7 +295,7 @@ def test_no_transport_fails_closed_without_keys():
         assert engine.transport is None
         for coro in (
             engine.run_bb84(ALICE, BOB, 100),
-            engine.run_e91(ALICE, BOB, 100),
+            engine.run_e91(ALICE, BOB, 8000),
         ):
             session = await coro
             assert session.status == "failed"
@@ -696,7 +722,7 @@ def test_repeated_drills_leave_no_owned_resources(tmp_path):
             before = {
                 node: (await transport.inspect(node))["active_count"] for node in nodes
             }
-            drill = QuantumTeleportationDrill(pool, mesh, protocol, engine, ledger, None)
+            drill = QuantumTeleportationDrillSimulator(pool, mesh, protocol, engine, ledger, None)
             reports = []
             for _ in range(2):
                 report = await drill.run()
@@ -749,5 +775,348 @@ def test_repeated_drills_leave_no_owned_resources(tmp_path):
         session = await engine.run_bb84("drill-left", "drill-right", 12000, requested_bits=256)
         assert session.status == "established"
         assert session.keys_agreed is True
+
+    _run(main())
+
+
+def make_repeater_stack(*, transport_type=LocalNodeTransport, sink=None, extra_workers=()):
+    """Four real workers, capacity-limited to the genuine three-hop route."""
+    route = (ALICE, "repeater-a", "repeater-b", BOB)
+    workers = {
+        node: QuantumNodeWorker(
+            node, token=TOKEN, capacity=1 if node in (ALICE, BOB) else 2,
+            rng=random.Random(8001 + index),
+        )
+        for index, node in enumerate(route)
+    }
+    workers.update({
+        node: QuantumNodeWorker(node, token=TOKEN, rng=random.Random(991))
+        for node in extra_workers
+    })
+    transport = transport_type(workers)
+    observed = {"created": [], "swapped": [], "corrections": set()}
+
+    async def record_resource(event):
+        if event["event_type"] == "bell.created":
+            observed["created"].append((tuple(event["nodes"]), event["resources"][0]))
+        elif event["event_type"] == "swap.completed":
+            observed["swapped"].append(event["resources"][-1])
+            payload = event["payload"]
+            observed["corrections"].add((payload["correction_x"], payload["correction_z"]))
+        return {"receipt_id": "observed-resource"}
+
+    pool = BellPairPool(transport=transport, append_event=record_resource)
+    mesh = QuantumRepeaterMesh(pool, rng=random.Random(411))
+    for node in route:
+        mesh.register_node(node, "repeater-test", qubit_capacity=workers[node].capacity)
+    for left, right in zip(route, route[1:]):
+        mesh.register_link(left, right)
+    engine = QKDProtocolEngine(
+        mesh, transport=transport, rng=random.Random(4404), append_event=sink,
+    )
+    return workers, transport, pool, engine, observed
+
+
+def test_e91_full_count_repeater_witness_key_and_lease_consumption():
+    """Actual two-BSM rounds feed the witness and independent endpoint keys."""
+    async def main():
+        _, transport, pool, engine, observed = make_repeater_stack()
+        assert frozenset((ALICE, BOB)) not in engine.mesh.links
+        session = await engine.run_e91(ALICE, BOB, 20000)
+        assert session.status == "established" and session.reason is None
+        assert session.raw_count == 20000 and session.extracted_bits == 256
+        assert session.keys_agreed and session.qber == 0.0
+        assert session.entropy_budget["chsh_S_lower"] > 2.0
+        assert set(session.entropy_budget["chsh_counts"]) == {"0", "1", "2", "3"}
+        assert sum(session.entropy_budget["chsh_counts"].values()) == 10000
+        assert session.phase_test_count == 4000
+        assert len(observed["created"]) == 60000
+        assert len(observed["swapped"]) == 40000
+        assert any(x or z for x, z in observed["corrections"])
+        assert set(nodes for nodes, _ in observed["created"]) == {
+            (ALICE, "repeater-a"), ("repeater-a", "repeater-b"), ("repeater-b", BOB),
+        }
+        for _, pair_id in observed["created"]:
+            assert pool.status_of(pair_id) is PairStatus.CONSUMED
+        for pair_id in observed["swapped"]:
+            assert pool.status_of(pair_id) is PairStatus.CONSUMED
+        for node in engine.mesh.nodes:
+            info = await transport.inspect(node)
+            assert info["active_count"] == 0 and info["lease_count"] == 0
+        await owner_use_both(transport, session, "repeater-use")
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "repeater-gone")
+        assert_public_clean(session.to_dict())
+        assert pool.list_active_pairs() == []
+
+    _run(main())
+
+
+@pytest.mark.parametrize("topology", ("absent", "disconnected", "unregistered", "overlong", "different_pool"))
+def test_e91_missing_route_has_no_discovery_vault_rng_or_pool_effects(topology):
+    async def main():
+        class ObservedTransport(LocalNodeTransport):
+            probe_calls = 0
+
+            async def inspect(self, node_id, **kwargs):
+                self.probe_calls += 1
+                return await super().inspect(node_id, **kwargs)
+
+            async def qkd_step(self, node_id, **kwargs):
+                self.probe_calls += 1
+                return await super().qkd_step(node_id, **kwargs)
+
+            async def reserve(self, node_id, **kwargs):
+                self.probe_calls += 1
+                return await super().reserve(node_id, **kwargs)
+
+        _, transport, pool, engine = make_stack(transport_type=ObservedTransport)
+        if topology == "absent":
+            engine.mesh = None
+        elif topology == "disconnected":
+            engine.mesh.links.clear()
+        elif topology == "unregistered":
+            del engine.mesh.nodes[BOB]
+        elif topology == "different_pool":
+            engine.mesh.bell_pool = BellPairPool(transport=transport)
+        else:
+            engine.mesh.links.clear()
+            path = [ALICE, *(f"route-mid-{i:02}" for i in range(15)), BOB]
+            for node in path[1:-1]:
+                engine.mesh.register_node(node, "test-long")
+            for left, right in zip(path, path[1:]):
+                engine.mesh.register_link(left, right)
+        before_rng = engine._rng.getstate()
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "failed" and session.reason == "route_unavailable"
+        assert transport.probe_calls == 0 and engine._rng.getstate() == before_rng
+        assert engine._session_instances == {}
+        assert pool.list_active_pairs() == [] and pool.uncertain_reserves() == {}
+        assert not session.keys_agreed and session.key_commitment_hex is None
+        for node in (ALICE, BOB):
+            await assert_unbound(transport, node, session.session_id, "no-route")
+            assert (await transport.inspect(node))["active_count"] == 0
+
+    _run(main())
+
+
+def test_e91_short_admission_precedes_missing_topology_and_draws():
+    async def main():
+        engine = QKDProtocolEngine(rng=random.Random(42))
+        before = engine._rng.getstate()
+        for count in (0, 200):
+            session = await engine.run_e91(ALICE, BOB, count)
+            assert session.status == "aborted" and session.reason == "insufficient_sample"
+            assert session.qber is None and session.extracted_bits == 0
+        assert engine._rng.getstate() == before
+        assert engine._session_instances == {}
+        assert engine.pool.list_active_pairs() == []
+
+    _run(main())
+
+
+@pytest.mark.parametrize("after_effect", (False, True))
+@pytest.mark.parametrize("partition_abort", (False, True))
+def test_e91_first_release_fault_is_failed_keyless_or_key_quarantined(after_effect, partition_abort):
+    async def main():
+        class UnconfirmedRelease(LocalNodeTransport):
+            retire_calls = []
+
+            async def release(self, node_id, **kwargs):
+                if "-retire-0-" in kwargs["operation_id"]:
+                    self.retire_calls.append((node_id, kwargs["operation_id"]))
+                    if after_effect:
+                        await super().release(node_id, **kwargs)
+                    raise NodeTransportAmbiguous("lost terminal acknowledgement")
+                return await super().release(node_id, **kwargs)
+
+            async def qkd_step(self, node_id, **kwargs):
+                if partition_abort and node_id == BOB and kwargs["action"] in ("abort", "lengths"):
+                    raise NodeTransportUnavailable("abort partition")
+                return await super().qkd_step(node_id, **kwargs)
+
+        events, sink = make_sink()
+        workers, transport, pool, engine = make_stack(transport_type=UnconfirmedRelease, sink=sink)
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "failed" and session.reason == "resource_cleanup_unconfirmed"
+        assert session.extracted_bits == 0 and not session.keys_agreed
+        assert session.key_id is None
+        assert session.commitment_alice_hex is None and session.commitment_bob_hex is None
+        assert session.key_commitment_hex is None
+        assert len(transport.retire_calls) == 1  # Never retry an ambiguous mutation.
+        assert [event["event_type"] for event in events] == ["qkd.failed"]
+        pair_ids = {
+            lease["resource_id"] for node in (ALICE, BOB)
+            for lease in (await transport.inspect(node))["leases"]
+        }
+        assert len(pair_ids) == 1
+        assert pool.status_of(next(iter(pair_ids))) is PairStatus.QUARANTINED
+        assert (await transport.inspect(ALICE))["active_count"] == (0 if after_effect else 1)
+        assert (await transport.inspect(BOB))["active_count"] == 1
+        local = LocalNodeTransport(workers)
+        await assert_keyless(local, ALICE, session.session_id, "release-fault-a")
+        if partition_abort:
+            assert engine._quarantined_sessions[session.session_id] == {
+                BOB: (await local.inspect(BOB))["instance_id"],
+            }
+        else:
+            await assert_keyless(local, BOB, session.session_id, "release-fault-b")
+            assert session.session_id not in engine._quarantined_sessions
+        assert_public_clean(session.to_dict())
+
+    _run(main())
+
+
+def test_e91_partial_route_capacity_failure_never_falls_back():
+    async def main():
+        unrelated = "unrelated-owner"
+        workers, transport, pool, engine, observed = make_repeater_stack(extra_workers=(unrelated,))
+        held = await pool.create_pair(BOB, unrelated, BellStateType.PHI_PLUS, 1.0, operation_id="held-pair")
+        before = {node: (await transport.inspect(node))["active_count"] for node in workers}
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "failed" and session.reason == "resource_cleanup_unconfirmed"
+        assert session.raw_count == 8000 and session.extracted_bits == 0
+        assert not session.keys_agreed and session.key_commitment_hex is None
+        assert observed["swapped"] == []
+        assert [nodes for nodes, _ in observed["created"]] == [
+            (BOB, unrelated), (ALICE, "repeater-a"), ("repeater-a", "repeater-b"),
+        ]
+        assert pool.status_of(held.pair_id) is PairStatus.ACTIVE
+        assert {node: (await transport.inspect(node))["active_count"] for node in workers} == before
+        for _, pair_id in observed["created"][1:]:
+            assert pool.status_of(pair_id) is PairStatus.DISCARDED
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "partial-route")
+
+    _run(main())
+
+
+def test_e91_shortest_route_lexical_tie_uses_real_repeater():
+    async def main():
+        _, transport, pool, engine, observed = make_repeater_stack()
+        # Equal two-hop routes replace the original three-hop chain.
+        # Register in reverse lexical order to expose incidental iteration ties.
+        engine.mesh.links.clear()
+        for repeater in ("repeater-b", "repeater-a"):
+            engine.mesh.register_link(ALICE, repeater)
+            engine.mesh.register_link(repeater, BOB)
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "established" and session.extracted_bits == 256
+        assert session.entropy_budget["chsh_S_lower"] > 2.0
+        assert set(nodes for nodes, _ in observed["created"]) == {
+            (ALICE, "repeater-a"), ("repeater-a", BOB),
+        }
+        assert len(observed["created"]) == 16000
+        assert len(observed["swapped"]) == 8000
+        assert (await transport.inspect("repeater-b"))["active_count"] == 0
+        assert pool.list_active_pairs() == []
+        await owner_use_both(transport, session, "lexical-route")
+
+    _run(main())
+
+
+@pytest.mark.parametrize("kind,fidelity,established", (
+    (BellStateType.PSI_MINUS, 1.0, True),
+    (BellStateType.PHI_PLUS, 0.5, False),
+))
+def test_e91_uses_actual_returned_density_and_known_frame(kind, fidelity, established):
+    async def main():
+        class PhysicalResourcePool(BellPairPool):
+            async def create_pair(self, node_a, node_b, state_type, requested_fidelity, **kwargs):
+                # A deterministic physical-state seam, not a routing success
+                # stub: the real pool creates the density and both worker leases.
+                return await super().create_pair(node_a, node_b, kind, fidelity, **kwargs)
+
+        workers = make_workers()
+        transport = LocalNodeTransport(workers)
+        pool = PhysicalResourcePool(transport=transport)
+        mesh = QuantumRepeaterMesh(pool)
+        mesh.register_node(ALICE, "density-a")
+        mesh.register_node(BOB, "density-b")
+        mesh.register_link(ALICE, BOB)
+        engine = QKDProtocolEngine(mesh, rng=random.Random(4404))
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        if established:
+            assert session.status == "established" and session.qber == 0.0
+            assert session.extracted_bits == 256
+            assert session.entropy_budget["chsh_S_lower"] > 2.0
+            await owner_use_both(transport, session, "normalized-frame")
+        else:
+            assert session.status == "aborted" and session.reason == "entanglement_witness_failed"
+            assert session.entropy_budget["chsh_S_lower"] <= 2.0
+            assert session.extracted_bits == 0 and session.key_commitment_hex is None
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "actual-density")
+            assert (await transport.inspect(node))["active_count"] == 0
+        assert pool.list_active_pairs() == []
+
+    _run(main())
+
+
+@pytest.mark.parametrize("failure_stage", ("reserve", "consume"))
+def test_e91_unconfirmed_pool_retirement_prevents_extraction(failure_stage):
+    async def main():
+        class UnconfirmedRetirement(BellPairPool):
+            attempted = []
+
+            async def reserve_pairs(self, pair_ids, **kwargs):
+                result = await super().reserve_pairs(pair_ids, **kwargs)
+                if failure_stage == "reserve" and "-retire-" in kwargs["operation_id"]:
+                    self.attempted.extend(pair_ids)
+                    raise QuantumResourceError("retirement_unconfirmed", "reservation acknowledgement lost")
+                return result
+
+            async def consume_pairs(self, pair_ids, **kwargs):
+                await super().consume_pairs(pair_ids, **kwargs)
+                if failure_stage == "consume" and "-retire-" in kwargs["operation_id"]:
+                    self.attempted.extend(pair_ids)
+                    raise QuantumResourceError("retirement_unconfirmed", "consumption acknowledgement lost")
+
+        workers = make_workers()
+        transport = LocalNodeTransport(workers)
+        pool = UnconfirmedRetirement(transport=transport)
+        mesh = QuantumRepeaterMesh(pool)
+        mesh.register_node(ALICE, "retire-a")
+        mesh.register_node(BOB, "retire-b")
+        mesh.register_link(ALICE, BOB)
+        engine = QKDProtocolEngine(mesh, rng=random.Random(4404))
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "failed" and session.reason == "resource_cleanup_unconfirmed"
+        assert session.extracted_bits == 0 and session.key_commitment_hex is None
+        assert len(pool.attempted) == 1
+        assert pool.status_of(pool.attempted[0]) is PairStatus.QUARANTINED
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "retire-unconfirmed")
+            assert (await transport.inspect(node))["active_count"] == 0
+
+    _run(main())
+
+
+def test_e91_partial_swap_lost_transfer_retains_quarantine_without_retry():
+    async def main():
+        class LostTransfer(LocalNodeTransport):
+            uncertain_ops = []
+
+            async def transfer(self, node_id, **kwargs):
+                result = await super().transfer(node_id, **kwargs)
+                if "-swap-0-xfer-a" in kwargs["operation_id"]:
+                    self.uncertain_ops.append(kwargs["operation_id"])
+                    raise NodeTransportAmbiguous("survivor transfer reply lost")
+                return result
+
+        _, transport, pool, engine, observed = make_repeater_stack(transport_type=LostTransfer)
+        session = await engine.run_e91(ALICE, BOB, 8000)
+        assert session.status == "failed" and session.reason == "resource_cleanup_unconfirmed"
+        assert not session.keys_agreed and session.extracted_bits == 0
+        assert session.key_commitment_hex is None
+        assert len(transport.uncertain_ops) == 1
+        assert len(observed["created"]) == 3 and observed["swapped"] == []
+        assert [
+            pool.status_of(pair_id) for _, pair_id in observed["created"]
+        ] == [PairStatus.QUARANTINED, PairStatus.QUARANTINED, PairStatus.DISCARDED]
+        for node in engine.mesh.nodes:
+            assert (await transport.inspect(node))["active_count"] == 0
+        for node in (ALICE, BOB):
+            await assert_keyless(transport, node, session.session_id, "partial-swap")
 
     _run(main())

@@ -1052,9 +1052,9 @@ def test_scripted_devnet_drill_confirms(tmp_path):
 def test_second_drill_is_rejected_while_one_runs():
     import asyncio
 
-    from desk_gateway.quantum_qkd_mesh import DrillBusy, QuantumTeleportationDrill
+    from desk_gateway.quantum_qkd_mesh import DrillBusy, QuantumTeleportationDrillSimulator
 
-    class Stuck(QuantumTeleportationDrill):
+    class Stuck(QuantumTeleportationDrillSimulator):
         async def _run(self):
             await asyncio.sleep(0.05)
             return {"all_passed": False, "prerequisite": None, "stages": {}}

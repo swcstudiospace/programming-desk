@@ -6292,7 +6292,7 @@ def create_mcp(
     from desk_gateway.quantum_qkd_mesh import (
         DrillBusy as _Q69DrillBusy,
         QKDProtocolEngine,
-        QuantumTeleportationDrill as _Q69Drill,
+        QuantumTeleportationDrillSimulator as _Q69Drill,
     )
 
     class Quantum68EventCollector:

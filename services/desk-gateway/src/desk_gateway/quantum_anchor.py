@@ -29,7 +29,7 @@ import json
 import os
 import stat
 import struct
-import threading
+import zlib
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, Mapping
@@ -48,7 +48,7 @@ except ImportError:  # pragma: no cover - dependency declared by the gateway
 
 from .quantum_ledger import (
     InclusionProof,
-    LedgerCorruptError,
+    LedgerError,
     QuantumTeleportationReceiptLedger,
 )
 
@@ -59,6 +59,8 @@ COMPUTE_BUDGET_PROGRAM_ID = "ComputeBudget111111111111111111111111111111"
 COMPUTE_UNITS = 400000
 MAX_MEMO_BYTES = 1021
 MAX_PACKET_BYTES = 1232
+MAX_RPC_RESPONSE_BYTES = 64 * 1024
+_U64_MAX = (1 << 64) - 1
 
 RPC_URL_ENV = "QUANTUM_SOLANA_RPC_URL"
 SIGNER_PATH_ENV = "QUANTUM_SOLANA_SIGNER_PATH"
@@ -68,6 +70,12 @@ ATTEST_VERSION = 1
 
 _CONFIRMED_STATUSES = ("confirmed", "finalized")
 
+# Bound for observing a rival claim-holder's prepared event after losing the
+# atomic claim race. The winner persists synchronously, so contention settles
+# in milliseconds; a placeholder that never resolves is an interrupted claim
+# and fails closed without re-sign/resubmit.
+_CLAIM_SETTLE_S = 2.0
+_CLAIM_SETTLE_POLL_S = 0.01
 
 class AnchorError(Exception):
     """Publisher failure carrying a stable code and an HTTP mapping hint."""
@@ -578,8 +586,10 @@ class QuantumTeleportationAnchorExporter:
         self._poll_interval = float(poll_interval_s)
         self._rpc_id = 0
         self._prepared: dict[str, _Prepared] = {}
-        self._key_locks: dict[str, asyncio.Lock] = {}
-        self._locks_guard = threading.Lock()
+        # No per-receipt asyncio-lock registry: the shared single-send
+        # authority is the atomic SQLite claim in the ledger (claim_anchor),
+        # which serializes exporters across objects, coroutines, and
+        # processes. Local locks cannot cover a second exporter object.
 
     async def aclose(self) -> None:
         if self._owned_client is not None:
@@ -599,17 +609,22 @@ class QuantumTeleportationAnchorExporter:
         return found.signature if found is not None else None
 
     def prepared_record(self, receipt_id: str, tree_size: int | None = None) -> _Prepared | None:
-        """Return the durable single-send guard for a receipt, if any."""
+        """Return the durable single-send guard for a receipt, if any.
+
+        Raises LedgerError when the ledger is unavailable: callers fail
+        closed and never treat an outage as "no prepared signature".
+        """
         hit = self._prepared.get(receipt_id)
         if hit is not None:
             return hit if tree_size is None or tree_size == hit.tree_size else None
         return self._find_prepared_in_ledger(receipt_id, tree_size)
 
     def _find_prepared_in_ledger(self, receipt_id: str, tree_size: int | None) -> _Prepared | None:
-        try:
-            events = self._ledger.events_by_type("anchor.prepared", limit=100000)
-        except Exception:
-            return None
+        # Complete indexed lookup by receipt ID: the prepared event carries
+        # the actual persisted signature. A ledger outage raises LedgerError
+        # (fail closed) instead of returning a miss that would permit a
+        # second sign/send.
+        events = self._ledger.anchor_prepared_events(receipt_id)
         for event in events:
             payload = event.get("payload") if isinstance(event, Mapping) else None
             if not isinstance(payload, Mapping):
@@ -630,13 +645,22 @@ class QuantumTeleportationAnchorExporter:
                 return found
         return None
 
-    def _lock_for(self, receipt_id: str) -> asyncio.Lock:
-        with self._locks_guard:
-            lock = self._key_locks.get(receipt_id)
-            if lock is None:
-                lock = asyncio.Lock()
-                self._key_locks[receipt_id] = lock
-            return lock
+    async def _await_prepared_event(self, receipt_id: str, tree_size: int) -> _Prepared | None:
+        """Wait briefly for a rival claim-holder's prepared event to land.
+
+        The winner signs and persists synchronously right after winning the
+        claim, so this normally returns on the first poll. A placeholder
+        whose event never lands (interrupted claim) resolves to None: fail
+        closed with no re-sign and no resubmit.
+        """
+        deadline = monotonic() + _CLAIM_SETTLE_S
+        while True:
+            found = self._find_prepared_in_ledger(receipt_id, tree_size)
+            if found is not None:
+                return found
+            if monotonic() >= deadline:
+                return None
+            await asyncio.sleep(_CLAIM_SETTLE_POLL_S)
 
     def _client(self) -> httpx.AsyncClient:
         if self._injected_client is not None:
@@ -659,26 +683,80 @@ class QuantumTeleportationAnchorExporter:
     async def _rpc(self, method: str, params: Any) -> Any:
         url = self._check_rpc_url()
         self._rpc_id += 1
-        body = {"jsonrpc": "2.0", "id": self._rpc_id, "method": method, "params": params}
+        request_id = self._rpc_id
+        body = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
+        content = bytearray()
         try:
-            response = await self._client().post(url, json=body)
-        except (httpx.HTTPError, OSError) as exc:
+            # Bound wire bytes AND inflated bytes before JSON admission. Limit
+            # inflation itself, rather than letting HTTPX allocate an arbitrary
+            # decoded chunk before applying the application budget.
+            deadline = monotonic() + self._rpc_timeout
+            async with asyncio.timeout(self._rpc_timeout):
+                async with self._client().stream(
+                    "POST", url, json=body, headers={"Accept-Encoding": "gzip, deflate, identity"},
+                ) as response:
+                    if response.status_code != 200:
+                        raise _RpcTransportError(f"{method} HTTP {response.status_code}")
+                    if response.is_stream_consumed:
+                        # Injected transports may supply an already-read reply.
+                        if (
+                            len(response.content) > MAX_RPC_RESPONSE_BYTES
+                            or response.num_bytes_downloaded > MAX_RPC_RESPONSE_BYTES
+                        ):
+                            raise _RpcShapeError(f"{method} response exceeds 64 KiB")
+                        content.extend(response.content)
+                    else:
+                        encoding = response.headers.get("content-encoding", "identity").strip().lower()
+                        if encoding not in ("identity", "gzip", "deflate"):
+                            raise _RpcShapeError(f"{method} response encoding unsupported")
+                        decoder = (
+                            zlib.decompressobj(16 + zlib.MAX_WBITS if encoding == "gzip" else zlib.MAX_WBITS)
+                            if encoding != "identity" else None
+                        )
+                        wire_bytes = 0
+                        async for chunk in response.aiter_raw():
+                            if monotonic() >= deadline:
+                                raise TimeoutError
+                            wire_bytes += len(chunk)
+                            if wire_bytes > MAX_RPC_RESPONSE_BYTES:
+                                raise _RpcShapeError(f"{method} response exceeds 64 KiB")
+                            if decoder is not None:
+                                chunk = decoder.decompress(chunk, MAX_RPC_RESPONSE_BYTES - len(content) + 1)
+                            if len(content) + len(chunk) > MAX_RPC_RESPONSE_BYTES:
+                                raise _RpcShapeError(f"{method} response exceeds 64 KiB")
+                            content.extend(chunk)
+                            if decoder is not None and decoder.unused_data:
+                                raise _RpcShapeError(f"{method} compressed response has trailing data")
+                        if decoder is not None and not decoder.eof:
+                            raise _RpcShapeError(f"{method} compressed response truncated")
+                    if monotonic() >= deadline:
+                        raise TimeoutError
+        except zlib.error:
+            raise _RpcShapeError(f"{method} compressed response invalid") from None
+        except (httpx.HTTPError, OSError, TimeoutError) as exc:
             raise _RpcTransportError(f"{method} transport failed: {type(exc).__name__}") from None
-        if response.status_code != 200:
-            raise _RpcTransportError(f"{method} HTTP {response.status_code}")
         try:
-            decoded = response.json()
-        except ValueError:
+            decoded = json.loads(content)
+        except (ValueError, UnicodeDecodeError, RecursionError):
             raise _RpcShapeError(f"{method} returned non-JSON") from None
-        if not isinstance(decoded, dict) or decoded.get("jsonrpc") != "2.0":
+        if (
+            not isinstance(decoded, dict)
+            or decoded.get("jsonrpc") != "2.0"
+            or type(decoded.get("id")) is not int
+            or decoded["id"] != request_id
+            or ("result" in decoded) == ("error" in decoded)
+        ):
             raise _RpcShapeError(f"{method} envelope invalid")
-        if decoded.get("error") is not None:
+        if "error" in decoded:
             err = decoded["error"]
-            code = err.get("code") if isinstance(err, dict) else None
-            message = err.get("message") if isinstance(err, dict) else None
-            hint = str(message)[:200] if isinstance(message, str) else "rpc error"
-            raise _RpcTransportError(f"{method} rpc error {code}: {hint}")
-        return decoded.get("result")
+            if (
+                not isinstance(err, dict)
+                or type(err.get("code")) is not int
+                or not isinstance(err.get("message"), str)
+            ):
+                raise _RpcShapeError(f"{method} error envelope invalid")
+            raise _RpcTransportError(f"{method} rpc error {err['code']}: {err['message'][:200]}")
+        return decoded["result"]
 
     async def export_commitment(
         self, receipt_id: str, *, tree_size: int | None = None
@@ -698,170 +776,223 @@ class QuantumTeleportationAnchorExporter:
             proof = self._ledger.inclusion_proof(receipt_id, size)
         except (LookupError, ValueError):
             return self._empty_fail("unknown_receipt", "receipt is not part of the requested prefix", 400)
-        except LedgerCorruptError:
+        except LedgerError:
             return self._empty_fail("ledger_unavailable", "receipt ledger failed integrity", 503)
+        if proof.eligible is not True:
+            return self._anchored_fail(
+                "ineligible_leaf", "receipt is not a successful execution leaf", 400,
+                proof, size, current_size, current_root,
+            )
         if not self._ledger.verify_proof(proof):
-            return self._sized_fail(
-                "local_proof_invalid", "local inclusion proof does not verify", 503,
-                size, current_size, current_root, proof.leaf_index,
+            return self._anchored_fail(
+                "invalid_proof", "receipt inclusion proof failed validation", 400,
+                proof, size, current_size, current_root,
             )
-        if not proof.eligible:
-            return self._sized_fail(
-                "ineligible_leaf", "only teleport-success or drill-summary leaves publish", 400,
-                size, current_size, current_root, proof.leaf_index,
-            )
-
-        lock = self._lock_for(receipt_id)
-        async with lock:
+        # Single-send gate: the memory fast-path, then the durable ledger
+        # claim/prepared state shared across exporter objects and processes.
+        # A ledger outage fails closed here, never as a fresh attempt.
+        try:
             prepared = self._prepared.get(receipt_id) or self._find_prepared_in_ledger(receipt_id, None)
-            if prepared is not None:
-                # Already signed/sent for this receipt: observe the same
-                # signature at its pinned prefix, never resign.
+        except LedgerError:
+            return self._empty_fail("ledger_unavailable", "receipt ledger unavailable", 503)
+        if prepared is not None:
+            # Already signed/sent for this receipt: observe the same
+            # signature at its pinned prefix, never resign. Aged
+            # confirmations whose recent status was pruned recover through
+            # historical readback before any expired verdict.
+            try:
                 pinned = self._ledger.inclusion_proof(receipt_id, prepared.tree_size)
-                memo_text, memo_bytes = self._attestation_for(pinned)
-                result = await self._observe(
-                    prepared.signature, pinned, prepared.tree_size, memo_text, memo_bytes,
-                    payer_b58=prepared.payer_b58, last_valid=prepared.last_valid,
-                )
-                await self._record_terminal(result, pinned, receipt_id, prepared.tree_size, prepared.signature)
-                return result
-            # Fresh attempt: every prerequisite below fails BEFORE signing.
-            memo_text, memo_bytes = self._attestation_for(proof)
-            try:
-                assert_wire_caps(memo_bytes)
-            except PayloadTooLargeError as exc:
-                return self._anchored_fail(
-                    "payload_too_large", exc.error_detail, 413,
-                    proof, size, current_size, current_root,
-                )
-            try:
-                self._check_rpc_url()
-            except AnchorError as exc:
-                return self._anchored_fail(exc.error_code, exc.error_detail, exc.http_status,
-                                           proof, size, current_size, current_root)
-            try:
-                signer = load_signer(self._signer_path)
-            except AnchorError as exc:
-                return self._anchored_fail(exc.error_code, exc.error_detail, exc.http_status,
-                                           proof, size, current_size, current_root)
-            payer = bytes(signer.public_key_bytes)
-            payer_b58 = b58encode(payer)
-            try:
-                genesis = await self._rpc("getGenesisHash", [])
-            except AnchorError as exc:
-                return self._anchored_fail("genesis_lookup_failed", exc.error_detail, 502,
-                                           proof, size, current_size, current_root)
-            if genesis != DEVNET_GENESIS_HASH:
-                return self._anchored_fail("wrong_genesis", "connected cluster is not the pinned Devnet", 503,
-                                           proof, size, current_size, current_root)
-            try:
-                latest = await self._rpc("getLatestBlockhash", [{"commitment": "confirmed"}])
-                blockhash_b58, last_valid = self._parse_blockhash(latest)
-                blockhash = b58decode(blockhash_b58)
-                if len(blockhash) != 32:
-                    raise _RpcShapeError("blockhash is not 32 bytes")
-            except AnchorError as exc:
-                if isinstance(exc, (_RpcTransportError, _RpcShapeError)):
-                    code, detail = exc.error_code, exc.error_detail
-                else:  # pragma: no cover - defensive; _parse_blockhash only raises AnchorError
-                    code, detail = "blockhash_lookup_failed", str(exc)
-                return self._anchored_fail(code, detail, 502, proof, size, current_size, current_root)
-            except ValueError as exc:
-                return self._anchored_fail("blockhash_lookup_failed", str(exc), 502,
-                                           proof, size, current_size, current_root)
-            try:
-                message = build_message(payer, blockhash, memo_bytes)
-                verify_message_shape(message, payer=payer, memo=memo_bytes)
-            except (ValueError, AnchorError) as exc:
-                return self._anchored_fail("local_wire_invalid", str(exc), 500,
-                                           proof, size, current_size, current_root)
-            try:
-                fee_value = await self._rpc("getFeeForMessage", [base64.b64encode(message).decode("ascii")])
-            except AnchorError as exc:
-                return self._anchored_fail("fee_lookup_failed", exc.error_detail, 502,
-                                           proof, size, current_size, current_root)
-            fee = self._parse_u64_or_null(fee_value, nested=True)
-            if fee is None:
-                return self._anchored_fail("fee_unavailable", "fee estimator returned null", 503,
-                                           proof, size, current_size, current_root)
-            try:
-                balance_value = await self._rpc("getBalance", [payer_b58])
-            except AnchorError as exc:
-                return self._anchored_fail("balance_lookup_failed", exc.error_detail, 502,
-                                           proof, size, current_size, current_root)
-            balance = self._parse_u64_or_null(balance_value, nested=True)
-            if balance is None:
-                return self._anchored_fail("balance_lookup_failed", "balance shape invalid", 502,
-                                           proof, size, current_size, current_root)
-            if balance < fee:
-                return self._anchored_fail("insufficient_balance", "payer cannot cover the exact fee", 503,
-                                           proof, size, current_size, current_root)
-            signature = signer.sign(message)
-            if not verify_signature(payer, signature, message):
-                return self._anchored_fail("local_wire_invalid", "local signature check failed", 500,
-                                           proof, size, current_size, current_root)
-            sig_b58 = b58encode(signature)
-            try:
-                await self._ledger.append_event(
-                    {
-                        "event_type": "anchor.prepared",
-                        "session_id": str(proof.metadata.get("session_id", "")),
-                        "actor": "anchor-exporter",
-                        "nodes": list(proof.metadata.get("nodes", [])),
-                        "resources": list(proof.metadata.get("resources", [])),
-                        "outcome": "prepared",
-                        "payload": {
-                            "receipt_id": receipt_id,
-                            "tree_size": size,
-                            "root_hex": proof.expected_root_hex,
-                            "leaf_index": proof.leaf_index,
-                            "signature": sig_b58,
-                            "payer": payer_b58,
-                            "last_valid_block_height": last_valid,
-                        },
-                    }
-                )
-            except Exception:
-                return self._anchored_fail("prepared_persist_failed", "prepared signature not durable", 503,
-                                           proof, size, current_size, current_root)
-            self._prepared[receipt_id] = _Prepared(
-                signature=sig_b58, payer_b58=payer_b58, last_valid=last_valid, tree_size=size
-            )
-            tx_bytes = transaction_bytes(message, signature)
-            try:
-                sent = await self._rpc(
-                    "sendTransaction",
-                    [
-                        base64.b64encode(tx_bytes).decode("ascii"),
-                        {
-                            "encoding": "base64",
-                            "skipPreflight": False,
-                            "preflightCommitment": "confirmed",
-                            "maxRetries": 0,
-                        },
-                    ],
-                )
-            except AnchorError as exc:
-                result = self._anchored_unknown(
-                    "send_failed", exc.error_detail, 502, proof, size,
-                    self._ledger_current(), sig_b58,
-                )
-                await self._record_terminal(result, proof, receipt_id, size, sig_b58)
-                return result
-            if sent != sig_b58:
-                result = self._anchored_unknown(
-                    "send_sig_mismatch", "node returned a different signature", 502,
-                    proof, size, self._ledger_current(), sig_b58,
-                )
-                await self._record_terminal(result, proof, receipt_id, size, sig_b58)
-                return result
-            await self._record_submitted(proof, receipt_id, size, sig_b58)
+            except (LookupError, ValueError, LedgerError):
+                return self._empty_fail("ledger_unavailable", "receipt ledger unavailable", 503)
+            memo_text, memo_bytes = self._attestation_for(pinned)
             result = await self._observe(
-                sig_b58, proof, size, memo_text, memo_bytes,
-                payer_b58=payer_b58, last_valid=last_valid,
+                prepared.signature, pinned, prepared.tree_size, memo_text, memo_bytes,
+                payer_b58=prepared.payer_b58, last_valid=prepared.last_valid,
+                historical=True,
+            )
+            await self._record_terminal(result, pinned, receipt_id, prepared.tree_size, prepared.signature)
+            return result
+        # Fresh attempt: every prerequisite below fails BEFORE signing.
+        memo_text, memo_bytes = self._attestation_for(proof)
+        try:
+            assert_wire_caps(memo_bytes)
+        except PayloadTooLargeError as exc:
+            return self._anchored_fail(
+                "payload_too_large", exc.error_detail, 413,
+                proof, size, current_size, current_root,
+            )
+        try:
+            self._check_rpc_url()
+        except AnchorError as exc:
+            return self._anchored_fail(exc.error_code, exc.error_detail, exc.http_status,
+                                       proof, size, current_size, current_root)
+        try:
+            signer = load_signer(self._signer_path)
+        except AnchorError as exc:
+            return self._anchored_fail(exc.error_code, exc.error_detail, exc.http_status,
+                                       proof, size, current_size, current_root)
+        payer = bytes(signer.public_key_bytes)
+        payer_b58 = b58encode(payer)
+        try:
+            genesis = await self._rpc("getGenesisHash", [])
+        except AnchorError as exc:
+            return self._anchored_fail("genesis_lookup_failed", exc.error_detail, 502,
+                                       proof, size, current_size, current_root)
+        if genesis != DEVNET_GENESIS_HASH:
+            return self._anchored_fail("wrong_genesis", "connected cluster is not the pinned Devnet", 503,
+                                       proof, size, current_size, current_root)
+        try:
+            latest = await self._rpc("getLatestBlockhash", [{"commitment": "confirmed"}])
+            blockhash_b58, last_valid = self._parse_blockhash(latest)
+            blockhash = b58decode(blockhash_b58)
+            if len(blockhash) != 32:
+                raise _RpcShapeError("blockhash is not 32 bytes")
+        except AnchorError as exc:
+            if isinstance(exc, (_RpcTransportError, _RpcShapeError)):
+                code, detail = exc.error_code, exc.error_detail
+            else:  # pragma: no cover - defensive; _parse_blockhash only raises AnchorError
+                code, detail = "blockhash_lookup_failed", str(exc)
+            return self._anchored_fail(code, detail, 502, proof, size, current_size, current_root)
+        except ValueError as exc:
+            return self._anchored_fail("blockhash_lookup_failed", str(exc), 502,
+                                       proof, size, current_size, current_root)
+        try:
+            message = build_message(payer, blockhash, memo_bytes)
+            verify_message_shape(message, payer=payer, memo=memo_bytes)
+        except (ValueError, AnchorError) as exc:
+            return self._anchored_fail("local_wire_invalid", str(exc), 500,
+                                       proof, size, current_size, current_root)
+        try:
+            fee_value = await self._rpc("getFeeForMessage", [base64.b64encode(message).decode("ascii")])
+        except AnchorError as exc:
+            return self._anchored_fail("fee_lookup_failed", exc.error_detail, 502,
+                                       proof, size, current_size, current_root)
+        fee = self._parse_u64_or_null(fee_value, nested=True)
+        if fee is None:
+            return self._anchored_fail("fee_unavailable", "fee estimator returned null", 503,
+                                       proof, size, current_size, current_root)
+        try:
+            balance_value = await self._rpc("getBalance", [payer_b58])
+        except AnchorError as exc:
+            return self._anchored_fail("balance_lookup_failed", exc.error_detail, 502,
+                                       proof, size, current_size, current_root)
+        balance = self._parse_u64_or_null(balance_value, nested=True)
+        if balance is None:
+            return self._anchored_fail("balance_lookup_failed", "balance shape invalid", 502,
+                                       proof, size, current_size, current_root)
+        if balance < fee:
+            return self._anchored_fail("insufficient_balance", "payer cannot cover the exact fee", 503,
+                                       proof, size, current_size, current_root)
+        # Atomic single-send claim AFTER proof/genesis/message/fee/balance
+        # prerequisites pass and BEFORE signing. The winner signs exactly
+        # once below; a rival that loses this race observes the winner's
+        # prepared state and never signs. No network await happens inside
+        # the claim transaction.
+        try:
+            won = self._ledger.claim_anchor(
+                receipt_id, tree_size=size, root_hex=proof.expected_root_hex,
+                leaf_index=proof.leaf_index, payer_b58=payer_b58, last_valid=last_valid,
+            )
+        except LedgerError:
+            return self._anchored_fail("ledger_unavailable", "receipt ledger unavailable", 503,
+                                       proof, size, current_size, current_root)
+        if not won:
+            try:
+                claimed = self._ledger.read_anchor_claim(receipt_id)
+                if claimed is None:
+                    raise LedgerError("anchor claim missing after conflict")
+                existing = await self._await_prepared_event(receipt_id, claimed["tree_size"])
+            except LedgerError:
+                return self._anchored_fail("ledger_unavailable", "receipt ledger unavailable", 503,
+                                           proof, size, current_size, current_root)
+            if existing is None:
+                current = self._ledger_current()
+                return AnchorResult(
+                    "unknown", None, None, claimed["root_hex"], claimed["tree_size"],
+                    claimed["leaf_index"], current[1], current[0],
+                    error_code="claim_pending",
+                    error_detail="single-send claim held elsewhere; no local signature was created",
+                    http_status=503,
+                )
+            self._prepared[receipt_id] = existing
+            try:
+                pinned = self._ledger.inclusion_proof(receipt_id, existing.tree_size)
+            except (LookupError, ValueError, LedgerError):
+                return self._empty_fail("ledger_unavailable", "receipt ledger unavailable", 503)
+            memo_text, memo_bytes = self._attestation_for(pinned)
+            result = await self._observe(
+                existing.signature, pinned, existing.tree_size, memo_text, memo_bytes,
+                payer_b58=existing.payer_b58, last_valid=existing.last_valid,
+                historical=True,
+            )
+            await self._record_terminal(result, pinned, receipt_id, existing.tree_size, existing.signature)
+            return result
+        signature = signer.sign(message)
+        if not verify_signature(payer, signature, message):
+            return self._anchored_fail("local_wire_invalid", "local signature check failed", 500,
+                                       proof, size, current_size, current_root)
+        sig_b58 = b58encode(signature)
+        try:
+            await self._ledger.append_event(
+                {
+                    "event_type": "anchor.prepared",
+                    "session_id": str(proof.metadata.get("session_id", "")),
+                    "actor": "anchor-exporter",
+                    "nodes": list(proof.metadata.get("nodes", [])),
+                    "resources": list(proof.metadata.get("resources", [])),
+                    "outcome": "prepared",
+                    "payload": {
+                        "receipt_id": receipt_id,
+                        "tree_size": size,
+                        "root_hex": proof.expected_root_hex,
+                        "leaf_index": proof.leaf_index,
+                        "signature": sig_b58,
+                        "payer": payer_b58,
+                        "last_valid_block_height": last_valid,
+                    },
+                }
+            )
+        except Exception:
+            return self._anchored_fail("prepared_persist_failed", "prepared signature not durable", 503,
+                                       proof, size, current_size, current_root)
+        self._prepared[receipt_id] = _Prepared(
+            signature=sig_b58, payer_b58=payer_b58, last_valid=last_valid, tree_size=size
+        )
+        tx_bytes = transaction_bytes(message, signature)
+        try:
+            sent = await self._rpc(
+                "sendTransaction",
+                [
+                    base64.b64encode(tx_bytes).decode("ascii"),
+                    {
+                        "encoding": "base64",
+                        "skipPreflight": False,
+                        "preflightCommitment": "confirmed",
+                        "maxRetries": 0,
+                    },
+                ],
+            )
+        except AnchorError as exc:
+            result = self._anchored_unknown(
+                "send_failed", exc.error_detail, 502, proof, size,
+                self._ledger_current(), sig_b58,
             )
             await self._record_terminal(result, proof, receipt_id, size, sig_b58)
             return result
+        if sent != sig_b58:
+            result = self._anchored_unknown(
+                "send_sig_mismatch", "node returned a different signature", 502,
+                proof, size, self._ledger_current(), sig_b58,
+            )
+            await self._record_terminal(result, proof, receipt_id, size, sig_b58)
+            return result
+        await self._record_submitted(proof, receipt_id, size, sig_b58)
+        result = await self._observe(
+            sig_b58, proof, size, memo_text, memo_bytes,
+            payer_b58=payer_b58, last_valid=last_valid,
+        )
+        await self._record_terminal(result, proof, receipt_id, size, sig_b58)
+        return result
 
     def _attestation_for(self, proof: InclusionProof) -> tuple[str, bytes]:
         siblings = [bytes(h) for _, h in proof.siblings]
@@ -885,7 +1016,17 @@ class QuantumTeleportationAnchorExporter:
         *,
         payer_b58: str,
         last_valid: int | None,
+        historical: bool = False,
     ) -> AnchorResult:
+        """Observe confirmation for one prepared signature, never resending.
+
+        ``historical`` is set when observing an already-stored signature
+        (repeat export or a rival claim-holder's prepared event): a null
+        recent status may mean pruned history rather than absence, so the
+        exact historical status search plus transaction readback runs before
+        any expired/deadline verdict. Fresh post-send observation keeps the
+        existing direct expiry semantics.
+        """
         deadline = monotonic() + self._confirmation_timeout
         while True:
             try:
@@ -907,12 +1048,18 @@ class QuantumTeleportationAnchorExporter:
                     return self._anchored_fail("status_tx_error", "cluster reports transaction error", 200,
                                                proof, size, self._ledger_current_size(),
                                                self._ledger_current_root(), sig_b58)
-            # Unconfirmed (null entry or below confirmed): observe expiry, never resend.
+            # Unconfirmed (null entry or below confirmed): for a stored
+            # signature, consult pruned history before expiry, never resend.
+            if historical and not isinstance(entry, Mapping):
+                recovered = await self._historical_readback(
+                    sig_b58, proof, size, memo_text, memo_bytes, payer_b58=payer_b58
+                )
+                if recovered is not None:
+                    return recovered
             height: int | None = None
             try:
                 height_value = await self._rpc("getBlockHeight", [])
-                if type(height_value) is int:
-                    height = height_value
+                height = self._parse_u64_or_null(height_value)
             except AnchorError:
                 height = None
             if height is not None and last_valid is not None and height > last_valid:
@@ -922,6 +1069,58 @@ class QuantumTeleportationAnchorExporter:
                 return self._anchored_unknown("confirmation_deadline", "confirmation not observed in time", 504,
                                               proof, size, self._ledger_current(), sig_b58)
             await asyncio.sleep(self._poll_interval)
+
+    async def _historical_readback(
+        self,
+        sig_b58: str,
+        proof: InclusionProof,
+        size: int,
+        memo_text: str,
+        memo_bytes: bytes,
+        *,
+        payer_b58: str,
+    ) -> AnchorResult | None:
+        """Recover an aged confirmation from pruned status history.
+
+        Returns a decisive AnchorResult (confirmed via exact readback, or a
+        definitive on-chain mismatch/error) or None when history holds
+        nothing and the caller falls through to expiry/deadline observation.
+        Never signs, never resubmits.
+        """
+        try:
+            hist = await self._rpc(
+                "getSignatureStatuses", [[sig_b58], {"searchTransactionHistory": True}]
+            )
+        except AnchorError as exc:
+            return self._anchored_unknown("status_lookup_failed", exc.error_detail, 502,
+                                          proof, size, self._ledger_current(), sig_b58)
+        hist_entry = self._parse_status_entry(hist)
+        if hist_entry is None:
+            return self._anchored_unknown("status_lookup_failed", "historical status shape invalid", 502,
+                                          proof, size, self._ledger_current(), sig_b58)
+        if isinstance(hist_entry, Mapping):
+            if hist_entry["err"] is None and hist_entry["confirmationStatus"] in _CONFIRMED_STATUSES:
+                return await self._readback(
+                    hist_entry, sig_b58, proof, size, memo_text, memo_bytes, payer_b58=payer_b58
+                )
+            if hist_entry["err"] is not None:
+                return self._anchored_fail("status_tx_error", "cluster reports transaction error", 200,
+                                           proof, size, self._ledger_current_size(),
+                                           self._ledger_current_root(), sig_b58)
+        # Statuses may be fully pruned while the transaction remains readable
+        # at the confirmed commitment: exact getTransaction readback decides.
+        try:
+            tx = await self._rpc(
+                "getTransaction",
+                [sig_b58, {"encoding": "json", "commitment": "confirmed", "maxSupportedTransactionVersion": 0}],
+            )
+        except AnchorError:
+            return None
+        if not isinstance(tx, dict) or self._parse_u64_or_null(tx.get("slot")) is None:
+            return None
+        return await self._readback(
+            {"slot": tx["slot"]}, sig_b58, proof, size, memo_text, memo_bytes, payer_b58=payer_b58
+        )
 
     async def _readback(
         self,
@@ -950,15 +1149,18 @@ class QuantumTeleportationAnchorExporter:
             return self._anchored_fail("readback_failed", "transaction shape invalid", 502,
                                        proof, size, current[0], current[1], sig_b58)
         slot = tx.get("slot")
-        if type(slot) is not int:
-            return self._anchored_fail("readback_slot_missing", "observed slot missing", 502,
+        if self._parse_u64_or_null(slot) is None:
+            return self._anchored_fail("readback_slot_missing", "observed slot invalid", 502,
                                        proof, size, current[0], current[1], sig_b58)
         entry_slot = entry.get("slot")
-        if type(entry_slot) is int and entry_slot != slot:
+        if self._parse_u64_or_null(entry_slot) is None or entry_slot != slot:
             return self._anchored_fail("readback_slot_missing", "status slot disagrees with transaction slot", 502,
                                        proof, size, current[0], current[1], sig_b58)
         meta = tx.get("meta")
-        if not isinstance(meta, dict) or meta.get("err") is not None:
+        if not isinstance(meta, dict) or "err" not in meta:
+            return self._anchored_fail("readback_failed", "transaction meta.err missing", 502,
+                                       proof, size, current[0], current[1], sig_b58)
+        if meta["err"] is not None:
             return self._anchored_fail("readback_tx_error", "transaction executed with error", 200,
                                        proof, size, current[0], current[1], sig_b58)
         txn = tx.get("transaction")
@@ -966,7 +1168,7 @@ class QuantumTeleportationAnchorExporter:
             return self._anchored_fail("readback_failed", "transaction body missing", 502,
                                        proof, size, current[0], current[1], sig_b58)
         signatures = txn.get("signatures")
-        if not isinstance(signatures, list) or not signatures or signatures[0] != sig_b58:
+        if signatures != [sig_b58]:
             return self._anchored_fail("readback_sig_mismatch", "transaction signature mismatch", 502,
                                        proof, size, current[0], current[1], sig_b58)
         message = txn.get("message")
@@ -983,6 +1185,21 @@ class QuantumTeleportationAnchorExporter:
         if not self._memo_matches(message, keys, memo_text):
             return self._anchored_fail("readback_memo_mismatch", "on-chain memo bytes differ from the frozen proof",
                                        502, proof, size, current[0], current[1], sig_b58)
+        # Bind the admitted json message (including its recent blockhash) to
+        # the already-prepared signature, not just a claimed signature string.
+        try:
+            payer = b58decode(payer_b58, max_len=32)
+            observed_message = build_message(
+                payer, b58decode(message["recentBlockhash"], max_len=32), memo_bytes,
+            )
+            signature_matches = verify_signature(
+                payer, b58decode(sig_b58, max_len=64), observed_message,
+            )
+        except ValueError:
+            signature_matches = False
+        if not signature_matches:
+            return self._anchored_fail("readback_sig_mismatch", "signature does not bind the readback message", 502,
+                                       proof, size, current[0], current[1], sig_b58)
         # Frozen-root check: the readback memo must attest the anchored prefix.
         try:
             attestation = decode_attestation(memo_text)
@@ -1027,7 +1244,7 @@ class QuantumTeleportationAnchorExporter:
         last_valid = value.get("lastValidBlockHeight")
         if not isinstance(blockhash, str) or not blockhash:
             raise _RpcShapeError("blockhash missing")
-        if type(last_valid) is not int or last_valid < 0:
+        if self._parse_u64_or_null(last_valid) is None:
             raise _RpcShapeError("lastValidBlockHeight invalid")
         return blockhash, last_valid
 
@@ -1039,7 +1256,7 @@ class QuantumTeleportationAnchorExporter:
             value = value.get("value")
         if value is None:
             return None
-        if type(value) is int and value >= 0:
+        if type(value) is int and 0 <= value <= _U64_MAX:
             return value
         return None
 
@@ -1049,69 +1266,82 @@ class QuantumTeleportationAnchorExporter:
         if not isinstance(statuses, dict):
             return None
         value = statuses.get("value")
-        if not isinstance(value, list) or not value:
+        if not isinstance(value, list) or len(value) != 1:
             return None
         entry = value[0]
         if entry is None:
             return False
         if not isinstance(entry, dict):
             return None
+        if (
+            "err" not in entry
+            or QuantumTeleportationAnchorExporter._parse_u64_or_null(entry.get("slot")) is None
+            or "confirmations" not in entry
+            or (
+                entry["confirmations"] is not None
+                and QuantumTeleportationAnchorExporter._parse_u64_or_null(entry["confirmations"]) is None
+            )
+            or "confirmationStatus" not in entry
+            or (
+                entry["confirmationStatus"] not in ("processed", *_CONFIRMED_STATUSES)
+                and not (entry["confirmationStatus"] is None and entry["err"] is not None)
+            )
+        ):
+            return None
         return entry
 
     def _message_shape_matches(self, message: Mapping[str, Any], keys: list) -> bool:
         try:
+            if keys != [keys[0], COMPUTE_BUDGET_PROGRAM_ID, MEMO_PROGRAM_ID]:
+                return False
+            header = message.get("header")
+            expected_header = {
+                "numRequiredSignatures": 1,
+                "numReadonlySignedAccounts": 0,
+                "numReadonlyUnsignedAccounts": 2,
+            }
+            if (
+                not isinstance(header, dict)
+                or header != expected_header
+                or any(type(header.get(key)) is not int for key in expected_header)
+            ):
+                return False
+            blockhash = message.get("recentBlockhash")
+            if not isinstance(blockhash, str) or len(b58decode(blockhash, max_len=32)) != 32:
+                return False
             instructions = message.get("instructions")
             if not isinstance(instructions, list) or len(instructions) != 2:
                 return False
-            allowed = {MEMO_PROGRAM_ID, COMPUTE_BUDGET_PROGRAM_ID}
-            seen = set()
-            for ix in instructions:
-                if not isinstance(ix, dict):
+            for index, accounts in ((1, []), (2, [0])):
+                ix = instructions[index - 1]
+                if (
+                    not isinstance(ix, dict)
+                    or type(ix.get("programIdIndex")) is not int
+                    or ix["programIdIndex"] != index
+                    or not isinstance(ix.get("accounts"), list)
+                    or ix["accounts"] != accounts
+                    or any(type(account) is not int for account in ix["accounts"])
+                    or not isinstance(ix.get("data"), str)
+                ):
                     return False
-                pid_index = ix.get("programIdIndex")
-                if type(pid_index) is not int or pid_index < 0 or pid_index >= len(keys):
-                    program = ix.get("program")
-                    if program not in allowed:
-                        return False
-                    seen.add(program)
-                    continue
-                program = keys[pid_index]
-                if program not in allowed:
-                    return False
-                seen.add(program)
-                accounts = ix.get("accounts", [])
-                data = ix.get("data", "")
-                if program == COMPUTE_BUDGET_PROGRAM_ID:
-                    if accounts != []:
-                        return False
-                    if b58decode(str(data), max_len=16) != b"\x02" + struct.pack("<I", COMPUTE_UNITS):
-                        return False
-                elif program == MEMO_PROGRAM_ID:
-                    if accounts != [0]:
-                        return False
-            return seen == allowed
+            return (
+                b58decode(instructions[0]["data"], max_len=16)
+                == b"\x02" + struct.pack("<I", COMPUTE_UNITS)
+            )
         except (ValueError, TypeError, IndexError):
             return False
 
     def _memo_matches(self, message: Mapping[str, Any], keys: list, memo_text: str) -> bool:
         try:
-            for ix in message.get("instructions", []):
-                if not isinstance(ix, dict):
-                    continue
-                pid_index = ix.get("programIdIndex")
-                program = None
-                if type(pid_index) is int and 0 <= pid_index < len(keys):
-                    program = keys[pid_index]
-                elif isinstance(ix.get("program"), str):
-                    program = ix["program"]
-                if program != MEMO_PROGRAM_ID:
-                    continue
-                data = ix.get("data", "")
-                raw = b58decode(str(data), max_len=2048)
-                if raw == memo_text.encode("utf-8"):
-                    return True
-            return False
-        except (ValueError, TypeError):
+            ix = message["instructions"][1]
+            return (
+                type(ix.get("programIdIndex")) is int
+                and ix["programIdIndex"] == 2
+                and keys[2] == MEMO_PROGRAM_ID
+                and isinstance(ix.get("data"), str)
+                and b58decode(ix["data"], max_len=MAX_MEMO_BYTES) == memo_text.encode("utf-8")
+            )
+        except (ValueError, TypeError, IndexError, KeyError):
             return False
 
     # -- result builders --------------------------------------------------
@@ -1165,14 +1395,15 @@ class QuantumTeleportationAnchorExporter:
         if not receipt_id:
             receipt_id = self._receipt_id_for_proof(proof)
         event_type = f"anchor.{result.status}"
+        # Indexed existence check by signature, never an oldest-first window
+        # scan. A lookup outage still appends the audit event best-effort:
+        # duplicates here are harmless audit rows, while the single-send
+        # guard lives in the claim plus the prepared event.
         try:
-            existing = self._ledger.events_by_type(event_type, limit=100000)
-        except Exception:
-            existing = ()
-        for event in existing:
-            payload = event.get("payload") if isinstance(event, Mapping) else None
-            if isinstance(payload, Mapping) and payload.get("signature") == sig:
+            if self._ledger.has_anchor_event(event_type, sig):
                 return
+        except LedgerError:
+            pass
         await self._append_anchor_event(
             event_type, result.status, proof, receipt_id, size, sig,
             result.error_code, result.slot,

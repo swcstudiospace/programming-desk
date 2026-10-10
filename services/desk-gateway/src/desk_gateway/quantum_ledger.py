@@ -15,12 +15,14 @@ rollback API here on purpose.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import math
 import os
 import sqlite3
 import stat
+import struct
 import threading
 import uuid
 from dataclasses import dataclass, field
@@ -274,11 +276,18 @@ def _require_bool(value: Any, name: str) -> bool:
     return value
 
 
+# Documented kernel upper rounding slack: the numerical Bell/teleport kernel
+# derives fidelity from floating-point density arithmetic and may round a true
+# 1.0 to marginally above it. Values within this epsilon of 1.0 are accepted
+# as 1.0-adjacent and stored unclamped (never silently normalized). The strict
+# raw lower bound (0.95 for teleport/swap success) is never relaxed.
+_KERNEL_FIDELITY_UPPER_SLACK = 1e-9
+
 def _require_fidelity(value: Any, name: str, minimum: float) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ValueError(f"{name} must be numeric")
     f = float(value)
-    if not math.isfinite(f) or f < 0.0 or f > 1.0 or f < minimum:
+    if not math.isfinite(f) or f < minimum or f > 1.0 + _KERNEL_FIDELITY_UPPER_SLACK:
         raise ValueError(f"{name} out of accepted range")
     return f
 
@@ -461,9 +470,7 @@ def encode_execution_leaf(summary: Mapping[str, Any]) -> bytes:
     out += event_uuid
     out += commit
     out += bytes((frame_bsm, gate, node_count))
-    import struct as _struct
-
-    out += _struct.pack(">d", fidelity_f)
+    out += struct.pack(">d", fidelity_f)
     if leaf_type == LEAF_TYPE_TELEPORT:
         if len(out) != TELEPORT_LEAF_SIZE:
             raise LedgerError("teleport codec length invariant broken")
@@ -475,7 +482,7 @@ def encode_execution_leaf(summary: Mapping[str, Any]) -> bytes:
         v = drill.get(n)
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(float(v)):
             raise ValueError(f"drill.{n} must be finite numeric")
-        out += _struct.pack(">d", float(v))
+        out += struct.pack(">d", float(v))
     for n in ("clean_sifted", "clean_test", "clean_errors"):
         v = drill.get(n)
         if type(v) is not int or v < 0 or v > 0xFFFFFFFF:
@@ -513,11 +520,13 @@ def decode_execution_leaf(data: bytes) -> dict[str, Any]:
     if not isinstance(data, (bytes, bytearray)) or len(data) not in (TELEPORT_LEAF_SIZE, DRILL_LEAF_SIZE):
         raise ValueError("execution leaf must be exactly 71 or 150 bytes")
     data = bytes(data)
-    import struct as _struct
-
     version, leaf_type = data[0], data[1]
     if version != EXEC_LEAF_VERSION or leaf_type not in (LEAF_TYPE_TELEPORT, LEAF_TYPE_DRILL):
         raise ValueError("unknown execution leaf version/type")
+    if leaf_type == LEAF_TYPE_TELEPORT and len(data) != TELEPORT_LEAF_SIZE:
+        raise ValueError("teleport leaf must be exactly 71 bytes")
+    if leaf_type == LEAF_TYPE_DRILL and len(data) != DRILL_LEAF_SIZE:
+        raise ValueError("drill leaf must be exactly 150 bytes")
     flags = int.from_bytes(data[2:4], "big")
     if flags & 0xFF80:
         raise ValueError("reserved flag bits must be zero")
@@ -536,9 +545,35 @@ def decode_execution_leaf(data: bytes) -> dict[str, Any]:
     frame_bsm, gate, node_count = data[60], data[61], data[62]
     if gate & 0xF0:
         raise ValueError("reserved gate bits must be zero")
-    fidelity = _struct.unpack(">d", data[63:71])[0]
+    if node_count <= 0:
+        raise ValueError("node_count must be u8 >= 1")
+    fidelity = struct.unpack(">d", data[63:71])[0]
     if not math.isfinite(fidelity):
         raise ValueError("fidelity must be finite")
+    # Strict typed success fields: the raw lower bound holds exactly and only
+    # the documented kernel upper rounding slack is tolerated above 1.0.
+    if fidelity < 0.95 or fidelity > 1.0 + _KERNEL_FIDELITY_UPPER_SLACK:
+        raise ValueError("fidelity out of accepted range")
+    frame = {
+        "frame_x": (frame_bsm >> 0) & 1,
+        "frame_z": (frame_bsm >> 1) & 1,
+        "bsm_x": (frame_bsm >> 2) & 1,
+        "bsm_z": (frame_bsm >> 3) & 1,
+        "correction_x": (frame_bsm >> 4) & 1,
+        "correction_z": (frame_bsm >> 5) & 1,
+    }
+    if frame["correction_x"] != (frame["bsm_x"] ^ frame["frame_x"]):
+        raise ValueError("correction_x must equal bsm_x XOR frame_x")
+    if frame["correction_z"] != (frame["bsm_z"] ^ frame["frame_z"]):
+        raise ValueError("correction_z must equal bsm_z XOR frame_z")
+    if bool((gate >> 0) & 1) is not bool(frame["correction_x"]):
+        raise ValueError("gate_x must match the actual x correction")
+    if bool((gate >> 1) & 1) is not bool(frame["correction_z"]):
+        raise ValueError("gate_z must match the actual z correction")
+    if not (frame_bsm >> 6) & 1 or not (frame_bsm >> 7) & 1:
+        raise ValueError("input_destroyed and resource_consumed must hold")
+    if not (gate >> 2) & 1 or not (gate >> 3) & 1:
+        raise ValueError("correction_applied and acknowledged must hold")
     teleport = {
         "frame_x": (frame_bsm >> 0) & 1,
         "frame_z": (frame_bsm >> 1) & 1,
@@ -568,18 +603,42 @@ def decode_execution_leaf(data: bytes) -> dict[str, Any]:
     if leaf_type == LEAF_TYPE_TELEPORT:
         return result
     off = TELEPORT_LEAF_SIZE
-    purif_baseline, purif_output, swap_f = _struct.unpack(">ddd", data[off : off + 24])
+    purif_baseline, purif_output, swap_f = struct.unpack(">ddd", data[off : off + 24])
     off += 24
+    for value, name in (
+        (purif_baseline, "purif_baseline"),
+        (purif_output, "purif_output"),
+    ):
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0 + _KERNEL_FIDELITY_UPPER_SLACK:
+            raise ValueError(f"drill.{name} out of range")
+    if not purif_output > purif_baseline:
+        raise ValueError("purification must show measured improvement")
+    if not math.isfinite(swap_f) or swap_f < 0.95 or swap_f > 1.0 + _KERNEL_FIDELITY_UPPER_SLACK:
+        raise ValueError("drill.swap_fidelity out of accepted range")
     clean_sifted = int.from_bytes(data[off : off + 4], "big")
     clean_test = int.from_bytes(data[off + 4 : off + 8], "big")
     clean_errors = int.from_bytes(data[off + 8 : off + 12], "big")
     clean_output = int.from_bytes(data[off + 12 : off + 14], "big")
     off += 14
+    if not (clean_sifted > 0 and 0 < clean_test <= clean_sifted and 0 <= clean_errors <= clean_test):
+        raise ValueError("clean counts inconsistent")
+    if 100 * clean_errors > 11 * clean_test:
+        raise ValueError("clean sample exceeds QBER bound")
+    if clean_output < 128:
+        raise ValueError("clean output_bits must be >= 128 usable bits")
     eve_test = int.from_bytes(data[off : off + 4], "big")
     eve_errors = int.from_bytes(data[off + 4 : off + 8], "big")
     eve_basis = data[off + 8]
     off += 9
+    if eve_basis not in (0, 1, 2):
+        raise ValueError("drill.eve_basis must be 0, 1, or 2")
+    if not (eve_test > 0 and 0 <= eve_errors <= eve_test):
+        raise ValueError("eve counts inconsistent")
+    if not 100 * eve_errors > 11 * eve_test:
+        raise ValueError("eve run must exceed the 11% abort boundary")
     commitment = data[off : off + 32]
+    if bytes(commitment) == bytes(32):
+        raise ValueError("key_commitment must commit to nonzero bytes")
     result["drill"] = {
         "purif_baseline": purif_baseline,
         "purif_output": purif_output,
@@ -660,6 +719,17 @@ CREATE TABLE IF NOT EXISTS ledger_checkpoints (
     tree_size INTEGER PRIMARY KEY,
     root_hex TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS ledger_anchor_claims (
+    receipt_id TEXT NOT NULL,
+    tree_size INTEGER NOT NULL,
+    root_hex TEXT NOT NULL,
+    leaf_index INTEGER NOT NULL,
+    payer_b58 TEXT NOT NULL,
+    last_valid INTEGER,
+    claimed_at TEXT NOT NULL,
+    PRIMARY KEY (receipt_id)
+);
+CREATE INDEX IF NOT EXISTS ledger_events_type_seq ON ledger_events(event_type, seq);
 CREATE TRIGGER IF NOT EXISTS ledger_no_update_events
 BEFORE UPDATE ON ledger_events
 BEGIN
@@ -695,15 +765,27 @@ class QuantumTeleportationReceiptLedger:
     def __init__(self, data_dir: str | Path | None = None, *, busy_timeout_ms: int = 5000) -> None:
         raw_dir = data_dir if data_dir is not None else os.environ.get("DATA_DIR", "/var/lib/desk-gateway")
         self._data_dir = Path(raw_dir)
-        self._data_dir.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
+        self._closed = False
+        self._conn: sqlite3.Connection | None = None
+        try:
+            self._data_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self._closed = True
+            raise LedgerError(f"ledger open failed: {type(exc).__name__}") from None
         try:
             os.chmod(self._data_dir, 0o700)
         except OSError:
             pass
         self._db_path = self._data_dir / DB_FILENAME
-        self._lock = threading.Lock()
-        self._closed = False
-        self._conn = sqlite3.connect(str(self._db_path), timeout=busy_timeout_ms / 1000.0, isolation_level=None, check_same_thread=False)
+        try:
+            self._conn = sqlite3.connect(str(self._db_path), timeout=busy_timeout_ms / 1000.0, isolation_level=None, check_same_thread=False)
+        except Exception as exc:
+            # sqlite3.OperationalError / OSError opening the file: an open
+            # failure, distinct from stored-state corruption. Startup
+            # isolation catches the LedgerError base.
+            self._closed = True
+            raise LedgerError(f"ledger open failed: {type(exc).__name__}") from None
         try:
             try:
                 os.chmod(self._db_path, 0o600)
@@ -719,7 +801,9 @@ class QuantumTeleportationReceiptLedger:
             if len(integrity) != 1 or str(integrity[0][0]).lower() != "ok":
                 raise LedgerCorruptError("sqlite integrity check failed")
             rows = cur.execute(
-                "SELECT seq, event_id, canonical_json, leaf_hex, eligible, leaf_blob"
+                "SELECT seq, event_id, event_type, session_id, actor, nodes_json,"
+                " resources_json, outcome, time, predecessor_hex,"
+                " canonical_json, leaf_hex, eligible, leaf_blob"
                 " FROM ledger_events ORDER BY seq;"
             ).fetchall()
             checkpoints = dict(cur.execute("SELECT tree_size, root_hex FROM ledger_checkpoints;").fetchall())
@@ -771,40 +855,90 @@ class QuantumTeleportationReceiptLedger:
         self._leaves: list[bytes] = []
         self._layers: list[list[bytes]] = []
         self._by_id: dict[str, int] = {}
+        self._id_by_seq: dict[int, str] = {}
         self._metas: dict[int, dict[str, Any]] = {}
         self._eligible: dict[int, int] = {}
-        expected_seq = 1
         prev_leaf_hex = GENESIS_PREDECESSOR_HEX
-        for seq, event_id, canonical_json, leaf_hex, eligible, leaf_blob in rows:
-            if seq != expected_seq:
-                raise LedgerCorruptError("event sequence gap")
-            try:
-                metadata = json.loads(canonical_json)
-            except ValueError:
-                raise LedgerCorruptError("stored canonical JSON unreadable") from None
-            if not isinstance(metadata, dict):
-                raise LedgerCorruptError("stored metadata malformed")
-            if metadata.get("seq") != seq or metadata.get("event_id") != event_id:
-                raise LedgerCorruptError("stored seq/event_id mismatch")
-            if metadata.get("predecessor_digest_hex") != prev_leaf_hex:
-                raise LedgerCorruptError("predecessor linkage broken")
-            recomputed = self._recompute_leaf(metadata, int(eligible))
-            if recomputed[1] != leaf_hex or bytes(leaf_blob) != recomputed[0]:
-                raise LedgerCorruptError("stored leaf digest mismatch")
-            leaf_bytes = bytes.fromhex(leaf_hex)
-            self._leaves.append(leaf_bytes)
-            self._by_id[event_id] = seq
-            self._metas[seq] = metadata
-            self._eligible[seq] = int(eligible)
-            self._append_path(leaf_bytes)
-            root_hex = self._layers[-1][0].hex()
-            stored = checkpoints.get(seq)
-            if stored is None or stored != root_hex:
-                raise LedgerCorruptError("prefix checkpoint mismatch")
-            prev_leaf_hex = leaf_hex
-            expected_seq += 1
+        for row in rows:
+            prev_leaf_hex = self._ingest_committed_row(row, checkpoints, prev_leaf_hex)
         if len(checkpoints) != len(rows):
             raise LedgerCorruptError("checkpoint count mismatch")
+
+    def _ingest_committed_row(
+        self, row: tuple, checkpoints: Mapping[int, str], expected_predecessor: str
+    ) -> str:
+        """Verify one committed row and extend the in-memory frontier.
+
+        Used both by startup replay and by the in-transaction delta refresh
+        for same-file writers. Returns the new expected predecessor hex.
+        """
+        (
+            seq, event_id, event_type, session_id, actor, nodes_json,
+            resources_json, outcome, time, predecessor_hex,
+            canonical_json, leaf_hex, eligible, leaf_blob,
+        ) = row
+        if seq != len(self._leaves) + 1:
+            raise LedgerCorruptError("event sequence gap")
+        try:
+            metadata = json.loads(canonical_json)
+        except ValueError:
+            raise LedgerCorruptError("stored canonical JSON unreadable") from None
+        if not isinstance(metadata, dict):
+            raise LedgerCorruptError("stored metadata malformed")
+        if metadata.get("seq") != seq or metadata.get("event_id") != event_id:
+            raise LedgerCorruptError("stored seq/event_id mismatch")
+        # Searchable columns are bound to the committed metadata: a
+        # column-only rewrite (e.g. event_type) fails replay closed even when
+        # the canonical JSON itself is untouched.
+        if (
+            metadata.get("event_type") != event_type
+            or metadata.get("session_id") != session_id
+            or metadata.get("actor") != actor
+            or metadata.get("outcome") != outcome
+            or metadata.get("time") != time
+            or metadata.get("predecessor_digest_hex") != predecessor_hex
+        ):
+            raise LedgerCorruptError("searchable column mismatch")
+        try:
+            stored_nodes = json.loads(nodes_json)
+            stored_resources = json.loads(resources_json)
+        except ValueError:
+            raise LedgerCorruptError("stored column JSON unreadable") from None
+        if stored_nodes != metadata.get("nodes") or stored_resources != metadata.get("resources"):
+            raise LedgerCorruptError("searchable column mismatch")
+        if predecessor_hex != expected_predecessor:
+            raise LedgerCorruptError("predecessor linkage broken")
+        recomputed = self._recompute_leaf(metadata, int(eligible))
+        if recomputed[1] != leaf_hex or bytes(leaf_blob) != recomputed[0]:
+            raise LedgerCorruptError("stored leaf digest mismatch")
+        try:
+            leaf_bytes = bytes.fromhex(leaf_hex)
+        except ValueError:
+            raise LedgerCorruptError("stored leaf digest unreadable") from None
+        self._leaves.append(leaf_bytes)
+        self._by_id[event_id] = seq
+        self._id_by_seq[seq] = event_id
+        self._metas[seq] = metadata
+        self._eligible[seq] = int(eligible)
+        self._append_path(leaf_bytes)
+        root_hex = self._layers[-1][0].hex()
+        stored = checkpoints.get(seq)
+        if stored is None or stored != root_hex:
+            raise LedgerCorruptError("prefix checkpoint mismatch")
+        return leaf_hex
+
+    def _truncate_to(self, base_len: int) -> None:
+        """Drop provisional/refresh in-memory state after a failed transaction."""
+        if len(self._leaves) <= base_len:
+            return
+        for event_id, seq in [item for item in self._by_id.items() if item[1] > base_len]:
+            del self._by_id[event_id]
+            self._id_by_seq.pop(seq, None)
+        for seq in range(base_len + 1, len(self._leaves) + 1):
+            self._metas.pop(seq, None)
+            self._eligible.pop(seq, None)
+        self._leaves = self._leaves[:base_len]
+        self._rebuild_layers()
 
     def _recompute_leaf(self, metadata: Mapping[str, Any], eligible: int) -> tuple[bytes, str]:
         if eligible in (LEAF_TYPE_TELEPORT, LEAF_TYPE_DRILL):
@@ -967,35 +1101,56 @@ class QuantumTeleportationReceiptLedger:
         with self._lock:
             self._ensure_open()
             clean = self._validate_input(event)
-            seq = len(self._leaves) + 1
-            event_id = uuid.uuid4().hex
-            predecessor = self._leaves[-1].hex() if self._leaves else GENESIS_PREDECESSOR_HEX
-            metadata: dict[str, Any] = {
-                "version": LEDGER_VERSION,
-                "event_type": clean["event_type"],
-                "seq": seq,
-                "event_id": event_id,
-                "session_id": clean["session_id"],
-                "actor": clean["actor"],
-                "nodes": clean["nodes"],
-                "resources": clean["resources"],
-                "time": datetime.now(timezone.utc).isoformat(),
-                "predecessor_digest_hex": predecessor,
-                "outcome": clean["outcome"],
-                "payload": clean["payload"],
-            }
-            eligible = classify_eligibility(clean["event_type"], clean["outcome"], clean["payload"])
-            if eligible:
-                preimage = encode_execution_leaf(self._summary_for(metadata, eligible))
-            else:
-                preimage = canonical_event_bytes(metadata)
-            leaf_hex = _hash_leaf(preimage).hex()
-            canonical_json = json.dumps(
-                metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
-            )
+            base_len = len(self._leaves)
             cur = self._conn.cursor()
             try:
+                # BEGIN IMMEDIATE precedes deriving seq/predecessor/root so a
+                # second ledger object on the same file serializes here.
                 cur.execute("BEGIN IMMEDIATE;")
+                # Refresh the ENTIRE committed delta (leaves, metadata,
+                # frontier, checkpoints) inside the transaction — never just
+                # max(seq) — so a stale cache cannot reuse a taken sequence.
+                delta = cur.execute(
+                    "SELECT seq, event_id, event_type, session_id, actor, nodes_json,"
+                    " resources_json, outcome, time, predecessor_hex,"
+                    " canonical_json, leaf_hex, eligible, leaf_blob"
+                    " FROM ledger_events WHERE seq > ? ORDER BY seq;",
+                    (base_len,),
+                ).fetchall()
+                if delta:
+                    delta_checkpoints = dict(cur.execute(
+                        "SELECT tree_size, root_hex FROM ledger_checkpoints WHERE tree_size > ?;",
+                        (base_len,),
+                    ).fetchall())
+                    prev = self._leaves[-1].hex() if self._leaves else GENESIS_PREDECESSOR_HEX
+                    for row in delta:
+                        prev = self._ingest_committed_row(row, delta_checkpoints, prev)
+                seq = len(self._leaves) + 1
+                event_id = uuid.uuid4().hex
+                predecessor = self._leaves[-1].hex() if self._leaves else GENESIS_PREDECESSOR_HEX
+                metadata: dict[str, Any] = {
+                    "version": LEDGER_VERSION,
+                    "event_type": clean["event_type"],
+                    "seq": seq,
+                    "event_id": event_id,
+                    "session_id": clean["session_id"],
+                    "actor": clean["actor"],
+                    "nodes": clean["nodes"],
+                    "resources": clean["resources"],
+                    "time": datetime.now(timezone.utc).isoformat(),
+                    "predecessor_digest_hex": predecessor,
+                    "outcome": clean["outcome"],
+                    "payload": clean["payload"],
+                }
+                eligible = classify_eligibility(clean["event_type"], clean["outcome"], clean["payload"])
+                if eligible:
+                    preimage = encode_execution_leaf(self._summary_for(metadata, eligible))
+                else:
+                    preimage = canonical_event_bytes(metadata)
+                leaf_hex = _hash_leaf(preimage).hex()
+                canonical_json = json.dumps(
+                    metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False
+                )
                 cur.execute(
                     "INSERT INTO ledger_events (seq, event_id, event_type, session_id, actor,"
                     " nodes_json, resources_json, outcome, time, predecessor_hex,"
@@ -1021,6 +1176,7 @@ class QuantumTeleportationReceiptLedger:
                 # Provisional in-memory root for the atomic checkpoint row.
                 self._leaves.append(bytes.fromhex(leaf_hex))
                 self._by_id[event_id] = seq
+                self._id_by_seq[seq] = event_id
                 self._metas[seq] = metadata
                 self._eligible[seq] = eligible
                 self._append_path(bytes.fromhex(leaf_hex))
@@ -1030,18 +1186,38 @@ class QuantumTeleportationReceiptLedger:
                     (seq, root_hex),
                 )
                 self._conn.commit()
+            except LedgerError:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                # Roll back provisional and refreshed memory so a failed
+                # transaction never leaks into serve-side state.
+                self._truncate_to(base_len)
+                raise
+            except sqlite3.IntegrityError:
+                # Residual race after the refresh (a commit landed between our
+                # delta read and our insert): fail closed, never surface a raw
+                # driver error and never reuse the sequence.
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                self._truncate_to(base_len)
+                raise LedgerError("ledger_unavailable: concurrent append conflict after refresh") from None
+            except sqlite3.Error:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                self._truncate_to(base_len)
+                raise LedgerError("ledger_unavailable: append transaction failed") from None
             except Exception:
                 try:
                     self._conn.rollback()
                 except Exception:
                     pass
-                # Roll back provisional memory so a failed transaction never
-                # leaks into serve-side state.
-                self._leaves = self._leaves[: seq - 1]
-                self._by_id.pop(event_id, None)
-                self._metas.pop(seq, None)
-                self._eligible.pop(seq, None)
-                self._rebuild_layers()
+                self._truncate_to(base_len)
                 raise
             return FrozenReceipt(
                 receipt_id=event_id,
@@ -1061,7 +1237,7 @@ class QuantumTeleportationReceiptLedger:
         leaf_hex = self._leaves[seq - 1].hex()
         layers = self._layers_for(seq)
         root_hex = layers[-1][0].hex() if layers else EMPTY_ROOT_HEX
-        event_id = next(k for k, v in self._by_id.items() if v == seq)
+        event_id = self._id_by_seq[seq]
         return FrozenReceipt(
             receipt_id=event_id,
             seq=seq,
@@ -1081,7 +1257,7 @@ class QuantumTeleportationReceiptLedger:
                 return FrozenSnapshot(tree_size=0, root_hex=EMPTY_ROOT_HEX, receipts=())
             layers = self._layers_for(size)
             root_hex = layers[-1][0].hex()
-            id_by_seq = {v: k for k, v in self._by_id.items() if v <= size}
+            id_by_seq = {s: self._id_by_seq[s] for s in range(1, size + 1)}
             receipts = tuple(
                 FrozenReceipt(
                     receipt_id=id_by_seq[s],
@@ -1115,7 +1291,9 @@ class QuantumTeleportationReceiptLedger:
                 raise ValueError("receipt is not part of the requested prefix")
             layers = self._layers_for(tree_size)
             siblings = _proof_siblings_for(layers, index, tree_size)
-            metadata = dict(self._metas[seq])
+            # Deep copy: the caller owns the returned metadata; later caller
+            # mutation must never damage the committed cache.
+            metadata = copy.deepcopy(self._metas[seq])
             eligible = self._eligible[seq]
             if eligible:
                 preimage = encode_execution_leaf(self._summary_for(metadata, eligible))
@@ -1124,13 +1302,25 @@ class QuantumTeleportationReceiptLedger:
             leaf_hex = _hash_leaf(preimage).hex()
             if leaf_hex != self._leaves[index].hex():
                 raise LedgerCorruptError("in-memory leaf inconsistent")
+            root_hex = layers[-1][0].hex()
+            # Bind the claimed tree_size/root against the trusted frozen
+            # checkpoint row, not just the in-memory frontier.
+            try:
+                stored_row = self._conn.execute(
+                    "SELECT root_hex FROM ledger_checkpoints WHERE tree_size = ?;",
+                    (tree_size,),
+                ).fetchone()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: checkpoint lookup failed") from None
+            if stored_row is None or stored_row[0] != root_hex:
+                raise LedgerCorruptError("prefix checkpoint mismatch")
             return InclusionProof(
                 version=LEDGER_VERSION,
                 leaf_index=index,
                 tree_size=tree_size,
                 leaf_preimage_bytes=preimage,
                 siblings=siblings,
-                expected_root_hex=layers[-1][0].hex(),
+                expected_root_hex=root_hex,
                 metadata=metadata,
                 eligible=bool(eligible),
                 leaf_digest_hex=leaf_hex,
@@ -1175,6 +1365,11 @@ class QuantumTeleportationReceiptLedger:
             except ValueError:
                 return False
             if not isinstance(metadata, Mapping):
+                return False
+            # Source one-based seq convention: the committed seq is always
+            # leaf_index + 1. A seq-mismatched proof is rejected even when its
+            # recomputed root happens to match.
+            if type(metadata.get("seq")) is not int or metadata.get("seq") != index + 1:
                 return False
             sibs = list(siblings) if isinstance(siblings, (list, tuple)) else None
             if sibs is None:
@@ -1286,18 +1481,213 @@ class QuantumTeleportationReceiptLedger:
                 raise ValueError("event_type required")
             if type(limit) is not int or limit <= 0 or limit > 100000:
                 raise ValueError("limit out of range")
-            cur = self._conn.cursor()
-            rows = cur.execute(
-                "SELECT canonical_json FROM ledger_events WHERE event_type = ? ORDER BY seq LIMIT ?;",
-                (event_type, limit),
-            ).fetchall()
-            return tuple(json.loads(r[0]) for r in rows)
+            try:
+                cur = self._conn.cursor()
+                rows = cur.execute(
+                    "SELECT canonical_json FROM ledger_events WHERE event_type = ? ORDER BY seq LIMIT ?;",
+                    (event_type, limit),
+                ).fetchall()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: event query failed") from None
+            try:
+                return tuple(json.loads(r[0]) for r in rows)
+            except ValueError:
+                raise LedgerCorruptError("stored event unreadable") from None
+
+    def list_receipts(self, limit: int) -> tuple[FrozenReceipt, ...]:
+        """First at most ``limit`` receipts in sequence order.
+
+        Bounded joined query over the indexed prefix — never a full snapshot,
+        tree, or history materialization. ``limit`` is an exact int in
+        1..1000. Each receipt carries its own frozen prefix (tree_size ==
+        seq with the checkpointed root at that seq).
+        """
+        with self._lock:
+            self._ensure_open()
+            if type(limit) is not int or limit < 1 or limit > 1000:
+                raise ValueError("limit must be an integer in 1..1000")
+            try:
+                cur = self._conn.cursor()
+                rows = cur.execute(
+                    "SELECT e.seq, e.event_id, e.leaf_hex, c.root_hex"
+                    " FROM ledger_events e JOIN ledger_checkpoints c ON c.tree_size = e.seq"
+                    " ORDER BY e.seq LIMIT ?;",
+                    (limit,),
+                ).fetchall()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: receipt listing failed") from None
+            return tuple(
+                FrozenReceipt(
+                    receipt_id=event_id,
+                    seq=seq,
+                    leaf_digest_hex=leaf_hex,
+                    tree_size=seq,
+                    prefix_root_hex=root_hex,
+                )
+                for seq, event_id, leaf_hex, root_hex in rows
+            )
+
+    def claim_anchor(
+        self,
+        receipt_id: str,
+        *,
+        tree_size: int,
+        root_hex: str,
+        leaf_index: int,
+        payer_b58: str,
+        last_valid: int | None,
+    ) -> bool:
+        """Atomically claim the single-send right for one receipt.
+
+        The shared cross-exporter/process authority: the first claimer wins
+        (True); any later claim for that receipt, even at a later prefix,
+        observes False and must never sign or send. Raises LedgerError when
+        the claim store is unavailable — callers fail closed, never treat outage as unclaimed.
+        No network await happens inside the claim transaction.
+        """
+        if not isinstance(receipt_id, str) or not receipt_id:
+            raise ValueError("receipt_id required")
+        if type(tree_size) is not int or tree_size <= 0:
+            raise ValueError("tree_size must be a positive integer")
+        if not isinstance(root_hex, str) or len(root_hex) != 64:
+            raise ValueError("root_hex must be 64 hex chars")
+        try:
+            bytes.fromhex(root_hex)
+        except ValueError:
+            raise ValueError("root_hex must be hex") from None
+        if type(leaf_index) is not int or leaf_index < 0 or leaf_index >= tree_size:
+            raise ValueError("leaf_index out of range for tree_size")
+        if not isinstance(payer_b58, str) or not payer_b58:
+            raise ValueError("payer_b58 required")
+        if last_valid is not None and (type(last_valid) is not int or last_valid < 0):
+            raise ValueError("last_valid must be a non-negative integer or None")
+        with self._lock:
+            self._ensure_open()
+            try:
+                cur = self._conn.cursor()
+                cur.execute("BEGIN IMMEDIATE;")
+                try:
+                    cur.execute(
+                        "INSERT INTO ledger_anchor_claims"
+                        " (receipt_id, tree_size, root_hex, leaf_index, payer_b58, last_valid, claimed_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?, ?);",
+                        (
+                            receipt_id, tree_size, root_hex, leaf_index,
+                            payer_b58, last_valid,
+                            datetime.now(timezone.utc).isoformat(),
+                        ),
+                    )
+                except sqlite3.IntegrityError:
+                    try:
+                        self._conn.rollback()
+                    except Exception:
+                        pass
+                    return False
+                self._conn.commit()
+                return True
+            except sqlite3.Error:
+                try:
+                    self._conn.rollback()
+                except Exception:
+                    pass
+                raise LedgerError("ledger_unavailable: anchor claim failed") from None
+
+    def read_anchor_claim(self, receipt_id: str, tree_size: int | None = None) -> dict[str, Any] | None:
+        """Return the stored claim matching the optional prefix, or None.
+
+        An explicit tree_size pins the attested prefix; omitting it returns the
+        receipt's sole claimed prefix. Raises LedgerError when the claim store is
+        unavailable — callers fail closed, never treat outage as unclaimed.
+        """
+        with self._lock:
+            self._ensure_open()
+            if not isinstance(receipt_id, str) or not receipt_id:
+                raise ValueError("receipt_id required")
+            if tree_size is not None and (type(tree_size) is not int or tree_size <= 0):
+                raise ValueError("tree_size must be a positive integer or None")
+            try:
+                cur = self._conn.cursor()
+                if tree_size is None:
+                    row = cur.execute(
+                        "SELECT tree_size, root_hex, leaf_index, payer_b58, last_valid"
+                        " FROM ledger_anchor_claims WHERE receipt_id = ?",
+                        (receipt_id,),
+                    ).fetchone()
+                else:
+                    row = cur.execute(
+                        "SELECT tree_size, root_hex, leaf_index, payer_b58, last_valid"
+                        " FROM ledger_anchor_claims WHERE receipt_id = ? AND tree_size = ?;",
+                        (receipt_id, tree_size),
+                    ).fetchone()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: anchor claim lookup failed") from None
+            if row is None:
+                return None
+            size, root, index, payer, valid = row
+            return {
+                "receipt_id": receipt_id,
+                "tree_size": size,
+                "root_hex": root,
+                "leaf_index": index,
+                "payer_b58": payer,
+                "last_valid": valid,
+            }
+
+    def anchor_prepared_events(self, receipt_id: str, *, limit: int = 10) -> tuple[dict[str, Any], ...]:
+        """Complete indexed prepared-event lookup for one receipt ID.
+
+        Targets the receipt directly (never an oldest-first window scan) and
+        fails closed with LedgerError on query error.
+        """
+        with self._lock:
+            self._ensure_open()
+            if not isinstance(receipt_id, str) or not receipt_id:
+                raise ValueError("receipt_id required")
+            if type(limit) is not int or limit < 1 or limit > 100:
+                raise ValueError("limit out of range")
+            try:
+                cur = self._conn.cursor()
+                rows = cur.execute(
+                    "SELECT canonical_json FROM ledger_events"
+                    " WHERE event_type = 'anchor.prepared'"
+                    " AND json_extract(canonical_json, '$.payload.receipt_id') = ?"
+                    " ORDER BY seq LIMIT ?;",
+                    (receipt_id, limit),
+                ).fetchall()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: prepared lookup failed") from None
+            try:
+                return tuple(json.loads(r[0]) for r in rows)
+            except ValueError:
+                raise LedgerCorruptError("stored prepared event unreadable") from None
+
+    def has_anchor_event(self, event_type: str, signature: str) -> bool:
+        """Indexed existence check for a terminal anchor event signature."""
+        with self._lock:
+            self._ensure_open()
+            if not isinstance(event_type, str) or not event_type:
+                raise ValueError("event_type required")
+            if not isinstance(signature, str) or not signature:
+                raise ValueError("signature required")
+            try:
+                cur = self._conn.cursor()
+                row = cur.execute(
+                    "SELECT 1 FROM ledger_events"
+                    " WHERE event_type = ?"
+                    " AND json_extract(canonical_json, '$.payload.signature') = ?"
+                    " LIMIT 1;",
+                    (event_type, signature),
+                ).fetchone()
+            except sqlite3.Error:
+                raise LedgerError("ledger_unavailable: anchor event lookup failed") from None
+            return row is not None
 
     def close(self) -> None:
         with self._lock:
             if not self._closed:
                 try:
-                    self._conn.close()
+                    if self._conn is not None:
+                        self._conn.close()
                 finally:
                     self._closed = True
 
@@ -1317,7 +1707,7 @@ def proof_to_jsonable(proof: InclusionProof | Mapping[str, Any]) -> dict[str, An
         preimage = bytes(proof["leaf_preimage_bytes"])
         siblings = list(proof["siblings"])
         expected = proof["expected_root_hex"]
-        metadata = dict(proof["metadata"])
+        metadata = copy.deepcopy(dict(proof["metadata"]))
         eligible = bool(proof.get("eligible", False))
         leaf_hex = str(proof.get("leaf_digest_hex", ""))
     else:
@@ -1327,7 +1717,7 @@ def proof_to_jsonable(proof: InclusionProof | Mapping[str, Any]) -> dict[str, An
         preimage = bytes(proof.leaf_preimage_bytes)
         siblings = list(proof.siblings)
         expected = proof.expected_root_hex
-        metadata = dict(proof.metadata)
+        metadata = copy.deepcopy(dict(proof.metadata))
         eligible = bool(proof.eligible)
         leaf_hex = proof.leaf_digest_hex
     return {
@@ -1352,7 +1742,7 @@ def proof_from_jsonable(data: Mapping[str, Any]) -> InclusionProof:
         siblings = tuple(
             (entry["direction"], bytes.fromhex(str(entry["digest_hex"]))) for entry in data["siblings"]
         )
-        metadata = dict(data["metadata"])
+        metadata = copy.deepcopy(dict(data["metadata"]))
     except (KeyError, ValueError, TypeError):
         raise ValueError("malformed proof projection") from None
     return InclusionProof(

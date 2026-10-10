@@ -52,6 +52,7 @@ from desk_gateway.quantum_ledger import (
     EMPTY_ROOT_HEX,
     InclusionProof,
     LedgerCorruptError,
+    LedgerError,
     QuantumTeleportationReceiptLedger,
     canonical_event_bytes,
     decode_execution_leaf,
@@ -282,7 +283,6 @@ class RpcFixture:
         if self.tx_mode == "null":
             return None
         sent = self.sent
-        memo_text = sent["memo"].decode("utf-8")
         slot = TX_SLOT
         meta = {"err": None}
         instructions = [
@@ -302,15 +302,46 @@ class RpcFixture:
             ]
         elif self.tx_mode == "memo_mismatch":
             instructions[1] = {"programIdIndex": 2, "accounts": [0], "data": b58encode(b"QTELEPORT1:AAAA")}
-            memo_text = "QTELEPORT1:AAAA"
         elif self.tx_mode == "slot_missing":
             slot = None
         return {
             "slot": slot,
             "meta": meta,
-            "transaction": {"signatures": [sig], "message": {"accountKeys": keys, "instructions": instructions}},
+            "transaction": {
+                "signatures": [sig],
+                "message": {
+                    "header": {
+                        "numRequiredSignatures": 1,
+                        "numReadonlySignedAccounts": 0,
+                        "numReadonlyUnsignedAccounts": 2,
+                    },
+                    "accountKeys": keys,
+                    "recentBlockhash": b58encode(self.blockhash_bytes),
+                    "instructions": instructions,
+                },
+            },
             "blockTime": None,
         }
+
+
+class RpcByteStream(httpx.AsyncByteStream):
+    """Count stream pulls and closure without trusting Content-Length."""
+
+    def __init__(self, chunks: list[bytes], *, stall: bool = False) -> None:
+        self.chunks = chunks
+        self.stall = stall
+        self.pulled = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.pulled += 1
+            yield chunk
+        if self.stall:
+            await asyncio.Event().wait()
+
+    async def aclose(self):
+        self.closed = True
 
 
 def make_exporter(ledger, fixture: RpcFixture, signer_path: str, **kw) -> QuantumTeleportationAnchorExporter:
@@ -562,7 +593,7 @@ def test_tampered_checkpoint_and_truncation_fail_closed(tmp_path):
     victim = _copy_db(tmp_path, src, "victim-checkpoint")
     conn = sqlite3.connect(victim / "quantum_teleportation.sqlite3")
     conn.execute("DROP TRIGGER ledger_no_update_checkpoints;")
-    conn.execute("UPDATE ledger_checkpoints SET root_hex = 'ff' || SUBSTR(root_hex, 3) WHERE tree_size = 2;")
+    conn.execute("UPDATE ledger_checkpoints SET root_hex = CASE SUBSTR(root_hex, 1, 1) WHEN '0' THEN '1' ELSE '0' END || SUBSTR(root_hex, 2) WHERE tree_size = 2;")
     conn.commit()
     conn.close()
     with pytest.raises(LedgerCorruptError):
@@ -821,7 +852,17 @@ def test_signer_missing_config_mentions_env_name_only():
 # Publisher: confirmed path + matrix
 # ---------------------------------------------------------------------------
 
-def test_confirmed_publishes_once_with_exact_message(tmp_path):
+def test_confirmed_publishes_once_with_exact_message(tmp_path, monkeypatch):
+    from desk_gateway.quantum_anchor import SignerIdentity
+
+    signatures_created = []
+    original_sign = SignerIdentity.sign
+
+    def counted_sign(identity, message):
+        signatures_created.append(message)
+        return original_sign(identity, message)
+
+    monkeypatch.setattr(SignerIdentity, "sign", counted_sign)
     ledger = make_ledger(tmp_path)
     signer_path, pub = write_throwaway_signer(tmp_path)
     fixture = RpcFixture()
@@ -841,6 +882,7 @@ def test_confirmed_publishes_once_with_exact_message(tmp_path):
         assert result.anchored_root_hex == proof.expected_root_hex
         assert result.signature == exporter.prepared_signature(receipt.receipt_id, size)
         assert fixture.methods_called("sendTransaction") == 1
+        assert len(signatures_created) == 1
         # Order: genesis, blockhash, fee, balance, then the single send.
         order = [m for m, _ in fixture.calls]
         assert order.index("getGenesisHash") < order.index("getLatestBlockhash")
@@ -1171,6 +1213,791 @@ def test_no_secret_material_in_public_artifacts(tmp_path):
         assert result.error_code == "signer_unreadable"
         assert seed_hex not in (result.error_detail or "")
         assert "/nonexistent" not in (result.error_detail or "")
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+# ---------------------------------------------------------------------------
+# 69-04 gap closure: ledger integrity, proofs, writers, listing (AC-008)
+# ---------------------------------------------------------------------------
+
+def _teleport_summary(seq=7):
+    return {
+        "leaf_type": "teleport",
+        "flags": 1,
+        "seq": seq,
+        "event_id_hex": "ab" * 16,
+        "metadata_commit_hex": "cd" * 32,
+        "teleport": dict(teleport_payload(), node_count=2),
+        "drill": None,
+    }
+
+
+def test_column_event_type_tamper_fails_replay(tmp_path):
+    src = tmp_path / "colsrc"
+    ledger = QuantumTeleportationReceiptLedger(src)
+    try:
+        asyncio.run(append_teleport(ledger, "col-1"))
+    finally:
+        ledger.close()
+    victim = _copy_db(tmp_path, src, "victim-column")
+    conn = sqlite3.connect(victim / "quantum_teleportation.sqlite3")
+    conn.execute("DROP TRIGGER ledger_no_update_events;")
+    conn.execute("UPDATE ledger_events SET event_type = 'evil.rewrite' WHERE seq = 1;")
+    conn.commit()
+    conn.close()
+    with pytest.raises(LedgerCorruptError):
+        QuantumTeleportationReceiptLedger(victim)
+
+
+def test_decoder_rejects_malformed_and_out_of_range():
+    encoded = encode_execution_leaf(_teleport_summary())
+    with pytest.raises(ValueError):
+        decode_execution_leaf(encoded + b"\x00")  # overlong
+    with pytest.raises(ValueError):
+        decode_execution_leaf(encoded[:-1])  # short
+    bad_version = bytearray(encoded)
+    bad_version[0] = 2
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(bad_version))
+    bad_flags = bytearray(encoded)
+    bad_flags[2:4] = (3).to_bytes(2, "big")
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(bad_flags))
+    no_nodes = bytearray(encoded)
+    no_nodes[62] = 0
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(no_nodes))
+    low_fidelity = bytearray(encoded)
+    low_fidelity[63:71] = struct.pack(">d", 0.5)
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(low_fidelity))
+    nan_fidelity = bytearray(encoded)
+    nan_fidelity[63:71] = struct.pack(">d", float("nan"))
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(nan_fidelity))
+    broken_xor = bytearray(encoded)
+    broken_xor[60] ^= 0x01  # frame_x flip breaks correction_x == bsm_x XOR frame_x
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(broken_xor))
+    # Drill leaf: exact 150 bytes and typed numeric success fields.
+    drill_summary = {
+        "leaf_type": "drill",
+        "flags": 1 | 2 | 4 | 8 | 16 | 32 | 64,
+        "seq": 3,
+        "event_id_hex": "ab" * 16,
+        "metadata_commit_hex": "cd" * 32,
+        "teleport": dict(teleport_payload(), node_count=2),
+        "drill": {
+            "purif_baseline": 0.80,
+            "purif_output": 0.92,
+            "swap_fidelity": 0.96,
+            "clean_sifted": 1000,
+            "clean_test": 100,
+            "clean_errors": 5,
+            "clean_output": 256,
+            "eve_test": 200,
+            "eve_errors": 40,
+            "eve_basis": 0,
+            "key_commitment": hashlib.sha256(b"commit").digest(),
+        },
+    }
+    drill_encoded = encode_execution_leaf(drill_summary)
+    assert len(drill_encoded) == 150
+    with pytest.raises(ValueError):
+        decode_execution_leaf(drill_encoded[:-1])
+    mistyped = bytearray(drill_encoded)
+    mistyped[1] = 1  # teleport type byte on a 150-byte body
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(mistyped))
+    bad_basis = bytearray(drill_encoded)
+    bad_basis[71 + 24 + 14 + 8] = 9
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(bad_basis))
+    no_output_bits = bytearray(drill_encoded)
+    no_output_bits[71 + 24 + 12:71 + 24 + 14] = (0).to_bytes(2, "big")
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(no_output_bits))
+    zero_commitment = bytearray(drill_encoded)
+    zero_commitment[118:150] = bytes(32)
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(zero_commitment))
+    low_swap = bytearray(drill_encoded)
+    low_swap[71 + 16:71 + 24] = struct.pack(">d", 0.5)
+    with pytest.raises(ValueError):
+        decode_execution_leaf(bytes(low_swap))
+
+
+def test_kernel_rounded_fidelity_accepted_raw_floor_rejected(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        rounded = asyncio.run(ledger.append_event(teleport_event("round", payload=teleport_payload(fidelity=1.0 + 5e-10))))
+        proof = ledger.inclusion_proof(rounded.receipt_id, 1)
+        assert QuantumTeleportationReceiptLedger.verify_proof(proof) is True
+        assert decode_execution_leaf(bytes(proof.leaf_preimage_bytes))["teleport"]["fidelity"] > 1.0
+        with pytest.raises(ValueError):
+            asyncio.run(ledger.append_event(teleport_event("low", payload=teleport_payload(fidelity=0.94))))
+        with pytest.raises(ValueError):
+            asyncio.run(ledger.append_event(teleport_event("high", payload=teleport_payload(fidelity=1.5))))
+        assert ledger.tree_size == 1
+    finally:
+        ledger.close()
+
+
+def test_proof_seq_and_tree_size_binding(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        first = asyncio.run(append_teleport(ledger, "bind-a"))
+        second = asyncio.run(append_teleport(ledger, "bind-b"))
+        proof = ledger.inclusion_proof(second.receipt_id, 2)
+        assert proof.leaf_index == 1
+        assert proof.metadata["seq"] == 2
+        assert QuantumTeleportationReceiptLedger.verify_proof(proof) is True
+        moved_index = InclusionProof(
+            version=proof.version, leaf_index=0, tree_size=proof.tree_size,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=proof.expected_root_hex, metadata=dict(proof.metadata),
+            eligible=proof.eligible, leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert QuantumTeleportationReceiptLedger.verify_proof(moved_index) is False
+        moved_seq = InclusionProof(
+            version=proof.version, leaf_index=proof.leaf_index, tree_size=proof.tree_size,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=proof.expected_root_hex,
+            metadata=dict(proof.metadata, seq=99),
+            eligible=proof.eligible, leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert QuantumTeleportationReceiptLedger.verify_proof(moved_seq) is False
+        swapped_size = InclusionProof(
+            version=proof.version, leaf_index=proof.leaf_index, tree_size=3,
+            leaf_preimage_bytes=proof.leaf_preimage_bytes, siblings=proof.siblings,
+            expected_root_hex=proof.expected_root_hex, metadata=dict(proof.metadata),
+            eligible=proof.eligible, leaf_digest_hex=proof.leaf_digest_hex,
+        )
+        assert QuantumTeleportationReceiptLedger.verify_proof(swapped_size) is False
+        assert ledger.inclusion_proof(first.receipt_id, 1).metadata["seq"] == 1
+    finally:
+        ledger.close()
+
+
+def test_tampered_checkpoint_blocks_proof_issuance(tmp_path):
+    src = tmp_path / "ckptsrc"
+    ledger = QuantumTeleportationReceiptLedger(src)
+    try:
+        receipt = asyncio.run(append_teleport(ledger, "ckpt-1"))
+        assert QuantumTeleportationReceiptLedger.verify_proof(ledger.inclusion_proof(receipt.receipt_id, 1)) is True
+    finally:
+        ledger.close()
+    victim = _copy_db(tmp_path, src, "victim-ckpt-proof")
+    conn = sqlite3.connect(victim / "quantum_teleportation.sqlite3")
+    conn.execute("DROP TRIGGER ledger_no_update_checkpoints;")
+    conn.execute("UPDATE ledger_checkpoints SET root_hex = CASE SUBSTR(root_hex, 1, 1) WHEN '0' THEN '1' ELSE '0' END || SUBSTR(root_hex, 2) WHERE tree_size = 1;")
+    conn.commit()
+    conn.close()
+    with pytest.raises(LedgerCorruptError):
+        QuantumTeleportationReceiptLedger(victim)
+
+
+def test_returned_proof_is_deep_copied(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger, "copy-1"))
+        first = ledger.inclusion_proof(receipt.receipt_id, 1)
+        first.metadata["payload"]["fidelity"] = 0.0
+        first.metadata["seq"] = 999
+        assert QuantumTeleportationReceiptLedger.verify_proof(first) is False
+        second = ledger.inclusion_proof(receipt.receipt_id, 1)
+        assert second.metadata["payload"]["fidelity"] == 0.97
+        assert QuantumTeleportationReceiptLedger.verify_proof(second) is True
+        projected = proof_to_jsonable(second)
+        projected["metadata"]["payload"]["fidelity"] = 0.0
+        third = ledger.inclusion_proof(receipt.receipt_id, 1)
+        assert QuantumTeleportationReceiptLedger.verify_proof(third) is True
+    finally:
+        ledger.close()
+
+
+def test_two_ledger_objects_share_one_directory(tmp_path):
+    shared = tmp_path / "shared"
+    first_ledger = QuantumTeleportationReceiptLedger(shared)
+    second_ledger = QuantumTeleportationReceiptLedger(shared)
+    try:
+        r1 = asyncio.run(first_ledger.append_event(teleport_event("shared-1")))
+        assert r1.seq == 1
+        r2 = asyncio.run(second_ledger.append_event(teleport_event("shared-2")))
+        assert r2.seq == 2
+        r3 = asyncio.run(first_ledger.append_event(teleport_event("shared-3")))
+        assert r3.seq == 3
+        assert len({r1.receipt_id, r2.receipt_id, r3.receipt_id}) == 3
+    finally:
+        first_ledger.close()
+        second_ledger.close()
+    reopened = QuantumTeleportationReceiptLedger(shared)
+    try:
+        assert reopened.tree_size == 3
+        for receipt_id in (r1.receipt_id, r2.receipt_id, r3.receipt_id):
+            assert QuantumTeleportationReceiptLedger.verify_proof(
+                reopened.inclusion_proof(receipt_id, 3)) is True
+    finally:
+        reopened.close()
+
+
+def test_threaded_same_file_appends_keep_unique_sequence(tmp_path):
+    shared = tmp_path / "hammer"
+    ledgers = [QuantumTeleportationReceiptLedger(shared) for _ in range(2)]
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [
+                pool.submit(
+                    lambda tag=tag, i=i: asyncio.run(
+                        ledgers[tag % 2].append_event(teleport_event(f"hammer-{tag}-{i}"))),
+                )
+                for tag in range(4)
+                for i in range(10)
+            ]
+            results = [f.result() for f in futures]
+        assert sorted(r.seq for r in results) == list(range(1, 41))
+        assert len({r.receipt_id for r in results}) == 40
+    finally:
+        for open_ledger in ledgers:
+            open_ledger.close()
+
+
+def test_list_receipts_bounded_first_sequence(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        for i in range(5):
+            asyncio.run(ledger.append_event(teleport_event(f"list-{i}")))
+        first_two = ledger.list_receipts(2)
+        assert type(first_two) is tuple and len(first_two) == 2
+        assert [r.seq for r in first_two] == [1, 2]
+        for item in first_two:
+            assert item.tree_size == item.seq
+            assert item.prefix_root_hex == ledger.snapshot(item.seq).root_hex
+        everything = ledger.list_receipts(1000)
+        assert [r.seq for r in everything] == [1, 2, 3, 4, 5]
+        for bad in (0, -1, 1001, "2", 2.0, None):
+            with pytest.raises(ValueError):
+                ledger.list_receipts(bad)
+        with pytest.raises(AttributeError):
+            first_two[0].seq = 99  # frozen receipt is immutable
+    finally:
+        ledger.close()
+
+
+def test_open_failures_raise_ledger_error_not_corrupt(tmp_path):
+    blocker = tmp_path / "blocker"
+    blocker.write_bytes(b"not a directory")
+    with pytest.raises(LedgerError) as excinfo:
+        QuantumTeleportationReceiptLedger(blocker)
+    assert type(excinfo.value) is LedgerError
+
+
+def test_anchor_claim_single_winner_per_receipt(tmp_path):
+    ledger = make_ledger(tmp_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger, "claim-1"))
+        proof = ledger.inclusion_proof(receipt.receipt_id, 1)
+        assert ledger.read_anchor_claim(receipt.receipt_id) is None
+        assert ledger.claim_anchor(
+            receipt.receipt_id, tree_size=1, root_hex=proof.expected_root_hex,
+            leaf_index=proof.leaf_index, payer_b58="Payer111", last_valid=100,
+        ) is True
+        assert ledger.claim_anchor(
+            receipt.receipt_id, tree_size=1, root_hex=proof.expected_root_hex,
+            leaf_index=proof.leaf_index, payer_b58="Payer111", last_valid=100,
+        ) is False
+        stored = ledger.read_anchor_claim(receipt.receipt_id)
+        assert stored is not None and stored["tree_size"] == 1 and stored["payer_b58"] == "Payer111"
+        assert stored == ledger.read_anchor_claim(receipt.receipt_id, 1)
+        second_receipt = asyncio.run(append_teleport(ledger, "claim-2"))
+        later_proof = ledger.inclusion_proof(receipt.receipt_id, 2)
+        other = QuantumTeleportationReceiptLedger(ledger.data_dir)
+        try:
+            assert other.claim_anchor(
+                receipt.receipt_id, tree_size=2, root_hex=later_proof.expected_root_hex,
+                leaf_index=later_proof.leaf_index, payer_b58="OtherPayer", last_valid=200,
+            ) is False
+            assert other.read_anchor_claim(receipt.receipt_id) == stored
+            assert other.claim_anchor(
+                second_receipt.receipt_id, tree_size=2, root_hex=later_proof.expected_root_hex,
+                leaf_index=1, payer_b58="OtherPayer", last_valid=200,
+            ) is True
+        finally:
+            other.close()
+        for bad_call in (
+            lambda: ledger.claim_anchor("", tree_size=1, root_hex=proof.expected_root_hex,
+                                        leaf_index=0, payer_b58="P", last_valid=None),
+            lambda: ledger.claim_anchor(receipt.receipt_id, tree_size=0, root_hex=proof.expected_root_hex,
+                                        leaf_index=0, payer_b58="P", last_valid=None),
+            lambda: ledger.read_anchor_claim(""),
+        ):
+            with pytest.raises(ValueError):
+                bad_call()
+    finally:
+        ledger.close()
+
+
+# ---------------------------------------------------------------------------
+# 69-04 gap closure: single-send publisher and aged readback (AC-009)
+# ---------------------------------------------------------------------------
+
+def _two_exporters(ledger, fixture, signer_path):
+    first_client = httpx.AsyncClient(transport=httpx.MockTransport(fixture.handler))
+    second_client = httpx.AsyncClient(transport=httpx.MockTransport(fixture.handler))
+    first = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", signer_path=signer_path,
+        http_client=first_client, confirmation_timeout_s=5.0, poll_interval_s=0.01,
+    )
+    second = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", signer_path=signer_path,
+        http_client=second_client, confirmation_timeout_s=5.0, poll_interval_s=0.01,
+    )
+    return first, second, (first_client, second_client)
+
+
+def test_two_exporters_sharing_ledger_send_once(tmp_path):
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = RpcFixture()
+    first, second, clients = _two_exporters(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        one = asyncio.run(first.export_commitment(receipt.receipt_id))
+        assert one.ok
+        two = asyncio.run(second.export_commitment(receipt.receipt_id))
+        assert two.ok and two.signature == one.signature
+        assert two.slot == TX_SLOT
+        assert fixture.methods_called("sendTransaction") == 1
+        raced = asyncio.run(append_teleport(ledger, "race-2"))
+
+        async def race():
+            return await asyncio.gather(
+                first.export_commitment(raced.receipt_id),
+                second.export_commitment(raced.receipt_id),
+            )
+
+        out_a, out_b = asyncio.run(race())
+        assert out_a.ok and out_b.ok and out_a.signature == out_b.signature
+        assert fixture.methods_called("sendTransaction") == 2
+    finally:
+        asyncio.run(first.aclose())
+        asyncio.run(second.aclose())
+        for client in clients:
+            asyncio.run(client.aclose())
+        ledger.close()
+
+
+def test_prepared_lookup_indexed_and_failclosed(tmp_path):
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = RpcFixture()
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert result.ok
+        for i in range(3):
+            decoy = asyncio.run(append_teleport(ledger, f"decoy-{i}"))
+            assert asyncio.run(exporter.export_commitment(decoy.receipt_id)).ok
+        assert fixture.methods_called("sendTransaction") == 4
+        cold = make_exporter(ledger, fixture, signer_path)
+        try:
+            # Cold exporter finds the prepared signature through the indexed
+            # ledger lookup with no memory state.
+            assert cold.prepared_signature(receipt.receipt_id) == result.signature
+            events = ledger.anchor_prepared_events(receipt.receipt_id)
+            assert len(events) == 1
+            assert events[0]["payload"]["signature"] == result.signature
+        finally:
+            asyncio.run(cold.aclose())
+        # Damage the event store: prepared lookup must fail closed with
+        # ledger_unavailable and must not sign or resend.
+        raw = sqlite3.connect(str(ledger.db_path))
+        raw.execute("DROP TABLE ledger_events;")
+        raw.commit()
+        raw.close()
+        with pytest.raises(LedgerError):
+            ledger.anchor_prepared_events(receipt.receipt_id)
+        stranded = make_exporter(ledger, fixture, signer_path)
+        try:
+            out = asyncio.run(stranded.export_commitment(receipt.receipt_id))
+            assert out.error_code == "ledger_unavailable" and out.http_status == 503
+            assert fixture.methods_called("sendTransaction") == 4
+        finally:
+            asyncio.run(stranded.aclose())
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+def test_aged_confirmation_recovers_through_historical_readback(tmp_path):
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = RpcFixture()
+    fixture.status_queue = [None] * 100
+    fixture.height = fixture.last_valid + 5  # recent window already past expiry
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        first = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert first.status == "unknown" and first.error_code == "expired"
+        assert fixture.methods_called("sendTransaction") == 1
+        late_client = httpx.AsyncClient(transport=httpx.MockTransport(fixture.handler))
+        late = QuantumTeleportationAnchorExporter(
+            ledger, rpc_url="https://devnet.example.invalid", signer_path=signer_path,
+            http_client=late_client, confirmation_timeout_s=5.0, poll_interval_s=0.01,
+        )
+        try:
+            second = asyncio.run(late.export_commitment(receipt.receipt_id))
+            assert second.ok and second.signature == first.signature
+            assert second.slot == TX_SLOT
+            assert fixture.methods_called("sendTransaction") == 1
+        finally:
+            asyncio.run(late.aclose())
+            asyncio.run(late_client.aclose())
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+def test_base58_long_memo_fixed_behavior_pinned():
+    memo = bytes((i * 37 + 11) % 256 for i in range(1021))
+    text = b58encode(memo)
+    assert len(text) > 256  # a full inclusion-path memo exceeds the short cap
+    assert b58decode(text, max_len=2048) == memo
+    with pytest.raises(ValueError):
+        b58decode(text)  # default short cap still rejects overlong input
+
+
+def test_live_checkpoint_tamper_blocks_proof_issuance(tmp_path):
+    live = tmp_path / "cklive"
+    ledger = QuantumTeleportationReceiptLedger(live)
+    try:
+        receipt = asyncio.run(append_teleport(ledger, "cklive-1"))
+        assert QuantumTeleportationReceiptLedger.verify_proof(ledger.inclusion_proof(receipt.receipt_id, 1)) is True
+        raw = sqlite3.connect(str(ledger.db_path))
+        raw.execute("DROP TRIGGER ledger_no_update_checkpoints;")
+        raw.execute("UPDATE ledger_checkpoints SET root_hex = CASE SUBSTR(root_hex, 1, 1) WHEN '0' THEN '1' ELSE '0' END || SUBSTR(root_hex, 2) WHERE tree_size = 1;")
+        raw.commit()
+        raw.close()
+        with pytest.raises(LedgerCorruptError):
+            ledger.inclusion_proof(receipt.receipt_id, 1)
+    finally:
+        ledger.close()
+
+
+@pytest.mark.parametrize(
+    "method,path,replacement",
+    [
+        ("getSignatureStatuses", ("value", 0, "err"), "missing"),
+        ("getSignatureStatuses", ("value", 0, "slot"), "missing"),
+        *[("getSignatureStatuses", ("value", 0, field), value)
+          for field in ("slot", "confirmations") for value in (-1, True, 1 << 64)],
+        ("getSignatureStatuses", ("value", 0, "confirmationStatus"), "missing"),
+        ("getSignatureStatuses", ("value", 0, "confirmationStatus"), "confirmed-ish"),
+        ("getSignatureStatuses", ("value", 0, "confirmations"), "missing"),
+        ("getTransaction", ("meta", "err"), "missing"),
+        *[("getTransaction", ("slot",), value) for value in (-1, True, 1 << 64)],
+        ("getTransaction", ("transaction", "message", "header"), "missing"),
+        *[("getTransaction", ("transaction", "message", "header", field), value)
+          for field, value in (("numRequiredSignatures", True), ("numRequiredSignatures", 2),
+                               ("numReadonlySignedAccounts", 1), ("numReadonlyUnsignedAccounts", 1))],
+        ("getTransaction", ("transaction", "message", "recentBlockhash"), "missing"),
+        ("getTransaction", ("transaction", "message", "recentBlockhash"), "0"),
+        ("getTransaction", ("transaction", "message", "recentBlockhash"), b58encode(b"\x09" * 32)),
+        *[("getTransaction", ("transaction", "message", "instructions", 0, "programIdIndex"), value)
+          for value in ("missing", -1, True, 3)],
+        ("getTransaction", ("transaction", "message", "instructions", 1, "programIdIndex"), "missing"),
+        ("getTransaction", ("transaction", "message", "instructions", 1, "programIdIndex"), False),
+        ("getTransaction", ("transaction", "message", "instructions", 0, "accounts"), "missing"),
+        ("getTransaction", ("transaction", "message", "instructions", 0, "accounts"), [0]),
+        ("getTransaction", ("transaction", "message", "instructions", 1, "accounts"), []),
+        ("getTransaction", ("transaction", "message", "instructions", 1, "accounts"), [False]),
+        ("getTransaction", ("transaction", "message", "instructions", 0, "data"), "missing"),
+        ("getTransaction", ("transaction", "message", "instructions", 0, "data"), b58encode(b"\x02" + struct.pack("<I", 1))),
+        ("getTransaction", ("transaction", "message", "instructions", 0, "data"), b58encode(b"\x03" + struct.pack("<I", 400000))),
+        ("getTransaction", ("transaction", "message", "instructions", 1, "data"), "missing"),
+    ],
+)
+def test_malformed_success_fields_never_confirm(tmp_path, method, path, replacement):
+    class CorruptFixture(RpcFixture):
+        def _result(self, requested, params):
+            result = super()._result(requested, params)
+            if requested == method:
+                target = result
+                for key in path[:-1]:
+                    target = target[key]
+                if replacement == "missing":
+                    del target[path[-1]]
+                else:
+                    target[path[-1]] = replacement
+            return result
+
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = CorruptFixture()
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        first = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        repeated = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not first.ok and not repeated.ok
+        assert first.status != "confirmed" and repeated.status != "confirmed"
+        assert first.slot is None and repeated.slot is None
+        assert first.signature == repeated.signature == fixture.sent["signature"]
+        assert fixture.methods_called("sendTransaction") == 1
+        assert not ledger.events_by_type("anchor.confirmed")
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+@pytest.mark.parametrize("mode", ["program_name_bypass", "invalid_program_name_bypass", "extra_key", "extra_signature", "reordered"])
+def test_json_readback_requires_exact_transaction_shape(tmp_path, mode):
+    class WrongShapeFixture(RpcFixture):
+        def _tx_result(self, sig):
+            result = super()._tx_result(sig)
+            txn = result["transaction"]
+            message = txn["message"]
+            if mode in ("program_name_bypass", "invalid_program_name_bypass"):
+                message["instructions"] = [
+                    {"program": COMPUTE_BUDGET_PROGRAM_ID, "accounts": [0], "data": "bad"},
+                    {"program": MEMO_PROGRAM_ID, "accounts": [], "data": b58encode(self.sent["memo"])},
+                ]
+                if mode == "invalid_program_name_bypass":
+                    for instruction in message["instructions"]:
+                        instruction["programIdIndex"] = 99
+            elif mode == "extra_key":
+                message["accountKeys"].append(MEMO_PROGRAM_ID)
+            elif mode == "extra_signature":
+                txn["signatures"].append(sig)
+            else:
+                message["instructions"].reverse()
+            return result
+
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = WrongShapeFixture()
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not result.ok and result.status == "failed"
+        assert fixture.methods_called("sendTransaction") == 1
+        assert not ledger.events_by_type("anchor.confirmed")
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+@pytest.mark.parametrize("method", ["getGenesisHash", "sendTransaction", "getSignatureStatuses", "getTransaction"])
+@pytest.mark.parametrize(
+    "mode",
+    ["missing_id", "bool_id", "wrong_id", "string_id", "wrong_version", "both", "neither", "null_error", "bool_error_code"],
+)
+def test_rpc_envelope_corruption_is_not_confirmation(tmp_path, method, mode):
+    fixture = RpcFixture()
+
+    def handler(request):
+        response = fixture.handler(request)
+        if json.loads(request.content)["method"] != method:
+            return response
+        body = response.json()
+        if mode == "missing_id":
+            del body["id"]
+        elif mode == "bool_id":
+            body["id"] = True
+        elif mode == "wrong_id":
+            body["id"] += 1
+        elif mode == "string_id":
+            body["id"] = str(body["id"])
+        elif mode == "wrong_version":
+            body["jsonrpc"] = "1.0"
+        elif mode == "both":
+            body["error"] = None
+        elif mode == "neither":
+            del body["result"]
+        elif mode == "null_error":
+            del body["result"]
+            body["error"] = None
+        else:
+            del body["result"]
+            body["error"] = {"code": True, "message": "invalid code"}
+        return httpx.Response(200, json=body)
+
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    exporter = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", signer_path=signer_path, http_client=client,
+    )
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not result.ok and result.status != "confirmed"
+        if method == "sendTransaction":
+            assert result.status == "unknown" and result.error_code == "send_failed"
+            fixture.fail["getSignatureStatuses"] = "malformed"
+            repeated = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+            assert not repeated.ok
+        assert fixture.methods_called("sendTransaction") == (0 if method == "getGenesisHash" else 1)
+        assert not ledger.events_by_type("anchor.confirmed")
+    finally:
+        asyncio.run(client.aclose())
+        ledger.close()
+
+
+@pytest.mark.parametrize("field", ["last_valid", "fee", "balance"])
+@pytest.mark.parametrize("value", [-1, True, 1 << 64])
+def test_rpc_u64_prerequisites_are_bounded(tmp_path, field, value):
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = RpcFixture()
+    setattr(fixture, field, value)
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not result.ok and result.status == "failed"
+        assert fixture.methods_called("sendTransaction") == 0
+        assert exporter.prepared_signature(receipt.receipt_id) is None
+    finally:
+        asyncio.run(exporter.aclose())
+        ledger.close()
+
+
+@pytest.mark.parametrize("compressed", [False, True])
+def test_rpc_stream_cap_closes_before_remainder_and_json_parse(tmp_path, compressed, monkeypatch):
+    import gzip
+
+    prefix = b'{"jsonrpc":"2.0","id":1,"result":"' + b"x" * (64 * 1024)
+    chunks = [gzip.compress(prefix), b"unconsumed"] if compressed else [prefix[:32768], prefix[32768:], b"unconsumed"]
+    stream = RpcByteStream(chunks)
+    headers = {"content-encoding": "gzip"} if compressed else {"content-length": "1"}
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, headers=headers, stream=stream))
+    )
+    ledger = make_ledger(tmp_path)
+    exporter = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", http_client=client,
+    )
+
+    def forbidden_parse(*args, **kwargs):
+        raise AssertionError("overflow must be rejected before parsing JSON")
+
+    monkeypatch.setattr("desk_gateway.quantum_anchor.json.loads", forbidden_parse)
+    try:
+        with pytest.raises(AnchorError) as excinfo:
+            asyncio.run(exporter._rpc("getGenesisHash", []))
+        assert excinfo.value.error_code == "rpc_shape_invalid"
+        assert stream.pulled == (1 if compressed else 2)
+        assert stream.closed
+    finally:
+        asyncio.run(client.aclose())
+        ledger.close()
+
+
+def test_rpc_stream_deadline_covers_stalled_body(tmp_path):
+    stream = RpcByteStream([b'{"jsonrpc":'], stall=True)
+    client = httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=stream))
+    )
+    ledger = make_ledger(tmp_path)
+    exporter = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", http_client=client, rpc_timeout_s=0.01,
+    )
+    try:
+        with pytest.raises(AnchorError) as excinfo:
+            asyncio.run(exporter._rpc("getGenesisHash", []))
+        assert excinfo.value.error_code == "rpc_transport_failed"
+        assert stream.pulled == 1 and stream.closed
+    finally:
+        asyncio.run(client.aclose())
+        ledger.close()
+
+
+@pytest.mark.parametrize("encoding", ["identity", "gzip", "deflate"])
+def test_rpc_stream_accepts_exact_budget_with_bounded_inflation(tmp_path, encoding):
+    import gzip
+    import zlib
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": DEVNET_GENESIS_HASH}).encode()
+    body += b" " * (64 * 1024 - len(body))
+    wire = gzip.compress(body) if encoding == "gzip" else zlib.compress(body) if encoding == "deflate" else body
+    stream = RpcByteStream([wire[:17], wire[17:]])
+    client = httpx.AsyncClient(transport=httpx.MockTransport(
+        lambda request: httpx.Response(200, headers={"content-encoding": encoding}, stream=stream)
+    ))
+    ledger = make_ledger(tmp_path)
+    exporter = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", http_client=client,
+    )
+    try:
+        assert asyncio.run(exporter._rpc("getGenesisHash", [])) == DEVNET_GENESIS_HASH
+        assert stream.pulled == 2 and stream.closed
+    finally:
+        asyncio.run(client.aclose())
+        ledger.close()
+
+
+def test_oversized_send_reply_retains_unknown_single_send(tmp_path):
+    fixture = RpcFixture()
+    stream = RpcByteStream([b"x" * (64 * 1024), b"x", b"unconsumed"])
+
+    def handler(request):
+        response = fixture.handler(request)
+        if json.loads(request.content)["method"] == "sendTransaction":
+            return httpx.Response(200, stream=stream)
+        return response
+
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    exporter = QuantumTeleportationAnchorExporter(
+        ledger, rpc_url="https://devnet.example.invalid", signer_path=signer_path, http_client=client,
+    )
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        result = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not result.ok and result.status == "unknown" and result.error_code == "send_failed"
+        assert result.signature == fixture.sent["signature"]
+        assert stream.pulled == 2 and stream.closed
+        # A later exact observation can recover the same submitted signature,
+        # but may never sign or send again because of the oversized reply.
+        recovered = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert recovered.ok and recovered.signature == result.signature
+        assert fixture.methods_called("sendTransaction") == 1
+    finally:
+        asyncio.run(client.aclose())
+        ledger.close()
+
+
+def test_malformed_aged_status_cannot_fall_through_to_confirmation(tmp_path):
+    class HistoricalMalformedFixture(RpcFixture):
+        def _result(self, method, params):
+            if method == "getSignatureStatuses" and len(params) == 2:
+                entry = dict(self.status_default)
+                del entry["err"]
+                return {"context": {"slot": TX_SLOT}, "value": [entry]}
+            return super()._result(method, params)
+
+    ledger = make_ledger(tmp_path)
+    signer_path, _ = write_throwaway_signer(tmp_path)
+    fixture = HistoricalMalformedFixture()
+    fixture.status_queue = [None] * 100
+    fixture.height = fixture.last_valid + 1
+    exporter = make_exporter(ledger, fixture, signer_path)
+    try:
+        receipt = asyncio.run(append_teleport(ledger))
+        first = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not first.ok and first.error_code == "expired"
+        repeated = asyncio.run(exporter.export_commitment(receipt.receipt_id))
+        assert not repeated.ok and repeated.status != "confirmed"
+        assert repeated.error_code == "status_lookup_failed"
+        assert fixture.methods_called("getTransaction") == 0
+        assert fixture.methods_called("sendTransaction") == 1
     finally:
         asyncio.run(exporter.aclose())
         ledger.close()

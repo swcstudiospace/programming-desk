@@ -20,6 +20,16 @@ Owned by SYSTEMS (`bot-01-systems-backend`); the rosters it serves are owned by 
 | `GET/POST /authorize`, `/token`, `/register` | — | OAuth AS (dynamic client registration, PKCE) |
 | `GET/POST /oauth/consent` | — | Consent page; the seat passphrase entered here decides the seat scope |
 | `POST /v1/intake` | origin token (`INTAKE_TOKENS`) | External asks for LEAD only; seat tokens get 403 |
+| `POST /v1/quantum/qkd/bb84` | lead or systems | BB84. `bit_length` 0 returns aborted `insufficient_sample` and a null QBER |
+| `POST /v1/quantum/qkd/e91` | lead or systems | E91 witness run. Not part of the drill's `all_passed` conjunction |
+| `GET /v1/quantum/qkd/session/{session_id}` | any authenticated seat | Public counts and independently blinded per-node commitments. No key bytes. Aborted sessions stay aborted |
+| `POST /v1/quantum/teleportation/ledger/snapshot` | lead or systems | Frozen prefix root and receipt ids |
+| `GET /v1/quantum/teleportation/ledger/receipts` | any authenticated seat | Receipt list |
+| `GET /v1/quantum/teleportation/ledger/receipt/{receipt_id}` | any authenticated seat | One receipt. Unknown is 404 |
+| `GET /v1/quantum/teleportation/ledger/proof` | any authenticated seat | Inclusion proof for `receipt_id` and `tree_size` |
+| `POST /v1/quantum/teleportation/ledger/proof/verify` | lead or systems | `valid` true or false. A bad shape is 400 |
+| `POST /v1/quantum/teleportation/anchor/export` | lead or systems | One Memo (1232-byte payload, 400000 compute units, exact readback) or a prerequisite code. No second send. Unconfigured or unfunded is 503; a deadline is 504 and does not resend |
+| `POST /v1/quantum/teleportation/drill/simulate` | lead or systems | Shared-runtime drill. `all_passed` is true only after a matching confirmed readback. A missing prerequisite, including an unfunded payer, keeps it false |
 
 A token minted for one seat used against another seat's path is refused with HTTP 403
 `{"error": "wrong_seat"}`. Unknown seats and packs are 404.
@@ -48,7 +58,12 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | Variable | Meaning |
 |---|---|
 | `HOST`, `PORT` | Listener, `127.0.0.1:8791` by default; nginx terminates TLS on `PUBLIC_HOST` |
-| `DATA_DIR` | JSON store: `roster.json`, `packs.json`, `intake.json`, `acks.json`, `doctor.json`, `audit.jsonl`, `oauth/` |
+| `DATA_DIR` | JSON store plus `quantum_teleportation.sqlite3` (directory 0700, file 0600). The anchored prefix is immutable; a later root does not erase a published Memo |
+| `QUANTUM_NODE_ENDPOINTS` | JSON map of node id to base URL. Empty means no remote worker plane. In-process workers are a test hook, not the operator path |
+| `QUANTUM_NODE_TOKENS` | JSON map of node id to that worker's credential |
+| `QUANTUM_NODE_LINKS` | JSON list of `[node, node]` pairs |
+| `QUANTUM_SOLANA_RPC_URL` | HTTPS Devnet RPC with no userinfo or path. Empty leaves publication unconfigured |
+| `QUANTUM_SOLANA_SIGNER_PATH` | Dedicated payer file. Settings does not open it. External funding of this address was selected and is not observed; the last recorded balance was 0. This is a trusted-device numerical simulator, not a hardware or device-independent system |
 | `DESK_REPO_DIR` | programming-desk checkout; read with `git show`/`git archive`, never switched or pushed |
 | `SEAT_PASSPHRASE_<SEAT>` | One distinct passphrase per seat; consent maps it to `seat:<seat>` |
 | `INTAKE_TOKENS` | `origin:token,...` accepted on `/v1/intake` |

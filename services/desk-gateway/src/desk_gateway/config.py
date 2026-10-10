@@ -176,6 +176,26 @@ def _validate_quantum_topology(
     return clean_endpoints, clean_tokens, clean_links
 
 
+def _validate_solana_rpc(url: str) -> str:
+    """Accept an empty publisher URL or a bare https endpoint."""
+    if not isinstance(url, str):
+        raise ValueError("QUANTUM_SOLANA_RPC_URL must be a string")
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+    ):
+        raise ValueError("QUANTUM_SOLANA_RPC_URL must be an https URL without userinfo, path, or query")
+    return url
+
+
 @dataclass
 class Settings:
     public_host: str = "desk.swcstudio.space"
@@ -275,6 +295,13 @@ class Settings:
     quantum_transport_override: Any = field(default=None, repr=False, compare=False)
     quantum_rng_override: Any = field(default=None, repr=False, compare=False)
     quantum_sink_override: Any = field(default=None, repr=False, compare=False)
+    # Constructor-only test hooks. Never populated from the environment.
+    quantum_workers_override: Any = field(default=None, repr=False, compare=False)
+    quantum_rpc_client_override: Any = field(default=None, repr=False, compare=False)
+    # Dedicated Devnet publisher. Empty means unconfigured (export returns 503).
+    # The signer file is not opened here.
+    quantum_solana_rpc_url: str = ""
+    quantum_solana_signer_path: str = ""
 
     def __post_init__(self) -> None:
         endpoints, tokens, links = _validate_quantum_topology(
@@ -285,6 +312,9 @@ class Settings:
         self.quantum_node_endpoints = endpoints
         self.quantum_node_tokens = tokens
         self.quantum_node_links = links
+        self.quantum_solana_rpc_url = _validate_solana_rpc(self.quantum_solana_rpc_url)
+        if not isinstance(self.quantum_solana_signer_path, str):
+            raise ValueError("QUANTUM_SOLANA_SIGNER_PATH must be a string")
 
     @property
     def issuer_url(self) -> str:
@@ -429,4 +459,6 @@ class Settings:
             quantum_node_endpoints=_json_object_env("QUANTUM_NODE_ENDPOINTS"),
             quantum_node_tokens=_json_object_env("QUANTUM_NODE_TOKENS"),
             quantum_node_links=_json_links_env("QUANTUM_NODE_LINKS"),
+            quantum_solana_rpc_url=_env("QUANTUM_SOLANA_RPC_URL"),
+            quantum_solana_signer_path=_env("QUANTUM_SOLANA_SIGNER_PATH"),
         )

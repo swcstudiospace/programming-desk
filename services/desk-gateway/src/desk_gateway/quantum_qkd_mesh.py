@@ -5,27 +5,19 @@ Implements:
 - QKDProtocolType: BB84 (prepare-and-measure) and E91 (EPR entanglement-based).
 - QKDProtocolEngine: Simulates basis selection, qubit transmission, basis sifting,
   Quantum Bit Error Rate (QBER) calculation, error correction, and privacy amplification.
-- EavesdropDetector: Intercept-resend eavesdropper (Eve) simulator with disturbance tracking (QBER > 11% threshold).
-- QuantumTeleportationReceiptLedger: Append-only cryptographic binary Merkle tree of verified teleportation sessions,
-  entangled pairs, and sifted symmetric key roots.
-- QuantumTeleportationAnchorExporter: Exports Merkle roots to Solana devnet targets.
-- QuantumTeleportationDrillSimulator: 5-stage verification drill for Milestone v5.1.
+- QuantumTeleportationDrill: one shared-runtime pass whose all_passed flag is the
+  confirmed-publication conjunction, never a stand-in for an unfunded signer.
 """
 
 from __future__ import annotations
 
 import asyncio
-import collections
 import enum
-import hashlib
-import hmac
-import json
-import math
 import re
 import secrets
 import time
 from dataclasses import dataclass, field, replace
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from .quantum_key import (
     EPS_COR,
@@ -45,16 +37,13 @@ from .quantum_key import (
     validate_count,
     validate_requested_bits,
 )
-from .quantum_node import deposit_correlated_key_bits
+from .quantum_node import QuantumNodeError, deposit_correlated_key_bits
 from .quantum_state import BellState, H, X, Z
 from .quantum_teleportation import (
     BellPairPool,
     BellStateType,
-    EntangledBellPair,
-    EntanglementPurifier,
-    EntanglementSwapper,
     QuantumRepeaterMesh,
-    QuantumTeleportationProtocol,
+    QuantumResourceError,
 )
 
 
@@ -167,20 +156,6 @@ class QKDSession:
             "duration_ms": self.duration_ms,
             "receipt_id": self.receipt_id,
         }
-
-
-class EavesdropDetector:
-    """Simulates intercept-resend eavesdropping attacks on quantum transmission.
-    
-    In BB84, if an eavesdropper intercepts a qubit in a random basis and resends it,
-    they introduce a 25% error rate on sifted bits (QBER ~ 0.25).
-    The theoretical threshold for aborting key exchange is QBER > 11.0% (Shor-Preskill bound).
-    """
-    ABORT_THRESHOLD_QBER = 0.110
-
-    @classmethod
-    def evaluate_eavesdropping(cls, qber: float) -> bool:
-        return qber > cls.ABORT_THRESHOLD_QBER
 
 
 class QKDProtocolEngine:
@@ -825,219 +800,277 @@ class QKDProtocolEngine:
         return session
 
 
-@dataclass
-class QuantumQKDReceipt:
-    receipt_id: str
-    event_type: str
-    target_nodes: List[str]
-    session_id: str
-    fidelity_or_qber: float
-    payload_hash: str
-    merkle_root: str
-    timestamp: float = field(default_factory=time.time)
 
-    def to_dict(self) -> Dict[str, Any]:
+
+
+class DrillBusy(Exception):
+    """Another drill is already running on this runtime."""
+
+
+class QuantumTeleportationDrill:
+    """One pass over the shared pool, engine, ledger, and publisher.
+
+    ``all_passed`` is true only after a confirmed Devnet readback of an
+    eligible drill summary. A missing signer or an unfunded payer keeps it
+    false. This is a trusted-device numerical simulator: no physical or
+    device-independent claim.
+    """
+
+    def __init__(self, pool: Any, mesh: Any, protocol: Any, engine: Any, ledger: Any, exporter: Any) -> None:
+        self.pool = pool
+        self.mesh = mesh
+        self.protocol = protocol
+        self.engine = engine
+        self.ledger = ledger
+        self.exporter = exporter
+        self._gate = asyncio.Lock()
+        self._running = False
+        self._round = 0
+
+    async def run(self) -> Dict[str, Any]:
+        async with self._gate:
+            if self._running:
+                raise DrillBusy()
+            self._running = True
+        try:
+            return await self._run()
+        finally:
+            async with self._gate:
+                self._running = False
+
+    async def _run(self) -> Dict[str, Any]:
+        stages: Dict[str, Any] = {}
+        self._round += 1
+        tag = f"drill-{self._round}"
+        names = list(getattr(self.mesh, "nodes", {}))
+        if self.ledger is None:
+            return _drill_report(False, "ledger_unavailable", stages)
+        if len(names) < 3:
+            return _drill_report(False, "route_needs_three_nodes", stages)
+        left, repeater, right = names[0], names[1], names[2]
+        bound = getattr(self.engine, "_workers", {})
+        if left not in bound or right not in bound:
+            return _drill_report(False, "worker_plane_unavailable", stages)
+
+        purify = await self._purify(left, repeater, tag)
+        stages["purify"] = purify
+        swap = await self._swap(left, repeater, right, tag)
+        stages["swap"] = swap
+        teleport = await self._teleport(left, right, swap.get("pair_id"), tag)
+        stages["teleport"] = teleport
+        clean = await self._bb84(left, right, intercept=False)
+        stages["clean_bb84"] = clean
+        eve = await self._bb84(left, right, intercept=True)
+        stages["eve"] = eve
+        numerical = all(stage.get("passed") for stage in (purify, swap, teleport, clean, eve))
+        if not numerical:
+            await self._emit_failed("numerical_stage_failed")
+            return _drill_report(False, "numerical_stage_failed", stages)
+
+        try:
+            receipt = await self.ledger.append_event(_drill_summary_event(
+                nodes=[left, repeater, right],
+                teleport=teleport["payload"],
+                purify=purify,
+                swap=swap,
+                clean=clean["session"],
+                eve=eve["session"],
+            ))
+        except (ValueError, LedgerShapeError) as exc:
+            stages["ledger"] = {"passed": False, "reason": "summary_rejected"}
+            return _drill_report(False, "summary_rejected", stages)
+        stages["ledger"] = {
+            "passed": True,
+            "receipt_id": receipt.receipt_id,
+            "tree_size": receipt.tree_size,
+            "root_hex": receipt.prefix_root_hex,
+        }
+        if self.exporter is None:
+            return _drill_report(False, "publisher_unavailable", stages)
+        anchor = await self.exporter.export_commitment(receipt.receipt_id, tree_size=receipt.tree_size)
+        stages["anchor"] = {
+            "status": anchor.status,
+            "error_code": anchor.error_code,
+            "signature": anchor.signature,
+            "slot": anchor.slot,
+            "anchored_root_hex": anchor.anchored_root_hex,
+            "anchored_tree_size": anchor.anchored_tree_size,
+            "leaf_index": anchor.leaf_index,
+        }
+        confirmed = (
+            anchor.status == "confirmed"
+            and anchor.slot is not None
+            and anchor.anchored_root_hex == receipt.prefix_root_hex
+            and anchor.anchored_tree_size == receipt.tree_size
+            and anchor.leaf_index == receipt.seq - 1
+        )
+        code = None if confirmed else (anchor.error_code or anchor.status)
+        return _drill_report(confirmed, code, stages)
+
+    async def _purify(self, left: str, repeater: str, tag: str) -> Dict[str, Any]:
+        try:
+            first = await self.pool.create_pair(left, repeater, fidelity=0.90, operation_id=f"{tag}-pur-a")
+            second = await self.pool.create_pair(left, repeater, fidelity=0.92, operation_id=f"{tag}-pur-b")
+            result = await self.mesh.purifier.purify(first.pair_id, second.pair_id, operation_id=f"{tag}-purify")
+        except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
+            return {"passed": False, "reason": getattr(exc, "code", "purify_failed")}
+        if not result.accepted or result.output_pair_id is None:
+            return {"passed": False, "reason": "purify_rejected", "baseline_fidelity": 0.90, "output_fidelity": None}
+        if not (result.output_fidelity > 0.90):
+            return {
+                "passed": False,
+                "reason": "no_measured_improvement",
+                "baseline_fidelity": 0.90,
+                "output_fidelity": result.output_fidelity,
+            }
         return {
-            "receipt_id": self.receipt_id,
-            "event_type": self.event_type,
-            "target_nodes": self.target_nodes,
-            "session_id": self.session_id,
-            "fidelity_or_qber": round(self.fidelity_or_qber, 6),
-            "payload_hash": self.payload_hash,
-            "merkle_root": self.merkle_root,
-            "timestamp": self.timestamp,
+            "passed": True,
+            "reason": None,
+            "baseline_fidelity": 0.90,
+            "output_fidelity": result.output_fidelity,
         }
 
-
-class QuantumTeleportationReceiptLedger:
-    """Cryptographic append-only Merkle receipt ledger for quantum teleportation and QKD events."""
-
-    def __init__(self) -> None:
-        self.leaves: List[str] = []
-        self.receipts: List[QuantumQKDReceipt] = []
-
-    def _hash_pair(self, left: str, right: str) -> str:
-        return hashlib.sha256((left + right).encode("utf-8")).hexdigest()
-
-    def calculate_merkle_root(self) -> str:
-        if not self.leaves:
-            return hashlib.sha256(b"quantum-teleportation-empty").hexdigest()
-        current = list(self.leaves)
-        while len(current) > 1:
-            if len(current) % 2 != 0:
-                current.append(current[-1])
-            current = [self._hash_pair(current[i], current[i + 1]) for i in range(0, len(current), 2)]
-        return current[0]
-
-    def append_event(
-        self,
-        event_type: str,
-        target_nodes: List[str],
-        session_id: str,
-        fidelity_or_qber: float,
-        payload_data: Dict[str, Any],
-    ) -> QuantumQKDReceipt:
-        payload_json = json.dumps(payload_data, sort_keys=True)
-        payload_hash = hashlib.sha256(payload_json.encode("utf-8")).hexdigest()
-        leaf_hash = hashlib.sha256(f"{event_type}:{session_id}:{fidelity_or_qber}:{payload_hash}".encode("utf-8")).hexdigest()
-        self.leaves.append(leaf_hash)
-        merkle_root = self.calculate_merkle_root()
-
-        receipt = QuantumQKDReceipt(
-            receipt_id=f"qrcpt-{secrets.token_hex(8)}",
-            event_type=event_type,
-            target_nodes=target_nodes,
-            session_id=session_id,
-            fidelity_or_qber=fidelity_or_qber,
-            payload_hash=payload_hash,
-            merkle_root=merkle_root,
-        )
-        self.receipts.append(receipt)
-        return receipt
-
-
-class QuantumTeleportationAnchorExporter:
-    """Publishes Merkle roots of quantum teleportation & QKD ledgers to Solana devnet."""
-
-    def __init__(self, solana_rpc_endpoint: str = "https://api.devnet.solana.com") -> None:
-        self.solana_rpc_endpoint = solana_rpc_endpoint
-        self.commitments: List[Dict[str, Any]] = []
-
-    def export_commitment(
-        self,
-        ledger: QuantumTeleportationReceiptLedger,
-        program_id: str = "QuantumTeleportDevnet111111111111111111111111",
-    ) -> Dict[str, Any]:
-        merkle_root = ledger.calculate_merkle_root()
-        commitment_tx = hashlib.sha256(f"solana-tx:{merkle_root}:{time.time()}".encode("utf-8")).hexdigest()
-        record = {
-            "commitment_tx": commitment_tx,
-            "merkle_root": merkle_root,
-            "event_count": len(ledger.receipts),
-            "program_id": program_id,
-            "rpc_target": self.solana_rpc_endpoint,
-            "slot": 298471000 + len(self.commitments),
-            "timestamp": time.time(),
-            "status": "confirmed",
-        }
-        self.commitments.append(record)
-        return record
-
-
-class QuantumTeleportationDrillSimulator:
-    """5-point verification drill simulator for Milestone v5.1."""
-
-    @classmethod
-    def run_drill(cls) -> Dict[str, Any]:
-        pool = BellPairPool()
-        purifier = EntanglementPurifier()
-        mesh = QuantumRepeaterMesh(pool)
-        proto = QuantumTeleportationProtocol(mesh)
-        qkd_engine = QKDProtocolEngine(mesh)
-        ledger = QuantumTeleportationReceiptLedger()
-        exporter = QuantumTeleportationAnchorExporter()
-
-        # Step 1: Bell State Generation & Entanglement Purification
-        p1 = pool.create_pair("desk-alpha", "desk-beta", BellStateType.PHI_PLUS, initial_fidelity=0.92)
-        p2 = pool.create_pair("desk-alpha", "desk-beta", BellStateType.PHI_PLUS, initial_fidelity=0.94)
-        ok_pur, purified_pair, p_succ = purifier.purify(p1, p2)
-        purify_step = {
-            "success": ok_pur and purified_pair is not None and purified_pair.fidelity > 0.92,
-            "purified_fidelity": purified_pair.fidelity if purified_pair else 0.0,
-            "success_prob": p_succ,
-        }
-
-        # Step 2: Multi-Hop Quantum Repeater Entanglement Swapping
-        mesh.register_node("desk-alpha", "us-east")
-        mesh.register_node("repeater-1", "mid-atlantic")
-        mesh.register_node("desk-gamma", "eu-west")
-        ok_swap, swapped_pair, swap_logs = mesh.establish_multi_hop_entanglement(
-            ["desk-alpha", "repeater-1", "desk-gamma"], base_fidelity=0.98
-        )
-        repeater_step = {
-            "success": ok_swap and swapped_pair is not None,
-            "swapped_endpoints": [swapped_pair.node_a, swapped_pair.node_b] if swapped_pair else [],
-            "swapped_fidelity": swapped_pair.fidelity if swapped_pair else 0.0,
-            "logs": swap_logs,
-        }
-
-        # Step 3: Quantum Teleportation of Superposition Qubit
-        # Teleport qubit: (|0> + i|1>)/sqrt(2)
-        tele_res = proto.teleport_qubit(
-            source_node="desk-alpha",
-            target_node="desk-gamma",
-            alpha=complex(1.0, 0.0),
-            beta=complex(0.0, 1.0),
-            bell_pair=swapped_pair,
-        )
-        tele_rcpt = ledger.append_event(
-            "QUANTUM_TELEPORTATION",
-            ["desk-alpha", "desk-gamma"],
-            tele_res.session_id,
-            tele_res.fidelity,
-            tele_res.to_dict(),
-        )
-        teleport_step = {
-            "success": tele_res.success and tele_res.fidelity >= 0.85,
-            "bell_measurement": tele_res.bell_measurement,
-            "pauli_correction": tele_res.pauli_correction,
-            "fidelity": tele_res.fidelity,
-            "receipt_id": tele_rcpt.receipt_id,
-        }
-
-        # Step 4: BB84 Key Distribution & Eavesdropping Interception Abort
-        # 4a: Clean exchange
-        clean_qkd = qkd_engine.run_bb84_exchange("desk-alpha", "desk-beta", bit_length=128, intercept_ratio=0.0)
-        # 4b: Intercepted exchange (with Eve active at 95% interception)
-        intercepted_qkd = qkd_engine.run_bb84_exchange("desk-alpha", "desk-beta", bit_length=160, intercept_ratio=0.95)
-        qkd_rcpt = ledger.append_event(
-            "QKD_BB84_SESSION",
-            ["desk-alpha", "desk-beta"],
-            clean_qkd.session_id,
-            clean_qkd.qber,
-            clean_qkd.to_dict(),
-        )
-        ledger.append_event(
-            "QKD_INTERCEPT_EVENT",
-            ["desk-alpha", "desk-beta"],
-            intercepted_qkd.session_id,
-            intercepted_qkd.qber,
-            intercepted_qkd.to_dict(),
-        )
-        qkd_step = {
-            "clean_success": not clean_qkd.eavesdropping_detected and len(clean_qkd.final_shared_key_hex) > 0,
-            "clean_qber": clean_qkd.qber,
-            "clean_key_hex": clean_qkd.final_shared_key_hex[:16] + "...",
-            "eavesdropped_detected": intercepted_qkd.eavesdropping_detected,
-            "eavesdropped_qber": intercepted_qkd.qber,
-            "eavesdropped_aborted": intercepted_qkd.final_shared_key_hex == "",
-        }
-
-        # Step 5: Solana Devnet Quantum Teleportation Anchoring
-        anchor = exporter.export_commitment(ledger)
-        anchor_step = {
-            "success": anchor["status"] == "confirmed" and len(anchor["merkle_root"]) == 64,
-            "commitment_tx": anchor["commitment_tx"],
-            "merkle_root": anchor["merkle_root"],
-            "slot": anchor["slot"],
-        }
-
-        all_passed = (
-            purify_step["success"]
-            and repeater_step["success"]
-            and teleport_step["success"]
-            and qkd_step["clean_success"]
-            and qkd_step["eavesdropped_detected"]
-            and anchor_step["success"]
-        )
-
+    async def _swap(self, left: str, repeater: str, right: str, tag: str) -> Dict[str, Any]:
+        try:
+            first = await self.pool.create_pair(left, repeater, fidelity=1.0, operation_id=f"{tag}-swap-a")
+            second = await self.pool.create_pair(repeater, right, fidelity=1.0, operation_id=f"{tag}-swap-b")
+            result = await self.mesh.swapper.swap(first.pair_id, second.pair_id, operation_id=f"{tag}-swap")
+        except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
+            return {"passed": False, "reason": getattr(exc, "code", "swap_failed")}
+        fidelity = result.output_fidelity
+        passed = bool(result.accepted) and isinstance(fidelity, float) and fidelity >= 0.95
         return {
-            "all_passed": all_passed,
-            "purify_step": purify_step,
-            "repeater_step": repeater_step,
-            "teleport_step": teleport_step,
-            "qkd_step": qkd_step,
-            "anchor_step": anchor_step,
-            "ledger_receipts_count": len(ledger.receipts),
-            "final_merkle_root": ledger.calculate_merkle_root(),
+            "passed": passed,
+            "reason": None if passed else "swap_below_threshold",
+            "fidelity": fidelity,
+            "pair_id": result.output_pair_id,
         }
+
+    async def _teleport(self, source: str, target: str, pair_id: str | None, tag: str) -> Dict[str, Any]:
+        if not pair_id:
+            return {"passed": False, "reason": "no_swap_output", "payload": None}
+        try:
+            result = await self.protocol.teleport_qubit(
+                source, target, 1 + 0j, 0j, bell_pair=pair_id, operation_id=f"{tag}-teleport",
+            )
+        except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
+            return {"passed": False, "reason": getattr(exc, "code", "teleport_failed"), "payload": None}
+        correction = result.correction
+        payload = {
+            "model_version": 1,
+            "frame_x": int(correction.frame_x),
+            "frame_z": int(correction.frame_z),
+            "bsm_x": int(correction.bsm_x),
+            "bsm_z": int(correction.bsm_z),
+            "correction_x": int(correction.correction_x),
+            "correction_z": int(correction.correction_z),
+            "gate_x": bool(result.gate_x),
+            "gate_z": bool(result.gate_z),
+            "correction_applied": bool(result.correction_applied),
+            "acknowledged": bool(result.acknowledged),
+            "input_destroyed": bool(result.input_destroyed),
+            "resource_consumed": bool(result.resource_consumed),
+            "fidelity": result.fidelity,
+        }
+        passed = bool(result.success) and isinstance(result.fidelity, float) and result.fidelity >= 0.95
+        return {"passed": passed, "reason": None if passed else result.reason, "payload": payload, "fidelity": result.fidelity}
+
+    async def _bb84(self, sender: str, receiver: str, *, intercept: bool) -> Dict[str, Any]:
+        try:
+            session = await self.engine.run_bb84(sender, receiver, 12000, intercept=intercept)
+        except (QuantumResourceError, QuantumNodeError, ValueError) as exc:
+            return {"passed": False, "reason": getattr(exc, "code", "qkd_failed"), "session": None}
+        if intercept:
+            passed = (
+                session.status == "aborted"
+                and session.reason == "qber_exceeded"
+                and session.keys_agreed is False
+                and session.key_commitment_hex is None
+            )
+        else:
+            passed = (
+                session.status == "established"
+                and session.keys_agreed is True
+                and session.extracted_bits >= 128
+                and isinstance(session.key_commitment_hex, str)
+                and len(session.key_commitment_hex) == 64
+            )
+        return {"passed": passed, "reason": session.reason, "session": session}
+
+    async def _emit_failed(self, reason: str) -> None:
+        if self.ledger is None:
+            return
+        try:
+            await self.ledger.append_event({
+                "event_type": "drill.summary",
+                "session_id": "drill-failed",
+                "actor": "drill",
+                "nodes": [],
+                "resources": [],
+                "outcome": "failed",
+                "payload": {"reason": reason},
+            })
+        except Exception:
+            return
+
+
+class LedgerShapeError(ValueError):
+    """Drill summary rejected by the ledger's public validators."""
+
+
+def _drill_report(all_passed: bool, prerequisite: str | None, stages: Dict[str, Any]) -> Dict[str, Any]:
+    public_stages = {}
+    for name, stage in stages.items():
+        if name in ("clean_bb84", "eve"):
+            session = stage.get("session")
+            public_stages[name] = {
+                "passed": bool(stage.get("passed")),
+                "reason": stage.get("reason"),
+                "status": getattr(session, "status", None),
+                "qber": getattr(session, "qber", None),
+                "extracted_bits": getattr(session, "extracted_bits", None),
+                "keys_agreed": getattr(session, "keys_agreed", None),
+            }
+        else:
+            item = {key: value for key, value in stage.items() if key != "session"}
+            public_stages[name] = item
+    return {
+        "all_passed": bool(all_passed),
+        "prerequisite": prerequisite,
+        "stages": public_stages,
+    }
+
+
+def _drill_summary_event(*, nodes, teleport, purify, swap, clean, eve) -> Dict[str, Any]:
+    return {
+        "event_type": "drill.summary",
+        "session_id": "drill-summary",
+        "actor": "drill",
+        "nodes": list(nodes),
+        "resources": [],
+        "outcome": "success",
+        "payload": {
+            "teleport": dict(teleport),
+            "purification": {
+                "baseline_fidelity": purify["baseline_fidelity"],
+                "output_fidelity": purify["output_fidelity"],
+            },
+            "swap": {"fidelity": swap["fidelity"]},
+            "clean": {
+                "sifted_count": int(clean.sifted_count),
+                "test_count": int(clean.test_count),
+                "error_count": int(clean.error_count),
+                "output_bits": int(clean.extracted_bits),
+                "established": True,
+                "key_agreement": True,
+            },
+            "eve": {
+                "test_count": int(eve.test_count),
+                "error_count": int(eve.error_count),
+                "basis": 2,
+                "aborted": True,
+                "both_keyless": True,
+            },
+            "key_commitment_hex": clean.key_commitment_hex,
+        },
+    }

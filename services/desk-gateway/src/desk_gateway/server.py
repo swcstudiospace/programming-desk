@@ -748,6 +748,7 @@ def create_mcp(
                 "packs": sorted(services.rosters.packs),
                 "registered_seats": sorted(k for k, v in (roster.get("seats") or {}).items() if v.get("agent_uuid")),
                 "channel_registered": bool(roster.get("channel_id")),
+                "quantum_ready": bool(getattr(mcp, "_quantum_ready", False)),
                 "intake": store.intake_counts(),
                 "oauth": {
                     "issuer": settings.issuer_url,
@@ -6278,12 +6279,19 @@ def create_mcp(
         NodeTransportUnavailable as _Q68Unavailable,
         RemoteNodeTransport as _Q68RemoteTransport,
     )
+    from desk_gateway.quantum_anchor import (
+        QuantumTeleportationAnchorExporter as _Q69Exporter,
+    )
+    from desk_gateway.quantum_ledger import (
+        LedgerCorruptError as _Q69LedgerCorrupt,
+        QuantumTeleportationReceiptLedger as _Q69Ledger,
+        proof_from_jsonable as _q69_proof_from,
+        proof_to_jsonable as _q69_proof_to,
+    )
     from desk_gateway.quantum_qkd_mesh import (
-        EavesdropDetector,
+        DrillBusy as _Q69DrillBusy,
         QKDProtocolEngine,
-        QuantumTeleportationAnchorExporter,
-        QuantumTeleportationDrillSimulator,
-        QuantumTeleportationReceiptLedger,
+        QuantumTeleportationDrill as _Q69Drill,
     )
 
     class Quantum68EventCollector:
@@ -6345,8 +6353,14 @@ def create_mcp(
         if rng is None:
             rng = secrets.SystemRandom()
         sink = quantum_settings.quantum_sink_override
-        collector = Quantum68EventCollector()
-        append_event = sink if sink is not None else collector.append_event
+        collector = None
+        if sink is not None:
+            append_event = sink
+        elif qteleport_ledger is not None:
+            append_event = qteleport_ledger.append_event
+        else:
+            async def append_event(_event: Any) -> None:
+                raise _Q69LedgerCorrupt("ledger unavailable")
         transport = quantum_settings.quantum_transport_override
         if transport is None and quantum_settings.quantum_node_endpoints:
             transport = _Q68RemoteTransport(
@@ -6365,22 +6379,50 @@ def create_mcp(
             swapper=mesh.swapper, transport=transport, collector=collector, rng=rng,
         )
 
+    qteleport_ledger = None
+    try:
+        qteleport_ledger = _Q69Ledger(settings.data_dir)
+    except _Q69LedgerCorrupt:
+        qteleport_ledger = None
     q68 = _q68_build_runtime(settings)
     qteleport_pool = q68.pool
     qteleport_mesh = q68.mesh
     qteleport_proto = q68.proto
-    qkd_engine = QKDProtocolEngine(qteleport_mesh)
-    qteleport_ledger = QuantumTeleportationReceiptLedger()
-    qteleport_exporter = QuantumTeleportationAnchorExporter()
+    qteleport_exporter = None
+    if qteleport_ledger is not None:
+        qteleport_exporter = _Q69Exporter(
+            qteleport_ledger,
+            rpc_url=settings.quantum_solana_rpc_url or None,
+            signer_path=settings.quantum_solana_signer_path or None,
+            http_client=settings.quantum_rpc_client_override,
+        )
+    qkd_sink = settings.quantum_sink_override
+    if qkd_sink is None and qteleport_ledger is not None:
+        qkd_sink = qteleport_ledger.append_event
+    qkd_engine = QKDProtocolEngine(
+        qteleport_mesh,
+        pool=qteleport_pool,
+        transport=q68.transport,
+        rng=q68.rng,
+        append_event=qkd_sink,
+        workers=settings.quantum_workers_override,
+        worker_tokens=settings.quantum_node_tokens,
+    )
+    qteleport_drill = _Q69Drill(
+        qteleport_pool, qteleport_mesh, qteleport_proto, qkd_engine,
+        qteleport_ledger, qteleport_exporter,
+    )
 
     mcp._quantum68 = q68  # type: ignore[attr-defined]
     mcp._quantum68_transport = q68.transport  # type: ignore[attr-defined]
     mcp._qteleport_pool = qteleport_pool  # type: ignore[attr-defined]
     mcp._qteleport_mesh = qteleport_mesh  # type: ignore[attr-defined]
     mcp._qteleport_proto = qteleport_proto  # type: ignore[attr-defined]
+    mcp._quantum_ready = qteleport_ledger is not None  # type: ignore[attr-defined]
     mcp._qkd_engine = qkd_engine  # type: ignore[attr-defined]
     mcp._qteleport_ledger = qteleport_ledger  # type: ignore[attr-defined]
     mcp._qteleport_exporter = qteleport_exporter  # type: ignore[attr-defined]
+    mcp._qteleport_drill = qteleport_drill  # type: ignore[attr-defined]
 
     _Q68_MUTATION_SEATS = ("lead", "systems")
     _Q68_MAX_BODY_BYTES = 65536
@@ -6390,7 +6432,8 @@ def create_mcp(
     def _q68_error(request: Request, status: int, code: str, detail: str) -> Response:
         titles = {
             400: "Bad Request", 404: "Not Found", 409: "Conflict",
-            503: "Service Unavailable", 504: "Gateway Timeout",
+            413: "Payload Too Large", 415: "Unsupported Media Type",
+            502: "Bad Gateway", 503: "Service Unavailable", 504: "Gateway Timeout",
         }
         return problem_response(
             status=status, title=titles.get(status, "Error"), detail=detail,
@@ -6438,6 +6481,8 @@ def create_mcp(
             return None, _q68_error(request, 400, "unreadable_body", "Request body could not be read.")
         if len(raw) > _Q68_MAX_BODY_BYTES:
             return None, _q68_error(request, 400, "body_too_large", "Request body exceeds 64 KiB.")
+        if raw and "application/json" not in request.headers.get("content-type", "").lower():
+            return None, _q68_error(request, 415, "unsupported_media_type", "POST bodies must be application/json.")
         if not raw:
             body: Any = {}
         else:
@@ -6488,6 +6533,26 @@ def create_mcp(
         if not isinstance(value, bool):
             raise _Q68Error("invalid_flag", f"{name} must be a boolean", status=400)
         return value
+
+    def _q68_count(body: dict[str, Any], name: str, *, default: int, maximum: int) -> int:
+        if name not in body:
+            return default
+        value = body[name]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise _Q68Error("invalid_count", f"{name} must be an integer", status=400)
+        if value < 0 or value > maximum:
+            raise _Q68Error("invalid_count", f"{name} is out of range", status=400)
+        return value
+
+    def _q69_ledger_ready(request: Request) -> Response | None:
+        if qteleport_ledger is None:
+            return _q68_error(request, 503, "ledger_unavailable", "Quantum receipt ledger is unavailable.")
+        return None
+
+    def _q69_workers_ready(request: Request) -> Response | None:
+        if not qkd_engine._workers:
+            return _q68_error(request, 503, "worker_plane_unavailable", "No QKD workers are configured.")
+        return None
 
     def _q68_complex(body: dict[str, Any], name: str, *, default: complex) -> complex:
         if name not in body:
@@ -6708,7 +6773,18 @@ def create_mcp(
         except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
             return _q68_domain_error(request, exc)
         receipt = result.receipt
-        receipt_dict = dict(receipt) if isinstance(receipt, _Q68Mapping) else None
+        if isinstance(receipt, _Q68Mapping):
+            receipt_dict = dict(receipt)
+        elif isinstance(getattr(receipt, "receipt_id", None), str):
+            receipt_dict = {
+                "receipt_id": receipt.receipt_id,
+                "seq": receipt.seq,
+                "tree_size": receipt.tree_size,
+                "prefix_root_hex": receipt.prefix_root_hex,
+                "leaf_digest_hex": receipt.leaf_digest_hex,
+            }
+        else:
+            receipt_dict = None
         # Below-threshold teleports are truthful unsuccessful protocol
         # outcomes (never top-level green); the resource stays consumed and
         # the raw unrounded fidelity is exposed for audit.
@@ -6765,51 +6841,242 @@ def create_mcp(
             return _q68_domain_error(request, exc)
         return JSONResponse({"ok": True, "worker": info})
 
+    def _q69_session_response(session: Any) -> JSONResponse:
+        return JSONResponse({"ok": session.status == "established", "session": session.to_dict()})
+
     @mcp.custom_route("/v1/quantum/qkd/bb84", methods=["POST"])
     async def quantum_qkd_bb84_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        sender = body.get("sender", "desk-alpha")
-        receiver = body.get("receiver", "desk-beta")
-        bit_length = int(body.get("bit_length", 128))
-        intercept_ratio = float(body.get("intercept_ratio", 0.0))
-
-        session = qkd_engine.run_bb84_exchange(sender, receiver, bit_length, intercept_ratio)
-        rcpt = qteleport_ledger.append_event(
-            "QKD_BB84_SESSION",
-            [sender, receiver],
-            session.session_id,
-            session.qber,
-            session.to_dict(),
-        )
-        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request) or _q69_workers_ready(request)
+        if blocked is not None:
+            return blocked
+        body, body_error = await _q68_body(request, {"sender", "receiver", "bit_length", "intercept", "requested_bits"})
+        if body_error is not None:
+            return body_error
+        try:
+            sender = _q68_str(body, "sender", default="desk-alpha", max_len=64)
+            receiver = _q68_str(body, "receiver", default="desk-beta", max_len=64)
+            bit_length = _q68_count(body, "bit_length", default=128, maximum=20000)
+            requested = _q68_count(body, "requested_bits", default=256, maximum=256)
+            intercept = _q68_bool(body, "intercept", default=False)
+            session = await qkd_engine.run_bb84(
+                sender, receiver, bit_length, intercept=intercept, requested_bits=requested,
+            )
+        except _Q68Error as exc:
+            return _q68_domain_error(request, exc)
+        except ValueError:
+            return _q68_error(request, 400, "invalid_field", "QKD request was rejected.")
+        return _q69_session_response(session)
 
     @mcp.custom_route("/v1/quantum/qkd/e91", methods=["POST"])
     async def quantum_qkd_e91_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        sender = body.get("sender", "desk-alpha")
-        receiver = body.get("receiver", "desk-beta")
-        pair_count = int(body.get("pair_count", 100))
-        noise_level = float(body.get("noise_level", 0.01))
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request) or _q69_workers_ready(request)
+        if blocked is not None:
+            return blocked
+        body, body_error = await _q68_body(request, {"sender", "receiver", "pair_count", "requested_bits"})
+        if body_error is not None:
+            return body_error
+        try:
+            sender = _q68_str(body, "sender", default="desk-alpha", max_len=64)
+            receiver = _q68_str(body, "receiver", default="desk-beta", max_len=64)
+            pair_count = _q68_count(body, "pair_count", default=100, maximum=20000)
+            requested = _q68_count(body, "requested_bits", default=256, maximum=256)
+            session = await qkd_engine.run_e91(sender, receiver, pair_count, requested_bits=requested)
+        except _Q68Error as exc:
+            return _q68_domain_error(request, exc)
+        except ValueError:
+            return _q68_error(request, 400, "invalid_field", "QKD request was rejected.")
+        return _q69_session_response(session)
 
-        session = qkd_engine.run_e91_exchange(sender, receiver, pair_count, noise_level)
-        rcpt = qteleport_ledger.append_event(
-            "QKD_E91_SESSION",
-            [sender, receiver],
-            session.session_id,
-            session.qber,
-            session.to_dict(),
-        )
-        return JSONResponse({"ok": True, "session": session.to_dict(), "receipt": rcpt.to_dict()})
+    @mcp.custom_route("/v1/quantum/qkd/session/{session_id}", methods=["GET"])
+    async def quantum_qkd_session_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        session_id = request.path_params.get("session_id", "")
+        if not isinstance(session_id, str) or not session_id or len(session_id) > 128:
+            return _q68_error(request, 400, "invalid_id", "session_id must be a 1..128 char string.")
+        session = qkd_engine.sessions.get(session_id)
+        if session is None:
+            return _q68_error(request, 404, "unknown_session", "QKD session is unknown.")
+        return JSONResponse({"ok": True, "session": session.to_dict()})
+
+    @mcp.custom_route("/v1/quantum/teleportation/ledger/snapshot", methods=["POST"])
+    async def quantum_ledger_snapshot_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        body, body_error = await _q68_body(request, {"tree_size"})
+        if body_error is not None:
+            return body_error
+        try:
+            tree_size = None
+            if "tree_size" in body:
+                tree_size = _q68_count(body, "tree_size", default=0, maximum=1_000_000)
+            snap = qteleport_ledger.snapshot(tree_size)
+        except _Q68Error as exc:
+            return _q68_domain_error(request, exc)
+        except ValueError:
+            return _q68_error(request, 400, "invalid_tree_size", "tree_size is out of range.")
+        return JSONResponse({
+            "ok": True,
+            "tree_size": snap.tree_size,
+            "root_hex": snap.root_hex,
+            "receipts": [
+                {"receipt_id": item.receipt_id, "seq": item.seq, "leaf_digest_hex": item.leaf_digest_hex}
+                for item in snap.receipts
+            ],
+        })
+
+    @mcp.custom_route("/v1/quantum/teleportation/ledger/receipts", methods=["GET"])
+    async def quantum_ledger_receipts_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        raw_limit = request.query_params.get("limit", "100")
+        if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 1000:
+            return _q68_error(request, 400, "invalid_limit", "limit must be an integer in 1..1000.")
+        snap = qteleport_ledger.snapshot()
+        limit = int(raw_limit)
+        receipts = [
+            {"receipt_id": item.receipt_id, "seq": item.seq, "leaf_digest_hex": item.leaf_digest_hex}
+            for item in snap.receipts[:limit]
+        ]
+        return JSONResponse({"ok": True, "receipts": receipts, "count": len(receipts)})
+
+    @mcp.custom_route("/v1/quantum/teleportation/ledger/receipt/{receipt_id}", methods=["GET"])
+    async def quantum_ledger_receipt_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        receipt_id = request.path_params.get("receipt_id", "")
+        if not isinstance(receipt_id, str) or not receipt_id or len(receipt_id) > 128:
+            return _q68_error(request, 400, "invalid_id", "receipt_id must be a 1..128 char string.")
+        try:
+            item = qteleport_ledger.receipt(receipt_id)
+        except LookupError:
+            return _q68_error(request, 404, "unknown_receipt", "Receipt is unknown.")
+        return JSONResponse({
+            "ok": True,
+            "receipt": {
+                "receipt_id": item.receipt_id,
+                "seq": item.seq,
+                "tree_size": item.tree_size,
+                "leaf_digest_hex": item.leaf_digest_hex,
+                "prefix_root_hex": item.prefix_root_hex,
+            },
+        })
+
+    @mcp.custom_route("/v1/quantum/teleportation/ledger/proof", methods=["GET"])
+    async def quantum_ledger_proof_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        receipt_id = request.query_params.get("receipt_id", "")
+        raw_size = request.query_params.get("tree_size", "")
+        if not receipt_id or len(receipt_id) > 128 or not raw_size.isdigit():
+            return _q68_error(request, 400, "invalid_proof_request", "receipt_id and tree_size are required.")
+        try:
+            proof = qteleport_ledger.inclusion_proof(receipt_id, int(raw_size))
+        except LookupError:
+            return _q68_error(request, 404, "unknown_receipt", "Receipt is unknown.")
+        except ValueError:
+            return _q68_error(request, 400, "invalid_tree_size", "tree_size is out of range.")
+        return JSONResponse({"ok": True, "proof": _q69_proof_to(proof)})
+
+    @mcp.custom_route("/v1/quantum/teleportation/ledger/proof/verify", methods=["POST"])
+    async def quantum_ledger_proof_verify_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        body, body_error = await _q68_body(request, {
+            "version", "leaf_index", "tree_size", "leaf_preimage_hex", "siblings",
+            "expected_root_hex", "metadata", "eligible", "leaf_digest_hex",
+        })
+        if body_error is not None:
+            return body_error
+        try:
+            proof = _q69_proof_from(body)
+        except (KeyError, TypeError, ValueError):
+            return _q68_error(request, 400, "invalid_proof", "Proof shape was rejected.")
+        return JSONResponse({"ok": True, "valid": bool(qteleport_ledger.verify_proof(proof))})
 
     @mcp.custom_route("/v1/quantum/teleportation/anchor/export", methods=["POST"])
-    async def quantum_teleportation_anchor_export_route(_request: Request) -> Response:
-        commitment = qteleport_exporter.export_commitment(qteleport_ledger)
-        return JSONResponse({"ok": True, "anchor": commitment})
+    async def quantum_teleportation_anchor_export_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        if qteleport_exporter is None:
+            return _q68_error(request, 503, "publisher_unavailable", "Quantum publisher is not configured.")
+        body, body_error = await _q68_body(request, {"receipt_id", "tree_size"})
+        if body_error is not None:
+            return body_error
+        try:
+            receipt_id = _q68_str(body, "receipt_id", max_len=128)
+            tree_size = None
+            if "tree_size" in body:
+                tree_size = _q68_count(body, "tree_size", default=0, maximum=1_000_000)
+            anchor = await qteleport_exporter.export_commitment(receipt_id, tree_size=tree_size)
+        except _Q68Error as exc:
+            return _q68_domain_error(request, exc)
+        payload = {
+            "ok": anchor.ok,
+            "anchor": {
+                "status": anchor.status,
+                "error_code": anchor.error_code,
+                "signature": anchor.signature,
+                "slot": anchor.slot,
+                "anchored_root_hex": anchor.anchored_root_hex,
+                "anchored_tree_size": anchor.anchored_tree_size,
+                "leaf_index": anchor.leaf_index,
+                "current_root_hex": anchor.current_root_hex,
+                "current_tree_size": anchor.current_tree_size,
+            },
+        }
+        return JSONResponse(payload, status_code=anchor.http_status)
 
     @mcp.custom_route("/v1/quantum/teleportation/drill/simulate", methods=["POST"])
-    async def quantum_teleportation_drill_simulate_route(_request: Request) -> Response:
-        drill_results = QuantumTeleportationDrillSimulator.run_drill()
-        return JSONResponse({"ok": True, "drill": drill_results})
+    async def quantum_teleportation_drill_simulate_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        blocked = _q69_ledger_ready(request)
+        if blocked is not None:
+            return blocked
+        body, body_error = await _q68_body(request, set())
+        if body_error is not None:
+            return body_error
+        try:
+            report = await qteleport_drill.run()
+        except _Q69DrillBusy:
+            return _q68_error(request, 409, "drill_conflict", "A drill is already running.")
+        return JSONResponse({"ok": report["all_passed"], "drill": report})
 
     # Milestone v5.2 (Phases 70 & 71): Quantum Memory Node Storage & Continuous-Variable Optical Mesh
     from desk_gateway.quantum_memory_mesh import (
@@ -10764,7 +11031,9 @@ def _install_quantum68_shutdown(starlette_app: Any, mcp: Any) -> None:
     explicitly closed. No-op when the gateway runs without a worker plane.
     """
     transport = getattr(mcp, "_quantum68_transport", None)
-    if transport is None or not hasattr(transport, "aclose"):
+    exporter = getattr(mcp, "_qteleport_exporter", None)
+    ledger = getattr(mcp, "_qteleport_ledger", None)
+    if transport is None and exporter is None and ledger is None:
         return
     previous = starlette_app.router.lifespan_context
 
@@ -10774,10 +11043,21 @@ def _install_quantum68_shutdown(starlette_app: Any, mcp: Any) -> None:
             async with previous(app) as state:
                 yield state
         finally:
-            try:
-                await transport.aclose()
-            except Exception as exc:
-                logger.warning("Quantum68 transport close failed (%s)", type(exc).__name__)
+            if transport is not None and hasattr(transport, "aclose"):
+                try:
+                    await transport.aclose()
+                except Exception as exc:
+                    logger.warning("Quantum68 transport close failed (%s)", type(exc).__name__)
+            if exporter is not None and hasattr(exporter, "aclose"):
+                try:
+                    await exporter.aclose()
+                except Exception as exc:
+                    logger.warning("Quantum publisher close failed (%s)", type(exc).__name__)
+            if ledger is not None:
+                try:
+                    ledger.close()
+                except Exception as exc:
+                    logger.warning("Quantum ledger close failed (%s)", type(exc).__name__)
 
     starlette_app.router.lifespan_context = _close_quantum68_on_shutdown
 

@@ -121,7 +121,11 @@ def b58encode(data: bytes) -> str:
 
 
 def b58decode(text: str, *, max_len: int = 128) -> bytes:
-    if not isinstance(text, str) or not 1 <= len(text) <= 256:
+    # Base58 expands by about 1.37. The default cap stays 256 characters so
+    # short account keys keep the old bound. Memo readback passes a larger
+    # max_len because a full inclusion path does not fit in 256 characters.
+    text_cap = max(256, max_len * 2)
+    if not isinstance(text, str) or not 1 <= len(text) <= text_cap:
         raise ValueError("base58 text out of bounds")
     for ch in text:
         if ch not in _B58_INDEX:

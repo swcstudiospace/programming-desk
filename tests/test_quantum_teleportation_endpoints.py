@@ -65,6 +65,7 @@ def _app(nodes, links, worker_rngs, tmp_path, capacities=None):
         quantum_node_links=[list(link) for link in links],
         quantum_transport_override=transport,
         quantum_rng_override=ScriptedRng([0.5] * 256),
+        quantum_workers_override=workers,
     )
     app, _ = build_app(settings)
     return TestClient(app)
@@ -527,3 +528,228 @@ def test_quantum_topology_settings_reject_bad_operator_config(tmp_path):
             quantum_node_tokens={"a": "t", "b": "t2"},
             quantum_node_links=[["a", "ghost"]],
         )
+    with pytest.raises(ValueError):
+        ConfigSettings(quantum_solana_rpc_url="http://127.0.0.1:8899")
+
+
+# --------------------------------------------------------------------------
+# phase 69 routes
+
+
+_SECRET_MARKERS = ("key_hex", "final_shared_key", "blinding", "seed", "secret", "passwd")
+
+
+def _json_text(payload):
+    return str(payload).lower()
+
+
+def test_qkd_auth_precedes_parse_and_zero_length_aborts(pair_app):
+    missing = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        content=b"{not-json",
+        headers={"content-type": "application/json"},
+    )
+    assert missing.status_code == 401
+    denied = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        content=b"{not-json",
+        headers={"content-type": "application/json", **_bearer("web")},
+    )
+    assert denied.status_code == 403
+    wrong_type = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        content=b"{}",
+        headers={"content-type": "text/plain", **_bearer("lead")},
+    )
+    assert wrong_type.status_code == 415
+    zero = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"sender": ALPHA, "receiver": BETA, "bit_length": 0},
+        headers=_bearer("systems"),
+    )
+    assert zero.status_code == 200
+    session = zero.json()["session"]
+    assert session["status"] == "aborted"
+    assert session["reason"] == "insufficient_sample"
+    assert session["qber"] is None
+    assert session["key_commitment_hex"] is None
+    assert zero.json()["ok"] is False
+    negative = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"bit_length": -1},
+        headers=_bearer("lead"),
+    )
+    assert negative.status_code == 400
+    boolean = pair_app.post(
+        "/v1/quantum/qkd/bb84",
+        json={"bit_length": True},
+        headers=_bearer("lead"),
+    )
+    assert boolean.status_code == 400
+
+
+def test_ledger_proof_round_trip_and_unfunded_anchor(tmp_path):
+    client = _app((ALPHA, BETA), [(ALPHA, BETA)], {ALPHA: [0.3]}, tmp_path)
+    pair = client.post(
+        "/v1/quantum/teleportation/bell-pair/create",
+        json={"node_a": ALPHA, "node_b": BETA, "initial_fidelity": 1.0},
+        headers=_bearer("lead"),
+    ).json()["bell_pair"]
+    tele = client.post(
+        "/v1/quantum/teleportation/teleport",
+        json={
+            "source_node": ALPHA,
+            "target_node": BETA,
+            "alpha": {"real": 0.6, "imag": 0.0},
+            "beta": {"real": 0.8, "imag": 0.0},
+            "bell_pair": pair["pair_id"],
+        },
+        headers=_bearer("lead"),
+    )
+    assert tele.status_code == 200 and tele.json()["ok"] is True
+    receipt_id = tele.json()["receipt"]["receipt_id"]
+    tree_size = tele.json()["receipt"]["tree_size"]
+    listed = client.get("/v1/quantum/teleportation/ledger/receipts", headers=_bearer("web"))
+    assert listed.status_code == 200
+    assert any(item["receipt_id"] == receipt_id for item in listed.json()["receipts"])
+    proof = client.get(
+        "/v1/quantum/teleportation/ledger/proof",
+        params={"receipt_id": receipt_id, "tree_size": tree_size},
+        headers=_bearer("quality"),
+    )
+    assert proof.status_code == 200
+    body = proof.json()["proof"]
+    verified = client.post(
+        "/v1/quantum/teleportation/ledger/proof/verify",
+        json=body,
+        headers=_bearer("lead"),
+    )
+    assert verified.status_code == 200 and verified.json()["valid"] is True
+    tampered = dict(body)
+    tampered["expected_root_hex"] = "ab" + body["expected_root_hex"][2:]
+    bad = client.post(
+        "/v1/quantum/teleportation/ledger/proof/verify",
+        json=tampered,
+        headers=_bearer("lead"),
+    )
+    assert bad.status_code == 200 and bad.json()["valid"] is False
+    exported = client.post(
+        "/v1/quantum/teleportation/anchor/export",
+        json={"receipt_id": receipt_id, "tree_size": tree_size},
+        headers=_bearer("lead"),
+    )
+    assert exported.status_code == 503
+    anchor = exported.json()["anchor"]
+    assert exported.json()["ok"] is False
+    assert anchor["status"] != "confirmed"
+    assert anchor["slot"] is None
+    assert all(marker not in _json_text(exported.json()) for marker in _SECRET_MARKERS)
+
+
+def _phase69_runtime(tmp_path, *, rpc_client=None, signer_path="", rpc_url=""):
+    import random
+
+    class Rng:
+        def __init__(self, prefix, seed):
+            self._prefix = list(prefix)
+            self._fallback = random.Random(seed)
+
+        def random(self):
+            if self._prefix:
+                return self._prefix.pop(0)
+            return self._fallback.random()
+
+        def choice(self, seq):
+            return seq[int(self.random() * len(seq)) % len(seq)]
+
+        def shuffle(self, items):
+            self._fallback.shuffle(items)
+
+    nodes = (ALPHA, REPEATER, BETA)
+    prefixes = {ALPHA: [0.1], REPEATER: [0.1], BETA: [0.5]}
+    workers = {
+        name: QuantumNodeWorker(name, capacity=32, token=f"tok-{name}", rng=Rng(prefixes[name], pos + 1))
+        for pos, name in enumerate(nodes)
+    }
+    transport = LocalNodeTransport(workers)
+    settings = Settings(
+        seat_passphrases=dict(_SEATS),
+        data_dir=tmp_path / "drill-data",
+        quantum_node_endpoints={name: f"http://127.0.0.1:{19011 + pos}" for pos, name in enumerate(nodes)},
+        quantum_node_tokens={name: f"tok-{name}" for name in nodes},
+        quantum_node_links=[[ALPHA, REPEATER], [REPEATER, BETA]],
+        quantum_transport_override=transport,
+        quantum_rng_override=Rng((), 7),
+        quantum_workers_override=workers,
+        quantum_solana_rpc_url=rpc_url,
+        quantum_solana_signer_path=signer_path,
+        quantum_rpc_client_override=rpc_client,
+    )
+    app, _ = build_app(settings)
+    return TestClient(app)
+
+
+def test_unfunded_drill_keeps_all_passed_false(tmp_path):
+    client = _phase69_runtime(tmp_path)
+    resp = client.post("/v1/quantum/teleportation/drill/simulate", json={}, headers=_bearer("lead"))
+    assert resp.status_code == 200
+    drill = resp.json()["drill"]
+    assert drill["all_passed"] is False
+    assert drill["prerequisite"] == "rpc_url_not_configured"
+    assert drill["stages"]["clean_bb84"]["passed"] is True
+    assert drill["stages"]["eve"]["passed"] is True
+    assert drill["stages"]["eve"]["keys_agreed"] is False
+    assert resp.json()["ok"] is False
+    assert all(marker not in _json_text(resp.json()) for marker in _SECRET_MARKERS)
+
+
+def test_scripted_devnet_drill_confirms(tmp_path):
+    import httpx
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "ledger_anchor_fixture",
+        __file__.rsplit("/", 1)[0] + "/test_quantum_ledger_anchor.py",
+    )
+    fixture_mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fixture_mod)
+    rpc = fixture_mod.RpcFixture()
+    signer_path, _pub = fixture_mod.write_throwaway_signer(tmp_path)
+    rpc_client = httpx.AsyncClient(transport=httpx.MockTransport(rpc.handler))
+    client = _phase69_runtime(
+        tmp_path,
+        rpc_client=rpc_client,
+        signer_path=signer_path,
+        rpc_url="https://api.devnet.solana.com",
+    )
+    resp = client.post("/v1/quantum/teleportation/drill/simulate", json={}, headers=_bearer("systems"))
+    assert resp.status_code == 200, resp.text
+    drill = resp.json()["drill"]
+    assert drill["all_passed"] is True
+    assert drill["prerequisite"] is None
+    assert drill["stages"]["anchor"]["status"] == "confirmed"
+    assert isinstance(drill["stages"]["anchor"]["slot"], int)
+    assert rpc.methods_called("sendTransaction") == 1
+    assert all(marker not in _json_text(resp.json()) for marker in _SECRET_MARKERS)
+
+
+def test_second_drill_is_rejected_while_one_runs():
+    import asyncio
+
+    from desk_gateway.quantum_qkd_mesh import DrillBusy, QuantumTeleportationDrill
+
+    class Stuck(QuantumTeleportationDrill):
+        async def _run(self):
+            await asyncio.sleep(0.05)
+            return {"all_passed": False, "prerequisite": None, "stages": {}}
+
+    drill = Stuck(None, None, None, None, object(), None)
+
+    async def main():
+        first = asyncio.create_task(drill.run())
+        await asyncio.sleep(0.01)
+        with pytest.raises(DrillBusy):
+            await drill.run()
+        assert (await first)["all_passed"] is False
+
+    asyncio.run(main())

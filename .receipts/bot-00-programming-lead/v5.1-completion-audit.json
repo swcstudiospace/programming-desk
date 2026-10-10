@@ -45,6 +45,34 @@
       "gates": "QUALITYG1/G3/G4/G5G6/G7 passed5paths; strictG2FAILED ONLYmissingindependentLEAD/human approval,not ownerapproval.",
       "boundary": "SOURCE checker NOTintegrated/defaultunmerged/sourcepushheld; planning draft can publish independently. No merge/automerge/stamp/waiver."
     },
+    "latest_quality_mcp_review": {
+      "provenance": "Actual parent MCP review observation, not a CLI execution row or approval stamp.",
+      "draft_pr": 215,
+      "review_id": "30986481",
+      "status": "COMPLETED",
+      "head": "6d19119",
+      "confidence": "4/5",
+      "findings": ["Declared directory force-stage recursively includes ignored files", "Receipt-only standalone long-force without --/tail lacks consumer coverage"],
+      "qualification": "Two nonblocking but valid findings, not waived. Parent directory BEFORE probe running, then QUALITY owner hardening/new regressions required.326tests and patched strictCLI rows26/27 valid checkpoints BEFORE directory hardening. SOURCE768 stable/0signed/livechain blocked; sourcepushhold continues."
+    },
+    "quality_directory_hardening": {
+      "local_owner_code": "0a6f77d",
+      "published_owner_head": "6d19119",
+      "directory_before_command_index": 37,
+      "directory_after_command_index": 38,
+      "repo_aware_cli_command_index": 39,
+      "compile_tool_observation": "Parent actual owner compile clean/tool.40s; exact command not supplied, no fabricated row.",
+      "qualification": "Continuation of historical MCPreview30986481: directory BEFOREfixturechecker0/Gitignorednestedtrue; AFTERfixturechecker1reject/Gittrueunchanged, internalcheckerargs --repo TempRoot. Both findings valid/notwaived; localowner0a6f77d hardening evidence not approval. Fullcandidate/gates/newheadreview pending/PR215still6d19119/SOURCEunintegrated/pushheld.326/oldCLI26–27 valid prehardening checkpoints."
+    },
+    "quality_hardening_candidate_proof": {
+      "local_owner_code": "0a6f77d",
+      "full_selftests_command_index": 40,
+      "selftests": "332passed18.77s/exit0/tool19.49s",
+      "parent_gate_observations": "Owner default strictG2 exit1/tool.44s ONLYmissingstamp; G1PASS5paths/tool.42s; G3PASS5paths/tool.41s. Exact gate commands not supplied, no fabricated rows.",
+      "parent_authoring_observations": "Format only new helper/tests tool.40s; code/tests-only ownercommit0a6f77d tool.22s. No product/sourcecheckout edits.",
+      "classifier_contract": "Only known regular files, root-contained with symlink rejection; --repo resolves actualcheckout/export. Unsupported default mirror topology fails closed.",
+      "qualification": "Final candidate proof, not signed approval. Local0a6f77d unpublished/PR215still6d19119/newheadreviewpending/SOURCEcheckerunintegrated/sourcepushheld. Previous326/CLI checkpoints retained."
+    },
     "planning_command_indices": [6, 7, 8, 9, 10, 11],
     "delivery_enumeration_command_index": 12,
     "full_suite_checkpoint_command_index": 13,
@@ -347,6 +375,89 @@
       "observed_by": "parent bot-00-programming-lead",
       "output_tail": "Local/unpublished SOURCEreceiptcommitd6b7789; exactcmd94entiredictpreserved/correct19declaredfiles/productd452fb1/final768/ownerPR215/SAST. Literal receiptforce-add/gitmetadata,no stamp/historyrewrite; sourcepushhelduntilownerintegration+signature."
     }
+,
+{
+  "cmd": "git add -- .planning/REQUIREMENTS.md .planning/ROADMAP.md .planning/STATE.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-CONTEXT.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-INTERFACES.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PATTERNS.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PLAN-REVIEW.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-RESEARCH.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-SECURITY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VALIDATION.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VERIFICATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-CONTEXT.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-INTERFACE-CONTRACT.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PATTERNS.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PLAN-REVIEW.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-RESEARCH.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-SECURITY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VALIDATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VERIFICATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/COVERAGE.md .planning/state.json .planning/tmp/68-edge-reqs.json .planning/tmp/69-edge-reqs.json .planning/tmp/v51-decision-68.txt .planning/tmp/v51-decision-69.txt .planning/tmp/v51-funding-blocker.txt .planning/v5.1-MILESTONE-AUDIT.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-GAP-INTERFACE.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-GAP-INTERFACE.md && git add -f .receipts/bot-00-programming-lead/v5.1-completion-audit.json && git commit --only -m 'docs(v5.1): record full implementation and live gate blockers' -- .planning/REQUIREMENTS.md .planning/ROADMAP.md .planning/STATE.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-01-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-02-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-03-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-CONTEXT.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-INTERFACES.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PATTERNS.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-PLAN-REVIEW.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-RESEARCH.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-SECURITY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VALIDATION.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VERIFICATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-01-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-02-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-03-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-CONTEXT.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-INTERFACE-CONTRACT.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PATTERNS.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-PLAN-REVIEW.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-RESEARCH.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-SECURITY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VALIDATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VERIFICATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/COVERAGE.md .planning/state.json .planning/tmp/68-edge-reqs.json .planning/tmp/69-edge-reqs.json .planning/tmp/v51-decision-68.txt .planning/tmp/v51-decision-69.txt .planning/tmp/v51-funding-blocker.txt .planning/v5.1-MILESTONE-AUDIT.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-04-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-05-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-06-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-07-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-08-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-PLAN.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-GAP-INTERFACE.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-04-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-05-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-06-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-07-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-08-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-PLAN.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-GAP-INTERFACE.md",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.58,
+  "output_tail": "112429b44updated/newLEADartifacts3722insertions414deletions; explicit70ownpaths only; AGENTS/.cursor/QUALITY/unrelated changesexcluded"
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.57,
+  "output_tail": "G1LEAD70committeddiffpathsPASS"
+},
+{
+  "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 1.07,
+  "output_tail": "G3failed2identifier-onlyfalsepositives:historicalcodeattributereference69RESEARCH206andENV-variable-namecollectionreceipt102; no actualsecretvalues; correctedwithtwoexplicitreviewableallowlistreasons perpolicy"
+},
+{
+  "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.69,
+  "output_tail": "G7deskPASS7rosters8packs22prompts7templates"
+},
+{
+  "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.6,
+  "output_tail": "G4PASSnocontractsurface"
+},
+{
+  "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.69,
+  "output_tail": "G5G6PASSnodeploydestructiveoperations"
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.75,
+  "output_tail": "G2LEADFAILONLYmissingindependentapproved_by/no selfstamp"
+},
+{
+  "cmd": "git commit --only -m 'docs(verification): annotate identifier-only secret scan false positives' -- .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-RESEARCH.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json && python3 ci/gates/check_secrets.py --base origin/main",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.83,
+  "output_tail": "f9c0f8c2explicitfalsepositivemarkerscommitted; G3AFTERPASS70paths/nosecrets; no scannerdisable/riskwaiver"
+}
+,
+{
+  "cmd": "python3 /tmp/desk-v51-staging-directory-smoke.py",
+  "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 0, "duration_s": 0.59,
+  "observed_by": "parent bot-00-programming-lead",
+  "output_tail": "BEFORE fixturecheckerexit0 accepts declared directory, actualgitforceignorednestedtrue. Diagnostic completed, not bypass approval."
+},
+{
+  "cmd": "python3 /tmp/desk-v51-staging-directory-smoke.py",
+  "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 0, "duration_s": 0.48,
+  "observed_by": "parent bot-00-programming-lead",
+  "output_tail": "AFTER localowner0a6f77d with smoke-internal --repo TempRoot checkerarguments:fixturecheckerexit1 bypassreject, actualGitignorednestedtrue unchanged. Narrow fixture hardening evidence/not real-change approval."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --repo /tmp/desk-v51-implementation --receipt /tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+  "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 1, "duration_s": 0.46,
+  "observed_by": "parent bot-00-programming-lead",
+  "output_tail": "Localowner0a6f77d repo-aware SOURCEreceipt check failsONLYmissingapproved_by; knownfile stagehistory verbatim. Not SOURCEintegration/approval; PR215publishedstill6d19119/fullcandidate-gates-reviewpending."
+}
+,
+{
+  "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+  "cwd": "/tmp/desk-v51-quality-gate", "exit_code": 0, "duration_s": 19.49,
+  "observed_by": "parent bot-00-programming-lead",
+  "output_tail": "Finalcandidate0a6f77d QUALITY332passed in18.77s; not SOURCEchecker integration/current-head review/independentstamp. PublishedPR215still6d19119."
+}
   ],
   "claims": [
     {
@@ -437,6 +548,20 @@
     {"claim": "QUALITYownerbranch selftests326passed17.37s/tool17.86s/no skips;not SOURCEintegration/signedapproval.", "evidence_command_index": 27}
     ,
     {"claim": "Actual SOURCEreceipt-only commitd6b7789 local/unpublished preserves exact historicalcmd94 and correct19declaredfiles/final768/PR215dependency/SAST,productd452fb1 unchanged; no push/stamp/historyrewrite.", "evidence_command_index": 28}
+,
+{"claim": "LEADfinalG1ownershippassed70committedartifactpaths", "evidence_command_index": 30},
+{"claim": "LEADG3beforeflaggedtwoidentifier-onlydocumentationfalsepositives,not credential values", "evidence_command_index": 31, "expects_failure": true},
+{"claim": "LEADfinalG7deskintegritypassed", "evidence_command_index": 32},
+{"claim": "LEADfinalG4passednocontractsurfacechanges", "evidence_command_index": 33},
+{"claim": "LEADfinalG5G6passednodeploydestructiveoperations", "evidence_command_index": 34},
+{"claim": "StrictLEADG2failedonlymissingindependentapproval,noselfstamp", "evidence_command_index": 35, "expects_failure": true},
+{"claim": "Twoexplicitreviewableidentifier-onlyallowlistannotationsremovedfalsepositives; finalG3passed70committedpathswithoutscannerdisable", "evidence_command_index": 36}
+,
+{"claim": "Actual BEFORE directory fixturechecker accepted recursive force-stage while Git included ignored nestedfile; diagnosticexit0 not bypassapproval.", "evidence_command_index": 37},
+{"claim": "Actual AFTER directory fixture rejects bypass with internal --repo temporaryroot arguments; actualGit inclusion capability unchanged. Narrow fixture repair,not real-change approval.", "evidence_command_index": 38},
+{"claim": "Repo-aware localQUALITY0a6f77d strictCLI against SOURCEreceipt FAILEDONLYmissingapproved_by; exactknownfile staging history retained,not SOURCEintegration/stamp.", "evidence_command_index": 39, "expects_failure": true}
+,
+{"claim": "QUALITYowner finalcandidate0a6f77d fullselftests332passed18.77s/tool19.49s; knownregularfile/rootcontainment/symlinkreject/--repo actualcheckout-export/defaultmirrorsfailclosed covered,not SOURCEintegration/stamp.", "evidence_command_index": 40}
   ],
   "historical_unverified": [
     "Full v5.1 acceptance is blocked: strict three-source requirements 0/11, phases 0/2 and required flows 0/5; source inspection is not runtime acceptance.",
@@ -457,7 +582,7 @@
     "All eleven original checkboxes remain open and signedacceptance0; independentapproved_by/QUALITY verdict absent. Hook rendering,20SUMMARIES and50advisoryclosed threats do not constitute approval.",
     "Postclaim whole-service SAST FAILED(index24):57419LOC/2HIGH6MED105LOW/tool7.91s/core10LOW/errors[]skips0nosec0; eight legacyHIGH/MED owner/QUALITY dispositions remain,no waiver. Previous57408/57374/57348 checkpoints preserved;47versions0known version-only.",
     "Complete70sourcecomment cohorts49+21 repaired/0new/extraP2actualclosed and3focusedclaimregressionspass; storedremote70flagsfalse/noapproval. Parent actual Eval20planPyYAMLtruthstrings/no errors/current69sixrow4Runtimeverified observation is not shell or approval.",
-    "Sourcefinal768passstableproductd452fb1, oldSOURCEchecker stilltwo-blockerG2 untilownerintegration. QUALITYpatched2bea6d1 strictCLIindex26 failsONLYmissingapproved_by and326selftestsindex27pass; no SOURCEcurrentCIpass/push. Historicalsourcecmd94 preserved/no stamp/selfwaiver. LEADplanninggatespending/publisheddac2fdf/funding0slot509600313 retained.",
+    "Sourcefinal768passstableproductd452fb1, localreceiptHEADd6b7789/unpublished, oldSOURCEchecker two-blockerG2 untilownerPR215integration. QUALITYpatched2bea6d1 strictCLIindex26 onlymissingapproval/326selftestsindex27pass; newlocalowner0a6f77d332selftestsindex40pass/newheadreviewpending, not SOURCEintegration. FinalLEADG1/G3/G4/G5/G6/G7pass70paths; strictLEADG2onlymissingstamp. SourcepubDAC/funding0slot509600313/live009010/SASTlegacyblocks remain; no merge-ready claim",
     "No commands/tests/build/lint/format/scan/gates/compilation/commits by this document worker. OriginalOct9 missingcode/artifact/unexecuted claims are historical only.",
     "No archival/completion/merge/auto-merge/force-push/release/tag/branchdeletion; existingv5.1.0 release is not acceptance. No private signer access or secret printing."
   ],

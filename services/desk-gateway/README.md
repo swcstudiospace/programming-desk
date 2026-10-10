@@ -20,9 +20,69 @@ Owned by SYSTEMS (`bot-01-systems-backend`); the rosters it serves are owned by 
 | `GET/POST /authorize`, `/token`, `/register` | — | OAuth AS (dynamic client registration, PKCE) |
 | `GET/POST /oauth/consent` | — | Consent page; the seat passphrase entered here decides the seat scope |
 | `POST /v1/intake` | origin token (`INTAKE_TOKENS`) | External asks for LEAD only; seat tokens get 403 |
+| `POST /v1/quantum/qkd/bb84` | lead or systems | BB84. Empty or unestimable finite samples abort as `insufficient_sample` with null QBER; this includes 0 and 200 rounds. Without a configured authenticated worker plane this returns 503 `worker_plane_unavailable` |
+| `POST /v1/quantum/qkd/e91` | lead or systems | E91 over the shortest registered mesh route (lexical ties, at most 16 nodes). Each disjoint private-key, public-CHSH and phase round consumes its own routed Bell resource; no unregistered direct-pair fallback. Empty/unestimable samples abort before sampling. Not part of the drill's `all_passed` conjunction. An unconfigured worker plane returns 503 `worker_plane_unavailable` |
+| `GET /v1/quantum/qkd/session/{session_id}` | any authenticated seat | Public counts and independently blinded per-node commitments. No key bytes. Aborted sessions stay aborted |
+| `POST /v1/quantum/teleportation/outputs/release` | lead or systems | Owner release of one successful teleport output: `session_id`, `receiver`, `operation_id`. Unknown session 404, receiver mismatch 403, second release under a new operation 409, same-operation retry replays its acknowledgement. Per-session serialization preserves confirmed acknowledgements. A definite pre-send failure leaves the output available; an ambiguous or cancelled release quarantines it, and both retry forms then return 409 without another mutation. IDs and status only, never credentials |
+| `GET /v1/quantum/worker/{node_id}/inspect` | any authenticated seat | Bounded lease page: `lease_offset` defaults to 0; `lease_limit` is 1..64. Follow `next_offset` until null. Measured but unreleased leases still occupy capacity |
+| `POST /v1/quantum/teleportation/ledger/snapshot` | lead or systems | Frozen prefix root and receipt ids |
+| `GET /v1/quantum/teleportation/ledger/receipts` | any authenticated seat | Bounded receipt list (`limit`: 1–4 ASCII decimal characters representing 1..1000; invalid is 400 `invalid_limit`). Cost proportional to the limit, never full history |
+| `GET /v1/quantum/teleportation/ledger/receipt/{receipt_id}` | any authenticated seat | One receipt. Unknown is 404 |
+| `GET /v1/quantum/teleportation/ledger/proof` | any authenticated seat | Inclusion proof for `receipt_id` and `tree_size` |
+| `POST /v1/quantum/teleportation/ledger/proof/verify` | lead or systems | `valid` true only for a cryptographically valid proof whose exact tree size/root is a committed local checkpoint. Same-depth prefix-size mutations are false. A bad shape is 400 |
+| `POST /v1/quantum/teleportation/anchor/export` | lead or systems | One Memo (1232-byte payload, 400000 compute units, exact readback) or a prerequisite code. No second send. Unconfigured or unfunded is 503; a deadline is 504 and does not resend |
+| `POST /v1/quantum/teleportation/drill/simulate` | lead or systems | Shared-runtime drill. `all_passed` is true only after a matching confirmed readback. A missing prerequisite, including a missing worker plane or an unfunded payer, keeps it false with the prerequisite named — always HTTP 200, never 503 (QKD without a worker plane is 503 instead) |
 
 A token minted for one seat used against another seat's path is refused with HTTP 403
 `{"error": "wrong_seat"}`. Unknown seats and packs are 404.
+
+Quantum mutations never automatically retry an ambiguous worker effect. Successful
+teleport outputs retain their receiver lease until the owner releases it. An ambiguous
+sent release or an interrupted release quarantines the output before propagation. E91
+checks every routed resource's terminal cleanup before reconciling or extracting;
+unconfirmed cleanup fails as `resource_cleanup_unconfirmed`, retains resource
+quarantine and withholds commitments. Unconfirmed private-key cleanup instead
+reports `key_cleanup_unconfirmed`. The drill cleans only its own resources and
+cannot pass while cleanup is unconfirmed.
+Deep JSON decoder failures are typed 400 `invalid_json` after authentication.
+Original worker history admission remains fixed: long routes or warm workers can
+refuse new effects and fail keylessly; no round-count truncation or mutation retry.
+
+The six phase-68 mutations (create, purify, route, swap, teleport, output release)
+share four active orchestration slots. A fifth request receives immediate
+429 `orchestration_busy`, without queueing. Authentication and bounded body
+validation precede admission; each admitted operation has a 60-second overall
+deadline, returning 504 `orchestration_timeout` and releasing its slot. This
+deadline does not truncate phase-69 E91 or drill runs.
+
+Worker leases retain their reservation-time instance through transfers and
+cleanup. Replacement-instance absence is never proof of release; E91 binds the
+lease to the selected pair before sampling. Duplicate lease release is rejected
+before any deletion. Definite pre-effect failures preserve input resources.
+Interrupted phase-68 operations retain unresolved custody without further
+network awaits or automatic cleanup mutations, including a first reservation
+whose worker acknowledgement was lost and a second interruption during failure
+cleanup. An applied/unacknowledged release retains its original lease obligation;
+pair retirement and subsequent cleanup cannot retry that lease under a new
+operation. Only an original-worker terminal tombstone, not `unknown_lease` or
+replacement absence, confirms release. New Bell pairs and survivor outputs are
+unavailable until their asynchronous receipt commit completes.
+Sent/unacknowledged QKD begins and ambiguous drill cleanup remain quarantined;
+later sweeps cannot clear them by issuing another mutation. Still-open ledger
+readers observe peer commits without reopening or writing. Receipt and anchor
+lookups use indexed, bounded projections rather than copying full history.
+A failed ledger transaction must either roll back or close its handle. If
+rollback also fails, all public receipt, snapshot, lookup and committed-proof
+paths refuse service; they cannot trust pending rows on that connection.
+Reopening replays the durable committed prefix before serving again.
+
+Each worker admits at most 64 nonterminal QKD sessions, including established
+keys not yet used. Keys are never silently evicted for new work. The operator
+uses the owning worker credential directly on `/v1/node/qkd_owner` to retrieve
+the private capability and perform one-shot `use_key`; the gateway never proxies
+that capability. To discard an unused session, submit `qkd_step` action `abort`
+with reason `user_abort` to each endpoint worker under the session's original
+instance. Terminal cleanup reopens the slot without restarting the worker.
 
 The `x-connector-key: <passphrase>` header is accepted as a bearer for smoke tests and for the
 Grok Bot header-key connector mode; Bots should connect with OAuth.
@@ -48,7 +108,12 @@ All settings come from the environment; `main()` first loads `GATEWAY_ENV_FILE`
 | Variable | Meaning |
 |---|---|
 | `HOST`, `PORT` | Listener, `127.0.0.1:8791` by default; nginx terminates TLS on `PUBLIC_HOST` |
-| `DATA_DIR` | JSON store: `roster.json`, `packs.json`, `intake.json`, `acks.json`, `doctor.json`, `audit.jsonl`, `oauth/` |
+| `DATA_DIR` | JSON store plus `quantum_teleportation.sqlite3` (directory 0700, file 0600). The anchored prefix is immutable; a later root does not erase a published Memo |
+| `QUANTUM_NODE_ENDPOINTS` | JSON map of node id to base URL for teleport, repeater, and QKD commands over one shared worker transport. Empty means no remote worker plane: QKD returns 503 `worker_plane_unavailable` while the drill stays 200 with `all_passed` false and the prerequisite named. The private owner capability path is worker-local and never proxied by the gateway |
+| `QUANTUM_NODE_TOKENS` | JSON map of node id to that worker's credential |
+| `QUANTUM_NODE_LINKS` | JSON list of `[node, node]` pairs |
+| `QUANTUM_SOLANA_RPC_URL` | HTTPS Devnet RPC with no userinfo or path. Empty leaves publication unconfigured |
+| `QUANTUM_SOLANA_SIGNER_PATH` | Dedicated payer file. Settings does not open it. External funding was selected and is not observed; balance was 0 lamports at confirmed slot 509446760 on 2026-10-10. This is a trusted-device numerical simulator, not a hardware or device-independent system |
 | `DESK_REPO_DIR` | programming-desk checkout; read with `git show`/`git archive`, never switched or pushed |
 | `SEAT_PASSPHRASE_<SEAT>` | One distinct passphrase per seat; consent maps it to `seat:<seat>` |
 | `INTAKE_TOKENS` | `origin:token,...` accepted on `/v1/intake` |

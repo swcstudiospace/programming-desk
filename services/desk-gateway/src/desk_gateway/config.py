@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import os
+import re
+import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 SEATS: dict[str, str] = {
     "lead": "bot-00-programming-lead",
@@ -49,6 +53,147 @@ def _float_env(name: str, default: float) -> float:
     if not raw:
         return default
     return float(raw)
+
+# Operator-owned quantum simulator-node topology (phase 68). These values are
+# read from the environment at startup only: no request may register nodes or
+# override endpoint URLs / credentials, and the values are never logged or
+# publicly serialized (repr is disabled on the Settings fields below).
+_QUANTUM_NODE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+_QUANTUM_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
+
+
+def _quantum_node_id(node: object, *, name: str) -> str:
+    if not isinstance(node, str) or not node or len(node) > 64:
+        raise ValueError(f"{name} must be a 1..64 char string")
+    if _QUANTUM_NODE_RE.fullmatch(node) is None:
+        raise ValueError(f"{name} holds illegal characters")
+    return node
+
+
+def _quantum_endpoint(node: str, url: object) -> str:
+    """Validate one operator-configured node URL (parity with transport rules)."""
+    if not isinstance(url, str) or not url.strip():
+        raise ValueError(f"node {node!r} endpoint must be a non-empty URL string")
+    try:
+        parts = urllib.parse.urlsplit(url.strip())
+    except ValueError as exc:
+        raise ValueError(f"node {node!r} has an unparsable endpoint") from exc
+    if parts.scheme not in ("http", "https") or not parts.hostname:
+        raise ValueError(f"node {node!r} endpoint must be an http(s) URL")
+    if parts.username or parts.password:
+        raise ValueError(f"node {node!r} endpoint must not embed credentials")
+    host = parts.hostname.lower()
+    # Literal loopback may run plaintext for local process evidence; every
+    # other host requires verified TLS (https). The transport enforces the
+    # same distinction per command.
+    if parts.scheme == "http" and host not in _QUANTUM_LOOPBACK_HOSTS:
+        raise ValueError(f"node {node!r} plaintext HTTP is loopback-only")
+    path = parts.path.rstrip("/")
+    if path not in ("", "/"):
+        raise ValueError(f"node {node!r} endpoint must not carry a path")
+    return url.strip()
+
+
+def _json_object_env(name: str) -> dict[str, Any]:
+    raw = _env(name)
+    if not raw:
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be JSON: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    return parsed
+
+
+def _json_links_env(name: str) -> list[Any]:
+    raw = _env(name)
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be JSON: {exc}") from exc
+    if not isinstance(parsed, list):
+        raise ValueError(f"{name} must be a JSON list of [node, node] pairs")
+    return parsed
+
+
+def _validate_quantum_topology(
+    endpoints: dict[str, Any],
+    tokens: dict[str, Any],
+    links: list[Any],
+) -> tuple[dict[str, str], dict[str, str], list[tuple[str, str]]]:
+    """Fail-closed validation of the operator quantum topology.
+
+    Rejects malformed shapes, unknown topology references, self-links,
+    duplicate undirected links, missing per-node credentials, and
+    permissive silent drops (a bare CSV string is not JSON and is
+    rejected, never partially accepted). Empty topology is valid and
+    means the gateway runs without a remote worker plane.
+    """
+    if not isinstance(endpoints, dict):
+        raise ValueError("quantum_node_endpoints must be a node->URL mapping")
+    if not isinstance(tokens, dict):
+        raise ValueError("quantum_node_tokens must be a node->token mapping")
+    clean_endpoints: dict[str, str] = {}
+    for node, url in endpoints.items():
+        _quantum_node_id(node, name="endpoint node")
+        clean_endpoints[node] = _quantum_endpoint(node, url)
+    clean_tokens: dict[str, str] = {}
+    if not isinstance(tokens, dict):
+        raise ValueError("quantum_node_tokens must be a node->token mapping")
+    for node, token in tokens.items():
+        _quantum_node_id(node, name="token node")
+        if node not in clean_endpoints:
+            raise ValueError(f"quantum token for unknown node {node!r}")
+        if not isinstance(token, str) or not token:
+            raise ValueError(f"quantum token for node {node!r} must be non-empty")
+        clean_tokens[node] = token
+    for node in clean_endpoints:
+        if node not in clean_tokens:
+            raise ValueError(f"node {node!r} has an endpoint but no configured token")
+    if not isinstance(links, list):
+        raise ValueError("quantum_node_links must be a list of [node, node] pairs")
+    seen: set[frozenset[str]] = set()
+    clean_links: list[tuple[str, str]] = []
+    for pos, entry in enumerate(links):
+        if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+            raise ValueError(f"quantum_node_links[{pos}] must be a [node, node] pair")
+        node_a, node_b = entry
+        _quantum_node_id(node_a, name=f"quantum_node_links[{pos}][0]")
+        _quantum_node_id(node_b, name=f"quantum_node_links[{pos}][1]")
+        if node_a == node_b:
+            raise ValueError(f"quantum_node_links[{pos}] must link distinct nodes")
+        if node_a not in clean_endpoints or node_b not in clean_endpoints:
+            raise ValueError(f"quantum_node_links[{pos}] references unknown node")
+        key = frozenset((node_a, node_b))
+        if key in seen:
+            raise ValueError(f"quantum_node_links[{pos}] duplicates an earlier link")
+        seen.add(key)
+        clean_links.append((node_a, node_b))
+    return clean_endpoints, clean_tokens, clean_links
+
+
+def _validate_solana_rpc(url: str) -> str:
+    """Accept an empty publisher URL or a bare https endpoint."""
+    if not isinstance(url, str):
+        raise ValueError("QUANTUM_SOLANA_RPC_URL must be a string")
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or not parsed.hostname
+        or parsed.username
+        or parsed.password
+        or parsed.query
+        or parsed.fragment
+        or parsed.path not in ("", "/")
+    ):
+        raise ValueError("QUANTUM_SOLANA_RPC_URL must be an https URL without userinfo, path, or query")
+    return url
 
 
 @dataclass
@@ -131,6 +276,43 @@ class Settings:
     docs_lookup_budget_sec: float = DOCS_LOOKUP_BUDGET_SEC
     docs_retrieval_budget_sec: float = DOCS_RETRIEVAL_BUDGET_SEC
     recall_bank_timeout_sec: float = RECALL_BANK_TIMEOUT_SEC
+    # Operator-owned quantum simulator-node topology (phase 68).
+    #
+    # QUANTUM_NODE_ENDPOINTS is a JSON object mapping node ID to base URL,
+    # QUANTUM_NODE_TOKENS a JSON object mapping node ID to scoped credential,
+    # QUANTUM_NODE_LINKS a JSON list of undirected [node, node] pairs.
+    # Empty topology is valid (no remote worker plane). Any configured node
+    # needs an endpoint and a token; links may only reference known nodes.
+    # Plaintext http is accepted for literal loopback process evidence only;
+    # all other hosts require https. Values are validated at construction,
+    # never logged, and never honored from request data.
+    quantum_node_endpoints: dict[str, str] = field(default_factory=dict, repr=False)
+    quantum_node_tokens: dict[str, str] = field(default_factory=dict, repr=False)
+    quantum_node_links: list[tuple[str, str]] = field(default_factory=list, repr=False)
+    # In-process test hooks only (a LocalNodeTransport, RNG, and/or event
+    # sink). Never populated from the environment; production always builds
+    # the lifespan-owned RemoteNodeTransport from the operator topology.
+    quantum_transport_override: Any = field(default=None, repr=False, compare=False)
+    quantum_rng_override: Any = field(default=None, repr=False, compare=False)
+    quantum_sink_override: Any = field(default=None, repr=False, compare=False)
+    quantum_rpc_client_override: Any = field(default=None, repr=False, compare=False)
+    # Dedicated Devnet publisher. Empty means unconfigured (export returns 503).
+    # The signer file is not opened here.
+    quantum_solana_rpc_url: str = ""
+    quantum_solana_signer_path: str = ""
+
+    def __post_init__(self) -> None:
+        endpoints, tokens, links = _validate_quantum_topology(
+            dict(self.quantum_node_endpoints),
+            dict(self.quantum_node_tokens),
+            list(self.quantum_node_links),
+        )
+        self.quantum_node_endpoints = endpoints
+        self.quantum_node_tokens = tokens
+        self.quantum_node_links = links
+        self.quantum_solana_rpc_url = _validate_solana_rpc(self.quantum_solana_rpc_url)
+        if not isinstance(self.quantum_solana_signer_path, str):
+            raise ValueError("QUANTUM_SOLANA_SIGNER_PATH must be a string")
 
     @property
     def issuer_url(self) -> str:
@@ -272,4 +454,9 @@ class Settings:
             docs_lookup_budget_sec=_float_env("DOCS_LOOKUP_BUDGET_SEC", DOCS_LOOKUP_BUDGET_SEC),
             docs_retrieval_budget_sec=_float_env("DOCS_RETRIEVAL_BUDGET_SEC", DOCS_RETRIEVAL_BUDGET_SEC),
             recall_bank_timeout_sec=_float_env("RECALL_BANK_TIMEOUT_SEC", RECALL_BANK_TIMEOUT_SEC),
+            quantum_node_endpoints=_json_object_env("QUANTUM_NODE_ENDPOINTS"),
+            quantum_node_tokens=_json_object_env("QUANTUM_NODE_TOKENS"),
+            quantum_node_links=_json_links_env("QUANTUM_NODE_LINKS"),
+            quantum_solana_rpc_url=_env("QUANTUM_SOLANA_RPC_URL"),
+            quantum_solana_signer_path=_env("QUANTUM_SOLANA_SIGNER_PATH"),
         )

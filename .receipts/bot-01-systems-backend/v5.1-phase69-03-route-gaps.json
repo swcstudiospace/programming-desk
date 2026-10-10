@@ -1,0 +1,38 @@
+{
+  "task_id": "v5.1-phase69-03-route-gaps",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-10-10T03:04:00Z",
+  "completed_at": "2026-10-10T03:13:24Z",
+  "commands": [
+    {
+      "cmd": "cd services/desk-gateway && TMPDIR=/dev/shm .venv/bin/python - <<'PY'\nimport json, urllib.request\nfrom desk_gateway.quantum_anchor import load_signer, b58encode\nident = load_signer('/tmp/desk-v51-devnet.Krey7h/keypair.json')\npub = b58encode(ident.public_key_bytes)\nreq = urllib.request.Request('https://api.devnet.solana.com', data=json.dumps({'jsonrpc':'2.0','id':1,'method':'getBalance','params':[pub]}).encode(), headers={'content-type':'application/json'})\nwith urllib.request.urlopen(req, timeout=20) as resp:\n    balance = json.load(resp)\nreq2 = urllib.request.Request('https://api.devnet.solana.com', data=json.dumps({'jsonrpc':'2.0','id':2,'method':'getSlot','params':[{'commitment':'confirmed'}]}).encode(), headers={'content-type':'application/json'})\nwith urllib.request.urlopen(req2, timeout=20) as resp:\n    slot = json.load(resp)\nprint('pubkey', pub)\nprint('balance', json.dumps(balance))\nprint('slot', json.dumps(slot))\nPY",
+      "exit_code": 0,
+      "duration_s": 0.73,
+      "output_tail": "pubkey 52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\nbalance {\"jsonrpc\": \"2.0\", \"result\": {\"context\": {\"apiVersion\": \"4.4.0-beta.0\", \"slot\": 509400169}, \"value\": 0}, \"id\": 1}\nslot {\"jsonrpc\": \"2.0\", \"result\": 509400169, \"id\": 2}"
+    },
+    {
+      "cmd": "cd services/desk-gateway && TMPDIR=/dev/shm .venv/bin/python -m pytest -q ../../tests/test_quantum_teleportation_endpoints.py::test_qkd_auth_precedes_parse_and_zero_length_aborts ../../tests/test_quantum_teleportation_endpoints.py::test_qkd_without_worker_binding_is_unavailable --tb=short",
+      "exit_code": 0,
+      "duration_s": 2.18,
+      "output_tail": "..                                                                       [100%]\n2 passed in 1.31s"
+    }
+  ],
+  "claims": [
+    {"claim": "The dedicated Devnet payer 52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv still has 0 lamports at confirmed slot 509400169. No live Memo was submitted.", "evidence_command_index": 0},
+    {"claim": "Zero-length E91 aborts with a null QBER, string and excessive BB84 counts are 400, unknown session and receipt are 404, an unauthenticated ledger read is 401, a non-mutation snapshot is 403, a shapeless proof is 400, and BB84 without a worker binding is 503 worker_plane_unavailable.", "evidence_command_index": 1}
+  ],
+  "unverified": [
+    "Live Devnet confirmation is not observed. A scripted RPC fixture is not this evidence.",
+    "Remote QKD is not on the worker HTTP command set. Teleport and repeater commands can use QUANTUM_NODE_ENDPOINTS; QKD and the drill key stages cannot.",
+    "No independent approved_by. This receipt does not accept REQ-QTELEPORT-006 through 011 or close the milestone."
+  ],
+  "files_changed": [
+    "services/desk-gateway/README.md",
+    "tests/test_quantum_teleportation_endpoints.py",
+    ".receipts/bot-01-systems-backend/v5.1-phase69-03-route-gaps.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

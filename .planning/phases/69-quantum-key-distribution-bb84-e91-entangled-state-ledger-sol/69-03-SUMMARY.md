@@ -77,6 +77,7 @@ The drill and the phase-69 routes now use one runtime. `all_passed` is true only
 - Unfunded drill: `all_passed` false, prerequisite `rpc_url_not_configured`, clean BB84 passed, Eve abort passed with `keys_agreed` false.
 - Scripted fixture: `all_passed` true, one `sendTransaction`, confirmed anchor. This is not a live Devnet observation.
 - Commit `5e22296` on draft PR #214.
+- Follow-up `fa210d5`: zero-length E91, rejected counts, unknown lookups, unbound-worker 503, and a fresh balance read of 0 lamports at slot 509400169.
 
 ## Cutover
 

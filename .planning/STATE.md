@@ -20,7 +20,7 @@ current_phase_name: Quantum Key Distribution BB84/E91, Entangled State Ledger & 
 
 Plan: 3 of 3 in current phase (source-complete; acceptance open)
 Status: Phase 69-03 source complete — live Devnet confirmation still blocks acceptance
-Last activity: 2026-10-10 — 69-03 shared drill and authenticated routes parent-verified (87 passed across endpoints, QKD, and ledger) and pushed as `5e22296` on draft PR #214. Unfunded `all_passed` stays false. Live Devnet confirmation still unobserved.
+Last activity: 2026-10-10 — 69-03 route-gap tests pushed as `fa210d5` on draft PR #214. Dedicated payer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv` balance 0 lamports at confirmed slot 509400169. Live Devnet confirmation still unobserved.
 
 
 ## Current Status
@@ -64,4 +64,4 @@ Last activity: 2026-10-10 — 69-03 shared drill and authenticated routes parent
 
 ### Blockers
 
-- Live Devnet anchoring still needs funded dedicated signer: observed official airdrop failed, balance0 lamports at confirmed slot509319960. Foundation agent instructions exclude human UI, documented POW requires>=5000 bootstrap lamports, inspected DevnetFaucet.org frontend requires GitHub auth. User selected external funding of dedicated Devnet address; this is intent, not observed funding. Finish all reachable numerical/API/publisher work; no local-validator or mocked-confirmation acceptance shortcut.
+- Live Devnet anchoring still needs funded dedicated signer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv`: rechecked 2026-10-10, balance 0 lamports at confirmed slot 509400169 (earlier airdrop failed at slot 509319960). User selected external funding; that selection is not observed funding. No live Memo was sent. Remote QKD commands are not on the worker HTTP surface, so a dedicated-process drill cannot run the key stages. No local-validator or mocked-confirmation acceptance shortcut.

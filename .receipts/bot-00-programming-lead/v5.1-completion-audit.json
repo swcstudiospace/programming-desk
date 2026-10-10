@@ -99,7 +99,7 @@
         {"url": "https://www.devnetfaucet.org", "eligibility": "GitHub contributor verification,human20SOLflow,no documented unattended publicAPI."},
         {"url": "https://docs.triton.one/chains/solana", "eligibility": "Customer/token/private RPC required; no verified public independent faucet."}
       ],
-      "credentials_discovery": "Names only: HELIUS_API_KEY,QUICKNODE_API_KEY,CHAINSTACK_API_KEY,TRITON_API_KEY,ALCHEMY_API_KEY,HELIUS_DEVNET_RPC_URL,QUICKNODE_DEVNET_RPC_URL,TRITON_DEVNET_RPC_URL absent; no values read/printed."
+      "credentials_discovery": "Names only: HELIUS_API_KEY,QUICKNODE_API_KEY,CHAINSTACK_API_KEY,TRITON_API_KEY,ALCHEMY_API_KEY,HELIUS_DEVNET_RPC_URL,QUICKNODE_DEVNET_RPC_URL,TRITON_DEVNET_RPC_URL absent; no values read/printed. # pragma: allowlist secret — Environment-variable identifiers only; no credential values."
     },
     "delivery_enumeration_provenance": "Actual parent command at index12, raw observed artifact://1143:40 nettrackedpaths plus30 newuntrackedpaths; union deduplicated into files_changed. Excludes inherited AGENTS/.cursor/QUALITY paths; not final ownership-gate proof.",
     "final_status": "Original11open; all70sourcecommentsrepaired/0new/final768consumerpassstableproductd452fb1, no signedapproval. Source notpushed; G2two blockers untilQUALITYownerintegration+stamp; localothergatespass/SAST8legacyHIGHMED/funding0slot509600313/positivechainmissing persist. No merge/waiver."

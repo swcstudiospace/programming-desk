@@ -18,9 +18,9 @@ current_phase_name: Quantum Key Distribution BB84/E91, Entangled State Ledger & 
 
 ## Current Position
 
-Plan: 1 of 3 in current phase (source-complete; acceptance open)
-Status: Phase 69-01 source complete — 69-02 QKD engine executing
-Last activity: 2026-10-10 — 69-01 ledger/publisher parent-verified (54 passed) and pushed as `7e3f2e6` on draft PR #214. Live Devnet confirmation still unobserved. 69-02 is the next slice.
+Plan: 2 of 3 in current phase (source-complete; acceptance open)
+Status: Phase 69-02 source complete — 69-03 drill and routes next
+Last activity: 2026-10-10 — 69-02 QKD engine parent-verified (53 passed) and pushed as `f786f35` on draft PR #214. Key bytes stay on the workers. Live Devnet confirmation still unobserved.
 
 
 ## Current Status

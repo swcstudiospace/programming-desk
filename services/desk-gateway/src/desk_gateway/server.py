@@ -6252,14 +6252,31 @@ def create_mcp(
         drill_results = QuantumTopologicalDrillSimulator.run_drill()
         return JSONResponse({"ok": True, "drill": drill_results})
 
-    # Milestone v5.1 (Phases 68 & 69): Inter-Cluster Quantum Teleportation, QKD & Entangled Swarm Mesh
+    # Milestone v5.1 Phase 68: faithful distributed-simulator REST surface
+    # (REQ-QTELEPORT-005). The four phase-68 route families below run over one
+    # shared runtime graph (pool/mesh/protocol/transport/sink) with no hidden
+    # replacement pairs and no second sync workflow. QKD/ledger/anchor/drill
+    # routes further below stay phase-69 owned and are untouched here.
+    import math as _q68_math
+    from collections import deque as _q68_deque
+    from collections.abc import Mapping as _Q68Mapping
+    from types import SimpleNamespace as _Q68Namespace
+    from desk_gateway.quantum_node import QuantumNodeError as _Q68NodeError
     from desk_gateway.quantum_teleportation import (
-        BellPairPool,
-        BellStateType,
-        EntanglementPurifier,
-        EntanglementSwapper,
-        QuantumRepeaterMesh,
-        QuantumTeleportationProtocol,
+        MAX_ROUTE_NODES as _Q68_MAX_ROUTE_NODES,
+        BellPairPool as _Q68Pool,
+        BellStateType as _Q68BellKind,
+        QuantumRepeaterMesh as _Q68Mesh,
+        QuantumResourceError as _Q68Error,
+        QuantumTeleportationProtocol as _Q68Protocol,
+    )
+    from desk_gateway.quantum_transport import (
+        NodeCommandFailed as _Q68CommandFailed,
+        NodeTransportAmbiguous as _Q68Ambiguous,
+        NodeTransportDeadline as _Q68Deadline,
+        NodeTransportError as _Q68TransportError,
+        NodeTransportUnavailable as _Q68Unavailable,
+        RemoteNodeTransport as _Q68RemoteTransport,
     )
     from desk_gateway.quantum_qkd_mesh import (
         EavesdropDetector,
@@ -6269,13 +6286,95 @@ def create_mcp(
         QuantumTeleportationReceiptLedger,
     )
 
-    qteleport_pool = BellPairPool()
-    qteleport_mesh = QuantumRepeaterMesh(qteleport_pool)
-    qteleport_proto = QuantumTeleportationProtocol(qteleport_mesh)
+    class Quantum68EventCollector:
+        """In-memory bounded async event sink for phase 68.
+
+        Implements ``await append_event(mapping)`` over the shared public
+        shape (event_type/session_id/actor/nodes/resources/outcome/payload).
+        Phase 69 replaces this collector with the durable ledger through the
+        same injected ``append_event`` seam; the pool/protocol tiers never
+        import the ledger module.
+        """
+
+        REQUIRED_KEYS = ("event_type", "session_id", "actor", "nodes", "resources", "outcome", "payload")
+
+        def __init__(self, max_events: int = 1024) -> None:
+            self._events: Any = _q68_deque(maxlen=max_events)
+            self._seq = 0
+            self._total = 0
+
+        async def append_event(self, event: Any) -> dict[str, Any]:
+            if not isinstance(event, _Q68Mapping):
+                raise ValueError("quantum event must be a mapping")
+            missing = [key for key in self.REQUIRED_KEYS if key not in event]
+            if missing:
+                raise ValueError(f"quantum event missing keys: {missing}")
+            for key in ("event_type", "session_id", "actor", "outcome"):
+                if not isinstance(event[key], str) or not event[key]:
+                    raise ValueError(f"quantum event {key!r} must be a non-empty string")
+            for key in ("nodes", "resources"):
+                if not isinstance(event[key], (list, tuple)) or any(
+                    not isinstance(node, str) for node in event[key]
+                ):
+                    raise ValueError(f"quantum event {key!r} must be a string list")
+            if not isinstance(event["payload"], _Q68Mapping):
+                raise ValueError("quantum event payload must be a mapping")
+            self._total += 1
+            self._seq += 1
+            self._events.append({
+                "event_type": event["event_type"],
+                "session_id": event["session_id"],
+                "actor": event["actor"],
+                "nodes": list(event["nodes"]),
+                "resources": list(event["resources"]),
+                "outcome": event["outcome"],
+                "payload": dict(event["payload"]),
+            })
+            return {"receipt_id": f"q68-{self._seq:08d}", "seq": self._seq}
+
+        def snapshot(self) -> list[dict[str, Any]]:
+            return [dict(entry) for entry in self._events]
+
+        @property
+        def dropped(self) -> int:
+            return self._total - len(self._events)
+
+    def _q68_build_runtime(quantum_settings: Settings) -> Any:
+        """Assemble the single injected pool/mesh/protocol/transport/sink graph."""
+        rng = quantum_settings.quantum_rng_override
+        if rng is None:
+            rng = secrets.SystemRandom()
+        sink = quantum_settings.quantum_sink_override
+        collector = Quantum68EventCollector()
+        append_event = sink if sink is not None else collector.append_event
+        transport = quantum_settings.quantum_transport_override
+        if transport is None and quantum_settings.quantum_node_endpoints:
+            transport = _Q68RemoteTransport(
+                dict(quantum_settings.quantum_node_endpoints),
+                dict(quantum_settings.quantum_node_tokens),
+            )
+        pool = _Q68Pool(rng=rng, transport=transport, append_event=append_event)
+        mesh = _Q68Mesh(pool, rng=rng)
+        for node_id in quantum_settings.quantum_node_endpoints:
+            mesh.register_node(node_id, "operator")
+        for node_a, node_b in quantum_settings.quantum_node_links:
+            mesh.register_link(node_a, node_b)
+        proto = _Q68Protocol(mesh, transport=transport, rng=rng, append_event=append_event)
+        return _Q68Namespace(
+            pool=pool, mesh=mesh, proto=proto, purifier=mesh.purifier,
+            swapper=mesh.swapper, transport=transport, collector=collector, rng=rng,
+        )
+
+    q68 = _q68_build_runtime(settings)
+    qteleport_pool = q68.pool
+    qteleport_mesh = q68.mesh
+    qteleport_proto = q68.proto
     qkd_engine = QKDProtocolEngine(qteleport_mesh)
     qteleport_ledger = QuantumTeleportationReceiptLedger()
     qteleport_exporter = QuantumTeleportationAnchorExporter()
 
+    mcp._quantum68 = q68  # type: ignore[attr-defined]
+    mcp._quantum68_transport = q68.transport  # type: ignore[attr-defined]
     mcp._qteleport_pool = qteleport_pool  # type: ignore[attr-defined]
     mcp._qteleport_mesh = qteleport_mesh  # type: ignore[attr-defined]
     mcp._qteleport_proto = qteleport_proto  # type: ignore[attr-defined]
@@ -6283,74 +6382,388 @@ def create_mcp(
     mcp._qteleport_ledger = qteleport_ledger  # type: ignore[attr-defined]
     mcp._qteleport_exporter = qteleport_exporter  # type: ignore[attr-defined]
 
+    _Q68_MUTATION_SEATS = ("lead", "systems")
+    _Q68_MAX_BODY_BYTES = 65536
+    _Q68_MAX_LIST_ITEMS = 64
+    _Q68_BEARER_CHALLENGE = 'Bearer error="invalid_token", error_description="missing or unknown seat passphrase"'
+
+    def _q68_error(request: Request, status: int, code: str, detail: str) -> Response:
+        titles = {
+            400: "Bad Request", 404: "Not Found", 409: "Conflict",
+            503: "Service Unavailable", 504: "Gateway Timeout",
+        }
+        return problem_response(
+            status=status, title=titles.get(status, "Error"), detail=detail,
+            error_code=code, instance=request.url.path,
+        )
+
+    def _q68_auth(request: Request, *, mutation: bool) -> tuple[str | None, Response | None]:
+        """Authenticate before any parse or side effect (401 vs 403)."""
+        auth = request.headers.get("authorization", "")
+        token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+        seat = settings.seat_for_passphrase(token)
+        if seat is None:
+            return None, problem_response(
+                status=401, title="Unauthorized",
+                detail="Valid seat passphrase required for quantum teleportation routes.",
+                error_code="unauthorized", instance=request.url.path,
+                headers={"WWW-Authenticate": _Q68_BEARER_CHALLENGE},
+            )
+        if mutation and seat not in _Q68_MUTATION_SEATS:
+            return None, problem_response(
+                status=403, title="Forbidden",
+                detail="Lead or systems seat required for quantum mutations.",
+                error_code="forbidden", instance=request.url.path,
+            )
+        return seat, None
+
+    def _q68_reject_constant(value: str) -> Any:
+        raise ValueError(f"non-finite JSON constant {value}")
+
+    def _q68_check_finite(node: Any) -> None:
+        stack = [node]
+        while stack:
+            current = stack.pop()
+            if isinstance(current, float) and not _q68_math.isfinite(current):
+                raise ValueError("non-finite number")
+            if isinstance(current, dict):
+                stack.extend(current.values())
+            elif isinstance(current, (list, tuple)):
+                stack.extend(current)
+
+    async def _q68_body(request: Request, allowed: set[str]) -> tuple[dict[str, Any] | None, Response | None]:
+        try:
+            raw = await request.body()
+        except Exception:
+            return None, _q68_error(request, 400, "unreadable_body", "Request body could not be read.")
+        if len(raw) > _Q68_MAX_BODY_BYTES:
+            return None, _q68_error(request, 400, "body_too_large", "Request body exceeds 64 KiB.")
+        if not raw:
+            body: Any = {}
+        else:
+            try:
+                text = raw.decode("utf-8")
+            except UnicodeDecodeError:
+                return None, _q68_error(request, 400, "invalid_json", "Request body must be UTF-8 JSON.")
+            try:
+                body = json.loads(text, parse_constant=_q68_reject_constant)
+            except ValueError:
+                return None, _q68_error(request, 400, "invalid_json", "Request body must be a JSON object.")
+            try:
+                _q68_check_finite(body)
+            except ValueError:
+                return None, _q68_error(request, 400, "invalid_number", "Numbers must be finite (no NaN or Infinity).")
+        if not isinstance(body, dict):
+            return None, _q68_error(request, 400, "invalid_json", "Request body must be a JSON object.")
+        unknown = sorted(set(body) - allowed)
+        if unknown:
+            return None, _q68_error(request, 400, "unknown_field", f"Unknown fields: {unknown}.")
+        return body, None
+
+    def _q68_str(body: dict[str, Any], name: str, *, default: str | None = None, max_len: int = 128) -> str:
+        if name not in body:
+            if default is not None:
+                return default
+            raise _Q68Error("missing_field", f"{name} is required", status=400)
+        value = body[name]
+        if not isinstance(value, str) or not value or len(value) > max_len:
+            raise _Q68Error("invalid_field", f"{name} must be a 1..{max_len} char string", status=400)
+        return value
+
+    def _q68_fidelity(body: dict[str, Any], name: str, *, default: float) -> float:
+        if name not in body:
+            return default
+        value = body[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not _q68_math.isfinite(float(value)):
+            raise _Q68Error("invalid_fidelity", f"{name} must be a finite number", status=400)
+        result = float(value)
+        if not 0.0 <= result <= 1.0:
+            raise _Q68Error("invalid_fidelity", f"{name} must lie in [0, 1]", status=400)
+        return result
+
+    def _q68_bool(body: dict[str, Any], name: str, *, default: bool) -> bool:
+        if name not in body:
+            return default
+        value = body[name]
+        if not isinstance(value, bool):
+            raise _Q68Error("invalid_flag", f"{name} must be a boolean", status=400)
+        return value
+
+    def _q68_complex(body: dict[str, Any], name: str, *, default: complex) -> complex:
+        if name not in body:
+            return default
+        raw = body[name]
+        if not isinstance(raw, dict) or set(raw) != {"real", "imag"}:
+            raise _Q68Error("invalid_amplitude", f"{name} must be an object with real/imag fields", status=400)
+        parts = []
+        for key in ("real", "imag"):
+            value = raw[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not _q68_math.isfinite(float(value)):
+                raise _Q68Error("invalid_amplitude", f"{name}.{key} must be a finite number", status=400)
+            parts.append(float(value))
+        return complex(parts[0], parts[1])
+
+    def _q68_kind(body: dict[str, Any], name: str, *, default: str) -> Any:
+        raw = body.get(name, default)
+        valid = [kind.value for kind in _Q68BellKind]
+        if not isinstance(raw, str) or raw not in valid:
+            raise _Q68Error("invalid_bell_kind", f"{name} must be one of {valid}", status=400)
+        return _Q68BellKind(raw)
+
+    def _q68_snapshot_dict(snap: Any) -> dict[str, Any]:
+        return {
+            "pair_id": snap.pair_id,
+            "state_type": snap.state_type.value,
+            "node_a": snap.node_a,
+            "node_b": snap.node_b,
+            "fidelity": snap.fidelity,
+            "status": snap.status.value,
+            "leases": [[node, lease] for node, lease in snap.leases],
+        }
+
+    def _q68_domain_error(request: Request, exc: Exception) -> Response:
+        if isinstance(exc, _Q68Error):
+            status = exc.status if exc.status in (400, 404, 409, 503, 504) else 409
+            return _q68_error(request, status, exc.code, exc.detail)
+        if isinstance(exc, _Q68Deadline):
+            return _q68_error(request, 504, "transport_deadline", f"Node deadline exceeded: {exc}")
+        if isinstance(exc, _Q68Ambiguous):
+            return _q68_error(request, 409, "transport_ambiguous", f"Node outcome ambiguous, pair quarantined: {exc}")
+        if isinstance(exc, _Q68Unavailable):
+            return _q68_error(request, 503, "transport_unavailable", f"Node unavailable: {exc}")
+        if isinstance(exc, _Q68TransportError):
+            return _q68_error(request, 503, "transport_error", f"Node transport failed: {exc}")
+        if isinstance(exc, (_Q68CommandFailed, _Q68NodeError)):
+            status = exc.status if 400 <= exc.status < 500 else 503
+            return _q68_error(request, status, exc.code, exc.detail)
+        raise exc
+
     @mcp.custom_route("/v1/quantum/teleportation/bell-pair/create", methods=["POST"])
     async def quantum_bell_pair_create_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        node_a = body.get("node_a", "desk-alpha")
-        node_b = body.get("node_b", "desk-beta")
-        stype_raw = body.get("state_type", "PHI_PLUS")
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(request, {"node_a", "node_b", "state_type", "initial_fidelity"})
+        if body_error is not None:
+            return body_error
         try:
-            stype = BellStateType(stype_raw)
-        except ValueError:
-            stype = BellStateType.PHI_PLUS
-        fidelity = float(body.get("initial_fidelity", 0.99))
-        pair = qteleport_pool.create_pair(node_a, node_b, stype, fidelity)
+            node_a = _q68_str(body, "node_a", default="desk-alpha", max_len=64)
+            node_b = _q68_str(body, "node_b", default="desk-beta", max_len=64)
+            kind = _q68_kind(body, "state_type", default="PHI_PLUS")
+            fidelity = _q68_fidelity(body, "initial_fidelity", default=0.99)
+            pair = await qteleport_pool.create_pair(node_a, node_b, kind, fidelity)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
         return JSONResponse({"ok": True, "bell_pair": pair.to_dict()})
 
     @mcp.custom_route("/v1/quantum/teleportation/purify", methods=["POST"])
     async def quantum_teleportation_purify_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        pair_id_1 = body.get("pair_id_1", "")
-        pair_id_2 = body.get("pair_id_2", "")
-        p1 = qteleport_pool.get_pair(pair_id_1)
-        p2 = qteleport_pool.get_pair(pair_id_2)
-        if not p1 or not p2:
-            return JSONResponse({"ok": False, "error": "Bell pairs not found"}, status_code=404)
-        ok, purified, p_succ = EntanglementPurifier.purify(p1, p2)
-        if ok and purified:
-            qteleport_pool.pairs[purified.pair_id] = purified
-            return JSONResponse({"ok": True, "purified_pair": purified.to_dict(), "p_succ": p_succ})
-        return JSONResponse({"ok": False, "error": "Purification distillation failed"}, status_code=400)
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(request, {"pair_id_1", "pair_id_2"})
+        if body_error is not None:
+            return body_error
+        try:
+            pair_id_1 = _q68_str(body, "pair_id_1", max_len=128)
+            pair_id_2 = _q68_str(body, "pair_id_2", max_len=128)
+            result = await q68.purifier.purify(pair_id_1, pair_id_2)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        if result.accepted:
+            output = qteleport_pool.get_pair(result.output_pair_id or "")
+            return JSONResponse({
+                "ok": True,
+                "accepted": True,
+                "purified_pair": output.to_dict() if output is not None else None,
+                "p_succ": result.p_accept,
+                "p_accept": result.p_accept,
+                "branch_bits": list(result.branch_bits),
+                "branch_probability": result.branch_probability,
+                "output_fidelity": result.output_fidelity,
+                "reason": result.reason,
+            })
+        # Parity rejection is a truthful unsuccessful protocol outcome, never
+        # top-level green: both inputs are consumed with no output pair.
+        return JSONResponse({
+            "ok": False,
+            "accepted": False,
+            "purified_pair": None,
+            "p_succ": result.p_accept,
+            "p_accept": result.p_accept,
+            "branch_bits": list(result.branch_bits),
+            "branch_probability": result.branch_probability,
+            "output_fidelity": None,
+            "reason": result.reason,
+        })
 
     @mcp.custom_route("/v1/quantum/repeater/route", methods=["POST"])
     async def quantum_repeater_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        node_path = body.get("node_path", ["desk-alpha", "repeater-1", "desk-beta"])
-        base_fidelity = float(body.get("base_fidelity", 0.98))
-        purify = bool(body.get("purify", True))
-        ok, pair, logs = qteleport_mesh.establish_multi_hop_entanglement(node_path, base_fidelity, purify)
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(request, {"node_path", "base_fidelity", "purify"})
+        if body_error is not None:
+            return body_error
+        try:
+            raw_path = body.get("node_path", ["desk-alpha", "repeater-1", "desk-beta"])
+            if not isinstance(raw_path, list):
+                raise _Q68Error("invalid_route", "node_path must be a list of node IDs", status=400)
+            if len(raw_path) > _Q68_MAX_LIST_ITEMS:
+                raise _Q68Error("invalid_route", "node_path is excessively long", status=400)
+            node_path = []
+            for pos, node in enumerate(raw_path):
+                if not isinstance(node, str) or not node or len(node) > 64:
+                    raise _Q68Error("invalid_route", f"node_path[{pos}] must be a 1..64 char string", status=400)
+                node_path.append(node)
+            base_fidelity = _q68_fidelity(body, "base_fidelity", default=0.98)
+            purify = _q68_bool(body, "purify", default=True)
+            # Empty and over-long routes must not crash: the mesh reports them
+            # as unsuccessful outcomes with logs (zero-count safe-abort style).
+            ok, pair, logs = await qteleport_mesh.establish_multi_hop_entanglement(
+                node_path, base_fidelity, purify,
+            )
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
         return JSONResponse({
             "ok": ok,
             "bell_pair": pair.to_dict() if pair else None,
             "logs": logs,
         })
 
+    @mcp.custom_route("/v1/quantum/teleportation/swap", methods=["POST"])
+    async def quantum_teleportation_swap_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(request, {"pair_id_ab", "pair_id_bc"})
+        if body_error is not None:
+            return body_error
+        try:
+            pair_id_ab = _q68_str(body, "pair_id_ab", max_len=128)
+            pair_id_bc = _q68_str(body, "pair_id_bc", max_len=128)
+            result = await q68.swapper.swap(pair_id_ab, pair_id_bc)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        output = qteleport_pool.get_pair(result.output_pair_id or "")
+        return JSONResponse({
+            "ok": result.accepted,
+            "accepted": result.accepted,
+            "swapped_pair": output.to_dict() if output is not None else None,
+            "output_pair_id": result.output_pair_id,
+            "bsm_bits": list(result.bsm_bits),
+            "bsm_probability": result.bsm_probability,
+            "correction_x": result.correction_x,
+            "correction_z": result.correction_z,
+            "gate_x": result.gate_x,
+            "gate_z": result.gate_z,
+            "correction_origin": result.correction_origin,
+            "output_fidelity": result.output_fidelity,
+            "reason": result.reason,
+        })
+
     @mcp.custom_route("/v1/quantum/teleportation/teleport", methods=["POST"])
     async def quantum_teleportation_teleport_route(request: Request) -> Response:
-        body = await request.json() if "application/json" in request.headers.get("content-type", "") else {}
-        source_node = body.get("source_node", "desk-alpha")
-        target_node = body.get("target_node", "desk-beta")
-        alpha_val = body.get("alpha", {"real": 1.0, "imag": 0.0})
-        beta_val = body.get("beta", {"real": 0.0, "imag": 0.0})
-        alpha = complex(float(alpha_val.get("real", 1.0)), float(alpha_val.get("imag", 0.0)))
-        beta = complex(float(beta_val.get("real", 0.0)), float(beta_val.get("imag", 0.0)))
-        intermediate_hops = body.get("intermediate_hops")
+        _, auth_error = _q68_auth(request, mutation=True)
+        if auth_error is not None:
+            return auth_error
+        body, body_error = await _q68_body(
+            request, {"source_node", "target_node", "alpha", "beta", "bell_pair", "intermediate_hops"},
+        )
+        if body_error is not None:
+            return body_error
+        try:
+            source_node = _q68_str(body, "source_node", default="desk-alpha", max_len=64)
+            target_node = _q68_str(body, "target_node", default="desk-beta", max_len=64)
+            alpha = _q68_complex(body, "alpha", default=complex(1.0, 0.0))
+            beta = _q68_complex(body, "beta", default=complex(0.0, 0.0))
+            selected: str | None = None
+            if "bell_pair" in body and body["bell_pair"] is not None:
+                selected = _q68_str(body, "bell_pair", max_len=128)
+            hops: list[str] | None = None
+            if "intermediate_hops" in body and body["intermediate_hops"] is not None:
+                raw_hops = body["intermediate_hops"]
+                if not isinstance(raw_hops, list):
+                    raise _Q68Error("invalid_hops", "intermediate_hops must be a list of node IDs", status=400)
+                if len(raw_hops) > _Q68_MAX_LIST_ITEMS:
+                    raise _Q68Error("invalid_hops", "intermediate_hops is excessively long", status=400)
+                hops = []
+                for pos, node in enumerate(raw_hops):
+                    if not isinstance(node, str) or not node or len(node) > 64:
+                        raise _Q68Error("invalid_hops", f"intermediate_hops[{pos}] must be a 1..64 char string", status=400)
+                    hops.append(node)
+            if hops is not None and selected is None:
+                if len(hops) + 2 > _Q68_MAX_ROUTE_NODES:
+                    raise _Q68Error("route_too_long", "teleport route must list at most 16 nodes", status=400)
+                unknown = [node for node in [source_node, *hops, target_node] if node not in qteleport_mesh.nodes]
+                if unknown:
+                    raise _Q68Error("unknown_node", f"teleport route uses unregistered nodes: {sorted(set(unknown))}", status=404)
+            # A selected pair combined with fresh-hop allocation is rejected
+            # by the protocol itself (invalid_selection, 400): an invalid
+            # selection never summons a hidden replacement pair.
+            result = await qteleport_proto.teleport_qubit(
+                source_node, target_node, alpha, beta,
+                bell_pair=selected, intermediate_hops=hops,
+            )
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        receipt = result.receipt
+        receipt_dict = dict(receipt) if isinstance(receipt, _Q68Mapping) else None
+        # Below-threshold teleports are truthful unsuccessful protocol
+        # outcomes (never top-level green); the resource stays consumed and
+        # the raw unrounded fidelity is exposed for audit.
+        return JSONResponse({"ok": result.success, "result": result.to_dict(), "receipt": receipt_dict})
 
-        res = qteleport_proto.teleport_qubit(
-            source_node=source_node,
-            target_node=target_node,
-            alpha=alpha,
-            beta=beta,
-            intermediate_hops=intermediate_hops,
-        )
-        rcpt = qteleport_ledger.append_event(
-            "QUANTUM_TELEPORTATION",
-            [source_node, target_node],
-            res.session_id,
-            res.fidelity,
-            res.to_dict(),
-        )
-        return JSONResponse({"ok": True, "result": res.to_dict(), "receipt": rcpt.to_dict()})
+    @mcp.custom_route("/v1/quantum/teleportation/pair/{pair_id}", methods=["GET"])
+    async def quantum_bell_pair_snapshot_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        pair_id = request.path_params.get("pair_id", "")
+        if not isinstance(pair_id, str) or not pair_id or len(pair_id) > 256:
+            return _q68_error(request, 400, "invalid_id", "pair_id must be a 1..256 char string.")
+        snap = qteleport_pool.snapshot(pair_id)
+        if snap is None:
+            return _q68_error(request, 404, "unknown_pair", f"pair {pair_id} is unknown.")
+        return JSONResponse({"ok": True, "pair": _q68_snapshot_dict(snap)})
+
+    @mcp.custom_route("/v1/quantum/teleportation/pairs", methods=["GET"])
+    async def quantum_bell_pair_list_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        try:
+            query = request.query_params
+            node_a = query.get("node_a")
+            node_b = query.get("node_b")
+            for name, value in (("node_a", node_a), ("node_b", node_b)):
+                if value is not None and (not value or len(value) > 64):
+                    raise _Q68Error("invalid_node", f"{name} must be a 1..64 char string", status=400)
+            snaps = qteleport_pool.list_active_pairs(node_a, node_b)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        pairs = [_q68_snapshot_dict(snap) for snap in snaps]
+        return JSONResponse({"ok": True, "pairs": pairs, "count": len(pairs)})
+
+    @mcp.custom_route("/v1/quantum/worker/{node_id}/inspect", methods=["GET"])
+    async def quantum_worker_inspect_route(request: Request) -> Response:
+        _, auth_error = _q68_auth(request, mutation=False)
+        if auth_error is not None:
+            return auth_error
+        node_id = request.path_params.get("node_id", "")
+        if not isinstance(node_id, str) or not node_id or len(node_id) > 64:
+            return _q68_error(request, 400, "invalid_node", "node_id must be a 1..64 char string.")
+        if q68.transport is None:
+            return _q68_error(request, 503, "worker_plane_unavailable", "No worker transport is configured.")
+        try:
+            info = await q68.transport.inspect(node_id)
+        except _Q68Unavailable as exc:
+            if "unknown node" in str(exc):
+                return _q68_error(request, 404, "unknown_node", f"node {node_id} is unknown.")
+            return _q68_domain_error(request, exc)
+        except (_Q68Error, _Q68TransportError, _Q68CommandFailed, _Q68NodeError) as exc:
+            return _q68_domain_error(request, exc)
+        return JSONResponse({"ok": True, "worker": info})
 
     @mcp.custom_route("/v1/quantum/qkd/bb84", methods=["POST"])
     async def quantum_qkd_bb84_route(request: Request) -> Response:
@@ -10342,6 +10755,33 @@ def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
     starlette_app.router.lifespan_context = _close_upstreams_on_shutdown
 
 
+def _install_quantum68_shutdown(starlette_app: Any, mcp: Any) -> None:
+    """Close the lifespan-owned quantum worker transport on shutdown.
+
+    Wraps the existing lifespan context (which already owns the MCP session
+    manager and upstream clients) without disturbing it: the previous
+    context still runs, then the reusable RemoteNodeTransport client is
+    explicitly closed. No-op when the gateway runs without a worker plane.
+    """
+    transport = getattr(mcp, "_quantum68_transport", None)
+    if transport is None or not hasattr(transport, "aclose"):
+        return
+    previous = starlette_app.router.lifespan_context
+
+    @contextlib.asynccontextmanager
+    async def _close_quantum68_on_shutdown(app: Any):
+        try:
+            async with previous(app) as state:
+                yield state
+        finally:
+            try:
+                await transport.aclose()
+            except Exception as exc:
+                logger.warning("Quantum68 transport close failed (%s)", type(exc).__name__)
+
+    starlette_app.router.lifespan_context = _close_quantum68_on_shutdown
+
+
 def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     settings = settings or Settings.from_env()
     settings.data_dir.mkdir(parents=True, exist_ok=True)
@@ -10415,6 +10855,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     )
     starlette_app = mcp.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, transport_security=transport_security, host=settings.public_host)
     _install_upstream_shutdown(starlette_app, services)
+    _install_quantum68_shutdown(starlette_app, mcp)
 
     async def desk_events(websocket: WebSocket) -> None:
         await websocket.accept()

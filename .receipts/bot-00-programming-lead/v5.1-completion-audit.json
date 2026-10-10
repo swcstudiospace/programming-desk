@@ -665,6 +665,28 @@
   "duration_s": 0.37,
   "output_tail": "Published corrected receipt strictG2FAIL ONLYmissing independent approved_by, no JSON/load/pointer error."
 }
+,
+{
+  "cmd": "git commit --only -m 'docs(verification): align evidence pointers counts and chronology with primary output' -- .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VERIFICATION.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-VALIDATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VERIFICATION.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-VALIDATION.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-09-SUMMARY.md .planning/phases/68-inter-cluster-quantum-teleportation-protocol-entanglement-sw/68-10-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-09-SUMMARY.md .planning/phases/69-quantum-key-distribution-bb84-e91-entangled-state-ledger-sol/69-10-SUMMARY.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.21,
+  "output_tail": "240c56b commits exactlynineLEADownedpaths/17insertions14deletions: latestpointer48/history16, four primary-grounded chronologyreport repairs, four currentSASTclosing repairs, preservedoriginalcriteria/commandhistory/no productcode."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.72,
+  "output_tail": "Primary-grounded correctedunionG1PASS70owned/G3PASS70nosecrets7templates/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; total pipelinewall only."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.49,
+  "output_tail": "CorrectedunionrealconsumerG2FAIL ONLYmissing independentapproved_by; no JSON/pointer/claim/force-stage failure."
+}
   ],
   "claims": [
     {

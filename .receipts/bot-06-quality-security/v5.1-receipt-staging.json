@@ -1,0 +1,123 @@
+{
+  "task_id": "v5.1-receipt-staging",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/v5.1-receipt-staging",
+  "started_at": "2026-10-10T17:18:40Z",
+  "completed_at": "2026-10-10T17:54:09Z",
+  "timestamp_basis": "Started_at is observed isolated-worktree birth, completed_at is parent observed verification UTC; command durations actual whole-tool wall times.",
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 1,
+      "duration_s": 0.79,
+      "output_tail": "BEFORE unchanged SOURCE receipt: missingindependentapproved_by PLUS mandatorygitadd-f--cmd94falsepositive; artifact1192"
+    },
+    {
+      "cmd": "git worktree add -b bot-06-quality-security/v5.1-receipt-staging /tmp/desk-v51-quality-gate origin/main",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 0,
+      "duration_s": 1.33,
+      "output_tail": "IsolatedQUALITYbranch/worktree atc9040a4, no usercheckoutfileedit; FICLONEfallbackcheckout"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "GenuineSyntaxErrornewfstringtestline1480singleliteralclosingbrace; sourceintentnotweakened, authorfixedescaped}}"
+    },
+    {
+      "cmd": "python3 -m py_compile ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.22,
+      "output_tail": "Correctedcheckerandconsumertestmodulescompileclean"
+    },
+    {
+      "cmd": "uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 49-152 ci/gates/check_receipt.py && uv run --project /tmp/desk-v51-implementation/services/desk-gateway --no-sync ruff format --range 1257-1484 ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.41,
+      "output_tail": "FormattedonlyNEWliteralclassifier/testblocks, no unrelatedrestyle"
+    },
+    {
+      "cmd": "git commit --only -m 'fix(gates): classify mandated receipt force staging narrowly' -- ci/gates/check_receipt.py ci/tests/test_gates.py",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.24,
+      "output_tail": "2bea6d1only2QUALITYfiles347insertions1deletion; HEADcandidate committed BEFOREcandidate-run tests"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 17.86,
+      "output_tail": "326passed17.37s/no skipped cases;27newcandidateCLIcases plus299existing"
+    },
+    {
+      "cmd": "python3 /tmp/desk-v51-quality-gate/ci/gates/check_receipt.py --receipt /tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 1,
+      "duration_s": 0.29,
+      "output_tail": "AFTERsameSOURCEreceiptactualCLI: ONLYmissingindependentapproved_by, mandatory-stagefalsepositivegoneunderisolatedQUALITYchecker; cmd94dictverbatimpreserved/no fakeapproval"
+    },
+    {
+      "cmd": "stat -c %w /tmp/desk-v51-quality-gate && date -u +%Y-%m-%dT%H:%M:%SZ",
+      "cwd": "/tmp/desk-v51-quality-gate",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "Worktreeactualbirth2026-10-10T17:18:40.071538673+0000;observedverificationUTC2026-10-10T17:54:09Z"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Originalreceiptvalidatorrejected compulsoryignoredreceiptstagingalongside correctlymissingapproval",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "CorrectedgateandnewCLIconsumerregressionscompileaftergenuinesyntaxfaultrepair",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "CandidateHEADgatesuite326passedincluding27newlegit-force-stage/reject-bypassCLIcases",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Patchedownercheckerremovesrealhistoricalforce-stagefalsepositivebutstillrefusestheunsignedSOURCEreceipt; originalcommandhistorypreserved",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "No independent LEAD/human approved_by for this QUALITY-authoredchange; authornever selfstamps, reviewer advisory is not signed approval.",
+    "Source branch still contains the old gate; isolated patched-checker after proof is not Source CI integration. Owner draft requires review/integration before SOURCE publish hold clears; no merge permitted in this session.",
+    "Final draft-head Greptile/QUALITY review and actual remote gates not yet completed; no merge-ready or security gate approval claim.",
+    "Classifier intentionally conservative: only leading literal unquoted git-add force-only options, canonical ASCII explicit own-seatreceiptanddeclaredsourcepaths; unsupportedwrappers/quoting/controlflow/extraoptions remainblocked, otherbypasschecksoriginal.",
+    "No live Devnet funding/publication, production deploy, risk waiver or original milestone acceptance is asserted by this gate-only change."
+  ],
+  "files_changed": [
+    "ci/gates/check_receipt.py",
+    "ci/tests/test_gates.py",
+    "docs/quality-gates.md",
+    "skills/verification-receipts/SKILL.md",
+    ".receipts/bot-06-quality-security/v5.1-receipt-staging.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": [],
+  "independent_source_review": {
+    "scope": "advisory only",
+    "reviewer": "ReviewQualityReceiptExemption",
+    "result": "zero remaining actionable source defects after literal classifier replaced mini-shell parser; priorunsafe-option/quote/controlflow findings superseded, no signed approval"
+  },
+  "source_history_boundary": {
+    "receipt": "/tmp/desk-v51-implementation/.receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+    "original_command_index": 94,
+    "raw_command_preserved": true,
+    "corrected_declared_missing_path": "services/desk-gateway/src/desk_gateway/quantum_key.py",
+    "scope": "Path actually changed in SOURCE netdiff; metadata correction did not mutate command history or approval"
+  }
+}

@@ -84,6 +84,16 @@ python3 ci/gates/check_receipt.py --receipt .receipts/bot-03-android/feat-push.j
 That last one is worth naming: `git commit --no-verify`, `./gradlew -x test`, `pytest || true` and
 friends produce a green receipt from a build that never ran. They are rejected outright.
 
+Receipt JSON is ignored by git and must be staged with `git add -f` (or
+`--force`). G-2 permits only a leading, literal, unquoted `git add` with
+force-only options, an optional `--`, and canonical explicit paths: at least
+one `.receipts/<authoring-bot>/*.json`, with every other path declared in
+`files_changed`. An optional `&&` tail remains subject to the original bypass
+checks. This does not exempt force-push, skipped hooks/tests, error masking,
+wrappers, substitutions or ambiguous shell syntax. Keep the actual command
+history; never rewrite it to conceal a flag. G-1, G-3 and independent approval
+remain required.
+
 **Evidence.** The receipt JSON, retained with the commit.
 
 ---

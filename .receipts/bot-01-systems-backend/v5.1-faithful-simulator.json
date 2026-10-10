@@ -1,0 +1,321 @@
+{
+  "task_id": "v5.1-faithful-simulator",
+  "bot": "bot-01-systems-backend",
+  "branch": "bot-01-systems-backend/v5.1-faithful-simulator",
+  "started_at": "2026-10-10T04:19:39Z",
+  "completed_at": "2026-10-10T07:23:28Z",
+  "commands": [
+    {
+      "cmd": "curl --silent --show-error --max-time 25 --include --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"requestAirdrop\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",10000000,{\"commitment\":\"finalized\"}]}' https://api.devnet.solana.com",
+      "exit_code": 0,
+      "duration_s": 3.18,
+      "output_tail": "HTTP/2 200; Date 2026-10-10T04:19:39Z; x-ratelimit-airdrop-limit: 1; x-ratelimit-airdrop-remaining: 0; {\"jsonrpc\":\"2.0\",\"error\":{\"code\":-32603,\"message\":\"Internal error\"},\"id\":1}",
+      "result": "RPC error; no funding signature returned"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-before-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 0,
+      "duration_s": 0.45,
+      "output_tail": "{\"asymmetric_minus_fidelity\": -1.1999999882661427e-09, \"asymmetric_psd_constructor\": \"accepted\", \"long_memo_decode_matches\": true, \"permutation\": \"rejected\", \"shared_writer\": \"IntegrityError\"}"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-workers-smoke.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 0,
+      "duration_s": 0.92,
+      "output_tail": "{\"bell_frames\": [{\"fidelity\": 0.9999999999999997, \"frame\": [0, 0], \"kind\": \"PHI_PLUS\"}, {\"fidelity\": 0.9999999999999997, \"frame\": [0, 1], \"kind\": \"PHI_MINUS\"}, {\"fidelity\": 0.9999999999999997, \"frame\": [1, 0], \"kind\": \"PSI_PLUS\"}, {\"fidelity\": 0.9999999999999997, \"frame\": [1, 1], \"kind\": \"PSI_MINUS\"}], \"distinct_worker_instances\": 4, \"ledger_size\": 6, \"teleport\": {\"fidelity\": 0.9933333333333332, \"input_destroyed\": true, \"receiver_correction\": true, \"resource_consumed\": true, \"success\": true}, \"worker_pids\": [2915417, 2915418, 2915419, 2915420]}"
+    },
+    {
+      "cmd": "curl --silent --show-error --max-time 25 --header 'Content-Type: application/json' --data '[{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",{\"commitment\":\"confirmed\"}]},{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"getSignaturesForAddress\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",{\"commitment\":\"confirmed\",\"limit\":5}]}]' https://api.devnet.solana.com",
+      "exit_code": 0,
+      "duration_s": 0.71,
+      "output_tail": "[{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"4.4.0-beta.0\",\"slot\":509420701},\"value\":0},\"id\":1},{\"jsonrpc\":\"2.0\",\"result\":[],\"id\":2}]"
+    },
+    {
+      "cmd": "curl --silent --show-error --max-time 25 --include --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"requestAirdrop\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",10000000,{\"commitment\":\"finalized\"}]}' https://api.devnet.solana.com",
+      "exit_code": 0,
+      "duration_s": 0.16,
+      "output_tail": "HTTP/2 429; Retry-After: 86400; x-ratelimit-airdrop-limit: 1; x-ratelimit-airdrop-remaining: -1; {\"jsonrpc\":\"2.0\",\"error\":{\"code\":429,\"message\":\"You've either reached your airdrop limit today or the airdrop faucet has run dry. Please visit https://faucet.solana.com for alternate sources of test SOL\"},\"id\":1}",
+      "result": "No funding signature; no further airdrop retries before provider cooldown"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'from desk_gateway.quantum_state import QuantumDensityMatrix, QuantumStateVector, X; matrices=(((0.5,0.5000000008),(0.5000000016,0.5)),((0.5,0.5000000016),(0.5000000008,0.5))); rejected=0\nfor rows in matrices:\n try: QuantumDensityMatrix(rows)\n except ValueError: rejected+=1\nassert rejected==2\nrho=QuantumStateVector.from_qubit(1,1j).density(); flipped=rho.apply_single(X,0); assert abs(flipped.fidelity_pure(QuantumStateVector.from_qubit(1,-1j))-1)<1e-9\nprint(\"PSD counterexample: rejected in both basis orders; complex X correction: fidelity 1 within 1e-9\")'",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 0,
+      "duration_s": 0.21,
+      "output_tail": "PSD counterexample: rejected in both basis orders; complex X correction: fidelity 1 within 1e-9"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'import asyncio,json,tempfile; from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger\nwith tempfile.TemporaryDirectory() as directory:\n a=QuantumTeleportationReceiptLedger(directory); b=QuantumTeleportationReceiptLedger(directory)\n event={\"event_type\":\"smoke.created\",\"session_id\":\"claim-smoke\",\"actor\":\"smoke\",\"nodes\":[\"alice\"],\"resources\":[],\"outcome\":\"created\",\"payload\":{}}\n first=asyncio.run(a.append_event(event)); asyncio.run(a.append_event(event))\n common={\"receipt_id\":first.receipt_id,\"leaf_index\":0,\"payer_b58\":\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",\"last_valid\":500}\n one=a.claim_anchor(**common,tree_size=1,root_hex=first.prefix_root_hex); two=b.claim_anchor(**common,tree_size=2,root_hex=a.current_root_hex)\n print(json.dumps({\"first_claim\":one,\"same_receipt_later_prefix_claim\":two})); a.close(); b.close()'",
+      "exit_code": 0,
+      "duration_s": 0.25,
+      "output_tail": "{\"first_claim\": true, \"same_receipt_later_prefix_claim\": true}",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'import asyncio,json,sys,tempfile; sys.path.insert(0,\"/tmp/desk-v51-implementation/tests\"); from test_quantum_ledger_anchor import make_ledger,append_teleport; from desk_gateway.quantum_anchor import QuantumTeleportationAnchorExporter\nwith tempfile.TemporaryDirectory() as directory:\n ledger=make_ledger(directory); receipt=asyncio.run(append_teleport(ledger,\"fresh-path-smoke\")); publisher=QuantumTeleportationAnchorExporter(ledger)\n result=asyncio.run(publisher.export_commitment(receipt.receipt_id)); print(json.dumps({\"fresh_unconfigured_publisher_returned_none\":result is None,\"error_code\":None if result is None else result.error_code})); ledger.close()'",
+      "exit_code": 1,
+      "duration_s": 0.47,
+      "output_tail": "TypeError: unsupported operand type(s) for /: 'str' and 'str'",
+      "result": "Probe construction error: helper requires Path, not str; not a product failure",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'import asyncio,json,sys,tempfile; from pathlib import Path; sys.path.insert(0,\"/tmp/desk-v51-implementation/tests\"); from test_quantum_ledger_anchor import make_ledger,append_teleport; from desk_gateway.quantum_anchor import QuantumTeleportationAnchorExporter\nwith tempfile.TemporaryDirectory() as directory:\n ledger=make_ledger(Path(directory)); receipt=asyncio.run(append_teleport(ledger,\"fresh-path-smoke\")); publisher=QuantumTeleportationAnchorExporter(ledger)\n result=asyncio.run(publisher.export_commitment(receipt.receipt_id)); print(json.dumps({\"fresh_unconfigured_publisher_returned_none\":result is None,\"error_code\":None if result is None else result.error_code})); ledger.close()'",
+      "exit_code": 0,
+      "duration_s": 0.43,
+      "output_tail": "{\"fresh_unconfigured_publisher_returned_none\": true, \"error_code\": null}",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'import asyncio,json,tempfile; from desk_gateway.quantum_ledger import QuantumTeleportationReceiptLedger\nwith tempfile.TemporaryDirectory() as directory:\n a=QuantumTeleportationReceiptLedger(directory); b=QuantumTeleportationReceiptLedger(directory)\n event={\"event_type\":\"smoke.created\",\"session_id\":\"claim-smoke\",\"actor\":\"smoke\",\"nodes\":[\"alice\"],\"resources\":[],\"outcome\":\"created\",\"payload\":{}}\n first=asyncio.run(a.append_event(event)); asyncio.run(a.append_event(event))\n common={\"receipt_id\":first.receipt_id,\"leaf_index\":0,\"payer_b58\":\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",\"last_valid\":500}\n one=a.claim_anchor(**common,tree_size=1,root_hex=first.prefix_root_hex); two=b.claim_anchor(**common,tree_size=2,root_hex=a.current_root_hex)\n assert one is True and two is False\n print(json.dumps({\"first_claim\":one,\"same_receipt_later_prefix_claim\":two})); a.close(); b.close()'",
+      "exit_code": 0,
+      "duration_s": 0.29,
+      "output_tail": "{\"first_claim\": true, \"same_receipt_later_prefix_claim\": false}",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -c 'import asyncio,json,sys,tempfile; from pathlib import Path; sys.path.insert(0,\"/tmp/desk-v51-implementation/tests\"); from test_quantum_ledger_anchor import make_ledger,append_teleport; from desk_gateway.quantum_anchor import QuantumTeleportationAnchorExporter\nwith tempfile.TemporaryDirectory() as directory:\n ledger=make_ledger(Path(directory)); receipt=asyncio.run(append_teleport(ledger,\"fresh-path-smoke\")); publisher=QuantumTeleportationAnchorExporter(ledger)\n result=asyncio.run(publisher.export_commitment(receipt.receipt_id)); assert result is not None and result.http_status==503\n print(json.dumps({\"fresh_unconfigured_publisher_returned_none\":result is None,\"error_code\":result.error_code})); ledger.close()'",
+      "exit_code": 0,
+      "duration_s": 0.5,
+      "output_tail": "{\"fresh_unconfigured_publisher_returned_none\": false, \"error_code\": \"rpc_url_not_configured\"}",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway"
+    },
+    {
+      "cmd": "curl --silent --show-error --max-time 25 --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",{\"commitment\":\"confirmed\"}]}' https://api.devnet.solana.com",
+      "cwd": "/tmp/desk-v51-implementation",
+      "exit_code": 0,
+      "duration_s": 0.23,
+      "output_tail": "{\"jsonrpc\":\"2.0\",\"result\":{\"context\":{\"apiVersion\":\"4.4.0-beta.0\",\"slot\":509446760},\"value\":0},\"id\":1}",
+      "result": "Read-only balance observation; not another faucet funding retry"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-focused.xml ../../tests/test_quantum_state_kernel.py ../../tests/test_quantum_node_transport.py ../../tests/test_quantum_teleportation.py ../../tests/test_quantum_qkd_mesh.py ../../tests/test_quantum_ledger_anchor.py ../../tests/test_quantum_teleportation_endpoints.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 2,
+      "duration_s": 3.59,
+      "output_tail": "3 collection errors: NameError Callable in quantum_teleportation.py:79; no tests executed",
+      "result": "Source import integration defect; subsequently repaired missing typing imports and missing worker release helper"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-focused.xml ../../tests/test_quantum_state_kernel.py ../../tests/test_quantum_node_transport.py ../../tests/test_quantum_teleportation.py ../../tests/test_quantum_qkd_mesh.py ../../tests/test_quantum_ledger_anchor.py ../../tests/test_quantum_teleportation_endpoints.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 1,
+      "duration_s": 57.96,
+      "output_tail": "12 failed, 253 passed in56.79s; stale discovery, terminal counts, source/test integration issues; full output artifact://835",
+      "result": "Initial behavioral regression failures were not rerun to confirm; source and consumer fixes were applied first"
+    },
+    {
+      "cmd": "TMPDIR=/dev/shm uv run --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-focused.xml ../../tests/test_quantum_state_kernel.py ../../tests/test_quantum_node_transport.py ../../tests/test_quantum_teleportation.py ../../tests/test_quantum_qkd_mesh.py ../../tests/test_quantum_ledger_anchor.py ../../tests/test_quantum_teleportation_endpoints.py",
+      "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+      "exit_code": 1,
+      "duration_s": 56.46,
+      "output_tail": "1 failed, 261 passed in55.12s; repeated-drill fixture called create_pair with nonexistent initial_fidelity keyword",
+      "result": "Fixture corrected to actual provider signature; scoped verification follows"
+    },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-http-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 2.12,
+    "result": "Real four-worker gateway smoke reached auth/type/size checks; probe expected malformed-body400 without application/json, but actual documented unsupported-media response was415. Corrected probe header; not a product failure."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-http-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 2.33,
+    "result": "Real four-worker gateway smoke passed Bell/teleport/output-release/repeater/purification paths before exposing a200-round BB84 session reporting QBER0 rather than unestimated null. Fixed finite-sample admission before estimation, with permanent BB84/E91 short-sample regressions."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-focused.xml ../../tests/test_quantum_state_kernel.py ../../tests/test_quantum_node_transport.py ../../tests/test_quantum_teleportation.py ../../tests/test_quantum_qkd_mesh.py ../../tests/test_quantum_ledger_anchor.py ../../tests/test_quantum_teleportation_endpoints.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 63.36,
+    "output_tail": "265 passed in62.21s (0:01:02)",
+    "result": "Integrated kernel, node/transport, teleportation, remote QKD, ledger/publisher, and endpoint acceptance regressions; genuine Devnet publication not claimed."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-gateway.xml ../../tests",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 69.56,
+    "output_tail": "3 failed,442 passed in68.25s",
+    "result": "Broad suite launched from package cwd; three unchanged desk tests require repository-root layout/PYTHONPATH. Invocation corrected, no unrelated product changes."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 68.45,
+    "output_tail": "445 passed in67.19s (0:01:07)"
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-http-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 320.4,
+    "result": "Actual four-worker smoke established BB84/E91 and independently consumed endpoint keys, exercised both five-stage unfunded drills and preserved user capacity. Final unknown-proof query omitted required tree_size and correctly got400; probe corrected to valid query before requesting404."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-uncertainty-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.43,
+    "output_tail": "later_lease_count1; refusal_code worker_refused; uncertainty status absent, no original instance",
+    "result": "Before-fix actual worker handler committed after timeout; a momentarily empty snapshot was incorrectly treated as definitive refusal."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-owner-replay-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 0.6,
+    "output_tail": "AttributeError: BellPairPool object has no attribute bell_pool",
+    "result": "Probe constructor error: pool must be supplied as keyword. Corrected probe, not a product defect."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-owner-replay-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.62,
+    "output_tail": "release_attempts2; codes transport_ambiguous,transport_ambiguous; output_status quarantined; corrupted_replay_exception LedgerCorruptError",
+    "result": "Before-fix quarantined output issued another release mutation. Startup replay already normalizes corrupt eligible payload errors; WR06 startup allegation refuted."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-uncertainty-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1.12,
+    "output_tail": "later_lease_count1; refusal_code transport_ambiguous; uncertainty status unresolved with original instance",
+    "result": "After-fix pending late commit remains explicitly quarantined on its original instance; no reserve retry."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-owner-replay-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 1.41,
+    "output_tail": "release_attempts1; codes transport_ambiguous,output_quarantined; output_status quarantined; corrupted_replay_exception LedgerCorruptError",
+    "result": "After-fix quarantined output blocks another mutation; corrupt startup stays typed LedgerCorruptError."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 81.95,
+    "output_tail": "1 failed,641 passed in80.73s",
+    "result": "Checkpoint tamper fixture sometimes wrote already-equal00 prefix, so performed no corruption. All three such fixtures now guarantee a different first hex nibble; no product acceptance weakened."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 80.75,
+    "output_tail": "642 passed in79.53s (0:01:19)",
+    "result": "Complete post-review consumer suite including bounded raw/compressed streaming, max-capacity inspection/cleanup, strict RPC confirmation and resource-quarantine regressions."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-http-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 1,
+    "duration_s": 307.5,
+    "result": "Post-review real-worker numerical/private-owner/drill paths passed; final probe looked for tree_size in bounded receipt-list row. List intentionally projects id,seq,digest only; probe now fetches the individual receipt DTO before proof/snapshot."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-http-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 325.97,
+    "output_tail": "{\"drills\": [[false, \"insufficient_balance\", null, null], [false, \"insufficient_balance\", null, null]], \"e91_chsh_S_lower\": 2.388834125721978, \"four_node_route\": 0.9850997777777776, \"ledger\": {\"bounded_list_count\": 5, \"frozen_tree_size\": 5, \"inclusion_valid\": true, \"restarted_gateway_pid\": 3752046, \"root_hex\": \"c899e1d69228b1e0913aee2702d7b5c4812574327409548f40ac78eeddb23ba6\"}, \"qkd\": {\"clean\": {\"error_count\": 0, \"extracted_bits\": 256, \"keys_agreed\": true, \"qber\": 0.0, \"status\": \"established\", \"test_count\": 4976}, \"e91\": {\"error_count\": 0, \"extracted_bits\": 256, \"keys_agreed\": true, \"qber\": 0.0, \"status\": \"established\", \"test_count\": 4000}, \"eve\": {\"error_count\": 1233, \"extracted_bits\": 0, \"keys_agreed\": false, \"qber\": 0.24669867947178872, \"status\": \"aborted\", \"test_count\": 4998}}, \"teleport\": {\"fidelity\": 0.9799999999999998, \"owner_release_replay\": true, \"receiver_correction\": true, \"single_use\": true}, \"worker_pids\": [3723729, 3723730, 3723731, 3723737]}",
+    "result": "Real four CLI workers plus gateway TCP; full selected-pair/resource/QKD/private-owner/five-stage drill/auth/bounds/receipt/proof/frozen-prefix restart smoke passed. No chain send or live confirmation; both drills insufficient_balance."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-nested-reply-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.49,
+    "output_tail": "inspect NodeTransportUnavailable; lengths NodeTransportUnavailable; reserve NodeTransportAmbiguous",
+    "result": "Python3.14 parsed a2000-deep sub-cap array and refused it as a non-object; no RecursionError reproduction on this interpreter."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-nested-reply-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.5,
+    "output_tail": "inspect NodeTransportUnavailable; lengths NodeTransportUnavailable; reserve NodeTransportAmbiguous",
+    "result": "Python3.14 also parsed a30000-deep60001-byte array and kept typed non-object refusal."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --no-sync python /tmp/desk-v51-nested-reply-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation/services/desk-gateway",
+    "exit_code": 0,
+    "duration_s": 0.5,
+    "output_tail": "all replies refused as returned a non-object payload; typed readonly unavailable/mutation ambiguous",
+    "result": "Diagnostic established this was non-object admission, not decoder recursion on3.14."
+  },
+  {
+    "cmd": "python3 /tmp/desk-v51-json-version-smoke.py",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.22,
+    "output_tail": "{\"python\":\"3.12.3\",\"bytes\":60001,\"decoder_result\":\"RecursionError\"}",
+    "result": "Supported system3.12 decoder boundary reproduced. Worker parser now explicitly catchesRecursionError through the same typed reply classifier; RPC already did so."
+  },
+  {
+    "cmd": "TMPDIR=/dev/shm uv run --project services/desk-gateway --no-sync python -m pytest -q --junitxml=/tmp/desk-v51-gateway.xml tests",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 81.61,
+    "output_tail": "645 passed in80.31s (0:01:20)",
+    "result": "Final complete Python3.14 consumer suite including excessive-nesting typed reply regressions."
+  }
+  ],
+  "claims": [
+    {"claim": "The supported public Devnet funding attempt returned JSON-RPC -32603 and no transaction signature", "evidence_command_index": 0},
+    {"claim": "Before gap closure, the numerical constructor accepted an asymmetric density that produced negative fidelity and rejected X permutation; a second ledger instance conflicted on append", "evidence_command_index": 1},
+    {"claim": "The existing base58 decoder round-tripped a Memo larger than 256 characters when max_len permits it", "evidence_command_index": 1},
+    {"claim": "Four real worker processes started with distinct instances; all four Bell kinds matched their numerical states across the endpoint workers, and the selected PSI_MINUS teleport achieved F>=0.95 with receiver correction and resource consumption", "evidence_command_index": 2},
+    {"claim": "The dedicated payer remained0 lamports with no signatures at confirmed slot509420701", "evidence_command_index": 3},
+    {"claim": "The later supported airdrop retry returned HTTP429 and a86400-second provider cooldown, not a transaction signature", "evidence_command_index": 4},
+    {"claim": "The corrected density constructor rejected the PSD counterexample in both basis orders, while the complex X correction retained unit fidelity within1e-9", "evidence_command_index": 5},
+    {"claim": "Before parent integration repair, one receipt won two SQLite claims at distinct prefixes across two same-file ledger objects", "evidence_command_index": 6},
+    {"claim": "Before parent integration repair, the fixture-backed fresh publisher control path returned None instead of a missing-configuration refusal; no chain RPC was used", "evidence_command_index": 8},
+    {"claim": "After parent integration repair, the same receipt could not win a second claim at a later prefix across two same-file ledger objects", "evidence_command_index": 9},
+    {"claim": "After parent integration repair, the fixture-backed genuine publisher returned a503 rpc_url_not_configured refusal instead of None; no chain acceptance is claimed", "evidence_command_index": 10},
+    {"claim": "Complete final consumer suite passed645tests", "evidence_command_index": 34},
+    {"claim": "Actual four-worker and gateway TCP acceptance, independent BB84/E91 owner custody, Eve abort, all five numerical drill stages, bounded REST and frozen-prefix restart proof passed", "evidence_command_index": 29},
+    {"claim": "Unfunded live publisher correctly refused both drills with insufficient_balance and no signature or slot", "evidence_command_index": 29},
+    {"claim": "Late reservation commits remain original-instance unresolved quarantine rather than falsely refuted absence", "evidence_command_index": 24},
+    {"claim": "A quarantined output cannot issue a second release mutation", "evidence_command_index": 25}
+  ],
+  "unverified": [
+    "Genuine Devnet Memo publication and confirmed matching readback remain unobserved: payer last observed0lamports, official airdrop429 Retry-After86400, both actual drills insufficient_balance with no signature or slot",
+    "No independent Desk reviewer has approved this receipt; approved_by intentionally absent. Advisory correctness/security source reviews are not signed approval",
+    "Current-head repository gates and fresh Greptile dispositions remain to be recorded; no merge-ready claim",
+    "Full consumer suite usedPython3.14; systemPython3.12 decoder recursion was observed, but no fullPython3.12suite or dependency/SASTscan was performed",
+    "Temporary smoke runners are continuation probes; recorded observations are retained, not portable CI entrypoints"
+  ],
+  "files_changed": [
+    ".receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+    "services/desk-gateway/README.md",
+    "services/desk-gateway/src/desk_gateway/config.py",
+    "services/desk-gateway/src/desk_gateway/quantum_anchor.py",
+    "services/desk-gateway/src/desk_gateway/quantum_ledger.py",
+    "services/desk-gateway/src/desk_gateway/quantum_node.py",
+    "services/desk-gateway/src/desk_gateway/quantum_qkd_mesh.py",
+    "services/desk-gateway/src/desk_gateway/quantum_state.py",
+    "services/desk-gateway/src/desk_gateway/quantum_teleportation.py",
+    "services/desk-gateway/src/desk_gateway/quantum_transport.py",
+    "services/desk-gateway/src/desk_gateway/server.py",
+    "tests/test_quantum_ledger_anchor.py",
+    "tests/test_quantum_node_transport.py",
+    "tests/test_quantum_qkd_mesh.py",
+    "tests/test_quantum_state_kernel.py",
+    "tests/test_quantum_teleportation.py",
+    "tests/test_quantum_teleportation_endpoints.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

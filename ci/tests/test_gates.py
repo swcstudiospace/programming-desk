@@ -1254,6 +1254,241 @@ class TestG2Receipts:
         assert r.returncode == 1
         assert "cannot be what makes this claim exhaustive" in r.stderr
 
+# ===========================================================================
+# G-2 — mandated receipt staging (`git add -f/--force -- <own receipt>`)
+# ===========================================================================
+
+_STAGE_BOT = "bot-01-systems-backend"
+_STAGE_APPROVER = "bot-06-quality-security"
+_STAGE_RECEIPT = ".receipts/bot-01-systems-backend/v5.1-test-fixture.json"
+_STAGE_SOURCES = [
+    "services/desk-gateway/src/desk_gateway/server.py",
+    "tests/test_quantum_key_budget.py",
+]
+_STAGE_PREFIX = (
+    "git add -f -- .receipts/bot-01-systems-backend/v5.1-test-fixture.json "
+    "services/desk-gateway/src/desk_gateway/server.py "
+    "tests/test_quantum_key_budget.py"
+)
+_STAGE_PREFIX_FORCE = _STAGE_PREFIX.replace("git add -f --", "git add --force --", 1)
+
+
+def _staging_receipt(tmp_path: Path, cmd: str, **overrides) -> Path:
+    """An isolated receipt whose files_changed declares everything staged."""
+    base = {
+        "bot": _STAGE_BOT,
+        "approved_by": _STAGE_APPROVER,
+        "files_changed": [_STAGE_RECEIPT, *_STAGE_SOURCES],
+        "commands": [
+            {"cmd": cmd, "exit_code": 0},
+            {"cmd": "pytest tests/", "exit_code": 0},
+        ],
+        "claims": [{"claim": "tests pass", "evidence_command_index": 1}],
+    }
+    base.update(overrides)
+    return write_receipt(tmp_path, **base)
+
+
+class TestG2ReceiptForceStaging:
+    """Receipt JSON lives under the gitignored `.receipts/` tree, so staging it
+    REQUIRES `git add -f/--force` — a flag that forces past no safety check.
+    The gate exempts exactly that narrow shape (own-bot receipt plus
+    `files_changed`-declared sources, committed in the same compound) and
+    keeps flagging every genuinely unsafe command, in any compound position.
+    These run the candidate gate CLI (the HEAD tip proposed for merge, not the
+    possibly base-overlaid working tree) over real receipt JSON via
+    run_candidate_gate().
+    """
+
+    def test_dash_f_staging_with_declared_sources_passes(self, tmp_path):
+        p = _staging_receipt(
+            tmp_path, _STAGE_PREFIX + ' && git commit -m "stage fixture"'
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+        assert "bypass" not in r.stderr
+
+    def test_force_long_flag_staging_passes(self, tmp_path):
+        p = _staging_receipt(
+            tmp_path, _STAGE_PREFIX_FORCE + ' && git commit -m "stage fixture"'
+        )
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 0, r.stderr
+        assert "bypass" not in r.stderr
+
+    def _blocked(self, tmp_path: Path, cmd: str, **overrides):
+        p = _staging_receipt(tmp_path, cmd, **overrides)
+        r = run_candidate_gate("check_receipt.py", "--receipt", str(p))
+        assert r.returncode == 1, f"{cmd!r} should have been rejected\n{r.stderr}"
+        assert "bypass" in r.stderr
+        return r
+
+    def test_push_force_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, "git push --force origin main")
+
+    def test_npm_force_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, "npm install --force")
+
+    def test_staging_then_push_force_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            _STAGE_PREFIX
+            + ' && git commit -m "stage fixture" && git push --force origin main',
+        )
+
+    def test_staging_then_no_verify_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path, _STAGE_PREFIX + ' && git commit --no-verify -m "stage fixture"'
+        )
+
+    def test_staging_then_masked_exit_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, _STAGE_PREFIX + " && pytest tests/ || true")
+
+    def test_staging_then_hidden_errors_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, _STAGE_PREFIX + " && cargo test 2>/dev/null")
+
+    def test_staging_then_autoconfirm_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, _STAGE_PREFIX + " && terraform apply --auto-approve")
+
+    def test_echoed_fake_staging_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            'echo "git add -f -- .receipts/bot-01-systems-backend/v5.1-test-fixture.json '
+            'tests/test_quantum_key_budget.py"',
+        )
+
+    def test_sh_c_wrapper_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            'sh -c "git add -f -- .receipts/bot-01-systems-backend/v5.1-test-fixture.json '
+            'tests/test_quantum_key_budget.py"',
+        )
+
+    def test_traversal_target_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} ../outside.py"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_glob_target_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} services/*"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_undeclared_source_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} "
+            "services/desk-gateway/src/desk_gateway/unlisted.py"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_wrong_seat_receipt_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} .receipts/bot-03-android/other.json"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_unterminated_quote_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, _STAGE_PREFIX + ' && git commit -m "oops')
+
+    def test_substitution_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            f"git add -f -- {_STAGE_RECEIPT} $(git rev-parse HEAD)"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_force_looking_filename_after_dashdash_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path, _STAGE_PREFIX + " --force" + ' && git commit -m "stage fixture"'
+        )
+
+    def test_force_word_in_commit_message_still_blocked(self, tmp_path):
+        self._blocked(tmp_path, 'git commit -m "allow --force here"')
+
+    def test_unknown_option_still_blocked(self, tmp_path):
+        """--pathspec-from-file reinterprets the staged targets (the named file
+        can list arbitrary undeclared paths), so the shape is no longer the
+        recognised one even with the own receipt present."""
+        self._blocked(
+            tmp_path,
+            "git add --force --pathspec-from-file=outside.list -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}"
+            + ' && git commit -m "stage fixture"',
+        )
+
+    def test_declared_force_filename_after_dashdash_still_blocked(self, tmp_path):
+        """Even a `files_changed`-declared file literally named `--force` is a
+        path after `--`, not a flag — only the pre-`--` option occurrence is
+        ever blanked, so the path occurrence must keep matching."""
+        self._blocked(
+            tmp_path,
+            _STAGE_PREFIX + " --force" + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, *_STAGE_SOURCES, "--force"],
+        )
+
+    def test_substitution_wrapped_staging_still_blocked(self, tmp_path):
+        """Splitting first would surface an inner `git add` that never runs as
+        a plain top-level staging operation — the whole command fails closed."""
+        self._blocked(
+            tmp_path,
+            "echo $(echo start; git add --force -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}; echo end)",
+        )
+
+    def test_heredoc_staging_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            "cat <<EOF\n"
+            "git add --force -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}\n"
+            "EOF",
+        )
+
+    def test_quoted_separator_still_blocked(self, tmp_path):
+        """A quoted `'--'` still separates options from paths for git, but the
+        parsed split cannot be mapped back to exact raw spans — fail closed
+        rather than blanking the post-`--` `--force` path occurrence."""
+        self._blocked(
+            tmp_path,
+            "git add --force '--' "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]} --force"
+            + ' && git commit -m "stage fixture"',
+            files_changed=[_STAGE_RECEIPT, *_STAGE_SOURCES, "--force"],
+        )
+
+    def test_comment_wrapped_staging_still_blocked(self, tmp_path):
+        """`# ...` is one shell comment, not a compound — splitting on its `;`
+        would surface a `git add` that never runs as a staging operation."""
+        self._blocked(
+            tmp_path,
+            "# ignored; git add --force -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}",
+        )
+
+    def test_control_flow_wrapped_staging_still_blocked(self, tmp_path):
+        """`if false; then ...; fi` exits 0 with the inner `git add` never
+        executing — control flow is not a simple-command compound."""
+        self._blocked(
+            tmp_path,
+            "if false; then\n"
+            "git add --force -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}\n"
+            "fi",
+        )
+
+    def test_brace_group_wrapped_staging_still_blocked(self, tmp_path):
+        self._blocked(
+            tmp_path,
+            "{ git add --force -- "
+            f"{_STAGE_RECEIPT} {_STAGE_SOURCES[0]} {_STAGE_SOURCES[1]}; }}",
+        )
+
 
 # ===========================================================================
 # Candidate-gate trust model (run_candidate_gate / _extract_candidate_gates)

@@ -743,6 +743,87 @@
     "output_tail": "Observed final source verification clock2026-10-10T12:35:50Z",
     "result": "Observed final source verification clock2026-10-10T12:35:50Z"
   }
+,
+  {
+    "cmd": "git add -f -- .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json services/desk-gateway/README.md services/desk-gateway/src/desk_gateway/quantum_teleportation.py services/desk-gateway/src/desk_gateway/quantum_qkd_mesh.py services/desk-gateway/src/desk_gateway/quantum_key.py services/desk-gateway/src/desk_gateway/quantum_ledger.py services/desk-gateway/src/desk_gateway/quantum_anchor.py services/desk-gateway/src/desk_gateway/quantum_node.py services/desk-gateway/src/desk_gateway/server.py tests/test_quantum_teleportation.py tests/test_quantum_qkd_mesh.py tests/test_quantum_key_budget.py tests/test_quantum_ledger_anchor.py tests/test_quantum_node_transport.py tests/test_quantum_teleportation_endpoints.py && git commit -m \"fix(quantum): close custody and committed-prefix verification gaps\"",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.44,
+    "output_tail": "Source integration committed6c7d8ef;15files3430insertions382deletions;new permanent budget behavior tests. No merge/deploy/force push.",
+    "result": "Source integration committed6c7d8ef;15files3430insertions382deletions;new permanent budget behavior tests. No merge/deploy/force push."
+  },
+  {
+    "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.91,
+    "output_tail": "G1manifestOK7bots115rules",
+    "result": "G1manifestOK7bots115rules"
+  },
+  {
+    "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.96,
+    "output_tail": "G1PASS21committed-diff files withinSYSTEMSownedpaths",
+    "result": "G1PASS21committed-diff files withinSYSTEMSownedpaths"
+  },
+  {
+    "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.77,
+    "output_tail": "G7PASS7rosters8packs22promptfiles;7templatesclean",
+    "result": "G7PASS7rosters8packs22promptfiles;7templatesclean"
+  },
+  {
+    "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 1.42,
+    "output_tail": "G3PASS21committed-diff files,no secretsdetected",
+    "result": "G3PASS21committed-diff files,no secretsdetected"
+  },
+  {
+    "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.9,
+    "output_tail": "G4PASSno contractsurfaces touched",
+    "result": "G4PASSno contractsurfaces touched"
+  },
+  {
+    "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 0.9,
+    "output_tail": "G5/G6PASSno deployments or destructive operations in receipt; not signed security acceptance",
+    "result": "G5/G6PASSno deployments or destructive operations in receipt; not signed security acceptance"
+  },
+  {
+    "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 0.77,
+    "output_tail": "G2FAILmissingindependentapproved_by plus two claims citing expected-failing commands without expects_failure. Parent fixed both own metadata issues; this first final attempt is not pass.",
+    "result": "G2FAILmissingindependentapproved_by plus two claims citing expected-failing commands without expects_failure. Parent fixed both own metadata issues; this first final attempt is not pass."
+  },
+  {
+    "cmd": "python3 -m pytest ci/tests/ -q --tb=short",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 0,
+    "duration_s": 18.81,
+    "output_tail": "299passed17.66s final gate selftests",
+    "result": "299passed17.66s final gate selftests"
+  },
+  {
+    "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/v5.1-faithful-simulator.json --bot bot-01-systems-backend --strict",
+    "cwd": "/tmp/desk-v51-implementation",
+    "exit_code": 1,
+    "duration_s": 0.18,
+    "output_tail": "Corrected strictG2FAILonly approved_by missing; all own expected-failure metadata errors cleared. Independent review stamp intentionally absent, never self-approved.",
+    "result": "Corrected strictG2FAILonly approved_by missing; all own expected-failure metadata errors cleared. Independent review stamp intentionally absent, never self-approved."
+  }
   ],
   "claims": [
     {"claim": "The supported public Devnet funding attempt returned JSON-RPC -32603 and no transaction signature", "evidence_command_index": 0},
@@ -767,7 +848,7 @@
     {"claim": "G-3 committed-diff secret scan passed", "evidence_command_index": 38},
     {"claim": "G-4 passed with no edited contract surface", "evidence_command_index": 39},
     {"claim": "G-5/G-6 passed with no deployment or destructive operations", "evidence_command_index": 40},
-    {"claim": "Strict receipt gate remains blocked only by missing independent approved_by", "evidence_command_index": 41},
+    {"claim": "Historical strict receipt gate failed on missing independent approved_by", "evidence_command_index": 41, "expects_failure": true},
     {"claim": "Authenticated decoder-depth failures and malformed numeric receipt limits now produce typed400 responses; missing credentials still precede body decoding", "evidence_command_index": 45},
     {"claim": "Corrected authenticated gateway decoder-depth smoke returned400invalid_json after the repair", "evidence_command_index": 46},
     {"claim": "After an actual worker release applies then cancellation propagates, output is quarantined and a fresh retry produces409 without another mutation", "evidence_command_index": 48},
@@ -781,16 +862,16 @@
     {"claim": "Actual failed COMMIT and ROLLBACK no longer expose pending receipts/proofs; all public paths close and reopen retains exact committed prefix", "evidence_command_index": 83},
     {"claim": "All five actual negative numerical/transport drill exits preserve original caller leases, private key usability and retained teleport output", "evidence_command_index": 82},
     {"claim": "Current actual two-worker gateway smoke proves six-family immediate429/auth ordering, applied-reserve504 custody, next200 slot recovery and explicit owned cleanup0/0", "evidence_command_index": 79},
-    {"claim": "Final whole-service SAST remains failed2HIGH6MEDIUM107LOW; exact milestone core/gateway/config has12LOW and noMEDHIGH, not a security gate pass", "evidence_command_index": 91},
+    {"claim": "Final whole-service SAST remains failed2HIGH6MEDIUM107LOW; exact milestone core/gateway/config has12LOW and noMEDHIGH, not a security gate pass", "evidence_command_index": 91, "expects_failure": true},
     {"claim": "An actual ledger close between inclusion proof and committed verification produces typed503ledger_unavailable before signer/RPC instead of uncaught LedgerClosedError", "evidence_command_index": 89}
   ],
   "unverified": [
     "Genuine Devnet Memo publication and confirmed matching readback remain unobserved: payer last observed0lamports, official airdrop429 Retry-After86400, both actual drills insufficient_balance with no signature or slot",
     "No independent Desk reviewer has approved this receipt; approved_by intentionally absent. Advisory correctness/security source reviews are not signed approval",
-    "Fresh post-gap-head Greptile disposition remains required. Pre-gap local G-1/G-3/G-4/G-5/G-6/G-7 passed and gate self-tests299passed; G-2 failed only missing independent approved_by. Final source-gap checks remain pending; no merge-ready claim",
+    "Final committed-sourceG1/G3/G4/G5/G6/G7passed and gate selftests299passed. Corrected strictG2failed only missing independentapproved_by; own expected-failure metadata corrected. Fresh final-headGreptile and independentDeskstamp remain required; no merge-ready claim",
     "Full final consumer suite usedPython3.14; no fullPython3.12suite. Exact47 installed noneditable versions0known vulnerabilities is version-only, not artifact integrity. Final whole-serviceSASTFAILED2HIGH6MEDIUM107LOW, exactcore12LOW; independent declared-mitigation advisory is not signed Desk approval or waiver of legacy blocks",
     "Temporary smoke runners are continuation probes; recorded observations are retained, not portable CI entrypoints",
-    "Earlier667/749/751 suites and older full-count TCP proofs remain historical with explicit source provenance. Final current fullsuite752passed and actual original-scope/admission/storage probes are recorded separately; final committed-diff gates and fresh-head Greptile still required",
+    "Earlier667/749/751 suites and older full-countTCPproofs remain historical with explicit source provenance. Finalcurrent fullsuite752passed; actual scope/admission/storage probes and committed-sourcegates are recorded separately. Fresh-headGreptile is still required",
     "The earlier stochastic TCP drill rejected purification; the later1125.58s actual full20000 repeater-only run passed all five numerical stages then refused genuine publication insufficient_balance. That TCP process predates final error-only release/storage/exporter guards; changed boundaries were exercised separately and no unqualified final-head TCP claim is made"
   ],
   "files_changed": [

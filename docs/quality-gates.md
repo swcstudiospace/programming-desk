@@ -94,6 +94,13 @@ wrappers, substitutions or ambiguous shell syntax. Keep the actual command
 history; never rewrite it to conceal a flag. G-1, G-3 and independent approval
 remain required.
 
+Every staging target must also exist as a regular file inside the checked
+repository. Directories, missing files and symlink components do not qualify.
+`--repo PATH` selects that repository context; by default it is the gate
+script's repository root. Detached candidate scripts must be given the real
+checkout/export path, not a mirrored root of symlinks. This is a current-file
+check, not proof of historical filesystem state; unknown state fails closed.
+
 **Evidence.** The receipt JSON, retained with the commit.
 
 ---

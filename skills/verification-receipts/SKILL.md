@@ -70,6 +70,12 @@ An `&&` tail is checked normally; force-push, skipped hooks/tests, masked
 failures and unsupported shell forms are not exempt. Record the actual
 command unchanged. Force-staging never supplies the independent `approved_by`.
 
+Force-staging targets must be existing regular files under the checked root;
+directories, missing files and symlink components fail closed. When using a
+detached gate script, pass `--repo <actual-checkout-or-export-root>` explicitly.
+The default is the gate script's repository root; a symlink mirror is not a
+supported force-staging context. No historical-file-state fallback is inferred.
+
 ```json
 {
   "task_id": "fix-pagination-offset",

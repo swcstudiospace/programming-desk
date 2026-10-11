@@ -704,6 +704,28 @@
   "duration_s": 0.14,
   "output_tail": "Observed retry-admission UTC2026-10-11T02:40:35Z, before prior official04:32UTCcooldown deadline."
 }
+,
+{
+  "cmd": "git commit --only -m 'docs(v5.1): record manual faucet retry and unfunded admission' -- .planning/STATE.md .planning/ROADMAP.md .planning/REQUIREMENTS.md .planning/v5.1-MILESTONE-AUDIT.md .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.23,
+  "output_tail": "3f96537onlyfiveLEADpaths34insertions15deletions; recordedactualManualQuickNode/Fixandretrychoices, newzero509754361andlatestpointer67/history48/16; no sourcecode/criteria change."
+},
+{
+  "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main && python3 ci/gates/check_secrets.py --base origin/main && python3 ci/gates/check_desk_integrity.py --repo . && python3 ci/gates/check_contracts.py --base origin/main && python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 1.75,
+  "output_tail": "SelectedretrycheckpointG1PASS70owned/G3PASS70no secrets7templates/G7PASS7rosters8packs22prompts/G4PASSno contract/G5G6PASSno deploy/destructive; wholepipelinewall only."
+},
+{
+  "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/v5.1-completion-audit.json --bot bot-00-programming-lead --strict",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 1,
+  "duration_s": 0.49,
+  "output_tail": "SelectedretrymetadatarealconsumerG2FAIL ONLYmissing independentapproved_by; fullJSON/latestpointer67/claimhistoryvalid; no selfapproval."
+}
   ],
   "claims": [
     {

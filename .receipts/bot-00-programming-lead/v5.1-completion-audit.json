@@ -89,7 +89,7 @@
     "full_suite_checkpoint_command_index": 13,
     "post_format_smoke_command_index": 14,
     "two_boundary_before_probe_command_index": 15,
-    "latest_read_only_balance_command_index": 48,
+    "latest_read_only_balance_command_index": 67,
     "historical_read_only_balance_command_index": 16,
     "first_repaired_smoke_primary_observation": {"provenance": "Recovered exact completed-job215 event, not a rerun or inferred from a report.", "event_id": "db6980dd", "observed_at": "2026-10-10T15:46:42.954Z", "job_id": "bg_215", "duration_ms": 2851, "tool_duration_s": 2.85, "source_receipt_command_index": 105, "actual_output": {"actual_adopted_reserve_history": 257, "authentic_four_leaf_proof": true, "four_to_three_algebraic_forgery": false, "four_to_three_committed_forgery": false, "history_workers_held": {"alice": 0, "bob": 0}, "normal_release_history_entries_visited": 0, "receipt_storage_fault": {"error": "ledger_unavailable", "status": 503}, "snapshot_storage_fault": {"error": "ledger_unavailable", "status": 503}, "unknown_output_lock_count": 0}, "qualification": "BothFALSE alreadyat2.85s; contrary phase-verification intermediateTRUE prose is a documentation error. Correct primary Sourcecommand105 and auditrow266 preserved; later2.28s alsoBOTHFALSE. No new execution, product outcome, approval or waiver invented."},
     "source_corrective_status": "All70 sourcecomments49+21 repaired/0new and extraP2actualclosed; finalconsumer768passed atstableproductd452fb1. Historical765 preclaimfix retained. Remote70flagsfalse/signed0; G2stilltwo blockers/SASTlegacy/livefunding blocked.",
@@ -123,14 +123,15 @@
     "funding": {
       "public_payer": "52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv",
       "balance_lamports": 0,
-      "confirmed_slot": 509643885,
-      "latest_balance_tool_duration_s": 0.67,
+      "confirmed_slot": 509754361,
+      "latest_balance_tool_duration_s": 0.27,
       "previous_read_only_balance_509600313": {"lamports": 0, "confirmed_slot": 509600313, "tool_duration_s": 0.25, "command_index": 16},
-      "latest_read_only_observation": "Actual parent SOURCEcwd confirmedgetBalance exit0/tool.67s/value0/contextslot509643885, exact commands[48]; commands[16] remains historical. No old command bytes changed and no new funding request.",
+      "previous_read_only_balance_509643885": {"lamports": 0, "confirmed_slot": 509643885, "tool_duration_s": 0.67, "command_index": 48},
+      "latest_read_only_observation": "AfteractualuserselectedManualQuickNode/Fixandretry: SOURCEcwd read-only confirmedgetBalance exit0/tool.27s/value0/contextslot509754361, exactcommands[67]. Earlier48/16 preserved; no faucet request or private signer access.",
       "previous_read_only_balance": {"lamports": 0, "confirmed_slot": 509555447, "tool_duration_s": 0.37},
       "new_funding_request": false,
       "official_cooldown": "Earlier JSONRPC-32603 then HTTP429 Retry-After86400; no retry before full approximately2026-10-11 04:32Z interval.",
-      "needs": "Manually fund exact payer through QuickNode free-base human verification, or privately provision already-existing eligible provider access. No signup/payment/mainnet transfer/CAPTCHA automation/proxy/aliases/rate evasion/validator/mock substitute.",
+      "needs": "User-selected manual QuickNode free-base faucet for the exact payer; human verification stillrequired. Selection is not funding. No signup/payment/mainnet transfer/CAPTCHA automation/proxy/aliases/rate evasion/validator/mock substitute.",
       "routes": [
         {"url": "https://solana.com/docs/rpc/http/requestairdrop", "eligibility": "Supported Devnet requestAirdrop; provider rate limits and full observed cooldown."},
         {"url": "https://solana.com/developers/cookbook/development/airdrops-and-faucets", "eligibility": "Official alternatives, not unconditionally machine-available."},
@@ -149,7 +150,7 @@
       "source_draft_body": "Actual API body update exit0/tool1.78s/drafttrue/publishedDAC unchanged; local SOURCEreceipt d6b7789/productd452fb1 unchanged, no SOURCEfileedit.",
       "owner_draft_body": "Actual REST body update exit0/tool1.69s/drafttrue/headf1841ae9ad3377077852958db61c8e158d209be2.",
       "owner_review": "Actual MCP30995847 COMPLETED/headf1841ae9ad3377077852958db61c8e158d209be2/5of5/citations0/noNEWfindings; not independentapproval/mergeclaim/gatepass. AllOWNERcomments exactly2 internal296688336/296688337 bothaddressedfalse: priorvaliddirectory/standalonecoverage repaired in source, storedflagsuncleared. Auto30995601SKIPPEDneverpass; historical6dreview retained.",
-      "current_funding": "Latest0lamports/confirmedslot509643885/tool.67s; prior509600313/.25s remains command16 history.",
+      "current_funding": "Latestafteruserchoice0lamports/confirmedslot509754361/tool.27s/commands[67]; earlier48slot509643885/.67s and16slot509600313/.25s retained as historical.",
       "boundary": "Supersedes prior continuation final_status funding timestamp. Parent records exact commands after worker finishes. No synthetic rows; SOURCEpushheld/nointegration/stamps/SASTwaiver."
     },
     "owner_completed_review_observation": {
@@ -168,9 +169,10 @@
       "qualification": "Supersedes earlier owner queue/pending metadata only. SOURCEchecker still unintegrated/pushheld/G2independentstamp, SASTlegacy/livechain blocked."
     },
     "latest_lead_publication_snapshot": "Actual parent publishedLEADdb8f5e76e8fd791028ccd7741efab3fc234e18e5/tool2.34s atcommands[55]; earlier179270e retained. Final receipt-only evidence append follows this checkpoint; no invented selfhash. Original receipt timestamps remain historical.",
+    "user_selected_retry_admission": {"provenance": "Actual user ask-tool answers, not inferred approval.", "funding_route": "Manual QuickNode faucet", "autonomous_action": "Fix and retry", "observed_at": "2026-10-11T02:40:35Z", "latest_balance_command_index": 67, "latest_observed_lamports": 0, "latest_confirmed_slot": 509754361, "admission": "blocked pending genuine funding and independent review/integration prerequisites", "human_verification": "User action required; never automated or bypassed.", "effect": "No skip, gap acceptance, requirement narrowing, signed approval, merge/waiver or new faucet request. Do not repeat known insufficient-balance drill until funds observed."},
     "receipt_syntax_checkpoint": {"provenance": "Actual parent Eval json.loads consumer observation, not a fabricated shell command.", "before": "After final bookkeeping metadata append at published45f3c89, json.loads raised JSONDecodeError line170column3 because parent left one trailing comma on continuation.final_status. This was a receipt-only authoring defect, not SOURCE/runtime failure.", "repair": "Removed only the trailing comma; all original command bytes,145SOURCErows and61preexistingLEADrows preserved.", "after": "Actual Eval fullJSONparse succeeded,11originalcheckboxesopen/0checked, allLEADclaimindices valid; actual strictCLI only missing independent approval atcommands[61].", "approval": "No self-stamp, waiver or completion; missing external prerequisites unchanged."},
     "lead_30999482_evidence_disposition": {"review_id": "30999482", "review_head": "a57d45a29f7750162ff612b6a2beb8d87a76696d", "terminal_status": "COMPLETED", "confidence": "5/5", "approval": false, "findings": [{"issue": 1, "internal_ids": ["296732844", "296731115", "296728858", "296726384"], "resolution": "Latest balance pointer corrected16→48;16 retained explicitly historical; actual consumer projection agreeszero509643885/.67s."}, {"issue": 2, "internal_id": "296723115", "resolution": "Valid cross-document contradiction, suggested direction disproved by primaryevent. Corrected four VERIFICATION/VALIDATION reports to2.85s BOTHFALSE, retaining correct Source105/audit266 and older2.18TRUE; later2.28alsoBOTHFALSE. All four reports cite actual eventdb6980dd; no rerun or waiver."}, {"issue": 3, "internal_id": "296723114", "resolution": "Four affected SUMMARY endings corrected105LOW/core10 at57419/exit1tool7.91; earlier107/12 explicitlyhistorical. Parent consumer parsedall20summaries/0requirements-completed/no old currentclosingcounts; no waiver."}, {"historical_internal_id": "296728859", "resolution": "Receipt-only trailing-comma load failure actuallyreproduced, one-char corrected/published309729f; current consumer JSON valid/G2only independentapproval. Failedcheckpoint retained, no waiver."}], "stored_lead_comment_flags": {"total": 11, "addressed_false": 11, "qualification": "No zero-unaddressed or merge-ready claim; independent QUALITYdisposition/approval needed even after valid code/docs repair."}, "primary_smoke": {"provenance": "Recovered exact completed-job215 event, not a rerun or inferred from a report.", "event_id": "db6980dd", "observed_at": "2026-10-10T15:46:42.954Z", "job_id": "bg_215", "duration_ms": 2851, "tool_duration_s": 2.85, "source_receipt_command_index": 105, "actual_output": {"actual_adopted_reserve_history": 257, "authentic_four_leaf_proof": true, "four_to_three_algebraic_forgery": false, "four_to_three_committed_forgery": false, "history_workers_held": {"alice": 0, "bob": 0}, "normal_release_history_entries_visited": 0, "receipt_storage_fault": {"error": "ledger_unavailable", "status": 503}, "snapshot_storage_fault": {"error": "ledger_unavailable", "status": 503}, "unknown_output_lock_count": 0}, "qualification": "BothFALSE alreadyat2.85s; contrary phase-verification intermediateTRUE prose is a documentation error. Correct primary Sourcecommand105 and auditrow266 preserved; later2.28s alsoBOTHFALSE. No new execution, product outcome, approval or waiver invented."}},
-    "final_status": "All11originalrequirementsopen/signed0;70sourcecommentsrepaired/0new/current768stableproductd452fb1unpublished;SOURCEG2stillmissingstamp+force-stageclassificationuntilownerintegration. OWNERf18430995847COMPLETED5of5/noNEWfindings but2storedflagsfalse/stampmissing;332candidateCI. LEAD70path finalgatesPASS/strictG2ONLYstampmissing. Whole-serviceSAST8legacyHIGHMED/funding0slot509643885/positivechainblocked; no merge/waiver/completion."
+    "final_status": "All11originalrequirementsopen/signed0;70sourcecommentsrepaired/0new/current768stableproductd452fb1unpublished;SOURCEG2stillmissingstamp+force-stageclassificationuntilownerintegration. OWNERf18430995847COMPLETED5of5/noNEWfindings but2storedflagsfalse/stampmissing;332candidateCI. LEAD70path finalgatesPASS/strictG2ONLYstampmissing. Whole-serviceSAST8legacyHIGHMED/funding0slot509754361/positivechainblocked; no merge/waiver/completion. UserselectedManualQuickNode/Fixandretry, no funding observed or approval implied."
   },
   "planning_evidence_addendum": {
     "finding": "Greptile #212 finding 296100815 / PRRT_kwDOUgQ0os6q75AU",
@@ -686,6 +688,21 @@
   "exit_code": 1,
   "duration_s": 0.49,
   "output_tail": "CorrectedunionrealconsumerG2FAIL ONLYmissing independentapproved_by; no JSON/pointer/claim/force-stage failure."
+}
+,
+{
+  "cmd": "curl --silent --show-error --max-time 30 --request POST --header 'Content-Type: application/json' --data '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"getBalance\",\"params\":[\"52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv\",{\"commitment\":\"confirmed\"}]}' https://api.devnet.solana.com",
+  "cwd": "/tmp/desk-v51-implementation",
+  "exit_code": 0,
+  "duration_s": 0.27,
+  "output_tail": "After user-selected ManualQuickNode/Fixandretry, read-only confirmed public balance0lamports/slot509754361/apiVersion4.4.0-beta.0. Route selection is not funding; no faucet request, signer access, send or redundant insufficient-balance drill."
+},
+{
+  "cmd": "date -u +%Y-%m-%dT%H:%M:%SZ",
+  "cwd": "/tmp/desk-v51-audit",
+  "exit_code": 0,
+  "duration_s": 0.14,
+  "output_tail": "Observed retry-admission UTC2026-10-11T02:40:35Z, before prior official04:32UTCcooldown deadline."
 }
   ],
   "claims": [

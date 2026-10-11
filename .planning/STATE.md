@@ -3,7 +3,7 @@ gsd_state_version: "1.0"
 milestone: v5.1
 milestone_name: Autonomous Multi-Agent Inter-Cluster Quantum Teleportation, Quantum Key Distribution (QKD) & Entangled Swarm Mesh
 status: blocked
-last_updated: "2026-10-10T19:29:27.000Z"
+last_updated: "2026-10-11T02:40:35.000Z"
 state_head: 179270ef86e4a188632bc9dcaff93356a05acd39
 source_head: dac2fdf99daa8ca1b9a6c3ce6e0db9edc59631b3
 source_local_head: "d6b7789"
@@ -55,7 +55,7 @@ Runtime evidence covers 9/11 original requirements: phase 68 requirements 001–
 
 ## External Blockers
 
-- Public payer `52WUE6dEz5VsaeV328qTTfWHm3Swbx4BXHFRqKvVGShv` was most recently observed at **0 lamports**, confirmed slot **509643885**, by read-only public-RPC `getBalance`, **exit 0/tool 0.67 s**. The earlier **0 lamports/slot 509600313/tool 0.25 s** remains a historical checkpoint, not the latest observation. Earlier official `requestAirdrop` attempts returned JSON-RPC -32603 then HTTP 429/`Retry-After: 86400`. This continuation made **no new funding request**; the full cooldown still expires around **2026-10-11 04:32 UTC**.
+- After the user selected **Manual QuickNode faucet** and **Fix and retry**, a new read-only public-RPC check still returned **0 lamports**, confirmed slot **509754361**, exit 0/tool **0.27 s**. Earlier zero/slot 509643885/tool 0.67 s and zero/slot 509600313/tool 0.25 s remain historical. The selection is not funding or approval: human verification on the exact-payer QuickNode page is still needed. No new funding request or redundant insufficient-balance drill was made; the official 24-hour cooldown remains until approximately 04:32 UTC.
 - The parent needs genuine funding of that exact payer, then the dedicated signer must make one SPL Memo send, observe confirmed/finalized status with `err=null`, and read back the exact root/full proof before a positive `all_passed` drill. The private payer file is retained securely and is never read, printed or deleted by these document/review agents.
 - Funding can come from a human using QuickNode's free-base Devnet faucet (human bot verification, 12-hour wallet interval), or privately provisioned, already-existing eligible provider access. A names-only check found `HELIUS_API_KEY`, `QUICKNODE_API_KEY`, `CHAINSTACK_API_KEY`, `TRITON_API_KEY`, `ALCHEMY_API_KEY`, `HELIUS_DEVNET_RPC_URL`, `QUICKNODE_DEVNET_RPC_URL` and `TRITON_DEVNET_RPC_URL` absent; no secret values were read. No mounted Chainstack tools are available. Helius faucet/RPC airdrops require a paid plan. Chainstack requires `CHAINSTACK_API_KEY` and Solana-recipient eligibility (at least 0.8 SOL on mainnet plus historical holdings); its MCP faucet is not an eligibility bypass. QuickNode has no documented unattended faucet API, and no independently usable public Triton faucet was verified. Do not substitute signup, payment, mainnet transfers, CAPTCHA automation, proxies, aliases, rate-limit evasion or local validators.
 - Independent Desk `approved_by` remains absent; advisory reviews are not signatures. QUALITY disposition of the legacy whole-service scanner findings and final-head Greptile findings is mandatory. No risk acceptance, completion or merge-ready claim is made.
@@ -63,5 +63,7 @@ Runtime evidence covers 9/11 original requirements: phase 68 requirements 001–
 ## Decisions and Repository Boundaries
 
 The user selected a faithful classical numerical simulator without waiving any original criterion, and genuine SPL Memo Devnet publication as the anchoring alternative. Joint-state evolution, original resource custody, the 0.95 fidelity threshold, independent reconciliation/extraction, abort behavior and REST criteria remain unchanged. No physical/hardware, device-independent or composable-secrecy claim is made.
+
+The latest blocker choice is **Fix and retry**, using the **manual QuickNode faucet**. It does not skip Phase 69, accept gaps, narrow requirements or authorize a merge/waiver. Retry the genuine live path only after funding is observed and the independent review/integration prerequisites are met; current read-only balance is still zero.
 
 Only feature branches and draft PRs are used: source #214 and planning #212 are updated separately in isolated worktrees. No merge, auto-merge, force-push, branch deletion, production deployment, archive, tag or release is authorized. Published `v5.1.0` is not acceptance evidence.

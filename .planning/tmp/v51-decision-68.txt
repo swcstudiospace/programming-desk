@@ -1,0 +1,1 @@
+User selected a faithful distributed quantum simulator for original v5.1 REQ-QTELEPORT-001–011; preserve joint-state evolution, node ownership/transport, fidelity and protocol acceptance. No physical hardware/security claims or scope waiver.

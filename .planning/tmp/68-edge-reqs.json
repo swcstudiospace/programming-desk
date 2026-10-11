@@ -1,0 +1,7 @@
+[
+ {"id":"REQ-QTELEPORT-001","text":"Bell State Generator & Entanglement Swarm Pair Distribution (BellPairPool, BellState, QuantumStateVector) generating and distributing maximally entangled Bell states (Phi+, Phi-, Psi+, Psi-) across distributed desk cluster nodes.","shapes":["collection","stateful","numeric-range","io"]},
+ {"id":"REQ-QTELEPORT-002","text":"Multi-Hop Quantum Repeater & Entanglement Swapping Engine (QuantumRepeaterNode, EntanglementSwapper, QuantumRepeaterMesh) performing Bell state measurements (BSM) across intermediary repeaters to extend entanglement reach with fidelity degradation tracking.","shapes":["collection","stateful","numeric-range","io"]},
+ {"id":"REQ-QTELEPORT-003","text":"Inter-Cluster Quantum Teleportation Protocol (QuantumTeleportationProtocol, TeleportationSession, ClassicalCorrection) executing 3-qubit joint state evolution, Bell measurement, classical 2-bit channel communication, and Pauli unitary reconstruction with fidelity verification (F>=0.95).","shapes":["stateful","numeric-range","io","text"]},
+ {"id":"REQ-QTELEPORT-004","text":"Purified Quantum Link Telemetry & Decoherence Evaluator (EntanglementPurifier, PurificationProtocol) applying 2-to-1 Deutsch/Bennett entanglement purification distillation rounds to filter channel noise.","shapes":["collection","stateful","numeric-range"]},
+ {"id":"REQ-QTELEPORT-005","text":"Quantum Phase68 REST API endpoints under /v1/quantum/teleportation/* and /v1/quantum/repeater/* in services/desk-gateway/src/desk_gateway/server.py.","shapes":["stateful","io","text"]}
+]

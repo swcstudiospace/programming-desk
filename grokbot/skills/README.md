@@ -56,3 +56,4 @@ While `pending` is true, the file exists on `ref` and not on `default_branch`. R
 - `desk-shared-memory/SKILL.md` — the canonical memory skill. It names only the eight core gateway tools.
 - `desk-run/SKILL.md` — the canonical `/desk-run` skill.
 - `swarm-control/SKILL.md`, `swarm-delivery/SKILL.md`, `swarm-verify/SKILL.md`, `swarm-sustain/SKILL.md` — the four lane operator skills.
+- `check_swarm_v21.py` — compares those four files to a local read-only agent-swarm checkout. It is not a CI gate.

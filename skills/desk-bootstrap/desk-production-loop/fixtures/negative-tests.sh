@@ -53,8 +53,6 @@ OVERLAY=(
   "docs/vps-agent-bus.md"
   "grokbot/README.md"
   "scripts/generate-templates.py"
-  ".github/workflows/gates.yml"
-  "ci/.github/workflows/gates.yml"
   "ci/gates/check_rollback.py"
   "$LOOP_DIR/fixtures/check-loop-acks.py"
 )

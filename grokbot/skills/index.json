@@ -101,6 +101,16 @@
       "purpose": "Calls the seat gateway for brief, recall, retain, docs, events, ownership, receipts and doctor. Memory is reached only through that gateway."
     },
     {
+      "name": "desk-substrate",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/desk-substrate/SKILL.md",
+      "ref": "bot-00-programming-lead/desk-substrate-memory-skills",
+      "default_branch": "main",
+      "pending": true,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Reads substrate brief, durability, and skill-lifecycle behavior through the seat gateway. Cites agent-substrate commit SHAs."
+    },
+    {
       "name": "desk-run",
       "repo": "swcstudiospace/programming-desk",
       "path": "grokbot/skills/desk-run/SKILL.md",

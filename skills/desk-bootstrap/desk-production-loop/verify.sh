@@ -13,24 +13,23 @@
 # What it cannot do: assert that a rule is CORRECT, or that a seat follows it. Every round's defect
 # would have passed the previous round's version of this check. It is a drift alarm, not a proof.
 #
-# Not wired into CI, and nothing in this skill or its docs says otherwise. Every CI path is foreign
-# to bot-00: .github/workflows/** and ci/.github/workflows/** are bot-05-infrastructure's,
-# ci/.github/** and ci/gates/** are bot-06-quality-security's. So a later template change can still
-# drop the loop with the PR gates green -- G-7 checks templates for forbidden CONTENT, not for a
-# required skill -- and this script only catches it for whoever runs it by hand or from the receipt.
+# The drift-checks job in .github/workflows/gates.yml and in ci/.github/workflows/gates.yml
+# runs this script and scripts/generate-templates.py --check on pull requests and on pushes
+# to main. Before either command, that job replaces both scripts with the copies from the
+# pull-request base ref (origin/main when the event is a push), the same overlay the gate
+# jobs use for ci/gates/. The rest of the checkout stays the tree under test, so a pull
+# request that edits either script is judged by the copy already on the base branch.
+# R7c reads those two workflow files and fails when the job is missing, when it does not
+# check the scripts out from that base ref, or when this header still says the checks are
+# unwired.
 #
-# For whichever owner picks it up, the whole change is two steps in the gates workflow, after the
-# G-7 step and needing nothing else:
+# Run from the repository root. No credentials. Both commands exit non-zero on failure:
 #
-#   - name: Desk production loop — consistency
-#     run: bash skills/desk-bootstrap/desk-production-loop/verify.sh
-#   - name: Seat templates — generator drift
-#     run: python3 scripts/generate-templates.py --check
+#   bash skills/desk-bootstrap/desk-production-loop/verify.sh
+#   python3 scripts/generate-templates.py --check
 #
-# Both exit non-zero on failure, take no arguments, need no credentials and no network, and run from
-# the repository root in well under a second. Tracked in the receipt's `blockers`.
-#
-# Run from the repository root. Cited by
+# Workflow paths stay foreign to bot-00: .github/workflows/** and ci/.github/workflows/gates.yml
+# are bot-05-infrastructure's, and ci/gates/** is bot-06-quality-security's. Cited by
 # .receipts/bot-00-programming-lead/lead-production-loop-spe-4794.json.
 #
 #   bash skills/desk-bootstrap/desk-production-loop/verify.sh
@@ -202,10 +201,38 @@ need("C-1" in S and "C-2" in S,"R7b companions cited in skill")
 need("an empty string fails identically" in fS,"R7b empty string fails too")
 for owner in ("bot-01-systems-backend","bot-06-quality-security"):
     need(owner in S,"R7b owner named "+owner)
-# (c) neither this skill nor its docs may claim that CI runs the loop checks -- it does not
-# assembled from fragments, and searched in V_HEAD not V_SELF, so neither assertion can satisfy
-# itself out of its own source text
-need(("Not wired "+"into CI") in V_HEAD,"R7c honest CI note in this script's header")
+# (c) the drift-checks job has to be in both gates workflow copies, and it has to run the
+# base-ref copies of this script and the template generator. The previous form of this check
+# required the header to say the checks were unwired, because at the time they were. That
+# sentence would now be the false one, so it is rejected instead of required. The false-claim
+# scan stays: the skill and the operating model do not describe this job, and neither they nor
+# this header may use the three phrasings below. The job name, the checkout, and the script
+# paths are assembled from fragments and searched in the workflow files, not in this script,
+# so the assertion cannot satisfy itself out of its own source text.
+JOB="drift-"+"checks"
+BASE_CHECKOUT='git checkout "origin/$'+"BASE_REF\""
+SCRIPTS=(
+    "skills/desk-bootstrap/desk-production-loop/"+"verify.sh",
+    "scripts/"+"generate-templates.py",
+)
+WORKFLOWS=(
+    ".github/workflows/"+"gates.yml",
+    "ci/.github/workflows/"+"gates.yml",
+)
+for wf in WORKFLOWS:
+    lines=load(wf).splitlines()
+    start=next((i for i,line in enumerate(lines) if line=="  "+JOB+":"), None)
+    need(start is not None,"R7c "+JOB+" job in "+wf)
+    body=[]
+    for line in lines[start+1:]:
+        if re.match(r"^  [A-Za-z0-9_-]+:\s*$", line):
+            break
+        body.append(line)
+    blob="\n".join(body)
+    need(BASE_CHECKOUT in blob,"R7c "+JOB+" checks out the base ref in "+wf)
+    for script in SCRIPTS:
+        need(script in blob,"R7c "+JOB+" overlays "+script+" in "+wf)
+need(("Not wired "+"into CI") not in V_HEAD,"R7c stale unwired note removed")
 for claim in ("CI "+"runs this check","enforced "+"by CI","CI "+"enforces"):
     need(claim not in fS and claim not in fD and claim not in V_HEAD,"R7c false CI claim: "+claim)
 # --- round 8 ---------------------------------------------------------------------------------
@@ -346,5 +373,5 @@ for dead in ("the response carried no etag; or the connector did not list the to
     need(dead not in fS,"stale text still present: "+dead[:40])
 need("or one with no etag" not in fD,"stale doc text")
 need(not re.search(r"(?i)(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN|Bearer\s+[A-Za-z0-9]{8})",S+B+D+V+R+"".join(T.values())),"credential literal")
-print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
+print("ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c drift-checks job in both gates copies, no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal")
 PY

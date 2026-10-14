@@ -1,0 +1,134 @@
+{
+  "task_id": "spe-12503-r7c-drift-checks",
+  "bot": "bot-00-programming-lead",
+  "branch": "bot-00-programming-lead/spe-12503-r7c-drift-checks",
+  "started_at": "2026-10-14T13:30:00Z",
+  "completed_at": "2026-10-14T13:38:11Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "A Desk Infra cloud agent wrote the R7c change. Lead owns verify.sh and the negative-test overlay. This branch does not change the gates workflows. The new R7c exits 1 here because main has no drift-checks job. The same script exits 0 against the workflows on bot-05-infrastructure/spe-12503-ci-drift-checks-7b8a. approved_by is unset.",
+  "commands": [
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 1,
+      "output_tail": "FAIL: R7c drift-checks job in .github/workflows/gates.yml"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+      "exit_code": 1,
+      "output_tail": "FAIL  baseline -> exit 1 (the scratch overlay is wrong, not the rules)\nNOT OK: a negative test did not fail as intended -- verify.sh is weaker than it claims"
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "output_tail": "generate-templates --check: 7 templates up to date"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "output_tail": "299 passed in 182.71s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "scratch=$(mktemp -d /tmp/spe-12503-cross.XXXX) && git -C /workspace archive --format=tar HEAD | tar -x -C \"$scratch\" && cp /tmp/spe-12503-lead/skills/desk-bootstrap/desk-production-loop/verify.sh \"$scratch/skills/desk-bootstrap/desk-production-loop/verify.sh\" && cp /tmp/spe-12503-lead/skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh \"$scratch/skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh\" && DESK_LOOP_ROOT=\"$scratch\" bash \"$scratch/skills/desk-bootstrap/desk-production-loop/verify.sh\"",
+      "exit_code": 0,
+      "output_tail": "R7c drift-checks job in both gates copies, no false CI claim"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/spe-12503-r7c-drift-checks.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/spe-12503-r7c-drift-checks.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL — .receipts/bot-00-programming-lead/spe-12503-r7c-drift-checks.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "verify.sh exits 1 on this branch because .github/workflows/gates.yml has no drift-checks job",
+      "evidence_command_index": 0,
+      "expects_failure": true
+    },
+    {
+      "claim": "negative-tests.sh exits 1 on this branch because the baseline hits that same missing job",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "generate-templates.py --check exits 0",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "pytest ci/tests passes: 299 passed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The script diff is inside paths owned by bot-00-programming-lead",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The diff contains no committed secrets",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "This verify.sh exits 0 when the tree is the infra branch, whose workflows contain the drift-checks job",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "The receipt records no deployment and no destructive operation",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "G-2 --strict fails because approved_by is absent",
+      "evidence_command_index": 11,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "GitHub Actions has not run this branch.",
+    "approved_by is absent until someone other than bot-00-programming-lead stamps this receipt.",
+    "On this branch the new R7c cannot pass. It passes against the infra branch's workflows. PR 217 overlays verify.sh from origin/main, so that PR runs this R7c only after this branch is merged."
+  ],
+  "files_changed": [
+    "skills/desk-bootstrap/desk-production-loop/verify.sh",
+    "skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+    ".receipts/bot-00-programming-lead/spe-12503-r7c-drift-checks.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

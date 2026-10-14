@@ -35,12 +35,12 @@
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
       "exit_code": 0,
-      "output_tail": "G-1 PASS — bot-00-programming-lead: 2 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 3 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "output_tail": "G-3 PASS — 2 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",

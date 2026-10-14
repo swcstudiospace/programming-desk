@@ -46,7 +46,7 @@ When `pending` is false and `pending_pr` is set, the path is already on `default
 | `ultrathink-track` | `hosts/grok-bot/commands/ultrathink-track/SKILL.md` | `main` |
 | `swarm-cloud-dispatch` | `swcstudiospace/agent-swarm` `grokbot/skills/swarm-cloud-dispatch/SKILL.md` | `main` |
 | `desk-shared-memory` | `grokbot/skills/desk-shared-memory/SKILL.md` in this repository | `main` |
-| `desk-run` | `grokbot/skills/desk-run/SKILL.md` in this repository | `main`, with an open draft that changes the file |
+| `desk-run` | `grokbot/skills/desk-run/SKILL.md` in this repository | `main`, open draft [pull request 224](https://github.com/swcstudiospace/programming-desk/pull/224) |
 
 `desk-run` is the umbrella for `/desk-run` and `/ultrathink`. It orders `ultrathink-protocol` through `ultrathink-plan`, `ultrathink-kickoff`, `ultrathink-sync` and `ultrathink-ship`, then `desk-shared-memory` and `swarm-cloud-dispatch`. When a prompt invokes a `/gsd-*` command it also runs the mapped pstack skills beside that command, the same mapping as claude-ultrathink pull request 27 (`docs/how-to/use-pstack-with-cursor.md` on `main`). Its canonical file is in this repository. The other skills stay in the repositories named above; this directory does not copy them.
 

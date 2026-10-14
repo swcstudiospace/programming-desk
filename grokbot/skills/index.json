@@ -138,6 +138,7 @@
       "ref": "main",
       "default_branch": "main",
       "pending": false,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/224",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "One /desk-run or /ultrathink command: native planning, gateway memory, pstack beside GSD commands, then a keyless cloud draft PR and the review-only Greptile gate."
     }

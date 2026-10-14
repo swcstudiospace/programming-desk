@@ -651,11 +651,12 @@ def create_mcp(
     fail_router, health_poller = failover if failover else (
         FailoverRouter(
             FederationRegistry(settings),
-            health_poller=UpstreamHealthPoller(services),
+            health_poller=UpstreamHealthPoller.from_settings(services, settings),
             isolation_manager=iso_mgr,
         ),
-        UpstreamHealthPoller(services),
+        UpstreamHealthPoller.from_settings(services, settings),
     )
+    services.health_poller = health_poller
     alert_dispatcher, slo_evaluator = alerting if alerting else (
         AlertDispatcher(settings),
         SLOEvaluator(settings),
@@ -10316,11 +10317,13 @@ def create_mcp(
     return mcp
 
 
-def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
-    """Close pooled upstream clients when the ASGI app shuts down.
+def _install_upstream_shutdown(starlette_app: Any, services: Any, health_poller: Any = None) -> None:
+    """Start upstream health polling with the app, and close clients on shutdown.
 
     The MCP Starlette app already owns router.lifespan_context (the session
-    manager). Wrap that context so shutdown still runs it, then closes clients.
+    manager). Wrap that context so shutdown still runs it, then stops the
+    poller and closes clients. ``start`` only schedules the loop: a down or
+    unconfigured upstream cannot block this lifespan.
     """
     previous = starlette_app.router.lifespan_context
 
@@ -10334,9 +10337,19 @@ def _install_upstream_shutdown(starlette_app: Any, services: Any) -> None:
             except Exception as exc:
                 logger.warning("Dragonfly pool open failed (%s)", type(exc).__name__)
         try:
+            if health_poller is not None:
+                try:
+                    await health_poller.start()
+                except Exception as exc:
+                    logger.warning("upstream health poller did not start (%s)", type(exc).__name__)
             async with previous(app) as state:
                 yield state
         finally:
+            if health_poller is not None:
+                try:
+                    await health_poller.stop()
+                except Exception as exc:
+                    logger.warning("upstream health poller stop failed (%s)", type(exc).__name__)
             await services.aclose()
 
     starlette_app.router.lifespan_context = _close_upstreams_on_shutdown
@@ -10362,7 +10375,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
     cutover_orchestrator = CutoverOrchestrator(settings, isolation_manager=iso_manager)
     cutover_components = (cutover_orchestrator, iso_manager)
 
-    health_poller = UpstreamHealthPoller(services)
+    health_poller = UpstreamHealthPoller.from_settings(services, settings)
     failover_router = FailoverRouter(
         fed_registry,
         health_poller=health_poller,
@@ -10414,7 +10427,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
         allowed_origins=origins,
     )
     starlette_app = mcp.streamable_http_app(streamable_http_path="/mcp", json_response=True, stateless_http=True, transport_security=transport_security, host=settings.public_host)
-    _install_upstream_shutdown(starlette_app, services)
+    _install_upstream_shutdown(starlette_app, services, health_poller)
 
     async def desk_events(websocket: WebSocket) -> None:
         await websocket.accept()

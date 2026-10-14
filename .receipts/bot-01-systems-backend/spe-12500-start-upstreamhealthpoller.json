@@ -1,0 +1,265 @@
+{
+  "task_id": "spe-12500-start-upstreamhealthpoller",
+  "bot": "bot-01-systems-backend",
+  "branch": "bot-01-systems-backend/spe-12500-start-upstreamhealthpoller-30s",
+  "started_at": "2026-10-14T13:05:14Z",
+  "completed_at": "2026-10-14T15:44:17Z",
+  "commands": [
+    {
+      "cmd": "cd services/desk-gateway && .venv/bin/pytest -q tests/test_health_poller.py tests/test_failover.py tests/test_plane_budgets.py::test_app_shutdown_closes_upstream_clients --tb=short",
+      "exit_code": 0,
+      "duration_s": 3.5,
+      "output_tail": "12 passed in 2.47s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DATA_DIR=/tmp/desk-gateway-pytest DESK_REPO_DIR=/workspace .venv/bin/pytest -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 38,
+      "output_tail": "697 passed in 37.88s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 7 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "G-3 FAIL — services/desk-gateway/tests/test_health_poller.py:137 conn_string: connection string with inline credentials"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 7 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 102,
+      "output_tail": "299 passed in 101.40s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/spe-12500-start-upstreamhealthpoller.json --bot bot-01-systems-backend --strict",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "G-2 FAIL — 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-01-systems-backend/spe-12500-start-upstreamhealthpoller.json",
+      "exit_code": 0,
+      "duration_s": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DATA_DIR=/tmp/desk-gateway-pytest DESK_REPO_DIR=/workspace .venv/bin/pytest -q tests/test_health_poller.py tests/test_failover.py --tb=short",
+      "exit_code": 0,
+      "duration_s": 2.22,
+      "output_tail": "14 passed in 2.22s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DATA_DIR=/tmp/desk-gateway-pytest DESK_REPO_DIR=/workspace .venv/bin/pytest -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 38.81,
+      "output_tail": "700 passed in 38.81s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 8 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 8 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 9.42,
+      "output_tail": "299 passed in 9.42s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DATA_DIR=/tmp/desk-gateway-pytest DESK_REPO_DIR=/workspace .venv/bin/pytest -q tests/test_health_poller.py tests/test_failover.py --tb=line -p no:cacheprovider",
+      "exit_code": 0,
+      "duration_s": 2.03,
+      "output_tail": "16 passed in 2.03s"
+    },
+    {
+      "cmd": "cd services/desk-gateway && DATA_DIR=/tmp/desk-gateway-pytest DESK_REPO_DIR=/workspace .venv/bin/pytest -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 40.3,
+      "output_tail": "702 passed in 40.30s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 8 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-3 PASS — 8 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Poller startup, shutdown, a failing upstream, cadence, and the existing failover shutdown test pass",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "The desk-gateway pytest suite passes with DATA_DIR and DESK_REPO_DIR pointed at this workspace",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "The ownership manifest is valid",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Changed paths are owned by bot-01-systems-backend",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3 flags the fake postgres URL in the poller test before the allowlist pragma",
+      "evidence_command_index": 4,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-3 passes once that fixture line is marked as a redaction fixture",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Desk integrity gate passes",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "The gate self-test suite passes",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "G-2 --strict fails closed because approved_by is missing",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-5/G-6 pass with no deploy or destructive command in the receipt",
+      "evidence_command_index": 10
+    },
+    {
+      "claim": "A timed-out probe does not start a second worker, Timescale health stays cancellable, and the cadence test rejects a slow gap",
+      "evidence_command_index": 11
+    },
+    {
+      "claim": "The desk-gateway suite passes after the in-flight probe change",
+      "evidence_command_index": 12
+    },
+    {
+      "claim": "The committed diff, including upstreams.py, stays inside bot-01-systems-backend paths",
+      "evidence_command_index": 13
+    },
+    {
+      "claim": "G-3 passes on that committed diff",
+      "evidence_command_index": 14
+    },
+    {
+      "claim": "That committed diff touches no contract surface",
+      "evidence_command_index": 15
+    },
+    {
+      "claim": "The gate self-test suite still passes",
+      "evidence_command_index": 16
+    },
+    {
+      "claim": "Repeated deadlines mark the upstream down, a stuck probe is not replaced, and an overlapping check waits for the fresh result",
+      "evidence_command_index": 17
+    },
+    {
+      "claim": "The desk-gateway suite passes after the deadline cancellation change",
+      "evidence_command_index": 18
+    },
+    {
+      "claim": "The committed diff stays inside bot-01-systems-backend paths after that change",
+      "evidence_command_index": 19
+    },
+    {
+      "claim": "G-3 still passes on the committed diff",
+      "evidence_command_index": 20
+    },
+    {
+      "claim": "The committed diff still touches no contract surface",
+      "evidence_command_index": 21
+    },
+    {
+      "claim": "Desk integrity still passes",
+      "evidence_command_index": 22
+    }
+  ],
+  "unverified": [
+    "approved_by is absent. G-2 --strict fails closed on that field until bot-00-programming-lead or a human stamps this receipt. The authoring seat did not self-approve.",
+    "The Linear branch name ovegovender/spe-12500-systems-start-upstreamhealthpoller-30s-on-desk-gateway fails the Quality Gates acting-bot step, which requires a bot-0N-name/ prefix. This receipt is for bot-01-systems-backend/spe-12500-start-upstreamhealthpoller-30s. Local G-1 was run with --bot bot-01-systems-backend.",
+    "pytest with no DATA_DIR and no DESK_REPO_DIR cannot mkdir /var/lib/desk-gateway or read /root/src/repos/programming-desk on this VM. That run reported 28 failed and 64 errors, all PermissionError or FileNotFoundError on those default Settings paths. It was not re-used as evidence.",
+    "Greptile's second review on PR 220 said a shielded deadline leaves the probe running and counts one failure, so failover stays healthy, and that an overlapping refresh can return the cold cache. The deadline now cancels the probe, a later poll charges another miss while that call is still stuck, and the overlapping caller waits for the same probe. This receipt does not record a newer Greptile verdict and does not claim merge-ready. QUALITY records that verdict.",
+    "No deploy, no gateway restart, and no merge.",
+    "A live desk_doctor call against a configured Hindsight upstream was not exercised. The cache path was tested with a fake health payload. Substrate stays a live probe because it is not one of the polled upstreams.",
+    "SWARM_ED25519_KEY and SWARM_REQUIRE_KEY are unset. This session is advisory and is not APPROVED."
+  ],
+  "files_changed": [
+    "services/desk-gateway/src/desk_gateway/config.py",
+    "services/desk-gateway/src/desk_gateway/health.py",
+    "services/desk-gateway/src/desk_gateway/server.py",
+    "services/desk-gateway/src/desk_gateway/tools/__init__.py",
+    "services/desk-gateway/src/desk_gateway/tools/core.py",
+    "services/desk-gateway/src/desk_gateway/upstreams.py",
+    "services/desk-gateway/tests/test_health_poller.py",
+    ".receipts/bot-01-systems-backend/spe-12500-start-upstreamhealthpoller.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert the lifespan start/stop in server.py, the deadline cancellation in health.py, and the async Timescale health probe. desk_doctor goes back to a live hindsight.health() call. No data migration and no deploy step.",
+  "approvals": []
+}

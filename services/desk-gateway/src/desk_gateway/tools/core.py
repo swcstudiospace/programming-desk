@@ -470,6 +470,27 @@ async def event_emit(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "substrate": result.get("body")}
 
 
+async def _memory_probe(svc: Any) -> tuple[dict[str, Any], str]:
+    """Memory plane for desk_doctor.
+
+    Hindsight, once the background poller has checked it, is read from that
+    cache so the tool does not open another upstream call. The cached value is
+    the same health() dict the live call would have returned. Substrate is not
+    one of the polled upstreams, so that plane stays a live probe. A cold cache
+    (no completed check yet) also stays live, so the reply cannot flip to ok
+    just because the poller has not run.
+    """
+    hindsight = svc.hindsight
+    configured = bool(getattr(getattr(hindsight, "http", None), "configured", False))
+    if not configured:
+        return await svc.substrate.health(), "substrate"
+    poller = getattr(svc, "health_poller", None)
+    cached = poller.cached_details("hindsight") if poller is not None and hasattr(poller, "cached_details") else None
+    if cached is not None:
+        return cached, "hindsight"
+    return await hindsight.health(), "hindsight"
+
+
 async def doctor(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     svc = ctx.services
     action = args["action"]
@@ -512,8 +533,8 @@ async def doctor(ctx: ToolContext, args: dict[str, Any]) -> dict[str, Any]:
     installed = set(args.get("installed_skills") or [])
     missing_skills = sorted(s for s in declared if s not in installed) if installed else declared
     checks["skills"] = {"green": bool(installed) and not missing_skills, "declared": declared, "missing": missing_skills, "detail": "pass installed_skills (names from the / menu) to verify" if not installed else ""}
-    mem = await svc.hindsight.health() if svc.hindsight.http.configured else await svc.substrate.health()
-    checks["memory"] = {"green": bool(mem.get("ok")), "plane": "hindsight" if svc.hindsight.http.configured else "substrate", "detail": mem.get("reason", "")}
+    mem, plane = await _memory_probe(svc)
+    checks["memory"] = {"green": bool(mem.get("ok")), "plane": plane, "detail": mem.get("reason", "")}
     live = len(svc.rosters.surface(ctx.short, store.packs_for(ctx.short)))
     base = len(ctx.seat.tools)
     checks["tools"] = {"green": 10 <= base <= 15 and live <= MAX_LIVE_TOOLS, "roster": base, "live": live, "contract": f"contracts/tool-rosters/{ctx.short}.yaml", "version": ctx.seat.version}

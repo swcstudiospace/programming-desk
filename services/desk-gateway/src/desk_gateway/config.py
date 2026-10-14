@@ -131,6 +131,10 @@ class Settings:
     docs_lookup_budget_sec: float = DOCS_LOOKUP_BUDGET_SEC
     docs_retrieval_budget_sec: float = DOCS_RETRIEVAL_BUDGET_SEC
     recall_bank_timeout_sec: float = RECALL_BANK_TIMEOUT_SEC
+    # Background upstream health cadence. The poller clamps a non-positive value to 30s.
+    upstream_health_poll_interval_sec: float = 30.0
+    # One upstream check is abandoned after this many seconds so a hung client cannot stall the loop.
+    upstream_health_check_timeout_sec: float = 15.0
 
     @property
     def issuer_url(self) -> str:
@@ -272,4 +276,6 @@ class Settings:
             docs_lookup_budget_sec=_float_env("DOCS_LOOKUP_BUDGET_SEC", DOCS_LOOKUP_BUDGET_SEC),
             docs_retrieval_budget_sec=_float_env("DOCS_RETRIEVAL_BUDGET_SEC", DOCS_RETRIEVAL_BUDGET_SEC),
             recall_bank_timeout_sec=_float_env("RECALL_BANK_TIMEOUT_SEC", RECALL_BANK_TIMEOUT_SEC),
+            upstream_health_poll_interval_sec=float(_env("UPSTREAM_HEALTH_POLL_INTERVAL_SEC", "30") or "30"),
+            upstream_health_check_timeout_sec=float(_env("UPSTREAM_HEALTH_CHECK_TIMEOUT_SEC", "15") or "15"),
         )

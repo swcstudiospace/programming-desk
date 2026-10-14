@@ -54,6 +54,8 @@ class Services:
     github: GitHub
     play: PlayConsole
     asc: AppStoreConnect
+    # Process-wide UpstreamHealthPoller, attached by create_mcp. Absent on Services.build().
+    health_poller: Any = None
 
     @classmethod
     def build(cls, settings: Settings, store: Store, rosters: Rosters) -> Services:

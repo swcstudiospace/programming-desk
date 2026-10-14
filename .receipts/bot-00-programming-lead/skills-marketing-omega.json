@@ -2,7 +2,7 @@
   "task_id": "skills-marketing-omega",
   "bot": "bot-00-programming-lead",
   "started_at": "2026-10-14T13:50:53Z",
-  "completed_at": "2026-10-14T14:03:06Z",
+  "completed_at": "2026-10-14T14:04:02Z",
   "brief_read_at": 1791985950.030013,
   "cached": false,
   "commands": [
@@ -33,8 +33,8 @@
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.05,
-      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+      "duration_s": 0.04,
+      "output_tail": "G-3 PASS \u2014 4 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
@@ -69,8 +69,8 @@
     {
       "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/skills-marketing-omega.json",
       "exit_code": 1,
-      "duration_s": 0.36,
-      "output_tail": "[FAIL] G-1 Path ownership\n[FAIL] G-2 Verification receipt\n[PASS] G-3 Committed secrets\n[PASS] G-4 Contract-first changes\n[PASS] G-5/G-6 Rollback and destructive ops\n[PASS] G-7 Desk integrity\n2 gate(s) failed.\nG-1 FOREIGN skills/README.md, skills/projects/omega-prime/SKILL.md, skills/projects/spectrumwebco-marketing/SKILL.md (bot-06-quality-security). G-2 only: approved_by is missing."
+      "duration_s": 0.37,
+      "output_tail": "[FAIL]  G-1  Path ownership\n[FAIL]  G-2  Verification receipt\n[PASS]  G-3  Committed secrets\n[PASS]  G-4  Contract-first changes\n[PASS]  G-5/G-6  Rollback and destructive ops\n[PASS]  G-7  Desk integrity\n2 gate(s) failed. Fix the cause \u2014 never bypass a gate (PD-3)."
     }
   ],
   "claims": [

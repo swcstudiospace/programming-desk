@@ -1,7 +1,7 @@
 {
   "task_id": "spe-12500-start-upstreamhealthpoller",
   "bot": "bot-01-systems-backend",
-  "branch": "ovegovender/spe-12500-systems-start-upstreamhealthpoller-30s-on-desk-gateway",
+  "branch": "bot-01-systems-backend/spe-12500-start-upstreamhealthpoller-30s",
   "started_at": "2026-10-14T13:05:14Z",
   "completed_at": "2026-10-14T13:22:00Z",
   "commands": [
@@ -122,7 +122,7 @@
   ],
   "unverified": [
     "approved_by is absent. G-2 --strict fails closed on that field until bot-00-programming-lead or a human stamps this receipt. The authoring seat did not self-approve.",
-    "GitHub Quality Gates derive the acting bot from the branch prefix bot-0N-name/. This branch is ovegovender/spe-12500-systems-start-upstreamhealthpoller-30s-on-desk-gateway, so the Determine the acting bot step exits before G-1. Local G-1 was run with --bot bot-01-systems-backend.",
+    "The Linear branch name ovegovender/spe-12500-systems-start-upstreamhealthpoller-30s-on-desk-gateway fails the Quality Gates acting-bot step, which requires a bot-0N-name/ prefix. This receipt is for bot-01-systems-backend/spe-12500-start-upstreamhealthpoller-30s. Local G-1 was run with --bot bot-01-systems-backend.",
     "pytest with no DATA_DIR and no DESK_REPO_DIR cannot mkdir /var/lib/desk-gateway or read /root/src/repos/programming-desk on this VM. That run reported 28 failed and 64 errors, all PermissionError or FileNotFoundError on those default Settings paths. It was not re-used as evidence.",
     "Greptile was not run. QUALITY records that verdict. This receipt does not claim merge-ready.",
     "No deploy, no gateway restart, and no merge.",

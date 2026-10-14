@@ -107,6 +107,7 @@
       "ref": "bot-00-programming-lead/desk-substrate-memory-skills",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/230",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "Reads substrate brief, durability, and skill-lifecycle behavior through the seat gateway. Cites agent-substrate commit SHAs."
     },

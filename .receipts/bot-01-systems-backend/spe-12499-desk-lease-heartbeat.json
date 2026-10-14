@@ -1,0 +1,120 @@
+{
+  "task_id": "spe-12499-desk-lease-heartbeat",
+  "bot": "bot-01-systems-backend",
+  "branch": "ovegovender/spe-12499-systems-build-servicesdesk-lease-heartbeat-60s-lease-renew",
+  "started_at": "2026-10-14T13:06:00Z",
+  "completed_at": "2026-10-14T13:22:26Z",
+  "summary": "SPE-12499: oneshot services/desk-lease-heartbeat. renew calls substrate graph_heartbeat for leases already recorded in held.json. LEASE_TIMEOUT_S is the wall-clock budget for the tick and, with INTERVAL and JITTER, must stay within LEASE_TTL_S/3. No infra units edited. Nothing installed.",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest services/desk-lease-heartbeat/tests -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 4.7,
+      "output_tail": "20 passed in 4.70s"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 15 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 15 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "LEASE_STATE_DIR=/tmp/lease-hb-state /tmp/lease-hb/local/bin/desk-lease-heartbeat renew",
+      "exit_code": 0,
+      "output_tail": "desk-lease-heartbeat: nothing held"
+    },
+    {
+      "cmd": "LEASE_STATE_DIR=/tmp/lease-hb-state LEASE_HELD_FILE=/tmp/lease-hb-held.json LEASE_ENDPOINT_URL=http://127.0.0.1:9/mcp LEASE_ENDPOINT_TOKEN=test-token LEASE_TIMEOUT_S=1 /tmp/lease-hb/local/bin/desk-lease-heartbeat renew",
+      "exit_code": 3,
+      "output_tail": "desk-lease-heartbeat: renew failed ut-spe12499-0123abcd/n1 (unreachable) at http://127.0.0.1:9/mcp: ConnectionRefusedError"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "pytest of services/desk-lease-heartbeat/tests reported 20 passed",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk production loop verify.sh passed",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Changed paths are owned by bot-01-systems-backend",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Secret scan of the branch diff found no committed secrets",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Desk integrity gate passed",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Installed desk-lease-heartbeat renew exits 0 and logs nothing held when the held file is absent",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Installed desk-lease-heartbeat renew exits 3 and logs unreachable ConnectionRefusedError when the substrate port is closed",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "Not run against a live substrate-mcp. HTTP cases use a local stub of the JSON-RPC tools/call shape that desk_graph_state action heartbeat already sends.",
+    "Nothing was installed on the VPS, and infra/lease-heartbeat/desk-lease-heartbeat.service was not edited. That stub still names /opt/programming-desk. The live checkout is /opt/desk-gateway/programming-desk; INFRA's installer has to point ExecStart at the script path in services/desk-lease-heartbeat/INTERFACE.md.",
+    "No seat in this repo writes held.json. A host whose file is missing logs nothing held and exits 0 until a claimer records the lease_id graph_claim returned.",
+    "The gates workflow runs python3 -m pytest ci/tests and does not collect services/desk-lease-heartbeat/tests. Adding that step would edit .github/workflows, which INFRA owns. The suite was run locally.",
+    "approved_by is absent until LEAD (bot-00-programming-lead) or a human stamps this receipt. G-2 --strict is expected to fail on that field alone.",
+    "The branch prefix is the Linear name ovegovender/..., so .github/workflows/gates.yml will not attribute the acting bot as bot-01. Local G-1 was invoked with --bot bot-01-systems-backend."
+  ],
+  "files_changed": [
+    "services/desk-lease-heartbeat/INTERFACE.md",
+    "services/desk-lease-heartbeat/heartbeat.env.example",
+    "services/desk-lease-heartbeat/pyproject.toml",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/__init__.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/__main__.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/cli.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/envfile.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/mcp.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/redact.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/renew.py",
+    "services/desk-lease-heartbeat/src/desk_lease_heartbeat/state.py",
+    "services/desk-lease-heartbeat/tests/conftest.py",
+    "services/desk-lease-heartbeat/tests/test_envfile.py",
+    "services/desk-lease-heartbeat/tests/test_mcp_parse.py",
+    "services/desk-lease-heartbeat/tests/test_renew.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

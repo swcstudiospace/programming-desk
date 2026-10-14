@@ -1,0 +1,106 @@
+{
+  "task_id": "desk-run-reconcile",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-14T13:49:00Z",
+  "completed_at": "2026-10-14T14:01:23Z",
+  "brief_read_at": "1791986159.5893974",
+  "cached": false,
+  "commands": [
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 11,
+      "output_tail": "299 passed in 10.60s"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 1,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py",
+      "exit_code": 2,
+      "duration_s": 0,
+      "output_tail": "run_all.py: error: the following arguments are required: --bot, --receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/desk-run-reconcile.json",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "[PASS] G-1 Path ownership; [FAIL] G-2 Verification receipt ('approved_by' is missing — work must be reviewed by someone else); [PASS] G-3 Committed secrets; [PASS] G-4 Contract-first changes; [PASS] G-5/G-6 Rollback and destructive ops; [PASS] G-7 Desk integrity. 1 gate(s) failed."
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10,
+      "output_tail": "299 passed in 9.46s"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0,
+      "output_tail": "ok: frontmatter, phase order, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/desk-run-reconcile.json",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "After the desk-run pending_pr link: [PASS] G-1 4 file(s); [FAIL] G-2 approved_by is missing; [PASS] G-3 4 file(s) scanned, no secrets; [PASS] G-4; [PASS] G-5/G-6; [PASS] G-7. 1 gate(s) failed."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ci/tests passes on this branch",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk production loop consistency check passes",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "bare run_all.py exits because --bot and --receipt are required",
+      "evidence_command_index": 2,
+      "expects_failure": true
+    },
+    {
+      "claim": "run_all fails only because approved_by is unset; G-1, G-3, G-4, G-5/G-6 and G-7 pass",
+      "evidence_command_index": 3,
+      "expects_failure": true
+    },
+    {
+      "claim": "ci/tests still passes after the desk-run pending_pr link",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "desk production loop consistency check still passes after the desk-run pending_pr link",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "run_all after the pending_pr link still fails only because approved_by is unset",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "The Cursor pstack beforeSubmitPrompt hook from claude-ultrathink #27 was not installed or submitted a /gsd-* prompt; this VM is not the box and the task forbids touching the VPS.",
+    "ultrathink-grokbot was not executed and no live /desk-run was started, so the hand-off order was checked by reading the skills, not by running a graph.",
+    "Greptile has not reviewed this pull request. The change is not claimed merge-ready. approved_by is unset until an independent reviewer stamps it.",
+    "desk_brief has no etag in the tool contract (brief_no_revision_marker). No human returned an ack_id, so loop_acks is empty rather than invented. The first desk_brief had recall.results[0].error upstream_timeout on bank pd-lead (reason: hindsight bank pd-lead exceeded the 6s recall budget). One refresh retry succeeded: substrate.ok true, no recall.results[].error, generated_at 1791986159.5893974, cached key absent so cached false.",
+    "loaded_packs and intake_queue came back empty on that retry. The gateway store fails silent, so empty is not evidence the queue or the pack list is empty.",
+    "pd-desk and pd-lead-reports returned empty result lists on the retry. That is not evidence those banks have no desk-run facts.",
+    "The Grok Bot private library was not re-saved. Re-save is manual and waits until this draft merges, then again from main.",
+    "The box file at /home/box/agent-data/workflows/desk-run/SKILL.md was not opened on the box. The reconcile used the uploaded desk-run.box copy supplied with the task.",
+    "Receipt path is .receipts/bot-00-programming-lead/desk-run-reconcile.json. desk_ownership_resolve reports .receipts/lead/desk-run-reconcile.json unowned, so that path was not written."
+  ],
+  "files_changed": [
+    "grokbot/skills/desk-run/SKILL.md",
+    "grokbot/skills/index.json",
+    "grokbot/skills/README.md",
+    ".receipts/bot-00-programming-lead/desk-run-reconcile.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Close this draft pull request without merging. Reverting the branch restores grokbot/skills/desk-run/SKILL.md, grokbot/skills/index.json and grokbot/skills/README.md. No deploy and no VPS change.",
+  "approvals": [],
+  "loop_acks": []
+}

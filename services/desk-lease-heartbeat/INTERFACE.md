@@ -71,7 +71,7 @@ INFRA writes `/etc/desk-lease-heartbeat/heartbeat.env` (root:root 0600, never
 committed). `substrate-lease-reap` reads that same file. This service reads
 only the names below. Unknown keys, including the reap and drift names, are
 ignored. Names only in [`heartbeat.env.example`](heartbeat.env.example). Every
-value empty. No tokens.
+value there is empty except `LEASE_TIMEOUT_S`, whose default is 10s. No tokens.
 
 `heartbeat.env` needs these names for this service:
 
@@ -98,7 +98,7 @@ value empty. No tokens.
 | `LEASE_TTL_S` | Omit `ttl_seconds` and let the substrate keep its default. Integer 30..86400 when set. Out of range is exit 6 |
 | `LEASE_INTERVAL_S` | Skip the cadence check. The process does not sleep on it. Positive integer when set |
 | `LEASE_JITTER_S` | Skip the cadence check. Integer >= 0 when set |
-| `LEASE_TIMEOUT_S` | Overall budget for one `renew` is 10 seconds. Positive integer when set |
+| `LEASE_TIMEOUT_S` | Default is 10s, the overall budget for one `renew`. The example file sets that default. Unset at runtime also means 10s. Positive integer when set |
 | `LEASE_MAX_MISSED` | A real failure never drops the row by count. Positive integer when set |
 | `LEASE_STATE_DIR` | No held file means nothing held, exit 0 |
 | `LEASE_HELD_FILE` | Use `$LEASE_STATE_DIR/held.json` |
@@ -129,9 +129,8 @@ ticks then still leave a third of the TTL. When all four are set, this
 process refuses the tick (exit 6) if either inequality fails. It does not
 sleep for `LEASE_INTERVAL_S` or `LEASE_JITTER_S`; the timer owns those.
 
-A 60s timer with 5s jitter and a 900s TTL leaves room for an overall timeout
-up to 59s, because `60 + 5 + 59 = 124` and `900 / 3 = 300`. Ten seconds is
-inside that margin.
+The default is 10s. A 60s interval, 5s jitter and a 900s TTL satisfy the
+guard: `60 + 5 + 10 = 75` and `900 / 3 = 300`.
 
 The endpoint is substrate-mcp, loopback, the same JSON-RPC `tools/call` shape as `substrate-lease-reap.sh`. Tool name: `graph_heartbeat`. Arguments: `graph_id`, `node_id`, `lease_id`, and `ttl_seconds` when configured. A per-lease `ttl_seconds` in `held.json` wins over `LEASE_TTL_S`.
 

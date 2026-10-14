@@ -7,7 +7,7 @@
 
 [Unit]
 Description=Hourly Solana devnet anchor proof verification (SPE-12502)
-Documentation=file:///opt/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
+Documentation=file:///opt/desk-gateway/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
 
 [Timer]
 OnCalendar=hourly

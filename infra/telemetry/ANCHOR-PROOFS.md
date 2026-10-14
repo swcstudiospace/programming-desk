@@ -19,41 +19,31 @@ they schedule: `infra/desk-gateway/desk-gateway.service`,
 |---|---|
 | `verify-anchor-proofs.service` | `Type=oneshot`. Runs the verifier once and exits |
 | `verify-anchor-proofs.timer` | `OnCalendar=hourly`, `Persistent=true`, `RandomizedDelaySec=60` |
-| `anchor-proofs.env.example` | Variable names the unit may read. No values |
+| `anchor-proofs.env.example` | `GREPTIME_HTTP_URL` only, with a placeholder value |
 
 The service has no `[Install]` section. `systemctl enable` applies to the
 timer. Enabling the service as well would also start a boot-time oneshot.
 
 ## What the oneshot runs
 
-`ExecStart=/opt/programming-desk/infra/telemetry/verify-anchor-proofs.sh`
+`ExecStart=/opt/desk-gateway/programming-desk/infra/telemetry/verify-anchor-proofs.sh`
 
-That is the canonical checkout path used by
-[`../desk-gateway/desk-gateway.service`](../desk-gateway/desk-gateway.service).
-`WorkingDirectory=/opt/programming-desk`. The script does not read the working
-directory; the unit sets it so a relative path in a later change still starts
-from the checkout.
+`WorkingDirectory=/opt/desk-gateway/programming-desk`. The script does not read
+the working directory; the unit sets it so a relative path in a later change
+still starts from the checkout.
 
-The script reads these variables (defaults are in the script, not secrets):
-
-| Name | Script default | Hourly unit |
-|---|---|---|
-| `GREPTIME_HTTP_URL` | `http://127.0.0.1:4000` | unset unless `anchor.env` sets it |
-| `SOLANA_DEVNET_RPC` | `https://api.devnet.solana.com` | unset unless `anchor.env` sets it |
-| `DRY_RUN` | `false` | leave unset. `true` skips the network |
-| `REPORT_OUTPUT_DIR` | `/tmp/desk-anchors` | `/var/lib/desk-anchor-proofs` |
+`EnvironmentFile=/etc/desk-anchor-proofs/anchor.env`. The live file is
+root-owned, mode `0600`, and it is never committed. `GREPTIME_HTTP_URL` is its
+only variable. Do not load `substrate.env`. The oneshot does not reference
+that file. Solana RPC, dry-run, and the report directory stay on the script
+defaults or on the unit. `Environment=REPORT_OUTPUT_DIR=/var/lib/desk-anchor-proofs`
+is a unit setting, not a line in `anchor.env`.
 
 `PrivateTmp=true` would delete a report written under `/tmp` when the oneshot
 stops. `StateDirectory=desk-anchor-proofs` creates
-`/var/lib/desk-anchor-proofs` and `Environment=REPORT_OUTPUT_DIR=` points the
-script there. `EnvironmentFile=` overrides that when the live file sets the
-same name.
-
-`EnvironmentFile=-/etc/desk-anchor-proofs/anchor.env` uses the `-` prefix, same
-as `desk-gateway.service`. A missing file is not a failure: the script already
-has defaults, and the report directory is set on the unit. Create the file
-only to override. Do not put secrets in the unit. The live file stays
-`root:root` `0600` and is never committed.
+`/var/lib/desk-anchor-proofs` and the unit's `Environment=` line points the
+script there. A missing `anchor.env` fails the oneshot. Do not put secrets in
+the unit.
 
 Hardening on the service, matching the lease oneshots plus the gateway fields
 this job needs: `User=root`, `Group=root`, `NoNewPrivileges=true`,
@@ -71,28 +61,39 @@ run and fires once after boot if a tick was missed while the host was down.
 That catch-up is why this is a calendar timer: `Persistent=` does not replay
 `OnUnitActiveSec` timers (see the lease timers, which omit it for that reason).
 
-A non-zero exit from the script fails the oneshot. The script exits 1 when it
-checked at least one batch and a batch failed. A query that returns no batches
-exits 0; that behavior is in the script and this unit does not change it.
+A non-zero exit from the script fails the oneshot. Exit codes:
+
+| Code | Meaning |
+|---|---|
+| 0 | Every checked batch verified |
+| 1 | A checked batch failed, or the Greptime query failed |
+| 2 | Usage error |
+| 3 | Greptime returned no anchor batches in the window. The script logs `no anchor batches in window` |
+
+Exit 3 is no data. It is not a verification failure. An empty window used to
+exit 0; the hourly timer now shows that hour as failed so a quiet Greptime is
+visible in the journal.
 
 ## Install and enable
 
 Do not run this from a pull request. After the checkout at
-`/opt/programming-desk` contains these files, and after a separate approval:
+`/opt/desk-gateway/programming-desk` contains these files, and after a separate
+approval:
 
 ```bash
-install -d -m 0700 /etc/desk-anchor-proofs
+install -d -m 0700 -o root -g root /etc/desk-anchor-proofs
 install -m 0600 -o root -g root \
-  /opt/programming-desk/infra/telemetry/anchor-proofs.env.example \
+  /opt/desk-gateway/programming-desk/infra/telemetry/anchor-proofs.env.example \
   /etc/desk-anchor-proofs/anchor.env
-# Edit /etc/desk-anchor-proofs/anchor.env if a default must change.
-# Then remove the leading '#' on the lines you set. Do not commit that file.
+# Replace <greptime-http-url>. The live file stays root:root mode 0600.
+# GREPTIME_HTTP_URL is its only variable. Do not load substrate.env.
+# Do not commit the live file.
 
 install -m 0644 \
-  /opt/programming-desk/infra/telemetry/verify-anchor-proofs.service \
+  /opt/desk-gateway/programming-desk/infra/telemetry/verify-anchor-proofs.service \
   /etc/systemd/system/verify-anchor-proofs.service
 install -m 0644 \
-  /opt/programming-desk/infra/telemetry/verify-anchor-proofs.timer \
+  /opt/desk-gateway/programming-desk/infra/telemetry/verify-anchor-proofs.timer \
   /etc/systemd/system/verify-anchor-proofs.timer
 
 systemctl daemon-reload

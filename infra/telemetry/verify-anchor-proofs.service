@@ -6,7 +6,7 @@
 
 [Unit]
 Description=Verify GreptimeDB Solana devnet anchor proofs (SPE-12502)
-Documentation=file:///opt/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
+Documentation=file:///opt/desk-gateway/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
 After=network-online.target
 Wants=network-online.target
 
@@ -14,14 +14,15 @@ Wants=network-online.target
 Type=oneshot
 User=root
 Group=root
-WorkingDirectory=/opt/programming-desk
+WorkingDirectory=/opt/desk-gateway/programming-desk
 # The script's own default report directory is /tmp/desk-anchors. PrivateTmp
 # throws that directory away when the oneshot exits, so the JSON would never
-# outlive the run. StateDirectory keeps it. An assignment in the EnvironmentFile
-# overrides this; a missing file does not, because of the `-` prefix.
+# outlive the run. StateDirectory keeps it. This Environment= line is not part
+# of anchor.env. That file's only variable is GREPTIME_HTTP_URL.
 Environment=REPORT_OUTPUT_DIR=/var/lib/desk-anchor-proofs
-EnvironmentFile=-/etc/desk-anchor-proofs/anchor.env
-ExecStart=/opt/programming-desk/infra/telemetry/verify-anchor-proofs.sh
+# Required. root:root mode 0600. Does not load substrate.env.
+EnvironmentFile=/etc/desk-anchor-proofs/anchor.env
+ExecStart=/opt/desk-gateway/programming-desk/infra/telemetry/verify-anchor-proofs.sh
 TimeoutStartSec=120
 NoNewPrivileges=true
 PrivateTmp=true

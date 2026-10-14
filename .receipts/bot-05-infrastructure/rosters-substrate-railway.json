@@ -1,0 +1,168 @@
+{
+  "task_id": "rosters-substrate-railway",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/rosters-substrate-railway",
+  "started_at": "2026-10-14T13:50:00Z",
+  "completed_at": "2026-10-14T14:05:00Z",
+  "summary": "Ownership stop. agent-substrate #59, #60 and #62 were not applied to the named roster, pack, change-record or railway-tailscale skill files. ownership.yaml assigns those paths to bot-06-quality-security. skills/platforms/railway-tailscale/SKILL.md is FOREIGN under G-1. .receipts/infra/rosters-substrate-railway.json is UNOWNED. The receipt lives at the owned path .receipts/bot-05-infrastructure/rosters-substrate-railway.json. No deploy and no VPS contact.",
+  "approved_by": null,
+  "approval_requested_from": "bot-00-programming-lead",
+  "commands": [
+    {
+      "cmd": "python3 -c 'import importlib.util; from pathlib import Path; spec=importlib.util.spec_from_file_location(\"own\",\"ci/gates/check_ownership.py\"); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m); manifest=m.load_manifest(Path(\"ownership.yaml\")); paths=[\"contracts/tool-rosters/_core.yaml\",\"contracts/tool-rosters/infra.yaml\",\"contracts/tool-packs/coordination.yaml\",\"skills/platforms/railway-tailscale/SKILL.md\",\"contracts/changes/rosters-substrate-railway.yaml\",\".receipts/infra/rosters-substrate-railway.json\",\".receipts/bot-05-infrastructure/rosters-substrate-railway.json\"];\n[print(p, m.resolve_owner(p, manifest), m.resolve_owner(p, manifest)[0]==\"bot-05-infrastructure\") for p in paths]'",
+      "exit_code": 0,
+      "duration_s": 0.54,
+      "output_tail": "contracts/tool-rosters/_core.yaml ('bot-06-quality-security', True) False\ncontracts/tool-rosters/infra.yaml ('bot-06-quality-security', True) False\ncontracts/tool-packs/coordination.yaml ('bot-06-quality-security', True) False\nskills/platforms/railway-tailscale/SKILL.md ('bot-06-quality-security', False) False\ncontracts/changes/rosters-substrate-railway.yaml ('bot-06-quality-security', True) False\n.receipts/infra/rosters-substrate-railway.json (None, False) False\n.receipts/bot-05-infrastructure/rosters-substrate-railway.json ('bot-05-infrastructure', False) True"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --files contracts/tool-rosters/_core.yaml contracts/tool-rosters/infra.yaml contracts/tool-packs/coordination.yaml skills/platforms/railway-tailscale/SKILL.md contracts/changes/rosters-substrate-railway.yaml .receipts/infra/rosters-substrate-railway.json .receipts/bot-05-infrastructure/rosters-substrate-railway.json",
+      "exit_code": 1,
+      "duration_s": 0.07,
+      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  UNOWNED  .receipts/infra/rosters-substrate-railway.json\n  FOREIGN  skills/platforms/railway-tailscale/SKILL.md  (owned by bot-06-quality-security)\nContract-surface yaml paths were not failure lines."
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "duration_s": 0.21,
+      "output_tail": "generate-templates --check: 7 templates up to date"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.47,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10.63,
+      "output_tail": "299 passed in 10.63s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.28,
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --files .receipts/bot-05-infrastructure/rosters-substrate-railway.json",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "G-3 PASS — 1 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/rosters-substrate-railway.json",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/rosters-substrate-railway.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "duration_s": 0.08,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/rosters-substrate-railway.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The four named edit targets, a contracts/changes record for this task, and .receipts/infra/rosters-substrate-railway.json are not owned by bot-05-infrastructure. The canonical receipt path is.",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Putting the railway-tailscale skill and .receipts/infra/rosters-substrate-railway.json in an INFRA diff fails G-1 (FOREIGN and UNOWNED). The contract-surface yaml paths were not the failure lines.",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "Unmodified rosters still match generate-templates --check",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "Desk production loop verify.sh exits 0",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "ci/tests pytest exits 0",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "Desk integrity stays green with the rosters and packs left as they are",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "No contract surface is in the diff, so G-4 passes with no change document",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "The receipt file contains no committed secret",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "The receipt records no deployment and no destructive operation",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-2 --strict fails because approved_by is unset",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "swcstudiospace/agent-substrate issues and pull requests #59, #60 and #62 were not read: gh issue view and git ls-remote both returned repository not found for this token, and the docs search did not return those issue bodies. Roster and skill text was therefore not drafted from source.",
+    "desk_brief at turn start was Shape B brief_degraded: recall.results for bank pd-lead returned error upstream_timeout (reason: hindsight bank pd-lead exceeded the 6s recall budget). desk_brief also has no etag field (brief_no_revision_marker). No human loop ack was granted. No product file was edited.",
+    "A later desk_memory_recall against pd-lead did return main-sync notes, including PR #60 mentioning parity:check and substrate.slice, and PR #59 as uplift-2. Those notes are memory, not a read of the repository, and they were not used to edit contracts.",
+    "Railway MCP list-services on 2026-10-14 showed Ultrathink production services GreptimeDB, TimescaleDB, Dragonfly, Postgres, tailscale-forwarder, tailscale-vpn, Agent, Gate, OpenBot, Routines, and Agent Substrate production services hindsight-api, hindsight-worker, hindsight-control-plane, hindsight-llm-bridge, Postgres, ragflow, ragflow-oauth-service, ragflow-oauth-integration, elasticsearch, mysql, redis, storage, tailscale-forwarder. That read is not a receipt command, was not re-run as a shell command, and did not change forwarder mappings.",
+    "parity:check was not executed. substrate.slice was not inspected. No VPS command was run. Nothing was deployed.",
+    "approved_by is unset until bot-00-programming-lead or a human reviews this receipt. G-2 is expected to fail on that field alone."
+  ],
+  "flagged_not_edited": [
+    {
+      "path": "contracts/tool-rosters/_core.yaml",
+      "owner": "bot-06-quality-security",
+      "reason": "contract_surface owned by QUALITY; task said flag rather than edit"
+    },
+    {
+      "path": "contracts/tool-rosters/infra.yaml",
+      "owner": "bot-06-quality-security",
+      "reason": "contract_surface owned by QUALITY; task said flag rather than edit"
+    },
+    {
+      "path": "contracts/tool-packs/coordination.yaml",
+      "owner": "bot-06-quality-security",
+      "reason": "contract_surface owned by QUALITY; task said flag rather than edit"
+    },
+    {
+      "path": "skills/platforms/railway-tailscale/SKILL.md",
+      "owner": "bot-06-quality-security",
+      "reason": "G-1 FOREIGN for bot-05-infrastructure; not a contract surface"
+    },
+    {
+      "path": "contracts/changes/rosters-substrate-railway.yaml",
+      "owner": "bot-06-quality-security",
+      "reason": "change records live under contracts/** owned by QUALITY; not added"
+    },
+    {
+      "path": ".receipts/infra/rosters-substrate-railway.json",
+      "owner": null,
+      "reason": "UNOWNED. Receipt written at .receipts/bot-05-infrastructure/rosters-substrate-railway.json instead"
+    }
+  ],
+  "files_changed": [
+    ".receipts/bot-05-infrastructure/rosters-substrate-railway.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

@@ -7,7 +7,11 @@
 #   gates:  g5 — deployment-class tool: rollback_plan and approval_id are required inputs
 #           g6 — destructive-class tool: approval_id is required and echoed into the audit event
 #   backend: the gateway module and function that implements the tool
-version: 1.0.0
+#
+# 1.1.0 records agent-substrate 91487e7 (#59), 9231f43 (#60) and 1e5e719 (#62) against the
+# tools the gateway already implements (services/desk-gateway). No tool was added. Capabilities
+# that need gateway code are follow-ups in contracts/changes/rosters-substrate-railway.yaml.
+version: 1.1.0
 surface: contracts/tool-rosters/_core.yaml
 tools:
   - name: desk_brief
@@ -16,6 +20,10 @@ tools:
     description: >-
       Start-of-turn brief for this seat: substrate memory brief for the Graph ID, recall from the
       seat bank and the shared desk bank, and the seat's open tickets. Cached for five minutes.
+      agent-substrate 9231f43 (#60) reads open graphs in two round trips (one graph_index select
+      and one batched graph_nodes select). Release 91487e7 (#59) spent the 1,200 ms brief budget
+      on one nodes query per open graph, so those briefs came back degraded. This tool still has
+      no etag, profile, or If-None-Match input; 91487e7's brief fast path is not a roster field.
     backend: core.brief
     input:
       type: object
@@ -30,7 +38,12 @@ tools:
     gates: []
     description: >-
       Search the desk document datasets (programming-desk, agent-substrate, and the repo named in
-      the ticket) through the substrate docs plane. Returns chunks with source paths and commits.
+      the ticket). Returns chunks with source paths and commits. When RAGFlow is configured the
+      gateway calls RAGFlow; it does not call a substrate docs_search tool. agent-substrate
+      91487e7 (#59, R6) documents RAGFlow dataset pins on the server, and 1e5e719 (#62, S7) adds
+      a docs-freshness SLI, trigger-lag detection and an opt-in golden canary. Those are not
+      fields on this tool. A chunk is not a repository fact until the file is opened, and this
+      tool does not report freshness.
     backend: core.docs_search
     input:
       type: object
@@ -47,6 +60,9 @@ tools:
     description: >-
       Retain a decision, verified command, environment fact or gotcha into this seat's memory bank.
       Refused without a receipt_path or a source URL. Content is redacted before it leaves the gateway.
+      agent-substrate 91487e7 (#59, R3) keeps a durable Hindsight retain outbox on the server. This
+      gateway still calls Hindsight retain and substrate memory_write itself; it does not enqueue
+      that outbox. partial means one plane stored and another did not.
     backend: core.memory_retain
     input:
       type: object
@@ -65,6 +81,8 @@ tools:
     gates: []
     description: >-
       Recall from this seat's bank and the shared desk bank (LEAD also reads pd-lead-reports).
+      agent-substrate 91487e7 (#59, R3) bounds recall budgets on the server. This tool's per-bank
+      timeout is unchanged, and a timed-out bank is reported rather than replaced with an empty list.
     backend: core.memory_recall
     input:
       type: object
@@ -115,7 +133,8 @@ tools:
     gates: []
     description: >-
       Emit a seat-attributed event to the substrate event log (GreptimeDB). Payloads are redacted
-      and capped at 4 KB.
+      and capped at 4 KB. agent-substrate 1e5e719 (#62, S6) also stores TTL'd metric_samples and
+      serves a bounded /slo/history. This tool does not write or read that history.
     backend: core.event_emit
     input:
       type: object

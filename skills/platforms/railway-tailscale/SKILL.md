@@ -26,11 +26,26 @@ Standing up or changing the Railway ↔ VPS path?
 │                           verify again → retire public exposure under G-6 with approval. §4–§5
 ├─ Something broke after cutover ──▶ Roll back: revert env by file, restart; re-create the proxy
 │                                     or domain if it was already removed. §6
+├─ Slice, index archive, /livez, or metrics history ──▶ §8. No gateway tool does these.
 └─ Writing the receipt ──▶ §7. TS_AUTHKEY and connection strings never appear in it.
 ```
 
-Nothing in this skill is deployed yet; service names and ports are provisional until the n1
-inventory records them. Treat every value below as "to confirm", not "confirmed".
+The five data planes named in this skill (GreptimeDB, TimescaleDB, DragonflyDB, Hindsight,
+RAGFlow) are the services agent-substrate `91487e7` (#59, "discovery of five Railway services")
+builds R1–R7 against. The history digest's commit subject names the discovery; it does not list
+Railway service ids, so this skill does not invent ids. Hostnames and ports in §2 stay this
+desk's forwarder record.
+
+`9231f43` (#60) records that release `91487e7` is live (tag `release-20261013-91487e7`). That is
+the substrate release. It is not a record that the public TCP proxy and public database domains
+in §5 have been retired. Those remain a G-6 step with an approval id.
+
+`1e5e719` (#62) hardens the VPS runtime (slice priority and swap isolation, a store-free
+`/livez`, an opt-in watchdog), keeps TTL'd `metric_samples` history with a bounded
+`/slo/history`, and adds index disaster recovery (logical export, offline verify,
+restore-to-scratch). Every policy in that commit ships off or report-only, and the commit says
+nothing deletes production data. This skill does not enable those policies. §8 lists the gateway
+tools that exist and the follow-ups that do not.
 
 ---
 
@@ -55,8 +70,8 @@ into each project. Variables:
 | Volume | Mounted for Tailscale state, so the machine identity survives redeploys | Without it each redeploy is a new machine with a new name and the VPS env points at a ghost |
 
 Machine name: `<project>-<environment>-tailscale-forwarder`. The VPS env uses these names, never
-the tailnet IP, which changes when the node is re-created. Expected mappings (provisional;
-confirm names and ports in n1 before deploying):
+the tailnet IP, which changes when the node is re-created. Expected mappings are this desk's
+forwarder record. `91487e7` names the five data planes and does not restate these hostnames:
 
 | Forwarder | Mappings |
 |---|---|
@@ -88,7 +103,9 @@ retired under G-6 after the forwarders are verified; an existing forwarder is ad
 2. From the VPS shell (`skills/platforms/remote-dev-machine`; SSH is INFRA-owned ops): `psql` to
    `ultrathink-production-tailscale-forwarder:5432`, `curl` to `:4000` and to
    `agent-substrate-production-tailscale-forwarder:8888/health` and `:9380`. Record each exit code.
-3. `desk_db_health` — five services green over the tailnet names, before any env changes.
+3. `desk_db_health` — greptime, timescale, dragonfly, hindsight and ragflow ok over the tailnet
+   names, and the substrate row present, before any env changes. The substrate row is
+   `GET /healthz`. `1e5e719` adds a store-free `/livez`; this probe is not that route.
 
 If any probe fails here, stop. The cutover has nothing to cut over to yet.
 
@@ -97,9 +114,17 @@ If any probe fails here, stop. The cutover has nothing to cut over to yet.
 1. Edit `/etc/substrate/substrate.env` and `/etc/desk-gateway/gateway.env`: `GREPTIME_URL`,
    `SUBSTRATE_PG_URL`, `DRAGONFLY_URL`, `HINDSIGHT_URL`, `RAGFLOW_URL` to the forwarder names.
    Keep a dated copy of each file beside it; that copy is the rollback.
-2. Restart `substrate-mcp` and `desk-gateway`. `desk_vps_units` shows them active.
-3. Verify again: `desk_db_health` green; `desk_event_emit` lands; `desk_brief` returns. Record
-   the calls.
+2. Restart `substrate-mcp` and `desk-gateway`. `desk_vps_units` shows them active. The gateway
+   default list is those two plus `substrate-host`, `substrate-dispatcher`, `vps-agent-bus` and
+   `grok-claude-cloud-connector`. It is not a glob of `substrate-*`. `91487e7` (R7) places
+   substrate units in `substrate.slice`. `9231f43` teaches `parity:check` to accept that slice
+   or `system.slice`; before that commit only `system.slice` passed, so the R7 slice failed the
+   check. There is no gateway tool for `parity:check`. Units added in `1e5e719`
+   (`substrate-index-archive`, `substrate-docs-canary`, `substrate-alert@`) appear in
+   `desk_vps_units` only when named in `units`.
+3. Verify again: `desk_db_health` ok for the five planes and the substrate `/healthz` row;
+   `desk_event_emit` lands; `desk_brief` returns. Record the calls. A green `/healthz` is not a
+   reading of `/livez`, and a landed event is not a `metric_samples` row (`1e5e719` S6).
 4. Only now retire public exposure (G-6): delete the TimescaleDB TCP proxy and the Greptime
    public domain, in the Railway dashboard or CLI. There is deliberately no gateway tool for
    this; it is a human-approved destructive change with an `approval_id` obtained through LEAD
@@ -129,7 +154,9 @@ probe with exit code; `desk_db_health` before and after; the env diff **by varia
 or screenshot reference); `approvals` with the G-6 approval id; `rollback_plan` from §6;
 `unverified` for anything not exercised (staging environment, `railway-app` disposition, ACL
 from the admin machines if not probed). `TS_AUTHKEY`, database passwords and bearer keys are
-never in the receipt, a template, a message or a tool argument (G-3, PD-4).
+never in the receipt, a template, a message or a tool argument (G-3, PD-4). Do not record a
+`parity:check` pass, a `/livez` probe, an index-archive verify, or a `/slo/history` read unless
+that command actually ran. None of those have a gateway tool (§8).
 
 ---
 
@@ -141,9 +168,9 @@ never in the receipt, a template, a message or a tool argument (G-3, PD-4).
 desk_tailscale_status → agent-substrate forwarder online; port 9380 unreachable
 curl agent-substrate-production-tailscale-forwarder:9380 → exit 7          ← mapping typo found
 fix CONNECTION_MAPPING_2 in Railway → redeploy forwarder → curl → exit 0
-desk_db_health → 5/5 green (public addresses still in env; nothing cut over yet)
-edit env (dated copies kept) → restart → desk_vps_units active → desk_db_health 5/5
-approval via LEAD → apr-… → delete TCP proxy + Greptime domain → desk_db_health 5/5
+desk_db_health → five planes and substrate /healthz ok (public addresses still in env)
+edit env (dated copies kept) → restart → desk_vps_units active → desk_db_health ok again
+approval via LEAD → apr-… → delete TCP proxy + Greptime domain → desk_db_health ok again
 receipt: probes, env names, approval id, rollback plan, unverified: ["staging not built"]
 ```
 
@@ -172,6 +199,37 @@ removed before the new one was proven. The order in §5 exists for this case.
 | Secret in receipt or message | Key or password in a JSON tail | Names only; rotate what leaked |
 | Bot computer on the tailnet | Bot depends on a desktop being awake; holds a route to databases | Bots use the gateway over normal egress |
 | `railway-app` left as an unknown node | Untagged node with unknown reach | Identify in n1; adopt or retire under G-6 |
+| `parity:check` fails the R7 slice | Checker accepts only `system.slice` | Fixed in `9231f43`: the unit cgroup may be `substrate.slice` or `system.slice`. No desk tool runs the checker |
+| Green `desk_db_health` read as `/livez` | Store-free liveness was not probed | The gateway calls `/healthz`. `/livez` is `1e5e719` and has no roster tool |
+| Index archive or `/slo/history` driven from this skill | A restore or a history read with no gateway tool | §8. Policies in `1e5e719` ship off or report-only |
+
+---
+
+## §8 What `91487e7`, `9231f43` and `1e5e719` do not add to the gateway
+
+Facts below are from the agent-substrate history digest (`git log --stat` since `feb597f`), not
+from a clone of that repo. The gateway implementations checked are
+`services/desk-gateway/src/desk_gateway/tools/infra.py`, `tools/core.py` and `upstreams.py`.
+
+| Commit | What landed in agent-substrate | Desk tool that already covers the adjacent fact | Not a roster tool |
+|---|---|---|---|
+| `91487e7` #59 | Discovery of the five Railway data-plane services; R7 cgroup ceilings in `substrate.slice`; R1 brief fast path; R3 Hindsight retain outbox; R6 RAGFlow dataset pins | `desk_railway_status`, `desk_db_health`, `desk_tailscale_status`, `desk_brief`, `desk_memory_retain`, `desk_docs_search` | No etag / If-None-Match / profile on `desk_brief`. No client of the retain outbox |
+| `9231f43` #60 | `openGraphs` in two round trips; `parity:check` accepts `substrate.slice` or `system.slice` | `desk_brief` (the budget failure mode). `desk_vps_units` still reports ActiveState only | No `desk_parity_check` |
+| `1e5e719` #62 | Slice priority and swap isolation; store-free `/livez` and an opt-in watchdog; TTL'd `metric_samples` and bounded `/slo/history`; index logical export, offline verify, restore-to-scratch; units `substrate-index-archive`, `substrate-docs-canary`, `substrate-alert@` | `desk_db_health` still calls `/healthz`. `desk_event_emit` still writes the event log. `desk_vps_units` can show the new units when `units` names them | No `/livez` probe, no metrics-history read, no index-archive tool. A restore tool would be g6 and is not added |
+
+Follow-ups, each of which needs gateway code before a roster entry:
+
+1. `desk_brief` inputs for the `91487e7` fast path (etag, If-None-Match, profile). The production loop treats a missing etag as the no-marker condition. Adding the field is a later contract change, not this one.
+2. A `/livez` reading distinct from `desk_db_health`'s `/healthz` (`1e5e719` S3), including the opt-in watchdog. `infra.db_health` does not call `/livez`.
+3. A read-only index-archive verify (`1e5e719` S2). Restore-to-scratch is not a read tool; pointed at a live database it would be g6. Neither backend exists.
+4. A read of `metric_samples` / `/slo/history` (`1e5e719` S6). `desk_event_emit` and `desk_railway_logs` are different stores.
+5. `parity:check` as a tool. It is a substrate script. `desk_vps_units` does not report which slice a unit is in.
+6. Putting `substrate-index-archive`, `substrate-docs-canary` and `substrate-alert@` on the default `desk_vps_units` list. The default is `DEFAULT_UNITS` in `infra.py`. Changing it is gateway code. Callers can pass `units` today.
+
+`coordination_graph_heartbeat` and `coordination_drift_scan` are unchanged as inputs.
+`91487e7` R4 keeps a swept graph while a live lease is held, which is why a rejected heartbeat
+still means stop. No DriftKind for slice, archive or metrics history is declared by these three
+commits, so the drift tool does not grow one.
 
 ---
 
@@ -184,3 +242,4 @@ removed before the new one was proven. The order in §5 exists for this case.
 | No `TS_AUTHKEY`, passwords or bearer keys anywhere but the secret stores | G-3, PD-4 | Receipts, templates and messages are copied |
 | Every probe recorded with its exit code; the unprobed goes in `unverified` | G-2, PD-1, PD-6 | "Reachable over the tailnet" is a claim a re-run must be able to check |
 | `infra/railway/**`, `infra/tailscale/**` are INFRA's; ACL widenings go past QUALITY | G-1, PD-2 | Ownership is already declared for these paths |
+| Do not add a roster tool the gateway does not implement | G-4, PD-2 | Slice check, `/livez`, index archive and metrics history are follow-ups until `infra.py` grows a backend |

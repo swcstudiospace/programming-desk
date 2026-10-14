@@ -1,0 +1,107 @@
+# Contract change: cite agent-substrate #59, #60 and #62 on the rosters the gateway
+# already serves. No new tool. Replaces the intent of programming-desk draft PR #225,
+# which INFRA closed without editing these files because ownership.yaml assigns them
+# to bot-06-quality-security.
+#
+# Source of the substrate facts: the attached history digest
+# (git log --stat of agent-substrate since feb597f), not a clone. That repo is not
+# readable from this checkout. SHAs below are from that digest.
+#
+# Verify:
+#   python3 ci/gates/check_contracts.py --base origin/main \
+#       --change contracts/changes/rosters-substrate-railway.yaml
+
+change_id: rosters-substrate-railway
+proposed_by: bot-06-quality-security
+
+surface: contracts/tool-rosters/_core.yaml
+surfaces:
+  - contracts/tool-rosters/infra.yaml
+  - contracts/tool-packs/coordination.yaml
+
+breaking: false
+version: 1.1.0
+previous_version: 1.0.0
+
+summary: >
+  Description-only update for agent-substrate 91487e7 (#59, discovery of the five Railway
+  data-plane services plus the R1–R7 substrate work), 9231f43 (#60, open-graphs in two round
+  trips and parity:check accepting substrate.slice) and 1e5e719 (#62, VPS runtime hardening,
+  durable metric_samples history, index disaster recovery). _core.yaml and infra.yaml move
+  1.0.0 -> 1.1.0. coordination.yaml moves 1.1.0 -> 1.2.0 because it was already at 1.1.0.
+  Tool names, kinds, gates, backends and input schemas are unchanged. skills/platforms/railway-tailscale/SKILL.md
+  carries the same facts for the INFRA procedure; it is not a contract surface. Nothing here
+  deploys, restarts a unit, or contacts the VPS.
+
+semantic_changes:
+  - field: desk_docs_search.description
+    change: >
+      The description no longer says the search goes through the substrate docs plane.
+      The gateway calls RAGFlow when RAGFlow is configured (tools/core.py docs_search).
+      91487e7 R6 and 1e5e719 S7 are named as server-side facts this tool does not return.
+  - field: desk_db_health.description
+    change: >
+      The description now names the substrate GET /healthz row the gateway already
+      returns next to the five data planes. The probe set is unchanged. /livez from
+      1e5e719 is explicitly not this probe.
+  - field: desk_vps_units.description
+    change: >
+      The description no longer reads as a glob of substrate-*. The omitted-units
+      default is the gateway DEFAULT_UNITS list, including grok-claude-cloud-connector.
+      1e5e719 units are visible only when the existing units array names them.
+
+acknowledgements: []
+
+migration_note: >
+  None required for callers. No input was added, removed, renamed or made required.
+  tools/list description text changes when a gateway process reloads these files.
+  This change does not reload or deploy the gateway.
+
+follow_ups:
+  - id: brief-fast-path-fields
+    cites: ["91487e7"]
+    needs: services/desk-gateway substrate brief client
+    reason: >
+      91487e7 R1 (ETag/304, degraded headers, last-good snapshot) is not an input or
+      output of desk_brief. The production loop treats a missing etag as the no-marker
+      condition. Adding the field is a later contract change.
+  - id: livez-and-watchdog
+    cites: ["1e5e719"]
+    needs: infra.db_health or a new read tool
+    reason: >
+      desk_db_health probes GET /healthz. 1e5e719 S3 adds a store-free /livez and an
+      opt-in watchdog. infra.py does not call /livez, so no roster entry is added.
+  - id: index-archive-verify
+    cites: ["1e5e719"]
+    needs: a new read backend; restore would be a separate g6 tool
+    reason: >
+      1e5e719 S2 is logical export, offline verify and restore-to-scratch of the
+      Timescale index. No gateway function wraps it. A restore aimed at a live
+      database is destructive and is not specified here.
+  - id: metrics-history-read
+    cites: ["1e5e719"]
+    needs: a new read backend
+    reason: >
+      1e5e719 S6 stores TTL'd metric_samples and serves a bounded /slo/history.
+      desk_event_emit writes the event log. desk_railway_logs reads deployment logs.
+      Neither is that history.
+  - id: parity-check-tool
+    cites: ["91487e7", "9231f43", "1e5e719"]
+    needs: a new read backend
+    reason: >
+      parity:check is a substrate script. 9231f43 accepts the unit cgroup under
+      substrate.slice or system.slice. desk_vps_units reports systemd ActiveState
+      only, not slice membership.
+  - id: default-units-for-62
+    cites: ["1e5e719"]
+    needs: DEFAULT_UNITS in services/desk-gateway/src/desk_gateway/tools/infra.py
+    reason: >
+      substrate-index-archive, substrate-docs-canary and substrate-alert@ are not
+      on the default list. Callers can pass them in units today. Changing the
+      default is gateway code owned with the gateway, not a roster-only edit.
+
+notes:
+  - "Tool names on _core.yaml, infra.yaml and coordination.yaml are unchanged. Backends stay core.brief, core.docs_search, core.memory_retain, core.memory_recall, core.event_emit, infra.railway_status, infra.railway_logs, infra.railway_variable_names, infra.railway_redeploy, infra.tailscale_status, infra.vps_units, infra.db_health, systems.graph_heartbeat and systems.drift_scan."
+  - "programming-desk PR #59 (coordination pack seats) and agent-substrate #59 (91487e7) share a number and are different changes. coordination.yaml's header says so."
+  - "The five service names are the data planes this desk already used on desk_db_health. 91487e7's subject calls that a discovery. The history digest does not include Railway service ids, and none are added here."
+  - "skills/platforms/railway-tailscale/SKILL.md is QUALITY-owned and not a contract surface, so it is not in surfaces."

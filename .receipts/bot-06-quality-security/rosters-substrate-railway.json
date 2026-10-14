@@ -1,0 +1,115 @@
+{
+  "task_id": "rosters-substrate-railway",
+  "bot": "bot-06-quality-security",
+  "branch": "bot-06-quality-security/rosters-substrate-railway",
+  "started_at": "2026-10-14T14:02:00Z",
+  "completed_at": "2026-10-14T14:12:21Z",
+  "commands": [
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "duration_s": 0.09,
+      "output_tail": "generate-templates --check: 7 templates up to date"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.27,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 9.68,
+      "output_tail": "303 passed in 9.51s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-06-quality-security --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-1 PASS — bot-06-quality-security: 7 file(s) within owned paths\n  NOTE: 4 contract surface file(s) touched — G-4 applies:\n    contracts/changes/rosters-substrate-railway.yaml\n    contracts/tool-packs/coordination.yaml\n    contracts/tool-rosters/_core.yaml\n    contracts/tool-rosters/infra.yaml"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.13,
+      "output_tail": "7 template(s) clean\nG-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main --change contracts/changes/rosters-substrate-railway.yaml",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-4 PASS — rosters-substrate-railway: non-breaking, v1.1.0, 0 acknowledgement(s)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-3 PASS — 7 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-06-quality-security --base origin/main --receipt .receipts/bot-06-quality-security/rosters-substrate-railway.json --strict",
+      "exit_code": 1,
+      "duration_s": 0.37,
+      "output_tail": "G-2 FAIL — .receipts/bot-06-quality-security/rosters-substrate-railway.json\n  - 'approved_by' is missing — work must be reviewed by someone else\n  [PASS]  G-1  Path ownership\n  [FAIL]  G-2  Verification receipt\n  [PASS]  G-3  Committed secrets\n  [PASS]  G-4  Contract-first changes\n  [PASS]  G-5/G-6  Rollback and destructive ops\n  [PASS]  G-7  Desk integrity\n1 gate(s) failed."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "generate-templates --check reports 7 templates up to date",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "desk production loop verify.sh exits 0",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "ci/tests pytest exits 0",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "G-1 passes for bot-06-quality-security on this branch",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-7 desk integrity passes",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 passes for contracts/changes/rosters-substrate-railway.yaml as a non-breaking change",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-3 finds no committed secret in the diff",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "run_all --strict exits 1 because approved_by is unset; G-1, G-3, G-4, G-5/G-6 and G-7 pass",
+      "evidence_command_index": 7,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "agent-substrate was not cloned. Facts for 91487e7, 9231f43 and 1e5e719 are from the attached git log --stat digest since feb597f, not from reading packages/mcp-server or infra/vps in that repo.",
+    "Railway was not queried. Service ids beyond the five data-plane names already on desk_db_health were not added, because the digest's 91487e7 subject does not list them.",
+    "The VPS was not contacted. parity:check was not executed. /healthz, /livez, /slo/history and the index archive were not probed. Nothing was deployed.",
+    "Public TCP proxy and public database domain retirement was not observed. 9231f43 records that release 91487e7 is live; it does not record that those public endpoints were removed.",
+    "Greptile was not run. approved_by is unset until bot-00-programming-lead or a human reviews this receipt.",
+    "Gateway tools/list was not reloaded from these files. Description text reaches a seat when the gateway process reloads the yaml."
+  ],
+  "files_changed": [
+    "contracts/tool-rosters/_core.yaml",
+    "contracts/tool-rosters/infra.yaml",
+    "contracts/tool-packs/coordination.yaml",
+    "contracts/changes/rosters-substrate-railway.yaml",
+    "skills/platforms/railway-tailscale/SKILL.md",
+    "ci/gates/run_all.py",
+    "ci/tests/test_rosters_substrate_railway.py",
+    ".receipts/bot-06-quality-security/rosters-substrate-railway.json"
+  ],
+  "contract_changes": [
+    "contracts/changes/rosters-substrate-railway.yaml"
+  ],
+  "rollback_plan": null,
+  "approvals": []
+}

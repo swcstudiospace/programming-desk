@@ -1,5 +1,9 @@
 # INFRA roster: core 8 + 7 = 15. Contract surface (QUALITY); consumer bot-05-infrastructure.
-version: 1.0.0
+# 1.1.0 records agent-substrate 91487e7 (#59), 9231f43 (#60) and 1e5e719 (#62) against the
+# seven tools services/desk-gateway/src/desk_gateway/tools/infra.py already implements.
+# No eighth INFRA tool. Follow-ups that need gateway code are in
+# contracts/changes/rosters-substrate-railway.yaml.
+version: 1.1.0
 seat: bot-05-infrastructure
 short: infra
 endpoint: /mcp/infra
@@ -11,7 +15,13 @@ tools:
   - name: desk_railway_status
     kind: read
     gates: []
-    description: Services, latest deployment and health for the Ultrathink and Agent Substrate Railway projects.
+    description: >-
+      Services, latest deployment and health for the Ultrathink and Agent Substrate Railway
+      projects. agent-substrate 91487e7 (#59) is the discovery of the substrate's five Railway
+      data-plane services (GreptimeDB, TimescaleDB, Dragonfly, Hindsight, RAGFlow) — the same
+      five this desk already names on desk_db_health. The commit message does not list Railway
+      service ids. This tool returns each configured project's service list as Railway reports
+      it. It does not filter that list to those five, and it does not report cgroup or slice state.
     backend: infra.railway_status
     input:
       type: object
@@ -22,7 +32,10 @@ tools:
   - name: desk_railway_logs
     kind: read
     gates: []
-    description: Recent deployment logs for one Railway service, bounded and redacted.
+    description: >-
+      Recent deployment logs for one Railway service, bounded and redacted. This is the
+      deployment log, not the metric_samples history agent-substrate 1e5e719 (#62, S6) stores
+      in GreptimeDB, and not /slo/history.
     backend: infra.railway_logs
     input:
       type: object
@@ -66,7 +79,11 @@ tools:
   - name: desk_tailscale_status
     kind: read
     gates: []
-    description: Tailnet view from the VPS - forwarders online, mapped ports reachable, this node's tags.
+    description: >-
+      Tailnet view from the VPS - forwarders online, mapped ports reachable, this node's tags.
+      The ports the gateway probes are the five data-plane mappings for agent-substrate 91487e7
+      (#59). 9231f43 (#60) and 1e5e719 (#62) add no forwarder port. This tool does not report
+      substrate.slice.
     backend: infra.tailscale_status
     input:
       type: object
@@ -76,7 +93,16 @@ tools:
   - name: desk_vps_units
     kind: read
     gates: []
-    description: systemd status of the desk-relevant units on the VPS (substrate-*, desk-gateway, vps-agent-bus, grok-claude-cloud).
+    description: >-
+      systemd ActiveState, SubState, start time and restart count for the units named in
+      `units`. When `units` is omitted the gateway default is substrate-mcp, substrate-host,
+      substrate-dispatcher, desk-gateway, vps-agent-bus and grok-claude-cloud-connector — not a
+      glob of substrate-*. agent-substrate 91487e7 (#59, R7) places substrate units in
+      substrate.slice; 9231f43 (#60) teaches parity:check to accept that slice or system.slice
+      (before that commit only system.slice passed, so the R7 slice failed the check); 1e5e719
+      (#62, S3) sets slice priority and swap isolation and adds substrate-index-archive,
+      substrate-docs-canary and substrate-alert@. This tool does not report slice membership
+      and does not run parity:check. Those #62 units show up only when named in `units`.
     backend: infra.vps_units
     input:
       type: object
@@ -90,7 +116,12 @@ tools:
   - name: desk_db_health
     kind: read
     gates: []
-    description: Health of the five data-plane services over the tailnet (Greptime, Timescale, Dragonfly, Hindsight, RAGFlow).
+    description: >-
+      Health of the five data-plane services agent-substrate 91487e7 (#59) discovered —
+      Greptime, Timescale, Dragonfly, Hindsight, RAGFlow — and of the substrate process, which
+      the gateway already probes with GET /healthz. agent-substrate 1e5e719 (#62, S3) adds a
+      store-free /livez and an opt-in watchdog; this tool does not call /livez. #62 S6
+      metric_samples is history, not another health target.
     backend: infra.db_health
     input:
       type: object

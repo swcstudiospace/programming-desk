@@ -147,6 +147,7 @@
       "ref": "bot-00-programming-lead/ultrathink-skills-sync",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "Critique alternative, unit flags, Cursor /gsd-* skill map, and the repeated-finding hand-off. Upstream has no SKILL.md."
     },
@@ -157,6 +158,7 @@
       "ref": "bot-00-programming-lead/ultrathink-skills-sync",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "Plugin ship path on main c8c6290. Ming's VPS keeps ship.autoMerge and ship.deleteBranch on."
     },
@@ -167,6 +169,7 @@
       "ref": "bot-00-programming-lead/ultrathink-skills-sync",
       "default_branch": "main",
       "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "Omp planning flight. Paragraphs marked requires claude-ultrathink#34 need PR 34 at 87411ed."
     },

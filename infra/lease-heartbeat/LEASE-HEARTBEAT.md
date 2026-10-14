@@ -1,8 +1,13 @@
-# Seat lease heartbeats — INFRA install/env stubs (SPE-4792)
+# Seat lease heartbeats — INFRA units and installer (SPE-12501)
 
 **Owner:** INFRA (`bot-05-infrastructure`). **Coordinating seat:** SYSTEMS (`bot-01-systems-backend`).
-**Status:** stubs for review. **Nothing here is installed**, and there is deliberately no
-`install.sh` — see §4.
+**Status:** unit files and `install.sh` are in the tree. The default installer writes or checks
+files and does not enable timers. `--enable` is the only path that enables them. This change
+does not run the installer on a host.
+**Interface:** SYSTEMS `desk-lease-heartbeat renew` in
+[PR #221](https://github.com/swcstudiospace/programming-desk/pull/221)
+(`bot-01-systems-backend/spe-12499-desk-lease-heartbeat`,
+`6ae2ea59f38d5c0b5cb83c5f98cd153dbae73340`, SPE-12499).
 
 > Not named `README.md` on purpose — see [`../substrate/SUBSTRATE-ENV.md`](../substrate/SUBSTRATE-ENV.md),
 > first note: `ownership.yaml`'s bare `README.md` rule matches at any depth and resolves a README
@@ -38,11 +43,14 @@ and it is why the cadence invariant in §3 is not a tuning preference.
 
 | File | What it is |
 |---|---|
-| `desk-lease-heartbeat.service` | `Type=oneshot` renewal unit. **Stub**: `ExecStart` names a SYSTEMS entrypoint that does not exist yet |
-| `desk-lease-heartbeat.timer` | `OnUnitActiveSec` timer driving the service. The literal interval is a placeholder, generated from `LEASE_INTERVAL_S` at install time |
-| `substrate-lease-reap.service` | `Type=oneshot` **sweeper**: one call to the SYSTEMS-owned `coord_reap_leases` tool on the local substrate-mcp. **Stub** — see §6 |
-| `substrate-lease-reap.timer` | Drives the sweeper. Default 45s, permitted 30–60s |
-| `lease-heartbeat.env.example` | Every variable the unit reads, names only, all values empty |
+| `desk-lease-heartbeat.service` | `Type=oneshot`. `WorkingDirectory` and `ExecStart` use `/opt/desk-gateway/programming-desk`. `TimeoutStartSec=10` |
+| `desk-lease-heartbeat.timer` | `OnUnitActiveSec=60`, `RandomizedDelaySec=5` |
+| `substrate-lease-reap.service` | `Type=oneshot` sweeper. Same checkout for `WorkingDirectory` and `ExecStart` of `substrate-lease-reap.sh`. See §6 |
+| `substrate-lease-reap.timer` | `OnUnitActiveSec=45`, `RandomizedDelaySec=5` |
+| `heartbeat.env.example` | The 13 heartbeat names, values blank. `install.sh` copies this once |
+| `lease-heartbeat.env.example` | Those names plus reap and drift names, values blank |
+| `install.sh` | Writes or checks files. Enables timers only with `--enable` |
+| `verify-units.sh` | `systemd-analyze verify` for every unit here, under a temporary root |
 | `drift-probe.sh` | Runnable, read-only, credential-free reachability + git-tip probe |
 | `DRIFT-SCAN.md` | What INFRA feeds `coord.drift_scan(repo)` and what it refuses to assert |
 
@@ -67,7 +75,8 @@ Not equivalent, and the gaps are worth stating rather than discovering:
 # /etc/cron.d/desk-lease-heartbeat — sketch. Requires LEASE_INTERVAL_S == 60 exactly.
 # Cron has no EnvironmentFile, so the entrypoint reads it directly — see the warning below.
 * * * * * root /usr/bin/flock -n /run/desk-lease-heartbeat.lock \
-  desk-lease-heartbeat renew --env-file /etc/desk-lease-heartbeat/heartbeat.env \
+  /opt/desk-gateway/programming-desk/services/desk-lease-heartbeat/.venv/bin/desk-lease-heartbeat renew \
+  --env-file /etc/desk-lease-heartbeat/heartbeat.env \
   >> /var/log/desk-lease-heartbeat.log 2>&1
 ```
 
@@ -123,68 +132,80 @@ LEASE_INTERVAL_S  +   LEASE_JITTER_S   +   LEASE_TIMEOUT_S   <=   LEASE_TTL_S / 
 - `LEASE_JITTER_S` exists because seven seats restarted together otherwise renew in lockstep
   forever, which turns one substrate hiccup into seven lost leases.
 
-systemd cannot read any of these out of an `EnvironmentFile`, so **all three unit literals are
-generated at install time**, never hand-maintained: `OnUnitActiveSec` from `LEASE_INTERVAL_S`,
-`RandomizedDelaySec` from `LEASE_JITTER_S`, and `TimeoutStartSec` from `LEASE_TIMEOUT_S`. A
-hand-edited unit and an env file disagreeing about the cadence is a TTL nobody can compute from
-the repo — and a `TimeoutStartSec` left at a fixed literal silently breaks the `TIMEOUT < INTERVAL`
-guarantee the moment SYSTEMS picks a shorter interval.
+systemd cannot read any of these out of an `EnvironmentFile`. The shipped literals are the
+cadence, and `install.sh` copies the unit files rather than rewriting them:
 
-## 4. Why there is no `install.sh` yet
+| Unit | Literal |
+|---|---|
+| `desk-lease-heartbeat.timer` `OnUnitActiveSec` | 60 |
+| `desk-lease-heartbeat.timer` `RandomizedDelaySec` | 5 |
+| `desk-lease-heartbeat.service` `TimeoutStartSec` | 10 |
+| `substrate-lease-reap.timer` `OnUnitActiveSec` | 45 |
+| `substrate-lease-reap.timer` `RandomizedDelaySec` | 5 |
 
-The `ExecStart` target (`services/desk-lease-heartbeat/`) is SYSTEMS-owned and does not exist. A
-timer installed now would fail every tick, fill the journal, and train whoever reads
-`systemctl --failed` to ignore this unit — so the first real renewal failure would also be ignored.
+Empty `LEASE_INTERVAL_S`, `LEASE_JITTER_S`, `LEASE_TIMEOUT_S`, and `LEASE_TTL_S` use 60, 5, 10,
+and 900. A non-empty interval, jitter, or timeout must equal the heartbeat literal above, and the
+two inequalities still have to hold. The reap interval is not part of that check: it does not
+renew a lease. The installer prints names and these literals. It does not print env values.
 
-Install once SYSTEMS lands the entrypoint. At that point the installer, matching
-[`../desk-gateway/install.sh`](../desk-gateway/install.sh) conventions, must:
+## 4. Installer
 
-1. Create `/etc/desk-lease-heartbeat/heartbeat.env` from `lease-heartbeat.env.example` **once**,
-   `0600 root:root`, and never overwrite it — an installer that rewrites a live env file is an
-   installer that drops the token on upgrade.
-2. Refuse to proceed when **any** of these is empty, and refuse when either §3 inequality fails —
-   including the jitter and timeout terms:
+`install.sh` is idempotent. By default it writes or checks files and does not call `systemctl`.
+Enabling the timers requires `--enable`, which runs `systemctl enable` on the two timers and does
+not start them. Do not pass `--enable` without an explicit yes to install on that host. A scratch
+tree uses `--sysroot DIR` (absolute). The default sysroot is `/`, and that path requires root.
+`--enable` is refused for any other sysroot.
 
-   | Group | Variables | Why a missing one is fatal |
-   |---|---|---|
-   | Cadence | `LEASE_TTL_S`, `LEASE_INTERVAL_S`, `LEASE_TIMEOUT_S`, `LEASE_JITTER_S` | Guessing a cadence means a lease expiring at a time nobody agreed to |
-   | **Identity** | `LEASE_SEAT`, `LEASE_HOLDER_ID` | A renewal with no seat renews nothing while the unit reports success — a green timer over an expiring lease |
-   | **Endpoint** | `LEASE_ENDPOINT_URL`, `LEASE_ENDPOINT_TOKEN` | Same failure, one step later: nowhere to send the renewal, or no right to make it |
-   | State | `LEASE_STATE_DIR` | The drift probe reads the last-renewal timestamp from here |
+```bash
+infra/lease-heartbeat/install.sh [--sysroot DIR] [--enable]
+```
 
-   Cadence alone is not enough: the unit files now require the env file (no `-` prefix on
-   `EnvironmentFile=`), so a *missing* file fails loudly — but a file that is present and half
-   filled in is the case that still looks healthy, and only this check catches it.
-3. Generate all three unit literals rather than shipping the placeholders: `OnUnitActiveSec` from
-   `LEASE_INTERVAL_S`, `RandomizedDelaySec` from `LEASE_JITTER_S`, and `TimeoutStartSec` from
-   `LEASE_TIMEOUT_S`. Leaving any of them at its literal is how the §3 guarantee quietly stops
-   holding. Do **not** add `Persistent=` to the timer: it replays missed activations only for
-   calendar timers, so on a monotonic timer it promises a catch-up tick that never arrives.
-4. `mkdir -p /var/lib/desk-lease-heartbeat` (matching `ReadWritePaths=` in the unit) for
-   `LEASE_STATE_DIR`.
-5. `systemctl enable --now desk-lease-heartbeat.timer`, then verify with `systemctl list-timers`
-   and one manual `systemctl start desk-lease-heartbeat.service` whose exit code goes in the
-   receipt. Enabling the **timer**, not the service.
-6. Record in the receipt: the unit files' checksums, `list-timers` output tail, the manual tick's
-   exit code, and the env diff **by variable name only**.
+1. Create `/etc/desk-lease-heartbeat/heartbeat.env` from `heartbeat.env.example` **once**, mode
+   `0600`. When the process is root the owner is `root:root`. An existing file is never
+   overwritten — an installer that rewrites a live env file is an installer that drops the token
+   on upgrade. A later failed check does not roll the bytes back, and it does not replace them.
+   Mode is set to `0600` without rewriting contents. Symlinks are refused.
+2. Require these 13 names to be **present**. An empty value counts as present. The check does not
+   print values.
 
-## 5. What SYSTEMS needs from INFRA to close SPE-4792
+   `LEASE_SEAT`, `LEASE_HOLDER_ID`, `LEASE_ENDPOINT_URL`, `LEASE_ENDPOINT_TOKEN`, `LEASE_TTL_S`,
+   `LEASE_INTERVAL_S`, `LEASE_JITTER_S`, `LEASE_TIMEOUT_S`, `LEASE_MAX_MISSED`, `LEASE_STATE_DIR`,
+   `LEASE_HELD_FILE`, `LEASE_LOG_LEVEL`, `LEASE_LOG_BYTES`.
+
+   Reap and drift names from `lease-heartbeat.env.example` may share the file. This installer does
+   not require them and will not rewrite the file to add them. Append them on the host before
+   enabling the reap timer.
+3. Pre-check §3. Empty cadence values use interval 60, jitter 5, timeout 10, TTL 900. A non-empty
+   interval, jitter, or timeout must match the shipped heartbeat literal (60, 5, 10) because the
+   units are copied, not generated. `Persistent=` stays absent.
+4. Copy the four unit files to `/etc/systemd/system/` and create `/var/lib/desk-lease-heartbeat`
+   (mode `0700`) for `ReadWritePaths=`. This happens only after the checks pass.
+5. Stop. No `daemon-reload`, no enable, no start, unless `--enable` was passed.
+
+`verify-units.sh` runs `systemd-analyze verify` on every `*.service` and `*.timer` in this
+directory inside a temporary `--root`, with stub executables for `ExecStart`. It does not enable
+units and it does not read the live env file.
+
+## 5. What SYSTEMS needs from INFRA, and what PR #221 returns
 
 - These env **names**, fixed, so the service can read them without a second naming round.
 - The §3 invariant enforced at install time, so the service may assume it holds at runtime.
 - `drift-probe.sh` as the reachability/tip input to `coord.drift_scan(repo)` — [DRIFT-SCAN.md](./DRIFT-SCAN.md).
 - A `LEASE_ENDPOINT_TOKEN` minted per unit, not shared with the desk gateway.
 
-What INFRA needs back, and is blocked on before this can be installed:
+PR #221 is the entrypoint this unit execs. `renew` is one tick. `--env-file` parses a systemd
+`EnvironmentFile` with no shell expansion, which is what the cron sketch needs. Exit 0 covers a
+renewed lease, nothing held, an unset upstream, and a substrate rejection that drops a row. Exits
+1–5 are real failures the next tick retries. Exit 6 is a bad env, a failed cadence invariant, or a
+malformed `held.json`. A lost lease does not stop the timer. The defaults this installer applies
+when the four cadence keys are empty are interval 60, jitter 5, timeout 10, TTL 900
+(`60 + 5 + 10 = 75`, `900 / 3 = 300`).
 
-- The `services/desk-lease-heartbeat` entrypoint and its `renew` subcommand's exit-code contract
-  (which exit codes mean "retry next tick" versus "lease lost, stop claiming it").
-- A `--env-file` option on that entrypoint, parsing the file the way systemd's `EnvironmentFile`
-  does. Without it the cron fallback has no safe way to load the env: sourcing it executes it as
-  shell, which mangles any token containing `$`, a backtick or a quote (§2).
-- Values for `LEASE_TTL_S`, `LEASE_INTERVAL_S` and `LEASE_JITTER_S`.
-- Whether a lost lease should leave the timer running (INFRA's assumption: yes — it keeps trying
-  and reports; stopping the timer means a recovered host never re-announces itself).
+Still outside this change:
+
+- Building the venv at the `ExecStart` path. That is a host install of the SYSTEMS package.
+- Passing `--enable`. Timers stay disabled until that flag is used on a host.
+- Minting `LEASE_ENDPOINT_TOKEN`. The installer never prints it.
 
 For the §6 sweeper specifically:
 
@@ -314,12 +335,11 @@ a sweeper able to reach another host's substrate is a sweeper able to reap anoth
 The `_SEC` suffix matches the SPE-4792 ticket's spelling while the heartbeat above uses `_S`. Same
 unit, two spellings, both deliberate — neither is a typo to fix in place.
 
-### Install (same standing as §4: not yet)
+### Install
 
-`substrate-lease-reap` depends only on the `coord_reap_leases` tool existing on the local
-substrate, so it can be installed **before** the heartbeat's `services/**` entrypoint lands. It
-still is not installed here, and the same installer rules apply: write the env file once at
-`0600`, generate `OnUnitActiveSec` from `SUBSTRATE_LEASE_REAP_INTERVAL_SEC` and `TimeoutStartSec`
-from `SUBSTRATE_LEASE_REAP_TIMEOUT_SEC`, refuse an interval outside 30–60, `systemctl enable --now`
-the **timer**, and put the manual tick's exit code in the receipt.
+`install.sh` copies `substrate-lease-reap.service` and `substrate-lease-reap.timer` with the
+shipped cadence: `OnUnitActiveSec=45`, `RandomizedDelaySec=5`, `TimeoutStartSec=30`. It does not
+rewrite those literals and it does not enable the timer unless `--enable` is passed. The 45s
+interval sits inside the 30–60s band above. The same env file rules as §4 apply: create
+`heartbeat.env` once at mode `0600`, never overwrite it, and do not print values.
 

@@ -1,4 +1,4 @@
-# STUB — not installed. SPE-4792 INFRA half. Pairs with desk-lease-heartbeat.service.
+# SPE-12501. Pairs with desk-lease-heartbeat.service. Copied by install.sh, not rewritten.
 #
 # OnUnitActiveSec, not OnCalendar: the tick is relative to this unit's own last activation rather
 # than to wall-clock slots, so a restart or a slow tick does not leave the cadence permanently out
@@ -9,10 +9,9 @@
 # one took, which is bounded by LEASE_TIMEOUT_S. So the bound below carries a TIMEOUT term; see
 # LEASE-HEARTBEAT.md §3.
 #
-# Both literals below are PLACEHOLDER values for review, not agreed ones. SYSTEMS owns
-# LEASE_TTL_S, LEASE_INTERVAL_S and LEASE_JITTER_S (see lease-heartbeat.env.example); systemd
-# cannot read an interval from an EnvironmentFile, so whoever installs this generates both from
-# the env rather than hand-editing them out of sync with it.
+# Shipped cadence: OnUnitActiveSec=60, RandomizedDelaySec=5. install.sh checks the env file
+# against these literals and against TimeoutStartSec=10. Empty cadence keys use the defaults
+# interval 60, jitter 5, timeout 10, TTL 900.
 #
 # The invariant that must hold is on the SUM of all three terms, not on OnUnitActiveSec alone:
 #
@@ -25,15 +24,14 @@
 # LEASE-HEARTBEAT.md §3.
 
 [Unit]
-Description=Renew the Programming Desk seat lease (SPE-4792)
-Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
+Description=Renew the Programming Desk seat lease (SPE-12501)
+Documentation=file:///opt/desk-gateway/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
 
 [Timer]
 OnBootSec=30
-# PLACEHOLDER — generate from LEASE_INTERVAL_S at install time.
 OnUnitActiveSec=60
-# PLACEHOLDER — generate from LEASE_JITTER_S. Spreads ticks so N seats restarted together do not
-# renew in lockstep; counted against the invariant above, never added on top of it.
+# Spreads ticks so N seats restarted together do not renew in lockstep. Counted against the
+# invariant above, never added on top of it.
 RandomizedDelaySec=5
 AccuracySec=1s
 # Persistent= is deliberately absent: it only replays missed activations for CALENDAR timers, so

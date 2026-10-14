@@ -1,0 +1,140 @@
+{
+  "task_id": "ultrathink-skills-sync",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-14T13:50:10Z",
+  "completed_at": "2026-10-14T14:02:30Z",
+  "branch": "bot-00-programming-lead/ultrathink-skills-sync",
+  "base": "main",
+  "commands": [
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.32,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10.52,
+      "output_tail": "299 passed in 10.28s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 PASS \u2014 bot-00-programming-lead: 15 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-3 PASS \u2014 15 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.06,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.16,
+      "output_tail": "G-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/ultrathink-skills-sync.json",
+      "exit_code": 0,
+      "duration_s": 0.03,
+      "output_tail": "G-5/G-6 PASS \u2014 no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py",
+      "exit_code": 2,
+      "duration_s": 0.03,
+      "output_tail": "run_all.py: error: the following arguments are required: --bot, --receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/ultrathink-skills-sync.json --strict",
+      "exit_code": 1,
+      "duration_s": 0.41,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/ultrathink-skills-sync.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\nSUMMARY: PASS G-1, FAIL G-2, PASS G-3, PASS G-4, PASS G-5/G-6, PASS G-7. 1 gate(s) failed."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/ultrathink-skills-sync.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.12,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/ultrathink-skills-sync.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Desk production loop consistency check passes",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "ci/tests pytest passes",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "G-1 ownership passes for bot-00-programming-lead against origin/main",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3 secret scan passes",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 finds no contract surface in the diff",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-7 desk integrity passes",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "G-5/G-6 pass with no deployment and no destructive command",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "run_all --strict exits 1 because approved_by is unset; G-1, G-3, G-4, G-5/G-6 and G-7 pass in that summary",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "claude-ultrathink pull request 34 (fix/omp-planning-cancellation at 87411ed) is open and not merged. Paragraphs marked requires claude-ultrathink#34 were read from that branch and are not live on main c8c6290.",
+    "The read-only clone used to compare skill bodies is /tmp/read-only/claude-ultrathink. CI does not have that clone, so the byte comparison is not a CI command.",
+    "Requested receipt path .receipts/lead/ultrathink-skills-sync.json is unowned under ownership.yaml (desk_ownership_resolve: unowned). This receipt is at .receipts/bot-00-programming-lead/ultrathink-skills-sync.json so G-1 and desk_receipt_check can see it.",
+    "No skill was installed on the VPS, and ship.autoMerge and ship.deleteBranch were not read or changed. The guidance states those VPS keys stay on.",
+    "Greptile has not reviewed this pull request. approved_by is unset until an independent reviewer stamps it.",
+    "Omp was not executed here, so coincident handoff callback ordering was read from the branch diff and tests, not observed in a live session."
+  ],
+  "files_changed": [
+    "grokbot/README.md",
+    "grokbot/skills/README.md",
+    "grokbot/skills/index.json",
+    "grokbot/skills/gsd-runtime/SKILL.md",
+    "grokbot/skills/gsd-ship-pr/SKILL.md",
+    "grokbot/skills/ultrathink-engine/SKILL.md",
+    "grokbot/skills/ultrathink-hitl/SKILL.md",
+    "grokbot/skills/ultrathink-last/SKILL.md",
+    "grokbot/skills/ultrathink-lessons/SKILL.md",
+    "grokbot/skills/ultrathink-on/SKILL.md",
+    "grokbot/skills/ultrathink-protocol/SKILL.md",
+    "grokbot/skills/ultrathink-pstack/SKILL.md",
+    "grokbot/skills/ultrathink-teach-admin/SKILL.md",
+    "grokbot/skills/ultrathink-think/SKILL.md",
+    "grokbot/skills/ultrathink-track/SKILL.md",
+    ".receipts/bot-00-programming-lead/ultrathink-skills-sync.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": []
+}

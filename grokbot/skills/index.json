@@ -1,82 +1,177 @@
 {
-  "note": "ref is the git ref where path exists. pending true means that ref is an open draft branch and default_branch does not contain path yet. After the pull request merges, Lead re-saves from default_branch. Grok Bot copies never write back.",
+  "note": "ref is the git ref where path exists. pending true means that ref is an open draft branch and default_branch does not contain path yet. After the pull request merges, Lead re-saves from default_branch. Grok Bot copies never write back. desk_copy, when set, is the programming-desk mirror of an upstream skill. Ultrathink rows pinned to c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb are on claude-ultrathink main after #22-#30 and #32. gsd-runtime text marked requires claude-ultrathink#34 depends on fix/omp-planning-cancellation at 87411ed (pull request 34), which is not merged.",
   "skills": [
     {
       "name": "ultrathink-protocol",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/ultrathink-protocol/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-protocol/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Plans non-trivial work inside the conversation before a multi-step build, fix, or refactor, including when /ultrathink-protocol is invoked."
+      "purpose": "Standing rule: capture Ming's request and plan it with the grokbot host loop before acting.",
+      "desk_copy": "grokbot/skills/ultrathink-protocol/SKILL.md"
     },
     {
       "name": "ultrathink-off",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-off/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-off/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Remembers that planning stays off for this conversation until /ultrathink-on."
+      "purpose": "Turns native ultrathink planning off for Desk Lead until /ultrathink-on."
     },
     {
       "name": "ultrathink-on",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-on/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-on/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Remembers that planning is on again for this conversation."
+      "purpose": "Turns native ultrathink planning back on for the box.",
+      "desk_copy": "grokbot/skills/ultrathink-on/SKILL.md"
     },
     {
       "name": "ultrathink-quick",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-quick/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-quick/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Answers one message without planning or tracker rows."
+      "purpose": "Answers one message directly as typed, with no planning and no Linear or Notion rows."
     },
     {
       "name": "ultrathink-skip",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-skip/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-skip/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Skips planning for the next message in this conversation only."
+      "purpose": "Skips planning for the next message only."
     },
     {
       "name": "ultrathink-status",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-status/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-status/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
       "default_branch": "main",
-      "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending": false,
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Reports only the planning preferences this conversation remembers."
+      "purpose": "Shows planning on or off, the Desk Lead host engine, tracking, ship, Jev, teach, and the last plan."
     },
     {
       "name": "ultrathink-track",
       "repo": "swcstudiospace/claude-ultrathink",
-      "path": "hosts/grok-bot/commands/ultrathink-track/SKILL.md",
-      "ref": "grokbot/ultrathink-skill-adapter",
+      "path": "hosts/grok-bot/skills/ultrathink-track/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Keeps planning and starts or stops Linear/Notion row creation.",
+      "desk_copy": "grokbot/skills/ultrathink-track/SKILL.md"
+    },
+    {
+      "name": "ultrathink-think",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-think/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Toggles Graph of Thought or shows the last graph sketch and waves.",
+      "desk_copy": "grokbot/skills/ultrathink-think/SKILL.md"
+    },
+    {
+      "name": "ultrathink-engine",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-engine/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Shows the planning engine route. On the box it stays host:grok-bot.",
+      "desk_copy": "grokbot/skills/ultrathink-engine/SKILL.md"
+    },
+    {
+      "name": "ultrathink-last",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-last/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Shows the last uplifted spec as a path and a short summary.",
+      "desk_copy": "grokbot/skills/ultrathink-last/SKILL.md"
+    },
+    {
+      "name": "ultrathink-lessons",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-lessons/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Lists, recalls, or promotes lessons. Promotion writes a draft only.",
+      "desk_copy": "grokbot/skills/ultrathink-lessons/SKILL.md"
+    },
+    {
+      "name": "ultrathink-hitl",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-hitl/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Toggles the clarifier or shows the last questions and answers.",
+      "desk_copy": "grokbot/skills/ultrathink-hitl/SKILL.md"
+    },
+    {
+      "name": "ultrathink-teach-admin",
+      "repo": "swcstudiospace/claude-ultrathink",
+      "path": "hosts/grok-bot/skills/ultrathink-teach-admin/SKILL.md",
+      "ref": "c8c62900a6e830d2d94a2a35f87a6f9b4fad04eb",
+      "default_branch": "main",
+      "pending": false,
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Full Teachable Moments CLI. Promote stays drafts-only.",
+      "desk_copy": "grokbot/skills/ultrathink-teach-admin/SKILL.md"
+    },
+    {
+      "name": "ultrathink-pstack",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/ultrathink-pstack/SKILL.md",
+      "ref": "bot-00-programming-lead/ultrathink-skills-sync",
       "default_branch": "main",
       "pending": true,
-      "pending_pr": "https://github.com/swcstudiospace/claude-ultrathink/pull/21",
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
       "owner_seat": "bot-00-programming-lead",
-      "purpose": "Remembers whether tracker rows are wanted; planning continues either way."
+      "purpose": "Critique alternative, unit flags, Cursor /gsd-* skill map, and the repeated-finding hand-off. Upstream has no SKILL.md."
+    },
+    {
+      "name": "gsd-ship-pr",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/gsd-ship-pr/SKILL.md",
+      "ref": "bot-00-programming-lead/ultrathink-skills-sync",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Plugin ship path on main c8c6290. Ming's VPS keeps ship.autoMerge and ship.deleteBranch on."
+    },
+    {
+      "name": "gsd-runtime",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/gsd-runtime/SKILL.md",
+      "ref": "bot-00-programming-lead/ultrathink-skills-sync",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/227",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Omp planning flight. Paragraphs marked requires claude-ultrathink#34 need PR 34 at 87411ed."
     },
     {
       "name": "swarm-cloud-dispatch",

@@ -3,7 +3,7 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/rosters-substrate-railway",
   "started_at": "2026-10-14T13:50:00Z",
-  "completed_at": "2026-10-14T14:05:00Z",
+  "completed_at": "2026-10-14T14:08:00Z",
   "summary": "Ownership stop. agent-substrate #59, #60 and #62 were not applied to the named roster, pack, change-record or railway-tailscale skill files. ownership.yaml assigns those paths to bot-06-quality-security. skills/platforms/railway-tailscale/SKILL.md is FOREIGN under G-1. .receipts/infra/rosters-substrate-railway.json is UNOWNED. The receipt lives at the owned path .receipts/bot-05-infrastructure/rosters-substrate-railway.json. No deploy and no VPS contact.",
   "approved_by": null,
   "approval_requested_from": "bot-00-programming-lead",
@@ -73,6 +73,12 @@
       "exit_code": 1,
       "duration_s": 0.08,
       "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/rosters-substrate-railway.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-05-infrastructure --base origin/main --receipt .receipts/bot-05-infrastructure/rosters-substrate-railway.json --strict",
+      "exit_code": 1,
+      "duration_s": 1.03,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/rosters-substrate-railway.json\n  - 'approved_by' is missing — work must be reviewed by someone else\n  [PASS]  G-1  Path ownership\n  [FAIL]  G-2  Verification receipt\n  [PASS]  G-3  Committed secrets\n  [PASS]  G-4  Contract-first changes\n  [PASS]  G-5/G-6  Rollback and destructive ops\n  [PASS]  G-7  Desk integrity\n1 gate(s) failed."
     }
   ],
   "claims": [
@@ -116,6 +122,11 @@
     {
       "claim": "G-2 --strict fails because approved_by is unset",
       "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "run_all --strict fails on G-2 because approved_by is unset; G-1, G-3, G-4, G-5/G-6 and G-7 pass",
+      "evidence_command_index": 11,
       "expects_failure": true
     }
   ],

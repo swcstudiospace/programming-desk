@@ -27,7 +27,7 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main",
       "exit_code": 0,
       "duration_s": 1,
-      "output_tail": "G-1 PASS — bot-01-systems-backend: 6 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-01-systems-backend: 7 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
@@ -39,7 +39,7 @@
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 1,
-      "output_tail": "G-3 PASS — 6 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 7 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
@@ -58,6 +58,18 @@
       "exit_code": 0,
       "duration_s": 102,
       "output_tail": "299 passed in 101.40s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-01-systems-backend/spe-12500-start-upstreamhealthpoller.json --bot bot-01-systems-backend --strict",
+      "exit_code": 1,
+      "duration_s": 1,
+      "output_tail": "G-2 FAIL — 'approved_by' is missing — work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-01-systems-backend/spe-12500-start-upstreamhealthpoller.json",
+      "exit_code": 0,
+      "duration_s": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
     }
   ],
   "claims": [
@@ -97,6 +109,15 @@
     {
       "claim": "The gate self-test suite passes",
       "evidence_command_index": 8
+    },
+    {
+      "claim": "G-2 --strict fails closed because approved_by is missing",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-5/G-6 pass with no deploy or destructive command in the receipt",
+      "evidence_command_index": 10
     }
   ],
   "unverified": [

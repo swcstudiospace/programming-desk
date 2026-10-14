@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-import threading
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -259,19 +258,20 @@ async def test_poll_cadence_honours_interval() -> None:
 
 
 @pytest.mark.asyncio
-async def test_timed_out_probe_does_not_start_another_while_the_worker_runs() -> None:
-    """A thread that ignores cancellation must not be joined by a second probe."""
+async def test_repeated_timeouts_mark_the_upstream_down() -> None:
+    """Each deadline cancels the probe and counts. Three misses trip failover."""
     started = 0
-    release = threading.Event()
-
-    def block() -> None:
-        release.wait(timeout=2)
+    cancelled = 0
 
     async def hang() -> dict[str, object]:
-        nonlocal started
+        nonlocal started, cancelled
         started += 1
-        await asyncio.to_thread(block)
-        return {"ok": False, "error": "down"}
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled += 1
+            raise
+        return {"ok": True}
 
     services = _services_with(
         {
@@ -286,38 +286,120 @@ async def test_timed_out_probe_does_not_start_another_while_the_worker_runs() ->
     poller = UpstreamHealthPoller(
         services,
         poll_interval_sec=0.05,
-        failure_threshold=1,
+        failure_threshold=3,
         check_timeout_sec=0.05,
     )
     await poller.start()
     try:
-        deadline = time.monotonic() + 1
-        while started < 1 and time.monotonic() < deadline:
-            await asyncio.sleep(0.01)
-        await asyncio.sleep(0.35)
-        assert started == 1
-        assert poller.running is True
+        deadline = time.monotonic() + 2
         record = poller.get_record("timescale")
+        while (
+            record is None
+            or record.consecutive_failures < 3
+            or record.healthy
+            or cancelled < 3
+        ) and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+            record = poller.get_record("timescale")
         assert record is not None
         assert record.details["error"] == "check_timeout"
-        assert record.consecutive_failures == 1
-        release.set()
-        deadline = time.monotonic() + 1
-        while started < 2 and time.monotonic() < deadline:
-            await asyncio.sleep(0.01)
-        assert started >= 2
+        assert record.consecutive_failures >= 3
+        assert record.healthy is False
+        assert record.last_status == "down"
+        assert started >= 3
+        assert cancelled >= 3
     finally:
-        release.set()
         await poller.stop()
 
     assert poller.running is False
     assert _named_poll_tasks() == []
-    leaked = [
-        task
-        for task in asyncio.all_tasks()
-        if task.get_name().startswith("upstream-health-check-") and not task.done()
-    ]
-    assert leaked == []
+
+
+@pytest.mark.asyncio
+async def test_stuck_probe_counts_later_misses_without_a_second_call() -> None:
+    """A probe that ignores cancellation is not replaced, and later polls still count."""
+    started = 0
+    release = asyncio.Event()
+
+    async def swallow() -> dict[str, object]:
+        nonlocal started
+        started += 1
+        while not release.is_set():
+            try:
+                await release.wait()
+            except asyncio.CancelledError:
+                continue
+        return {"ok": False, "error": "down"}
+
+    services = _services_with(
+        {
+            "timescale": swallow,
+            **{
+                name: AsyncMock(return_value={"error": "not_configured", "reason": "absent"})
+                for name in _SERVICES
+                if name != "timescale"
+            },
+        }
+    )
+    poller = UpstreamHealthPoller(
+        services,
+        poll_interval_sec=0.05,
+        failure_threshold=3,
+        check_timeout_sec=0.05,
+    )
+    await poller.start()
+    try:
+        deadline = time.monotonic() + 2
+        record = poller.get_record("timescale")
+        while (
+            started < 1 or record is None or record.consecutive_failures < 3 or record.healthy
+        ) and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+            record = poller.get_record("timescale")
+        assert started == 1
+        assert record is not None
+        assert record.consecutive_failures >= 3
+        assert record.healthy is False
+    finally:
+        release.set()
+        await poller.stop()
+
+
+@pytest.mark.asyncio
+async def test_overlapping_check_waits_for_the_running_probe() -> None:
+    """A second caller waits for the probe instead of reading the cold cache."""
+    started = 0
+    release = asyncio.Event()
+
+    async def slow() -> dict[str, object]:
+        nonlocal started
+        started += 1
+        await release.wait()
+        return {"ok": True, "reason": "fresh"}
+
+    services = _services_with({"timescale": slow})
+    poller = UpstreamHealthPoller(services, poll_interval_sec=30.0, check_timeout_sec=2.0)
+    first = asyncio.create_task(poller.check_service("timescale"))
+    deadline = time.monotonic() + 1
+    while started < 1 and time.monotonic() < deadline:
+        await asyncio.sleep(0.01)
+    second = asyncio.create_task(poller.check_service("timescale"))
+    await asyncio.sleep(0.05)
+    assert not first.done()
+    assert not second.done()
+    record = poller.get_record("timescale")
+    assert record is not None
+    assert record.last_checked_at == 0
+    release.set()
+    first_result, second_result = await asyncio.gather(first, second)
+    assert started == 1
+    assert first_result["reason"] == "fresh"
+    assert second_result["reason"] == "fresh"
+    record = poller.get_record("timescale")
+    assert record is not None
+    assert record.details["reason"] == "fresh"
+    assert record.last_checked_at > 0
+    assert record.healthy is True
 
 
 @pytest.mark.asyncio

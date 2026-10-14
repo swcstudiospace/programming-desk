@@ -17,13 +17,13 @@
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "G-1 PASS — bot-00-programming-lead: 7 file(s) within owned paths"
+      "output_tail": "G-1 PASS — bot-00-programming-lead: 8 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
       "duration_s": 0.2,
-      "output_tail": "G-3 PASS — 7 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 8 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
@@ -68,7 +68,7 @@
       "evidence_command_index": 0
     },
     {
-      "claim": "G-1 accepts the seven skill, index, and checker paths for bot-00-programming-lead",
+      "claim": "G-1 accepts the eight changed paths for bot-00-programming-lead, including the receipt",
       "evidence_command_index": 1
     },
     {

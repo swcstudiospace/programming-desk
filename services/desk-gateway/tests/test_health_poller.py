@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
+import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -249,6 +252,150 @@ async def test_poll_cadence_honours_interval() -> None:
     assert len(stamps) >= 4
     gaps = [stamps[i + 1] - stamps[i] for i in range(3)]
     assert all(gap >= interval * 0.6 for gap in gaps), gaps
+    # A 0.5s sleep still yields four stamps inside the two-second window.
+    # interval * 10 is 0.5s, so that sleep fails this bound. Real gaps sit
+    # near the interval, with room for scheduler jitter.
+    assert all(gap < interval * 10 for gap in gaps), gaps
+
+
+@pytest.mark.asyncio
+async def test_timed_out_probe_does_not_start_another_while_the_worker_runs() -> None:
+    """A thread that ignores cancellation must not be joined by a second probe."""
+    started = 0
+    release = threading.Event()
+
+    def block() -> None:
+        release.wait(timeout=2)
+
+    async def hang() -> dict[str, object]:
+        nonlocal started
+        started += 1
+        await asyncio.to_thread(block)
+        return {"ok": False, "error": "down"}
+
+    services = _services_with(
+        {
+            "timescale": hang,
+            **{
+                name: AsyncMock(return_value={"error": "not_configured", "reason": "absent"})
+                for name in _SERVICES
+                if name != "timescale"
+            },
+        }
+    )
+    poller = UpstreamHealthPoller(
+        services,
+        poll_interval_sec=0.05,
+        failure_threshold=1,
+        check_timeout_sec=0.05,
+    )
+    await poller.start()
+    try:
+        deadline = time.monotonic() + 1
+        while started < 1 and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        await asyncio.sleep(0.35)
+        assert started == 1
+        assert poller.running is True
+        record = poller.get_record("timescale")
+        assert record is not None
+        assert record.details["error"] == "check_timeout"
+        assert record.consecutive_failures == 1
+        release.set()
+        deadline = time.monotonic() + 1
+        while started < 2 and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+        assert started >= 2
+    finally:
+        release.set()
+        await poller.stop()
+
+    assert poller.running is False
+    assert _named_poll_tasks() == []
+    leaked = [
+        task
+        for task in asyncio.all_tasks()
+        if task.get_name().startswith("upstream-health-check-") and not task.done()
+    ]
+    assert leaked == []
+
+
+@pytest.mark.asyncio
+async def test_timescale_health_uses_a_cancellable_connection(monkeypatch: pytest.MonkeyPatch) -> None:
+    from desk_gateway.upstreams import Timescale
+
+    entered = asyncio.Event()
+    closed: list[type[BaseException] | None] = []
+    connect_kwargs: dict[str, object] = {}
+
+    class _Cursor:
+        async def __aenter__(self) -> _Cursor:
+            return self
+
+        async def __aexit__(self, *_exc: object) -> bool:
+            return False
+
+        async def execute(self, sql: str) -> None:
+            assert sql == "SELECT 1 AS ok"
+            entered.set()
+            await asyncio.Event().wait()
+
+        async def fetchone(self) -> tuple[int]:
+            return (1,)
+
+    class _Conn:
+        async def __aenter__(self) -> _Conn:
+            return self
+
+        async def __aexit__(self, exc_type: type[BaseException] | None, *_exc: object) -> bool:
+            closed.append(exc_type)
+            return False
+
+        def cursor(self) -> _Cursor:
+            return _Cursor()
+
+    class _AsyncConnection:
+        @staticmethod
+        async def connect(_url: str, **kwargs: object) -> _Conn:
+            connect_kwargs.update(kwargs)
+            return _Conn()
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(AsyncConnection=_AsyncConnection))
+    client = Timescale(SimpleNamespace(pg_url="postgresql://operator@db.internal/desk"))
+    absent = await Timescale(SimpleNamespace(pg_url="")).health()
+    assert absent["ok"] is False
+    assert absent["error"] == "not_configured"
+
+    probe = asyncio.create_task(client.health())
+    await asyncio.wait_for(entered.wait(), timeout=1)
+    probe.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await probe
+
+    assert closed == [asyncio.CancelledError]
+    assert connect_kwargs["connect_timeout"] == Timescale.HEALTH_CONNECT_TIMEOUT_SEC
+    options = str(connect_kwargs["options"])
+    assert "default_transaction_read_only=on" in options
+    assert f"statement_timeout={Timescale.HEALTH_STATEMENT_TIMEOUT_MS}" in options
+
+
+@pytest.mark.asyncio
+async def test_timescale_health_redacts_connection_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    from desk_gateway.upstreams import Timescale
+
+    secret = "postgresql://operator:secret-token@db.internal/desk"  # pragma: allowlist secret (redaction fixture)
+
+    class _AsyncConnection:
+        @staticmethod
+        async def connect(_url: str, **_kwargs: object) -> object:
+            raise RuntimeError(secret)
+
+    monkeypatch.setitem(sys.modules, "psycopg", SimpleNamespace(AsyncConnection=_AsyncConnection))
+    result = await Timescale(SimpleNamespace(pg_url="postgresql://operator@db.internal/desk")).health()
+    assert result["ok"] is False
+    assert result["error"] == "upstream_error"
+    assert "secret-token" not in result["reason"]
+    assert secret not in result["reason"]
 
 
 def test_poll_interval_comes_from_settings(monkeypatch: pytest.MonkeyPatch) -> None:

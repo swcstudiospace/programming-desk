@@ -548,6 +548,11 @@ class Greptime:
 
 
 class Timescale:
+    # Health probes have their own deadline. query() stays on the shared worker
+    # for index reads; the poller must not inherit that uncancellable path.
+    HEALTH_CONNECT_TIMEOUT_SEC = 5
+    HEALTH_STATEMENT_TIMEOUT_MS = 5000
+
     def __init__(self, settings: Settings) -> None:
         self.url = settings.pg_url
 
@@ -580,8 +585,45 @@ class Timescale:
             return {"error": UPSTREAM_ERROR, "reason": f"timescale: {redact_text(str(exc))[:300]}"}
 
     async def health(self) -> dict[str, Any]:
-        result = await self.query("SELECT 1 AS ok", 1)
-        return {"ok": bool(result.get("ok")), **({} if result.get("ok") else result)}
+        """Bounded ``SELECT 1`` on an async connection.
+
+        Cancellation closes the socket. ``statement_timeout`` stops a query that
+        the server has already started. This does not call ``query()``, which
+        parks the work on a thread ``asyncio.wait_for`` cannot stop.
+        """
+        if not self.configured:
+            return {"ok": False, **not_configured("timescale")}
+        try:
+            import psycopg
+        except ImportError:
+            return {
+                "ok": False,
+                "error": NOT_CONFIGURED,
+                "reason": "psycopg is not installed on the gateway (extra: timescale)",
+            }
+
+        options = (
+            "-c default_transaction_read_only=on "
+            f"-c statement_timeout={self.HEALTH_STATEMENT_TIMEOUT_MS}"
+        )
+        try:
+            async with await psycopg.AsyncConnection.connect(
+                self.url,
+                connect_timeout=self.HEALTH_CONNECT_TIMEOUT_SEC,
+                options=options,
+            ) as conn:
+                async with conn.cursor() as cur:
+                    await cur.execute("SELECT 1 AS ok")
+                    row = await cur.fetchone()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": UPSTREAM_ERROR,
+                "reason": f"timescale: {redact_text(str(exc))[:300]}",
+            }
+        return {"ok": bool(row and row[0] == 1)}
 
 
 TOKEN_BUCKET_LUA = """

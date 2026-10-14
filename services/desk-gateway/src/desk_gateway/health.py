@@ -101,6 +101,13 @@ class UpstreamHealthPoller:
         }
         self._task: asyncio.Task[None] | None = None
         self._stop_event = asyncio.Event()
+        # One live health task per service. wait_for() gives up on the deadline,
+        # but a worker that ignores cancellation (asyncio.to_thread) keeps running.
+        # The next poll must not submit another probe until that task finishes.
+        self._inflight: dict[str, asyncio.Task[Any]] = {}
+        # Counters from just before a deadline, so the real result replaces that
+        # provisional failure instead of stacking on it.
+        self._before_timeout: dict[str, tuple[int, int, bool, str]] = {}
 
     @classmethod
     def from_settings(cls, services: Any, settings: Settings) -> UpstreamHealthPoller:
@@ -159,46 +166,53 @@ class UpstreamHealthPoller:
                 "timestamp": time.time(),
             }
 
-    async def check_service(self, name: str) -> dict[str, Any]:
-        """Check a single upstream service directly and update its health state."""
-        svc_client = getattr(self.services, name, None)
-        if svc_client is None:
-            return {"ok": False, "error": "unknown_service", "reason": f"No client for {name}"}
+    def _exception_result(self, exc: BaseException) -> dict[str, Any]:
+        # Exception text can carry a connection URL. Keep the type, redact the rest.
+        return {
+            "ok": False,
+            "error": "check_exception",
+            "reason": redact_text(f"{type(exc).__name__}: {exc}")[:300],
+        }
 
-        start = time.monotonic()
-        try:
-            if hasattr(svc_client, "health") and callable(svc_client.health):
-                call = svc_client.health()
-                if self.check_timeout_sec is not None:
-                    res = await asyncio.wait_for(call, timeout=self.check_timeout_sec)
-                else:
-                    res = await call
-            else:
-                res = {"ok": True, "note": "no explicit health check implemented"}
-        except TimeoutError:
-            limit = self.check_timeout_sec
-            reason = (
-                f"{name} health check exceeded {limit:.0f}s"
-                if limit is not None
-                else f"{name} health check timed out"
-            )
-            res = {"ok": False, "error": "check_timeout", "reason": reason}
-        except Exception as exc:
-            # Exception text can carry a connection URL. Keep the type, redact the rest.
-            res = {
-                "ok": False,
-                "error": "check_exception",
-                "reason": redact_text(f"{type(exc).__name__}: {exc}")[:300],
-            }
+    def _timeout_result(self, name: str) -> dict[str, Any]:
+        limit = self.check_timeout_sec
+        reason = (
+            f"{name} health check exceeded {limit:.0f}s"
+            if limit is not None
+            else f"{name} health check timed out"
+        )
+        return {"ok": False, "error": "check_timeout", "reason": reason}
+
+    @staticmethod
+    async def _call_health(svc_client: Any) -> Any:
+        if hasattr(svc_client, "health") and callable(svc_client.health):
+            return await svc_client.health()
+        return {"ok": True, "note": "no explicit health check implemented"}
+
+    def _commit_result(self, name: str, res: Any, started: float, *, source: str) -> None:
         if not isinstance(res, dict):
             res = {"ok": False, "error": "check_exception", "reason": "health check returned a non-object"}
-        latency_ms = (time.monotonic() - start) * 1000
-
+        latency_ms = (time.monotonic() - started) * 1000
         is_ok = bool(res.get("ok"))
         is_unconfigured = res.get("error") == "not_configured"
 
         with self._lock:
             rec = self._records.setdefault(name, UpstreamHealthRecord(name=name))
+            # A deadline records one failure while the probe is still running.
+            # The real result is applied to the counters from before that deadline.
+            if source == "finished" and name in self._before_timeout:
+                successes, failures, healthy, status = self._before_timeout.pop(name)
+                rec.consecutive_successes = successes
+                rec.consecutive_failures = failures
+                rec.healthy = healthy
+                rec.last_status = status
+            elif source == "timeout" and name not in self._before_timeout:
+                self._before_timeout[name] = (
+                    rec.consecutive_successes,
+                    rec.consecutive_failures,
+                    rec.healthy,
+                    rec.last_status,
+                )
             rec.last_latency_ms = latency_ms
             rec.last_checked_at = time.time()
             rec.details = res
@@ -231,6 +245,83 @@ class UpstreamHealthPoller:
                 latency_ms,
             )
 
+    def _on_check_done(self, name: str, task: asyncio.Task[Any], started: float) -> None:
+        try:
+            if task.cancelled():
+                with self._lock:
+                    self._before_timeout.pop(name, None)
+                return
+            exc = task.exception()
+            res: Any = self._exception_result(exc) if exc is not None else task.result()
+            self._commit_result(name, res, started, source="finished")
+        except Exception as exc:
+            logger.error(
+                "Upstream %s health check result was discarded: %s",
+                name,
+                redact_text(f"{type(exc).__name__}: {exc}")[:300],
+            )
+        finally:
+            with self._lock:
+                if self._inflight.get(name) is task:
+                    self._inflight.pop(name, None)
+
+    async def check_service(self, name: str) -> dict[str, Any]:
+        """Check one upstream and update its health state.
+
+        A probe that is still running from an earlier deadline is left alone.
+        Starting another one would pile work onto the shared thread pool when
+        the client cannot be cancelled.
+        """
+        with self._lock:
+            existing = self._inflight.get(name)
+            if existing is not None and not existing.done():
+                return {
+                    "ok": False,
+                    "error": "check_in_flight",
+                    "reason": f"{name} health check still running",
+                }
+
+        svc_client = getattr(self.services, name, None)
+        if svc_client is None:
+            res = {"ok": False, "error": "unknown_service", "reason": f"No client for {name}"}
+            self._commit_result(name, res, time.monotonic(), source="finished")
+            return res
+
+        started = time.monotonic()
+        task = asyncio.create_task(self._call_health(svc_client), name=f"upstream-health-check-{name}")
+        task.add_done_callback(lambda done, name=name, started=started: self._on_check_done(name, done, started))
+        with self._lock:
+            raced = self._inflight.get(name)
+            if raced is not None and not raced.done():
+                task.cancel()
+                return {
+                    "ok": False,
+                    "error": "check_in_flight",
+                    "reason": f"{name} health check still running",
+                }
+            self._inflight[name] = task
+
+        try:
+            if self.check_timeout_sec is not None:
+                # shield: the deadline ends the wait. It does not cancel the probe.
+                res = await asyncio.wait_for(asyncio.shield(task), timeout=self.check_timeout_sec)
+            else:
+                res = await task
+        except TimeoutError:
+            if task.done() and not task.cancelled():
+                exc = task.exception()
+                res = self._exception_result(exc) if exc is not None else task.result()
+            else:
+                res = self._timeout_result(name)
+                self._commit_result(name, res, started, source="timeout")
+                return res
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            # The done callback already recorded this. Do not count it twice.
+            return self._exception_result(exc)
+        if not isinstance(res, dict):
+            res = {"ok": False, "error": "check_exception", "reason": "health check returned a non-object"}
         return res
 
     async def poll_all(self) -> dict[str, Any]:
@@ -265,7 +356,7 @@ class UpstreamHealthPoller:
         logger.info("upstream health poller started (interval=%.1fs)", self.poll_interval_sec)
 
     async def stop(self) -> None:
-        """Cancel the background loop and wait until its task is gone."""
+        """Cancel the background loop and any probe it has not finished."""
         self._stop_event.set()
         task = self._task
         if task is not None:
@@ -276,6 +367,15 @@ class UpstreamHealthPoller:
                 pass
             if self._task is task:
                 self._task = None
+        with self._lock:
+            pending = [item for item in self._inflight.values() if not item.done()]
+        for item in pending:
+            item.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        with self._lock:
+            self._inflight.clear()
+            self._before_timeout.clear()
 
     async def _poll_loop(self) -> None:
         while not self._stop_event.is_set():

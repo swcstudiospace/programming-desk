@@ -8,10 +8,10 @@
 # legally contain $ and ( ), so interpolating a branch-derived value into a script is
 # remote code execution on the runner, reachable before any gate can reject the bot.
 #
-# SETUP PREREQUISITE — runs-on. Both jobs below target a self-hosted runner labelled
+# SETUP PREREQUISITE — runs-on. Every job below targets a self-hosted runner labelled
 # [self-hosted, Linux, X64], because the originating organisation's GitHub-hosted minutes are
 # blocked by a spending limit. Before seeding a repository from this template, either give it a
-# runner carrying all three of those labels, or change both runs-on lines to ubuntu-latest.
+# runner carrying all three of those labels, or change every runs-on line to ubuntu-latest.
 #
 # Do not skip this. A runs-on that matches no available runner does not fail — the job sits
 # queued. As a required status check that presents as a pull request pending forever with no
@@ -229,3 +229,47 @@ jobs:
       - run: pip install pyyaml pytest
       - name: Gate test suite
         run: python3 -m pytest ci/tests/ -v
+
+  drift-checks:
+    # verify.sh and generate-templates.py --check. The gates job is pull_request-only
+    # because a push to main has no bot id and G-1 would fail before any gate ran.
+    # These two checks do not need a bot id. They run on pull requests and on pushes
+    # to main, and each exits non-zero on drift or error.
+    #
+    # The scripts executed here are the base-ref copies, overlaid the same way the
+    # gate jobs overlay ci/gates/. A pull request that edits either script is judged
+    # by the copy already on the base branch. The rest of the checkout is the tree
+    # under test. verify.sh needs python3 from the standard library.
+    # generate-templates.py imports yaml and exits if PyYAML is missing. Python 3.12
+    # matches the other jobs on this workflow.
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Use trusted drift scripts from base ref
+        env:
+          # Through env:, never interpolated into the script. Same rule as the
+          # gate overlay: a base ref may contain $, backtick, ( ) and ;.
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "+refs/heads/$BASE_REF:refs/remotes/origin/$BASE_REF"
+          git checkout "origin/$BASE_REF" -- \
+            skills/desk-bootstrap/desk-production-loop/verify.sh \
+            scripts/generate-templates.py
+          echo "Trusted drift scripts from origin/$BASE_REF"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install template generator dependency
+        run: pip install pyyaml
+
+      - name: Desk production loop — consistency
+        run: bash skills/desk-bootstrap/desk-production-loop/verify.sh
+
+      - name: Seat templates — generator drift
+        run: python3 scripts/generate-templates.py --check

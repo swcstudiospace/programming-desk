@@ -1,0 +1,124 @@
+{
+  "task_id": "spe-12503-ci-drift-checks",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/spe-12503-ci-drift-checks-7b8a",
+  "started_at": "2026-10-14T13:07:00Z",
+  "completed_at": "2026-10-14T13:38:11Z",
+  "repo": "swcstudiospace/programming-desk",
+  "summary": "drift-checks runs verify.sh and generate-templates.py --check on pull requests and pushes to main, using the base-ref copies of those scripts. The R7c edit is not on this branch. It is on bot-00-programming-lead/spe-12503-r7c-drift-checks, which this PR depends on. This branch's verify.sh is main's copy, so its R7c is the unwired check and exits 0. The new R7c runs in this PR's CI only after that Lead PR is merged, because the job overlays verify.sh from origin/main. approved_by is unset.",
+  "commands": [
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "output_tail": "R7c no false CI claim"
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
+      "exit_code": 0,
+      "output_tail": "ok: every case failed as intended, and the working tree was never written to"
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "output_tail": "generate-templates --check: 7 templates up to date"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "output_tail": "299 passed in 187.82s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 3 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json",
+      "exit_code": 0,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "This branch's verify.sh exits 0. Its R7c is the unwired check from main",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "negative-tests.sh exits 0",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "generate-templates.py --check exits 0",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "pytest ci/tests passes: 299 passed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "The diff is inside paths owned by bot-05-infrastructure",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "The diff contains no committed secrets",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Desk integrity check passes",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "The receipt records no deployment and no destructive operation",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-2 --strict fails because approved_by is absent",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "GitHub Actions has not finished this commit.",
+    "approved_by is absent until bot-00-programming-lead or a human stamps this receipt.",
+    "The new R7c is not in this branch. CI overlays verify.sh from origin/main, so this PR runs that check only after bot-00-programming-lead/spe-12503-r7c-drift-checks is merged. A local run of that script against this branch's workflows exited 0.",
+    "The runners list API returned HTTP 403 for this token. The latest job observed on the self-hosted runner was Security Nightly check-target on srv1778002 at 2026-10-14T07:45:11Z."
+  ],
+  "files_changed": [
+    ".github/workflows/gates.yml",
+    "ci/.github/workflows/gates.yml",
+    ".receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

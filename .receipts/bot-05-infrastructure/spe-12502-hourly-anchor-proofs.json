@@ -1,0 +1,131 @@
+{
+  "task_id": "spe-12502-hourly-anchor-proofs",
+  "bot": "bot-05-infrastructure",
+  "branch": "bot-05-infrastructure/spe-12502-hourly-anchor-proofs-5d93",
+  "tickets": ["SPE-12502"],
+  "started_at": "2026-10-14T13:07:00Z",
+  "completed_at": "2026-10-14T13:14:55Z",
+  "summary": "SPE-12502 files only. Added verify-anchor-proofs.service (Type=oneshot) and verify-anchor-proofs.timer (OnCalendar=hourly, Persistent=true, RandomizedDelaySec=60) under infra/telemetry/, plus ANCHOR-PROOFS.md install notes and an env-name template. Nothing was installed, enabled, or deployed. systemd-analyze verify is clean when the /opt/programming-desk prefix is rewritten to this checkout; on the committed paths it reports that checkout is absent here.",
+  "approved_by": null,
+  "approval_requested_from": "bot-06-quality-security",
+  "commands": [
+    {
+      "cmd": "python3 -m pytest infra/tests/test_anchor_verifier.py::test_anchor_proof_systemd_units_match_hourly_oneshot_contract infra/tests/test_anchor_verifier.py::test_anchor_proof_units_pass_systemd_analyze_verify infra/tests/test_anchor_verifier.py::test_verify_anchor_proofs_script_executable infra/tests/test_anchor_verifier.py::test_verify_anchor_proofs_dry_run infra/tests/test_anchor_verifier.py::test_verify_anchor_proofs_detects_corrupted_merkle_or_tx -q",
+      "exit_code": 0,
+      "duration_s": 1.61,
+      "output_tail": "5 passed in 1.61s"
+    },
+    {
+      "cmd": "systemd-analyze verify infra/telemetry/verify-anchor-proofs.service infra/telemetry/verify-anchor-proofs.timer",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "verify-anchor-proofs.service: Command /opt/programming-desk/infra/telemetry/verify-anchor-proofs.sh is not executable: No such file or directory"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "G-1 manifest OK — 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 5 file(s) within owned paths"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-4 PASS — no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
+      "exit_code": 0,
+      "duration_s": 98.55,
+      "output_tail": "299 passed in 98.55s (0:01:38)"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/spe-12502-hourly-anchor-proofs.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/spe-12502-hourly-anchor-proofs.json --bot bot-05-infrastructure --strict",
+      "exit_code": 1,
+      "duration_s": 0.1,
+      "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/spe-12502-hourly-anchor-proofs.json\n  - 'approved_by' is missing — work must be reviewed by someone else"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "Hourly oneshot unit contract holds, and systemd-analyze verify is clean when the checkout prefix points at this repo",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "systemd-analyze verify on the committed /opt/programming-desk paths exits non-zero because that checkout is absent on this machine",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-1 ownership against origin/main accepts the INFRA paths on this branch",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "G-3 secret scan of the diff against origin/main reports no secrets",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "G-4 finds no contract surface in the diff",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-7 desk integrity check passes",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "ci/tests gate self-test suite passes",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "G-5/G-6 finds no deployment or destructive operation in this receipt",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "strict receipt check fails because approved_by is missing",
+      "evidence_command_index": 9,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "The timer was not installed, enabled, or started on the VPS or on this machine. systemd-analyze verify does not start the unit.",
+    "GreptimeDB and Solana devnet were not contacted. The script tests that ran used DRY_RUN synthetic anchors.",
+    "infra/tests/test_anchor_verifier.py::test_synthetic_stress_telemetry_audit_suite was not re-run; it launches the gateway alert suite and is unchanged by this diff.",
+    "approved_by is unset until bot-06-quality-security or a human stamps the receipt. check_receipt.py --strict is expected to fail on that field and on no other."
+  ],
+  "files_changed": [
+    "infra/telemetry/verify-anchor-proofs.service",
+    "infra/telemetry/verify-anchor-proofs.timer",
+    "infra/telemetry/ANCHOR-PROOFS.md",
+    "infra/telemetry/anchor-proofs.env.example",
+    "infra/tests/test_anchor_verifier.py",
+    ".receipts/bot-05-infrastructure/spe-12502-hourly-anchor-proofs.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

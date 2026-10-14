@@ -29,20 +29,33 @@ While `pending` is true, the file exists on `ref` and not on `default_branch`. R
 
 ## Skills
 
-| Skill | Canonical file | Ref while pending |
+| Skill | Canonical file | Ref |
 |---|---|---|
-| `ultrathink-protocol` | `swcstudiospace/claude-ultrathink` `hosts/grok-bot/ultrathink-protocol/SKILL.md` | `grokbot/ultrathink-skill-adapter`, [pull request 21](https://github.com/swcstudiospace/claude-ultrathink/pull/21) |
-| `ultrathink-off` | `hosts/grok-bot/commands/ultrathink-off/SKILL.md` in the same repository | same draft |
-| `ultrathink-on` | `hosts/grok-bot/commands/ultrathink-on/SKILL.md` | same draft |
-| `ultrathink-quick` | `hosts/grok-bot/commands/ultrathink-quick/SKILL.md` | same draft |
-| `ultrathink-skip` | `hosts/grok-bot/commands/ultrathink-skip/SKILL.md` | same draft |
-| `ultrathink-status` | `hosts/grok-bot/commands/ultrathink-status/SKILL.md` | same draft |
-| `ultrathink-track` | `hosts/grok-bot/commands/ultrathink-track/SKILL.md` | same draft |
+| `ultrathink-protocol` | `swcstudiospace/claude-ultrathink` `hosts/grok-bot/skills/ultrathink-protocol/SKILL.md` | `c8c6290` on `main`. Desk mirror: `grokbot/skills/ultrathink-protocol/SKILL.md` |
+| `ultrathink-on` | `hosts/grok-bot/skills/ultrathink-on/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-think` | `hosts/grok-bot/skills/ultrathink-think/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-engine` | `hosts/grok-bot/skills/ultrathink-engine/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-last` | `hosts/grok-bot/skills/ultrathink-last/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-track` | `hosts/grok-bot/skills/ultrathink-track/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-lessons` | `hosts/grok-bot/skills/ultrathink-lessons/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-hitl` | `hosts/grok-bot/skills/ultrathink-hitl/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-teach-admin` | `hosts/grok-bot/skills/ultrathink-teach-admin/SKILL.md` | same pin. Desk mirror beside it |
+| `ultrathink-off` | `hosts/grok-bot/skills/ultrathink-off/SKILL.md` | `c8c6290` on `main`. Not mirrored here |
+| `ultrathink-quick` | `hosts/grok-bot/skills/ultrathink-quick/SKILL.md` | same pin. Not mirrored here |
+| `ultrathink-skip` | `hosts/grok-bot/skills/ultrathink-skip/SKILL.md` | same pin. Not mirrored here |
+| `ultrathink-status` | `hosts/grok-bot/skills/ultrathink-status/SKILL.md` | same pin. Not mirrored here |
+| `ultrathink-pstack` | `grokbot/skills/ultrathink-pstack/SKILL.md` in this repository | this branch until it merges. Upstream has no file; plan and ship cite §1, §2 and §5 |
+| `gsd-ship-pr` | `grokbot/skills/gsd-ship-pr/SKILL.md` in this repository | this branch until it merges |
+| `gsd-runtime` | `grokbot/skills/gsd-runtime/SKILL.md` in this repository | this branch until it merges. Paragraphs marked `requires claude-ultrathink#34` need [pull request 34](https://github.com/swcstudiospace/claude-ultrathink/pull/34) at `87411ed` |
 | `swarm-cloud-dispatch` | `swcstudiospace/agent-swarm` `grokbot/skills/swarm-cloud-dispatch/SKILL.md` | `grokbot/cursor-agents-export`, [pull request 12](https://github.com/swcstudiospace/agent-swarm/pull/12) |
 | `desk-shared-memory` | `grokbot/skills/desk-shared-memory/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
 | `desk-run` | `grokbot/skills/desk-run/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
 
-`desk-run` is the umbrella. It chains `ultrathink-protocol`, `desk-shared-memory` and `swarm-cloud-dispatch` into one `/desk-run` command. Its canonical file is in this repository. The other two stay in the repositories named above; this directory does not copy them.
+`c8c6290` is claude-ultrathink `main` after #22–#30 and #32. Pull request #21 has merged. The native host files under `hosts/grok-bot/skills/` are what the bot runs. The skill-protocol adapter files (`hosts/grok-bot/ultrathink-protocol/SKILL.md` and `hosts/grok-bot/commands/<name>/SKILL.md`) stay beside that host and do not replace it.
+
+`desk-run` is the umbrella. It chains `ultrathink-protocol`, `desk-shared-memory` and `swarm-cloud-dispatch` into one `/desk-run` command. Its canonical file is in this repository. `desk-shared-memory` is too. `swarm-cloud-dispatch` stays in agent-swarm.
+
+The mirrored `ultrathink-*` files in this directory match the native host procedure at `c8c6290`, plus a pointer to `gsd-runtime` where the Omp flight matters. `gsd-ship-pr` records the plugin ship path and states that on Ming's VPS `ship.autoMerge` and `ship.deleteBranch` stay on. `gsd-runtime` records the Omp flight. Text that is true only on `fix/omp-planning-cancellation` @ `87411ed` is marked `requires claude-ultrathink#34`.
 
 ## What is checked in here
 

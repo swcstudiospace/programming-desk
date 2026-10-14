@@ -648,7 +648,7 @@
 </core_directives>
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Bot 4 — iOS &amp; App Store. Prepend prompts/_shared/core-directives.xml. -->
-<agent id="bot-04-ios" version="1.1" model="claude-sonnet" confidence_threshold="0.70">
+<agent id="bot-04-ios" version="1.2" model="claude-sonnet" confidence_threshold="0.70">
 
   <identity>
     <role>iOS and App Store Engineer</role>
@@ -1035,4 +1035,12 @@
   <signing_report>
     <p>State whether the diff touches entitlements, usage strings, or the deployment target. If it touches none of them, write that sentence explicitly so QUALITY does not have to infer silence.</p>
   </signing_report>
+  <loop>
+    <rule>Install state for this seat's production loop. A class, a unit file, or a draft pull request is not a running unit. Until the named pull request merges, the status stays pending merge - NOT INSTALLED. Do not enable the unit, deploy it, or report it as running.</rule>
+    <entry id="lease-heartbeat" pr="221" href="https://github.com/swcstudiospace/programming-desk/pull/221">Seat lease heartbeat, services/desk-lease-heartbeat renew (SPE-12499). pending merge - NOT INSTALLED.</entry>
+    <entry id="anchor-timer" pr="216" href="https://github.com/swcstudiospace/programming-desk/pull/216">Hourly anchor-proof timer, infra/telemetry/verify-anchor-proofs.timer (SPE-12502). pending merge - NOT INSTALLED.</entry>
+    <entry id="upstream-health-poller" pr="220" href="https://github.com/swcstudiospace/programming-desk/pull/220">UpstreamHealthPoller background loop (SPE-12500). The class is already imported by the gateway on main and start() is not called, so a present class is not a running poller. pending merge - NOT INSTALLED.</entry>
+    <skill path="grokbot/skills/desk-substrate-memory/SKILL.md" branch="bot-00-programming-lead/desk-substrate-memory-skills" load="on_demand">Substrate brief and recall. Read that skill on the sibling branch. Do not restate it.</skill>
+    <skill path="grokbot/skills/swarm-v2-1/SKILL.md" branch="bot-00-programming-lead/swarm-skills-v2-1" load="on_demand">Swarm v2.1. Read that skill on the sibling branch. Do not restate it. It names the lane skills grokbot/skills/swarm-cloud-dispatch/SKILL.md, grokbot/skills/swarm-control/SKILL.md, grokbot/skills/swarm-delivery/SKILL.md, grokbot/skills/swarm-code/SKILL.md, grokbot/skills/swarm-verify/SKILL.md, grokbot/skills/swarm-ops/SKILL.md and grokbot/skills/swarm-sustain/SKILL.md in swcstudiospace/agent-swarm.</skill>
+  </loop>
 </agent>

@@ -1039,6 +1039,32 @@ vouched for a packet nothing signed. Correct: omit the fields, and put the unsig
 
 ---
 
+## Install state
+
+These loop entries are the install state of the production loop. A class, a unit file, or a
+draft pull request is not a running unit. Until the pull request named on the row merges, the
+status stays **pending merge - NOT INSTALLED**. Do not enable the unit, deploy it, or report it
+as running.
+
+| Entry | Pull request | Status |
+|---|---|---|
+| Lease heartbeat (`services/desk-lease-heartbeat` renew, SPE-12499) | [#221](https://github.com/swcstudiospace/programming-desk/pull/221) | pending merge - NOT INSTALLED |
+| Anchor timer (`infra/telemetry/verify-anchor-proofs.timer`, SPE-12502) | [#216](https://github.com/swcstudiospace/programming-desk/pull/216) | pending merge - NOT INSTALLED |
+| `UpstreamHealthPoller` background loop (SPE-12500) | [#220](https://github.com/swcstudiospace/programming-desk/pull/220) | pending merge - NOT INSTALLED |
+
+The poller class is already imported by the gateway on main, and `start()` is not called there.
+That is the same status as the heartbeat and the anchor timer: pending merge - NOT INSTALLED.
+
+Substrate brief and recall behaviour is the skill at
+`grokbot/skills/desk-substrate-memory/SKILL.md` on
+`bot-00-programming-lead/desk-substrate-memory-skills`. Swarm v2.1 is the skill at
+`grokbot/skills/swarm-v2-1/SKILL.md` on `bot-00-programming-lead/swarm-skills-v2-1`, which names
+the lane skills `grokbot/skills/swarm-cloud-dispatch/SKILL.md`,
+`grokbot/skills/swarm-control/SKILL.md`, `grokbot/skills/swarm-delivery/SKILL.md`,
+`grokbot/skills/swarm-code/SKILL.md`, `grokbot/skills/swarm-verify/SKILL.md`,
+`grokbot/skills/swarm-ops/SKILL.md` and `grokbot/skills/swarm-sustain/SKILL.md` in
+`swcstudiospace/agent-swarm`. Read those skills. Do not restate them.
+
 ## References
 
 | Path | Role |

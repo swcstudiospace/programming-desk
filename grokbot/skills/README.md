@@ -41,11 +41,19 @@ While `pending` is true, the file exists on `ref` and not on `default_branch`. R
 | `swarm-cloud-dispatch` | `swcstudiospace/agent-swarm` `grokbot/skills/swarm-cloud-dispatch/SKILL.md` | `grokbot/cursor-agents-export`, [pull request 12](https://github.com/swcstudiospace/agent-swarm/pull/12) |
 | `desk-shared-memory` | `grokbot/skills/desk-shared-memory/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
 | `desk-run` | `grokbot/skills/desk-run/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
+| `swarm-control` | `grokbot/skills/swarm-control/SKILL.md` in this repository | `bot-00-programming-lead/swarm-skills-v2-1`, [pull request 226](https://github.com/swcstudiospace/programming-desk/pull/226) |
+| `swarm-delivery` | `grokbot/skills/swarm-delivery/SKILL.md` in this repository | `bot-00-programming-lead/swarm-skills-v2-1`, [pull request 226](https://github.com/swcstudiospace/programming-desk/pull/226) |
+| `swarm-verify` | `grokbot/skills/swarm-verify/SKILL.md` in this repository | `bot-00-programming-lead/swarm-skills-v2-1`, [pull request 226](https://github.com/swcstudiospace/programming-desk/pull/226) |
+| `swarm-sustain` | `grokbot/skills/swarm-sustain/SKILL.md` in this repository | `bot-00-programming-lead/swarm-skills-v2-1`, [pull request 226](https://github.com/swcstudiospace/programming-desk/pull/226) |
 
 `desk-run` is the umbrella. It chains `ultrathink-protocol`, `desk-shared-memory` and `swarm-cloud-dispatch` into one `/desk-run` command. Its canonical file is in this repository. The other two stay in the repositories named above; this directory does not copy them.
+
+`swarm-control`, `swarm-delivery`, `swarm-verify`, and `swarm-sustain` are Desk Lead operator copies. The generated files of the same names in `swcstudiospace/agent-swarm` at main `825a69918256c8cbe25e608aa44e52ea7272ae9d` still stop at the role table. These copies add the v2.1 registry, shared pool, in-process ACP, commit-time drift gates, the Cursor headless-runner ban, and the keyless signing preflight remedy, and they mark the signed-controller bootstrap (agent-swarm pull request 34) as pending merge. `swarm-code` and `swarm-ops` stay upstream only.
 
 ## What is checked in here
 
 - `index.json` — the list.
 - `desk-shared-memory/SKILL.md` — the canonical memory skill. It names only the eight core gateway tools.
 - `desk-run/SKILL.md` — the canonical `/desk-run` skill.
+- `swarm-control/SKILL.md`, `swarm-delivery/SKILL.md`, `swarm-verify/SKILL.md`, `swarm-sustain/SKILL.md` — the four lane operator skills.
+- `check_swarm_v21.py` — compares those four files to a local read-only agent-swarm checkout. It is not a CI gate.

@@ -110,6 +110,50 @@
       "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/70",
       "owner_seat": "bot-00-programming-lead",
       "purpose": "One /desk-run command that chains planning, gateway memory and Cursor cloud dispatch through to a draft pull request and the Greptile gate."
+    },
+    {
+      "name": "swarm-control",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/swarm-control/SKILL.md",
+      "ref": "bot-00-programming-lead/swarm-skills-v2-1",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/226",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Lane control (a01-orchestrator) against agent-swarm main, including the v2.1 registry, ACP, drift gates, the Cursor runner ban, and the keyless preflight remedy."
+    },
+    {
+      "name": "swarm-delivery",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/swarm-delivery/SKILL.md",
+      "ref": "bot-00-programming-lead/swarm-skills-v2-1",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/226",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Lane delivery (a02, a03, a04) against agent-swarm main, including the v2.1 registry, shared verdict, ACP, drift gates, the Cursor runner ban, and the keyless preflight remedy."
+    },
+    {
+      "name": "swarm-verify",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/swarm-verify/SKILL.md",
+      "ref": "bot-00-programming-lead/swarm-skills-v2-1",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/226",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Lane verify (a08, a09, a10) against agent-swarm main, including the v2.1 registry, shared verdict, ACP, drift gates, the Cursor runner ban, and the keyless preflight remedy."
+    },
+    {
+      "name": "swarm-sustain",
+      "repo": "swcstudiospace/programming-desk",
+      "path": "grokbot/skills/swarm-sustain/SKILL.md",
+      "ref": "bot-00-programming-lead/swarm-skills-v2-1",
+      "default_branch": "main",
+      "pending": true,
+      "pending_pr": "https://github.com/swcstudiospace/programming-desk/pull/226",
+      "owner_seat": "bot-00-programming-lead",
+      "purpose": "Lane sustain (a14, a15) against agent-swarm main, including the v2.1 registry, ACP, drift gates, the Cursor runner ban, and the keyless preflight remedy."
     }
   ]
 }

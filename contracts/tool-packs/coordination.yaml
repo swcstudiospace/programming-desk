@@ -15,7 +15,8 @@
 # drift.ts — SPE-4792 #6) through Substrate.call_tool, the same path `lead.graph_state` already
 # uses for graph_claim/graph_release/graph_complete.
 #
-# `lead` in seats: (PR #59 review, Greptile P1 — LEAD cannot access coordination tools): LEAD is
+# `lead` in seats: (programming-desk PR #59 review, Greptile P1 — LEAD cannot access
+# coordination tools): LEAD is
 # the seat that actually runs claim -> heartbeat -> complete, so a SYSTEMS-only pack left it
 # unable to renew a lease it claimed, or to scan for drift before claiming. lead.yaml is already
 # at the 15-tool ceiling and has no `desk_app_tools_load`/`packs_allowed`, so LEAD does not merge
@@ -24,7 +25,14 @@
 # SeatRouter already serve from this file's own `seats:` list regardless of packs_allowed — see
 # `test_pack_endpoint_serves_only_the_pack` for the existing precedent on that path. No roster
 # file changes; this is the minimal, additive fix.
-version: 1.1.0
+#
+# 1.2.0 cites agent-substrate 91487e7 (that repo's #59, a different change from the
+# programming-desk PR #59 named above), 9231f43 (#60) and 1e5e719 (#62). Neither tool's
+# input changes. 91487e7's index sweep keeps a graph that still holds a live lease; that
+# is why a rejected heartbeat matters. No sweep, slice, archive or metrics tool is added
+# to this pack. Follow-ups that would need gateway code are in
+# contracts/changes/rosters-substrate-railway.yaml.
+version: 1.2.0
 app: coordination
 title: Lease coordination — heartbeat + drift scan
 seats: [systems, lead]
@@ -36,6 +44,10 @@ tools:
       Renew a lease this seat already holds, via the substrate's graph_heartbeat. lease_id must
       be the one graph_claim (desk_graph_state action: claim) returned. ok:false with reason
       lost, expired or unheld means stop working that node rather than retry the heartbeat.
+      agent-substrate 91487e7 (#59, R4) locks every node of a graph the index sweep picks and
+      keeps a graph that still holds a live lease. A rejected renewal is how that lease stops
+      counting as live. This tool takes no sweep argument. 9231f43 (#60) and 1e5e719 (#62) do
+      not change the heartbeat input.
     backend: systems.graph_heartbeat
     input:
       type: object
@@ -54,7 +66,9 @@ tools:
       Read-only coord_drift_scan(repo) snapshot: one call, one checked_at, every finding typed
       by DriftKind (agent-substrate drift.ts). Reports only — does not claim, release or alter
       anything. Call before the first claim of a turn and gate on its findings, not on silence:
-      an unavailable plane is reported, never folded into an empty result.
+      an unavailable plane is reported, never folded into an empty result. agent-substrate
+      91487e7 (#59), 9231f43 (#60) and 1e5e719 (#62) do not add a DriftKind for slice
+      membership, index archives or metric history, and this tool does not report those.
     backend: systems.drift_scan
     input:
       type: object

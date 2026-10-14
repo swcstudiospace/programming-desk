@@ -1,0 +1,22 @@
+[project]
+name = "desk-lease-heartbeat"
+version = "0.1.0"
+description = "Oneshot renewal of graph-node leases this Programming Desk already holds"
+readme = "INTERFACE.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Spectrum Web Co" }]
+dependencies = []
+
+[project.scripts]
+desk-lease-heartbeat = "desk_lease_heartbeat.cli:console"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

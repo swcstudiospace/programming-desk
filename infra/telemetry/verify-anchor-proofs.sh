@@ -11,6 +11,12 @@
 #   SOLANA_DEVNET_RPC         Solana devnet JSON-RPC endpoint (default: https://api.devnet.solana.com)
 #   DRY_RUN                   Set to true to verify synthetic mock anchors without network calls
 #   REPORT_OUTPUT_DIR         Directory to store JSON verification reports (default: /tmp/desk-anchors)
+#
+# Exit codes:
+#   0  every checked batch verified
+#   1  a checked batch failed, or the Greptime query failed
+#   2  usage error
+#   3  Greptime returned no anchor batches in the window
 
 set -euo pipefail
 
@@ -58,7 +64,9 @@ REPORT_FILE="${REPORT_OUTPUT_DIR}/anchor-verification-$(date -u +'%Y%m%d%H%M%S')
 
 log "Starting Solana devnet anchor verification sweep (dry_run: $DRY_RUN)..."
 
-# Run Python verification engine
+# Run Python verification engine. set -e is off so exit 3 can be logged
+# before the script stops. Exit 1 and 2 still propagate unchanged.
+set +e
 python3 - "$GREPTIME_HTTP_URL" "$SOLANA_DEVNET_RPC" "$DRY_RUN" "$REPORT_FILE" "$BATCH_ID_OVERRIDE" <<'PY'
 import hashlib
 import json
@@ -73,6 +81,7 @@ solana_rpc = sys.argv[2]
 dry_run = sys.argv[3].lower() == "true"
 report_file = sys.argv[4]
 batch_id_override = sys.argv[5]
+query_error = None
 
 def sha256_hex(val: str) -> str:
     return hashlib.sha256(val.encode("utf-8")).hexdigest()
@@ -92,6 +101,7 @@ def compute_merkle_root(leaves: list[str]) -> str:
     return current[0]
 
 def query_greptime_anchors() -> list[dict]:
+    global query_error
     if dry_run or "MOCK_ANCHORS" in os.environ:
         # Load mock anchors or generate synthetic verified batch
         mock_env = os.environ.get("MOCK_ANCHORS")
@@ -139,7 +149,8 @@ def query_greptime_anchors() -> list[dict]:
                 })
             return anchors
     except Exception as exc:
-        print(f"Warning: Failed querying GreptimeDB ({exc}), falling back to empty anchor list", file=sys.stderr)
+        query_error = str(exc)
+        print(f"ERROR: Failed querying GreptimeDB ({exc})", file=sys.stderr)
         return []
 
 def verify_solana_tx(solana_rpc: str, tx_sig: str) -> dict:
@@ -226,9 +237,23 @@ report = {
 with open(report_file, "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
 
+if query_error is not None:
+    sys.exit(1)
+if len(anchors) == 0:
+    sys.exit(3)
+
 print(f"Verified {len(anchors)} anchor batch(es). Overall valid: {report['all_verified']}.")
-if not report["all_verified"] and len(anchors) > 0:
+if not report["all_verified"]:
     sys.exit(1)
 PY
+py_status=$?
+set -e
+if [[ "$py_status" -eq 3 ]]; then
+  log "no anchor batches in window"
+  exit 3
+fi
+if [[ "$py_status" -ne 0 ]]; then
+  exit "$py_status"
+fi
 
 log "Anchor verification complete. Report written to $REPORT_FILE."

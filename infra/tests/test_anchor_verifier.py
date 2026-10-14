@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -89,6 +90,122 @@ def test_verify_anchor_proofs_detects_corrupted_merkle_or_tx(tmp_path):
     assert res["merkle_valid"] is False
     assert res["tx_confirmed"] is False
     assert res["verified"] is False
+
+
+def test_verify_anchor_proofs_zero_batches_exits_3(tmp_path):
+    """SPE-12502: Greptime returning no batches logs that fact and exits 3."""
+    report_dir = tmp_path / "reports"
+    env = os.environ.copy()
+    env["REPORT_OUTPUT_DIR"] = str(report_dir)
+    env["DRY_RUN"] = "true"
+    env["MOCK_ANCHORS"] = "[]"
+
+    proc = subprocess.run(
+        [str(VERIFY_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    assert proc.returncode == 3, proc.stderr
+    assert "no anchor batches in window" in proc.stdout
+    report_files = list(report_dir.glob("anchor-verification-*.json"))
+    assert len(report_files) == 1
+    report = json.loads(report_files[0].read_text(encoding="utf-8"))
+    assert report["batches_checked"] == 0
+    assert report["results"] == []
+
+
+def _unit_directives(path: Path) -> dict[str, str]:
+    """Last assignment wins. Comments and section headers are ignored."""
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(";"):
+            continue
+        if line.startswith("[") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def test_anchor_proof_systemd_units_match_hourly_oneshot_contract():
+    """SPE-12502: the timer is an hourly calendar unit and the service is oneshot."""
+    service = _unit_directives(REPO_ROOT / "infra/telemetry/verify-anchor-proofs.service")
+    timer = _unit_directives(REPO_ROOT / "infra/telemetry/verify-anchor-proofs.timer")
+
+    assert service["Type"] == "oneshot"
+    assert service["User"] == "root"
+    assert service["WorkingDirectory"] == "/opt/desk-gateway/programming-desk"
+    assert service["EnvironmentFile"] == "/etc/desk-anchor-proofs/anchor.env"
+    assert service["ExecStart"] == (
+        "/opt/desk-gateway/programming-desk/infra/telemetry/verify-anchor-proofs.sh"
+    )
+    assert service["Documentation"] == (
+        "file:///opt/desk-gateway/programming-desk/infra/telemetry/ANCHOR-PROOFS.md"
+    )
+    assert service["NoNewPrivileges"] == "true"
+    assert service["PrivateTmp"] == "true"
+    assert service["ProtectSystem"] == "strict"
+    assert service["ProtectHome"] == "true"
+    assert service["StateDirectory"] == "desk-anchor-proofs"
+    assert "REPORT_OUTPUT_DIR=/var/lib/desk-anchor-proofs" in service["Environment"]
+
+    example = (REPO_ROOT / "infra/telemetry/anchor-proofs.env.example").read_text(encoding="utf-8")
+    assignments = [
+        line.split("=", 1)[0].strip()
+        for line in example.splitlines()
+        if line.strip() and not line.lstrip().startswith("#") and "=" in line
+    ]
+    assert assignments == ["GREPTIME_HTTP_URL"]
+    assert "substrate.env" in example
+    assert "<greptime-http-url>" in example
+
+    assert timer["Documentation"] == (
+        "file:///opt/desk-gateway/programming-desk/infra/telemetry/ANCHOR-PROOFS.md"
+    )
+    assert timer["OnCalendar"] == "hourly"
+    assert timer["Persistent"] == "true"
+    assert timer["Unit"] == "verify-anchor-proofs.service"
+    delay = int(timer["RandomizedDelaySec"])
+    assert 1 <= delay <= 300
+
+
+def test_anchor_proof_units_pass_systemd_analyze_verify():
+    """SPE-12502: unit syntax is clean once ExecStart points at a real checkout.
+
+    The committed paths use /opt/desk-gateway/programming-desk, which is the VPS
+    checkout and is absent on a dev machine. systemd-analyze then exits 1 for
+    that missing binary. This rewrites those prefixes to the repo root, points
+    EnvironmentFile at a local placeholder, and verifies the copies. It does
+    not install or enable either unit.
+    """
+    analyze = shutil.which("systemd-analyze")
+    if analyze is None:
+        pytest.skip("systemd-analyze is not installed")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        env_file = root / "anchor.env"
+        env_file.write_text("GREPTIME_HTTP_URL=<greptime-http-url>\n", encoding="utf-8")
+        for name in ("verify-anchor-proofs.service", "verify-anchor-proofs.timer"):
+            source = (REPO_ROOT / "infra/telemetry" / name).read_text(encoding="utf-8")
+            rewritten = source.replace("/opt/desk-gateway/programming-desk", str(REPO_ROOT))
+            rewritten = rewritten.replace("/etc/desk-anchor-proofs/anchor.env", str(env_file))
+            (root / name).write_text(rewritten, encoding="utf-8")
+        proc = subprocess.run(
+            [
+                analyze,
+                "verify",
+                str(root / "verify-anchor-proofs.service"),
+                str(root / "verify-anchor-proofs.timer"),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert proc.stderr == ""
 
 
 def test_synthetic_stress_telemetry_audit_suite():

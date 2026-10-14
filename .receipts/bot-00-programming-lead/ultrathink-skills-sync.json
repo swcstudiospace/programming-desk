@@ -2,7 +2,7 @@
   "task_id": "ultrathink-skills-sync",
   "bot": "bot-00-programming-lead",
   "started_at": "2026-10-14T13:50:10Z",
-  "completed_at": "2026-10-14T14:01:29Z",
+  "completed_at": "2026-10-14T14:02:30Z",
   "branch": "bot-00-programming-lead/ultrathink-skills-sync",
   "base": "main",
   "commands": [
@@ -59,6 +59,18 @@
       "exit_code": 2,
       "duration_s": 0.03,
       "output_tail": "run_all.py: error: the following arguments are required: --bot, --receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/ultrathink-skills-sync.json --strict",
+      "exit_code": 1,
+      "duration_s": 0.41,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/ultrathink-skills-sync.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else\nSUMMARY: PASS G-1, FAIL G-2, PASS G-3, PASS G-4, PASS G-5/G-6, PASS G-7. 1 gate(s) failed."
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/ultrathink-skills-sync.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.12,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/ultrathink-skills-sync.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
     }
   ],
   "claims": [
@@ -89,6 +101,11 @@
     {
       "claim": "G-5/G-6 pass with no deployment and no destructive command",
       "evidence_command_index": 7
+    },
+    {
+      "claim": "run_all --strict exits 1 because approved_by is unset; G-1, G-3, G-4, G-5/G-6 and G-7 pass in that summary",
+      "evidence_command_index": 9,
+      "expects_failure": true
     }
   ],
   "unverified": [

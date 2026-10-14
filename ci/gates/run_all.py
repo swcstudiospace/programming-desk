@@ -22,6 +22,40 @@ def run(name: str, argv: list[str]) -> tuple[str, int]:
     return name, result.returncode
 
 
+def discover_change_document(paths: list[str]) -> str | None:
+    """Return the change document when ``paths`` contains exactly one.
+
+    The gates workflow passes ``--change`` for a yaml under ``contracts/changes``.
+    ``run_all`` used to ignore that and fail G-4 unless the caller repeated the
+    path. Zero documents, or more than one, returns None so the caller does not
+    guess among several.
+    """
+    docs = [
+        path for path in paths
+        if path.startswith("contracts/changes/") and path.endswith((".yaml", ".yml"))
+    ]
+    if len(docs) == 1:
+        return docs[0]
+    return None
+
+
+def changed_change_documents(base: str) -> list[str]:
+    """Yaml files under contracts/changes in ``base...HEAD``, excluding deletions.
+
+    Same diff the gates workflow uses (``--diff-filter=d``). A missing base or a
+    failed git call returns an empty list; G-4 then runs without ``--change`` and
+    reports its own failure.
+    """
+    out = subprocess.run(
+        ["git", "diff", "--name-only", "--diff-filter=d", f"{base}...HEAD", "--", "contracts/changes"],
+        capture_output=True, text=True, cwd=REPO_ROOT,
+    )
+    if out.returncode != 0:
+        print(out.stderr.strip() or "run_all: could not list contracts/changes", file=sys.stderr)
+        return []
+    return [line for line in out.stdout.splitlines() if line.endswith((".yaml", ".yml"))]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Run all quality gates")
     ap.add_argument("--bot", required=True)
@@ -50,8 +84,22 @@ def main() -> int:
     ))
 
     contracts_argv = [str(GATES_DIR / "check_contracts.py"), "--base", args.base]
-    if args.change:
-        contracts_argv += ["--change", str(args.change)]
+    change = args.change
+    if change is None:
+        docs = changed_change_documents(args.base)
+        found = discover_change_document(docs)
+        if found:
+            print(f"G-4 change document: {found}")
+            change = Path(found)
+        elif len(docs) > 1:
+            print(
+                "G-4: more than one change document in the diff; pass --change. Not guessing.",
+                file=sys.stderr,
+            )
+            for doc in docs:
+                print(f"  {doc}", file=sys.stderr)
+    if change is not None:
+        contracts_argv += ["--change", str(change)]
     results.append(run("G-4  Contract-first changes", contracts_argv))
 
     results.append(run(

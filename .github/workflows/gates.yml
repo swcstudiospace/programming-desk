@@ -10,15 +10,17 @@
 # The two must not diverge. .github/workflows/gates-template-sync.yml compares everything
 # below this comment block against the template and fails if they drift apart.
 #
-# Both jobs run on the organisation's self-hosted VPS runner, labelled
+# Every job runs on the organisation's self-hosted VPS runner, labelled
 # [self-hosted, Linux, X64], because this organisation's GitHub-hosted minutes are blocked by a
 # spending limit and hosted jobs die in seconds without reaching a gate. If that runner goes
 # offline these checks do not fail — they sit queued, which as a required check presents as a
 # pull request pending forever with no error to read. Check the runner before debugging a gate.
 #
-# Trust model (Greptile P1 4140823500): on pull_request, both jobs overlay ci/gates/
-# from the PR base ref before any python3 ci/gates or pytest import of those modules.
-# The PR tree is data only for gate script execution on the shared self-hosted runner.
+# Trust model (Greptile P1 4140823500): on pull_request, the gates and gate-self-test jobs
+# overlay ci/gates/ from the PR base ref before any python3 ci/gates or pytest import of those
+# modules. The PR tree is data only for gate script execution on the shared self-hosted runner.
+# The drift-checks job runs the checked-out verify.sh and generate-templates.py. Those scripts
+# are the drift checks; they are not gate modules, and this job does not overlay them.
 
 name: Quality Gates
 
@@ -226,3 +228,36 @@ jobs:
       - run: pip install pyyaml pytest
       - name: Gate test suite
         run: python3 -m pytest ci/tests/ -v
+
+  drift-checks:
+    # verify.sh and generate-templates.py --check. The gates job is pull_request-only
+    # because a push to main has no bot id and G-1 would fail before any gate ran.
+    # These two checks do not need a bot id. They run on pull requests and on pushes
+    # to main, and each exits non-zero on drift or error.
+    #
+    # Invocation is the one named in the verify.sh header: from the repository root,
+    # no arguments, no credentials. verify.sh needs python3 from the standard library.
+    # generate-templates.py imports yaml and exits if PyYAML is missing. Python 3.12
+    # matches the other jobs on this workflow.
+    #
+    # The checked-out commit is the tree under test (the pull request head, or the
+    # push commit on main). LEAD owns skills/desk-bootstrap/** and
+    # scripts/generate-templates.py. verify.sh still requires its own header to say
+    # the checks are not wired into CI (assertion R7c). Updating that header is that
+    # seat's change; this job is the wiring the header describes.
+    runs-on: [self-hosted, Linux, X64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install template generator dependency
+        run: pip install pyyaml
+
+      - name: Desk production loop — consistency
+        run: bash skills/desk-bootstrap/desk-production-loop/verify.sh
+
+      - name: Seat templates — generator drift
+        run: python3 scripts/generate-templates.py --check

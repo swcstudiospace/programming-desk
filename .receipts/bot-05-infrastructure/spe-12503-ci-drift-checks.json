@@ -3,22 +3,14 @@
   "bot": "bot-05-infrastructure",
   "branch": "bot-05-infrastructure/spe-12503-ci-drift-checks-7b8a",
   "started_at": "2026-10-14T13:07:00Z",
-  "completed_at": "2026-10-14T13:27:11Z",
+  "completed_at": "2026-10-14T13:38:11Z",
   "repo": "swcstudiospace/programming-desk",
-  "summary": "Follow-up on PR 217. R7c now requires the drift-checks job in both gates.yml copies and rejects the unwired header. The job overlays verify.sh and generate-templates.py from the pull-request base ref before running them. Lead (bot-00-programming-lead) signed off on the verify.sh edit. G-1 does not read that sign-off, so the Lead-owned paths still fail G-1 for bot-05-infrastructure.",
-  "lead_signoff": {
-    "by": "bot-00-programming-lead",
-    "paths": [
-      "skills/desk-bootstrap/desk-production-loop/verify.sh",
-      "skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh"
-    ],
-    "note": "Lead signed off on the R7c edit to verify.sh. negative-tests.sh is the overlay list that must name every load() path, including the two workflow copies R7c now reads. check_ownership.py has no sign-off input; it still reports both paths as foreign for bot-05-infrastructure."
-  },
+  "summary": "drift-checks runs verify.sh and generate-templates.py --check on pull requests and pushes to main, using the base-ref copies of those scripts. The R7c edit is not on this branch. It is on bot-00-programming-lead/spe-12503-r7c-drift-checks, which this PR depends on. This branch's verify.sh is main's copy, so its R7c is the unwired check and exits 0. The new R7c runs in this PR's CI only after that Lead PR is merged, because the job overlays verify.sh from origin/main. approved_by is unset.",
   "commands": [
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
       "exit_code": 0,
-      "output_tail": "ok: ... R7c drift-checks job in both gates copies, no false CI claim, ..."
+      "output_tail": "R7c no false CI claim"
     },
     {
       "cmd": "bash skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
@@ -33,7 +25,7 @@
     {
       "cmd": "python3 -m pytest ci/tests/ -q --tb=line",
       "exit_code": 0,
-      "output_tail": "299 passed in 112.45s"
+      "output_tail": "299 passed in 187.82s"
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
@@ -42,13 +34,13 @@
     },
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
-      "exit_code": 1,
-      "output_tail": "G-1 FAIL — bot-05-infrastructure\n  FOREIGN  skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh  (owned by bot-00-programming-lead)\n  FOREIGN  skills/desk-bootstrap/desk-production-loop/verify.sh  (owned by bot-00-programming-lead)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+      "exit_code": 0,
+      "output_tail": "G-1 PASS — bot-05-infrastructure: 3 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected"
+      "output_tail": "G-3 PASS — 3 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
@@ -59,16 +51,6 @@
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 0,
       "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
-    },
-    {
-      "cmd": "scratch=$(mktemp -d /tmp/spe-12503-base.XXXX) && git archive --format=tar HEAD | tar -x -C \"$scratch\" && cp .github/workflows/gates.yml \"$scratch/.github/workflows/gates.yml\" && cp ci/.github/workflows/gates.yml \"$scratch/ci/.github/workflows/gates.yml\" && git show origin/main:skills/desk-bootstrap/desk-production-loop/verify.sh > \"$scratch/skills/desk-bootstrap/desk-production-loop/verify.sh\" && git show origin/main:scripts/generate-templates.py > \"$scratch/scripts/generate-templates.py\" && DESK_LOOP_ROOT=\"$scratch\" bash \"$scratch/skills/desk-bootstrap/desk-production-loop/verify.sh\" && python3 \"$scratch/scripts/generate-templates.py\" --check --repo \"$scratch\"",
-      "exit_code": 0,
-      "output_tail": "R7c no false CI claim ...\ngenerate-templates --check: 7 templates up to date"
-    },
-    {
-      "cmd": "bash -c 'set -euo pipefail; scratch=$(mktemp -d /tmp/spe-12503-r7c.XXXX); git archive --format=tar HEAD | tar -x -C \"$scratch\"; python3 -c \"from pathlib import Path; import sys; p = Path(sys.argv[1]); text = p.read_text().replace(chr(10)+\\\"  drift-checks:\\\"+chr(10), chr(10)+\\\"  other-job:\\\"+chr(10), 1); assert \\\"  drift-checks:\\\" not in text; p.write_text(text)\" \"$scratch/.github/workflows/gates.yml\"; DESK_LOOP_ROOT=\"$scratch\" bash skills/desk-bootstrap/desk-production-loop/verify.sh'",
-      "exit_code": 1,
-      "output_tail": "FAIL: R7c drift-checks job in .github/workflows/gates.yml"
     },
     {
       "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json",
@@ -83,15 +65,15 @@
   ],
   "claims": [
     {
-      "claim": "The updated verify.sh exits 0 and reports the drift-checks job in both gates copies",
+      "claim": "This branch's verify.sh exits 0. Its R7c is the unwired check from main",
       "evidence_command_index": 0
     },
     {
-      "claim": "The negative-test suite exits 0, including the overlay list for the new load() paths",
+      "claim": "negative-tests.sh exits 0",
       "evidence_command_index": 1
     },
     {
-      "claim": "generate-templates.py --check exits 0 on the committed templates",
+      "claim": "generate-templates.py --check exits 0",
       "evidence_command_index": 2
     },
     {
@@ -99,9 +81,8 @@
       "evidence_command_index": 3
     },
     {
-      "claim": "G-1 for bot-05-infrastructure exits 1 because verify.sh and negative-tests.sh are owned by bot-00-programming-lead",
-      "evidence_command_index": 5,
-      "expects_failure": true
+      "claim": "The diff is inside paths owned by bot-05-infrastructure",
+      "evidence_command_index": 5
     },
     {
       "claim": "The diff contains no committed secrets",
@@ -116,36 +97,24 @@
       "evidence_command_index": 8
     },
     {
-      "claim": "origin/main copies of verify.sh and generate-templates.py exit 0 against this branch's workflows and templates",
+      "claim": "The receipt records no deployment and no destructive operation",
       "evidence_command_index": 9
     },
     {
-      "claim": "verify.sh exits 1 when the drift-checks job key is renamed in the live workflow copy",
-      "evidence_command_index": 10,
-      "expects_failure": true
-    },
-    {
-      "claim": "The receipt records no deployment and no destructive operation",
-      "evidence_command_index": 11
-    },
-    {
       "claim": "G-2 --strict fails because approved_by is absent",
-      "evidence_command_index": 12,
+      "evidence_command_index": 10,
       "expects_failure": true
     }
   ],
   "unverified": [
-    "GitHub Actions has not finished this commit. The self-hosted jobs queue until a runner with labels self-hosted, Linux, and X64 picks them up.",
-    "The runners list API returned HTTP 403 for this token, on the repository and on the organisation. The latest job observed on that runner is Security Nightly check-target on srv1778002 at 2026-10-14T07:45:11Z.",
-    "check_ownership.py does not read lead_signoff. The foreign-path result is a real G-1 failure for this branch until those paths are accepted another way.",
+    "GitHub Actions has not finished this commit.",
     "approved_by is absent until bot-00-programming-lead or a human stamps this receipt.",
-    "desk_ownership_resolve in this session resolved ci/.github/workflows/gates.yml against commit e0ad62ad, which is not origin/main. The local gate against origin/main assigns that file to bot-05-infrastructure."
+    "The new R7c is not in this branch. CI overlays verify.sh from origin/main, so this PR runs that check only after bot-00-programming-lead/spe-12503-r7c-drift-checks is merged. A local run of that script against this branch's workflows exited 0.",
+    "The runners list API returned HTTP 403 for this token. The latest job observed on the self-hosted runner was Security Nightly check-target on srv1778002 at 2026-10-14T07:45:11Z."
   ],
   "files_changed": [
     ".github/workflows/gates.yml",
     "ci/.github/workflows/gates.yml",
-    "skills/desk-bootstrap/desk-production-loop/verify.sh",
-    "skills/desk-bootstrap/desk-production-loop/fixtures/negative-tests.sh",
     ".receipts/bot-05-infrastructure/spe-12503-ci-drift-checks.json"
   ],
   "contract_changes": [],

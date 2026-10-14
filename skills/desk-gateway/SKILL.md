@@ -26,6 +26,8 @@ Calling a gateway tool?
 ├─ Took > 20 s? ──▶ The call was cut. Bound the inputs and split the work. §4
 ├─ 403? ──▶ Wrong seat endpoint. Stop. Tell LEAD. §5
 ├─ not_configured? ──▶ Upstream credential not provided. `unverified`, no browser workaround. §5
+├─ desk_brief? ──▶ Read `substrate` and `recall` separately. The gateway cache is not the substrate cache. §7
+├─ About to pass `profile`, `if_none_match`, or a bank name? ──▶ Not on the desk schema. The call is rejected. §7
 └─ Argument contains a token, password or key? ──▶ Remove it. Every call is audited. §6
 ```
 
@@ -106,6 +108,93 @@ an argument is a token that left the Bot computer, was hashed into an audit row 
 reached an upstream before redaction rules matched it. If a tool needs a secret, the gateway
 already holds it; you never supply one (PD-4).
 
+### §7 Brief pipeline, durability, and tools the roster did not gain
+
+`desk_brief` still takes only `graph_id`, `task_id`, and `refresh`
+(`contracts/tool-rosters/_core.yaml`). `additionalProperties: false` means `profile`,
+`if_none_match`, or a bank name is a validation error.
+
+`swcstudiospace/agent-substrate` was not readable from this seat (GitHub 404). Substrate
+sentences below come from the history digest of main `feb597f` (`git log --stat` since 8 Oct
+2026). A path is a path that commit's stat lists. The file was not opened. Where the digest
+states a behavior and does not print an environment-variable name, the desk task's name is
+given beside the SHA.
+
+Two caches sit in front of a brief.
+
+| Cache | Where | What a seat does |
+|---|---|---|
+| Gateway | `services/desk-gateway/src/desk_gateway/tools/core.py` `brief`: in-process, `BRIEF_TTL_SEC` 300. A hit adds `cached: true`. `refresh: true` skips it. A substrate error is not cached. The same function gathers `Substrate.brief` and `memory_recall` | Pass `refresh: true` after a retain you need in the same turn |
+| Substrate | `40890e4` (PR #64): identical concurrent misses share one load; stale-while-revalidate for the brief is shadow by default. Stat: `packages/mcp-server/src/cache.ts`. Desk-task flag name: `SUBSTRATE_CACHE_SWR` | Do not set the flag. Shadow keeps the previous answer. Do not retry a slow brief to help the fill: a waiter whose budget is spent starts no load (`40890e4` message) |
+
+`Substrate.brief` in `services/desk-gateway/src/desk_gateway/upstreams.py` POSTs
+`{repo, graph_id, surface: grok-bot}` to `/brief` and returns the brief string only.
+
+What `40890e4` added, and what `desk_brief` does with it:
+
+- A compact, state-carrying brief profile for the Grok Bot, shadow by default, plus an
+  estimated-spend SLI. Stat: `packages/mcp-server/src/brief-profile.ts`,
+  `packages/mcp-server/src/brief.ts`. Desk-task names: `profile` `full|compact`,
+  `SUBSTRATE_BRIEF_PROFILE`. The digest does not print those strings and does not name an
+  enforce surface list. The desk schema has no `profile`. Do not call a desk brief compact
+  or full. A suddenly short brief is unverified, not "nothing is stored".
+- A warm own-bank recall snapshot the brief reads from the cache only, off by default. Stat:
+  `packages/mcp-server/src/recall-snapshot.ts`. Desk-task flag: `SUBSTRATE_BRIEF_RECALL`.
+  Gateway recall still runs inside `core.brief` while that snapshot stays off. An empty
+  `substrate.brief` with a populated `recall` is a recall. An empty `recall` with no `reason`
+  is unknown, not "no memories".
+- A read-only Hindsight inventory, named in the same commit. Stat:
+  `packages/mcp-server/src/hindsight-inventory.ts`. Desk-task flag:
+  `SUBSTRATE_HINDSIGHT_INVENTORY`. The digest does not print a default for the inventory
+  flag. A missing inventory is not an empty bank list. Configured banks past a truncated
+  listing are not "missing" (`40890e4` Greptile note).
+- A brief too large to cache is composed once, and the fallback text does not carry recall.
+  The shadow stale probe does not delay a completed answer. Recall is counted included only
+  if it survives the compact byte cap (`40890e4` message). Class-labelled cache counters live
+  in `scripts/cache-stats.ts` in that same stat. A seat does not run that script.
+
+Durability. `a735372` (PR #61) puts expiry mode and graph generation into the brief and into
+the memory-search cache keys. Stat: `packages/mcp-server/src/brief.ts`,
+`packages/mcp-server/src/memory-policy.ts`, `packages/mcp-server/src/index-store.ts`,
+`packages/mcp-server/src/mcp.brief.test.ts`. The digest does not name `etag`, `state`,
+`surface`, `if_none_match`, or `include_expired`. Do not invent those fields. The gateway
+brief is `POST /brief`, so the GET `If-None-Match` cache in `HttpUpstream.request`
+(`upstreams.py`) does not apply, and the desk result has no etag. `cached: true` is the
+five-minute gateway cache, not HTTP 304. `brief_no_revision_marker` in
+`skills/desk-bootstrap/desk-production-loop` still applies. There is no desk argument that
+asks recall to show expired rows.
+
+`1e5e719` (PR #62; the same message is also logged as `496878d`) is index export, offline
+verify, and restore-to-scratch, a store-free `/livez`, TTL'd `metric_samples`, and a docs
+freshness check. Policies ship off or report-only, and the commit deletes no production data.
+Stat includes `docs/runbooks/index-archive.md` and `scripts/doctor-runtime.ts`. None of that
+is a desk tool. Do not run a restore, a reclaim, or the canary.
+
+`feb597f` (PR #67) is seven opt-in or report-only changes on uplift 5. Defaults keep today's
+memory digests, sweep deletes, and the `gate:boot` receipt. Event hashes stay frozen because
+the ledger cannot store a new preimage. A hash-version flip still finds the other version's
+claim, derived key, and pending review, and a rollback to v1 does the same. Migrate drops
+`memory_reviews_hash_idx` on every run, inside the lock, and releases its connection before
+the optional table tune. The sweep prints one JSON object and lists lifecycle ids before any
+delete. Index-drill errors use the shared redactor. Stat: `packages/mcp-server/src/index-store.ts`,
+`packages/mcp-server/src/index-sweep.ts`, `packages/mcp-server/src/memory-write.ts`,
+`packages/cli/src/skills.ts`, `scripts/chaos-planes.ts`, `scripts/rehearsal.ts`,
+`scripts/release-gate.ts`. The message does not list `skills` subcommands. Do not invent one.
+A seat does not migrate, drill, or run that CLI.
+
+`6e0dfd4` (PR #66) added operator-only `skills_approve` and approved-only `skills_list` (one
+entry per name), plus `SUBSTRATE_SKILLS_GOVERNANCE=off|report|enforce` (default off; report
+warns once; enforce links only approved skills and never unlinks). Stat:
+`packages/mcp-server/src/skills/registry.ts`, `packages/mcp-server/src/mcp.ts`,
+`packages/projector/src/skills-governance.ts`. Those MCP names are not on
+`contracts/tool-rosters/_core.yaml`. Calling them on the desk endpoint is an unknown tool (§1).
+
+`omp-sessions` is not named anywhere in that digest. The desk task records it as a read-only
+Hindsight bank: 68 omp session digests, one document per session, tagged by repo and date.
+`memory_recall` in `core.py` searches `ctx.seat.memory_own` and, when `include_shared` is
+true, `ctx.seat.memory_shared`. It has no bank argument, so it does not search
+`omp-sessions`. A miss there is not "no such session". Do not retain into that bank.
+
 ---
 
 ## Worked example
@@ -155,6 +244,9 @@ surface. One 403 is a misconfiguration; the response is `skills/desk-bootstrap` 
 | Browser workaround | Action done outside the gateway after `not_configured` | Record in `unverified`; ask INFRA for the credential |
 | Secret in an argument | Redacted args hash, token exposed in transit | Never supply a secret; the gateway holds them |
 | Extra argument | Validation error | Schemas are `additionalProperties: false` |
+| `profile` or `if_none_match` sent to `desk_brief` | Validation error | Not desk arguments. §7 |
+| Short brief read as "nothing known" | `40890e4` adds a shadow-by-default compact profile; the gateway returns the brief string with no profile label | Record it in `unverified`. Do not pass `profile` |
+| `skills_approve` or the `skills` CLI from a seat | Unknown tool, or a command `feb597f` does not list | Stop. §7 |
 
 ---
 
@@ -168,3 +260,4 @@ surface. One 403 is a misconfiguration; the response is `skills/desk-bootstrap` 
 | Roster changes go through contract review | G-4 | Every seat is a consumer of `contracts/tool-rosters/**` |
 | Roster count 10–15 (≤ 20 with a pack); g5/g6 tools carry their fields | G-7 | The same band doctor checks at runtime |
 | `not_configured` and fail-open reads land in `unverified` | G-2, PD-1, PD-6 | A result you did not get is not a result you can claim |
+| Desk brief arguments stay the roster schema | G-4 | Substrate `memory_brief` gained optional fields. The desk tool did not, so a seat must not send them |

@@ -40,6 +40,7 @@ While `pending` is true, the file exists on `ref` and not on `default_branch`. R
 | `ultrathink-track` | `hosts/grok-bot/commands/ultrathink-track/SKILL.md` | same draft |
 | `swarm-cloud-dispatch` | `swcstudiospace/agent-swarm` `grokbot/skills/swarm-cloud-dispatch/SKILL.md` | `grokbot/cursor-agents-export`, [pull request 12](https://github.com/swcstudiospace/agent-swarm/pull/12) |
 | `desk-shared-memory` | `grokbot/skills/desk-shared-memory/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
+| `desk-substrate` | `grokbot/skills/desk-substrate/SKILL.md` in this repository | `bot-00-programming-lead/desk-substrate-memory-skills`, [pull request 230](https://github.com/swcstudiospace/programming-desk/pull/230) |
 | `desk-run` | `grokbot/skills/desk-run/SKILL.md` in this repository | `bot-00-programming-lead/grokbot-skills-index`, [pull request 70](https://github.com/swcstudiospace/programming-desk/pull/70) |
 
 `desk-run` is the umbrella. It chains `ultrathink-protocol`, `desk-shared-memory` and `swarm-cloud-dispatch` into one `/desk-run` command. Its canonical file is in this repository. The other two stay in the repositories named above; this directory does not copy them.
@@ -47,5 +48,6 @@ While `pending` is true, the file exists on `ref` and not on `default_branch`. R
 ## What is checked in here
 
 - `index.json` — the list.
-- `desk-shared-memory/SKILL.md` — the canonical memory skill. It names only the eight core gateway tools.
+- `desk-shared-memory/SKILL.md` — the canonical memory skill. It names only the eight core gateway tools, and records how `40890e4` and `feb597f` show up on those calls.
+- `desk-substrate/SKILL.md` — substrate brief, durability, and skill lifecycle, cited by commit SHA because the upstream tree was not readable.
 - `desk-run/SKILL.md` — the canonical `/desk-run` skill.

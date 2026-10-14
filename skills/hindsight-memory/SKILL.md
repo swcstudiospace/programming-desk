@@ -11,9 +11,12 @@ gates: [G-2, G-3]
 
 The desk's memory plane is Hindsight, reached only through the gateway: `desk_brief` at turn
 start, `desk_memory_recall` when you need a fact, `desk_memory_retain` when you have one worth
-keeping. Banks: `pd-<seat>` is yours to write; `pd-desk` is shared, written by LEAD and QUALITY,
-read by all; `pd-lead-reports` is LEAD's. A weekly `reflect` prunes banks into mental models
-without your involvement.
+keeping. Writable banks: `pd-<seat>` is yours; `pd-desk` is shared, written by LEAD and
+QUALITY, read by all; `pd-lead-reports` is LEAD's. `omp-sessions` is a read-only recall source
+(one omp session digest per document, tagged by repo and date). The gateway picks the banks
+from the seat token, so `desk_memory_recall` does not take a bank name and does not search
+`omp-sessions`. A weekly `reflect` prunes the writable banks into mental models without your
+involvement.
 
 **Retain is refused without `receipt_path` or `source`.** That is the whole discipline in one
 schema rule: memory holds what was verified or where it was read, never what was believed.
@@ -30,6 +33,10 @@ About to retain something?
 
 About to act on something recalled?
 └─▶ Recall is a hint about where to look. Re-run the command or open the file before claiming it. §4
+
+About to read or write `omp-sessions`?
+├─ Write, migrate, or drill ──▶ No. Read-only, and not a desk tool argument. §6
+└─ A desk recall missed it ──▶ That miss is not "omp never did this". §6
 ```
 
 Redaction runs at the gateway, but the seat still does not type tokens: a redacted line is a
@@ -46,6 +53,7 @@ useless line, and the audit event still records that one was sent.
 | `pd-<seat>` | The seat | The seat | Own decisions, environment facts, verified commands, review risks |
 | `pd-desk` | LEAD, QUALITY | All seats | Team-wide facts: hosts, conventions, standing decisions, gate outcomes worth remembering |
 | `pd-lead-reports` | LEAD | LEAD | Dispatch and report history |
+| `omp-sessions` | Not a desk seat. Do not retain into it | Not via `desk_memory_recall` (no bank argument) | omp session digests, one document per session, tagged by repo and date. The count recorded with this skill is 68. This seat did not re-count the bank |
 
 Your endpoint writes to your own bank only; the gateway derives the bank from the seat token, so
 there is no argument to get wrong. A fact that belongs to the team goes to LEAD or QUALITY with
@@ -101,6 +109,31 @@ changed since.
 Recall and the brief fail open (`skills/desk-gateway` §2): an empty brief with a `reason` is not
 "no memories". Note the reason and continue without the cache.
 
+`desk_brief` already recalls while it builds the brief: `brief` in
+`services/desk-gateway/src/desk_gateway/tools/core.py` gathers the substrate brief and
+`memory_recall` together. Substrate `40890e4` (PR #64) adds a warm own-bank recall snapshot
+the brief reads from the cache only, off by default (stat:
+`packages/mcp-server/src/recall-snapshot.ts`; the file was not opened). The desk task names
+that flag `SUBSTRATE_BRIEF_RECALL`. An empty substrate string is not an empty gateway recall.
+Read both.
+
+The same commit adds a compact, state-carrying brief profile for the Grok Bot, shadow by
+default (stat: `packages/mcp-server/src/brief-profile.ts`). The desk task names `profile`
+`full|compact` and `SUBSTRATE_BRIEF_PROFILE`. The digest does not print those strings. The
+desk tool does not accept `profile`. A short brief is unverified, not a smaller memory.
+`skills/desk-gateway` §7 has the cache split and the etag gap on the desk result.
+
+`a735372` (PR #61) puts expiry mode and graph generation into the brief and the memory-search
+cache keys (stat: `packages/mcp-server/src/memory-policy.ts`). The digest does not say the
+retain schema changed. §3 is still the contract. Do not ask recall for expired rows; there is
+no desk argument for that.
+
+`feb597f` (PR #67) keeps today's memory digests by default. Event hashes stay frozen. A
+hash-version flip still finds the other version's claim, derived key, and pending review
+(stat: `packages/mcp-server/src/memory-write.ts`). That does not change the desk retain call.
+Do not run the guarded migrate, the lifecycle sweep, or the `skills` CLI. The commit message
+does not list subcommands.
+
 ### §5 Redaction and the weekly reflect
 
 The gateway runs the substrate redactor over `content` before it reaches Hindsight, and the audit
@@ -111,6 +144,33 @@ redacted retain leaves a hole where the fact was and an event showing a seat sen
 `reflect` runs weekly on each bank and folds retained facts into mental models. You do not run
 it, schedule it or wait for it. If a brief surfaces a fact you now know to be stale, retain the
 correction with the new receipt; reflect resolves contradictions towards the newest evidence.
+
+### §6 `omp-sessions` is read-only
+
+`omp-sessions` holds omp session digests: one document per session, tagged by repo and date.
+The desk task's figure is 68 digests. The history digest of agent-substrate main `feb597f`
+(commits since 8 Oct 2026) does not name this bank, so there is no substrate path to cite.
+This seat did not re-count the bank. `memory_recall` in
+`services/desk-gateway/src/desk_gateway/tools/core.py` searches the seat's own bank and, when
+`include_shared` is true, the shared banks on the seat token. It has no bank argument.
+
+What a seat does:
+
+- Do not retain into `omp-sessions`. A team fact still goes to LEAD or QUALITY for `pd-desk`,
+  with a receipt path. A session digest is not a retain.
+- Do not pass a bank name. The schema has no bank argument, and an extra argument is refused
+  (`skills/desk-gateway` §1).
+- A miss in `pd-<seat>` or `pd-desk` does not mean the session never happened. It means this
+  tool did not search `omp-sessions`. Say that when the question is about an omp session.
+- `40890e4` adds a read-only Hindsight inventory (stat:
+  `packages/mcp-server/src/hindsight-inventory.ts`, file not opened) and an own-bank recall
+  snapshot that is off by default (stat: `packages/mcp-server/src/recall-snapshot.ts`). The
+  desk task names the flags `SUBSTRATE_HINDSIGHT_INVENTORY` and `SUBSTRATE_BRIEF_RECALL`. A
+  hit that later arrives inside a brief is still a hint. Open the repo and the date it names
+  before claiming it (§4).
+- Do not migrate, drill, or rewrite the bank. `feb597f` (PR #67) is the guarded migrate and
+  the drills (stat: `packages/mcp-server/src/index-store.ts`, `scripts/chaos-planes.ts`).
+  The message does not make that a desk tool.
 
 ---
 
@@ -155,6 +215,8 @@ The second satisfies the schema with a fake source and retains nothing useful. I
 | Acting on recall | Claim rests on an old receipt | Re-run or re-open before claiming (PD-1) |
 | Empty brief read as "nothing known" | Fail-open reason ignored | Check `reason`; continue uncached |
 | Stale fact left standing | Brief keeps repeating it | Retain the correction with the new receipt |
+| `omp-sessions` miss read as "no such session" | The question was about omp and only `pd-*` was searched | Say the desk recall did not search that bank. §6 |
+| Retain aimed at `omp-sessions` | Extra bank argument, or a digest stored in `pd-<seat>` | Refused, or stored in the wrong bank. Do not write it |
 
 ---
 
@@ -166,3 +228,4 @@ The second satisfies the schema with a fake source and retains nothing useful. I
 | No secrets in `content` or any argument | G-3, PD-4 | Redaction is a backstop; the audit event outlives it |
 | Own bank only; team facts via LEAD/QUALITY | PD-2 (ownership, applied to memory) | One writer per bank keeps evidence attributable |
 | Recall is re-verified before a claim | PD-1 | A recalled exit code is not an observed one |
+| `omp-sessions` is not a retain target and is not a `desk_memory_recall` bank argument | PD-2, G-4 | The desk schema has no bank field. Writing session digests into `pd-<seat>` hides them from the bank that holds them |

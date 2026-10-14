@@ -2,7 +2,7 @@
   "task_id": "spe-12501-lease-heartbeat-installer",
   "bot": "bot-05-infrastructure",
   "started_at": "2026-10-14T13:26:00Z",
-  "completed_at": "2026-10-14T13:42:19Z",
+  "completed_at": "2026-10-14T13:43:30Z",
   "commands": [
     {
       "cmd": "bash -n infra/lease-heartbeat/install.sh",
@@ -49,7 +49,7 @@
     {
       "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
       "exit_code": 0,
-      "duration_s": 0.319,
+      "duration_s": 1.532,
       "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
     },
     {
@@ -61,31 +61,31 @@
     {
       "cmd": "python3 ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.378,
+      "duration_s": 0.431,
       "output_tail": "G-1 PASS — bot-05-infrastructure: 12 file(s) within owned paths"
     },
     {
       "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.635,
+      "duration_s": 0.174,
       "output_tail": "G-3 PASS — 12 file(s) scanned, no secrets detected"
     },
     {
       "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
       "exit_code": 0,
-      "duration_s": 0.279,
+      "duration_s": 0.168,
       "output_tail": "G-4 PASS — no contract surfaces touched"
     },
     {
       "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/spe-12501-lease-heartbeat-installer.json",
       "exit_code": 0,
-      "duration_s": 0.2,
+      "duration_s": 0.145,
       "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt"
     },
     {
       "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-05-infrastructure/spe-12501-lease-heartbeat-installer.json --bot bot-05-infrastructure --strict",
       "exit_code": 1,
-      "duration_s": 0.2,
+      "duration_s": 0.166,
       "output_tail": "G-2 FAIL — .receipts/bot-05-infrastructure/spe-12501-lease-heartbeat-installer.json\n  - 'approved_by' is missing — work must be reviewed by someone else\n\n  See skills/verification-receipts/SKILL.md"
     }
   ],

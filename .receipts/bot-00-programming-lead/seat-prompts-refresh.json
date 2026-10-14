@@ -1,0 +1,176 @@
+{
+  "task_id": "seat-prompts-refresh",
+  "bot": "bot-00-programming-lead",
+  "branch": "bot-00-programming-lead/seat-prompts-refresh",
+  "started_at": "2026-10-14T13:50:00Z",
+  "completed_at": "2026-10-14T13:59:50Z",
+  "runtime": "cursor-cloud",
+  "lane": "C",
+  "repo": "https://github.com/swcstudiospace/programming-desk",
+  "graph_id": null,
+  "change_summary": "Seat prompt refresh. Each prompts/bot-*.xml source is version 1.2 and carries a loop block. The lease heartbeat (PR 221), the anchor timer (PR 216), and UpstreamHealthPoller (PR 220) each say pending merge - NOT INSTALLED. Substrate brief/recall is cited as grokbot/skills/desk-substrate-memory/SKILL.md on bot-00-programming-lead/desk-substrate-memory-skills. Swarm v2.1 is cited as grokbot/skills/swarm-v2-1/SKILL.md on bot-00-programming-lead/swarm-skills-v2-1. INFRA and QUALITY also carry purple-team and omega-prime tooling pointers. prompts/_shared/core-directives.xml is unchanged. scripts/assemble-prompts.sh regenerated prompts-assembled/*.xml and the prompts/<SEAT>.xml aliases. The same three statuses are in skills/desk-bootstrap/desk-production-loop/SKILL.md.",
+  "commands": [
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.4,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "bash scripts/assemble-prompts.sh --check",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "assemble-prompts --check: 7 seats up to date (roster spectrumwebco.json, version 2026-09-30)"
+    },
+    {
+      "cmd": "python3 scripts/generate-templates.py --check",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "generate-templates --check: 7 templates up to date"
+    },
+    {
+      "cmd": "git diff --exit-code origin/main -- prompts/_shared/core-directives.xml",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": ""
+    },
+    {
+      "cmd": "python3 -c '\nfrom pathlib import Path\nphrase = \"pending merge - NOT INSTALLED\"\nentries = (\"lease-heartbeat\", \"anchor-timer\", \"upstream-health-poller\")\nsources = sorted(Path(\"prompts\").glob(\"bot-*.xml\"))\nassert len(sources) == 7, len(sources)\nfor p in sources:\n    text = p.read_text()\n    assert text.count(phrase) == 4, (p.name, text.count(phrase))\n    for entry in entries:\n        assert text.count(f\"id=\\\"{entry}\\\"\") == 1, (p.name, entry)\n    assert \"grokbot/skills/desk-substrate-memory/SKILL.md\" in text\n    assert \"grokbot/skills/swarm-v2-1/SKILL.md\" in text\n    has_tool = \"<tooling>\" in text\n    expect = p.name in {\"bot-05-infrastructure.xml\", \"bot-06-quality-security.xml\"}\n    assert has_tool is expect, (p.name, has_tool)\n    if has_tool:\n        assert \"https://github.com/swcstudiospace/purple-team\" in text\n        assert \"https://github.com/swcstudiospace/omes-bot\" in text\nfor seat in (\"LEAD\", \"SYSTEMS\", \"WEB\", \"ANDROID\", \"IOS\", \"INFRA\", \"QUALITY\"):\n    for folder in (\"prompts\", \"prompts-assembled\"):\n        t = Path(folder, f\"{seat}.xml\").read_text()\n        assert t.count(phrase) == 4, (folder, seat)\n        assert \"{{\" not in t, (folder, seat)\nprint(\"content ok: 7 sources phrase x4; tooling on INFRA and QUALITY only; assembled copies match that count\")\n'",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "content ok: 7 sources phrase x4; tooling on INFRA and QUALITY only; assembled copies match that count"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10.64,
+      "output_tail": "299 passed in 10.64s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  prompts-assembled/ANDROID.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/INFRA.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/IOS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/QUALITY.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/SYSTEMS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts-assembled/WEB.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/ANDROID.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/INFRA.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/IOS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/LEAD.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/QUALITY.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/SYSTEMS.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/WEB.xml  (owned by bot-06-quality-security)\n  FOREIGN  prompts/bot-01-systems-backend.xml  (owned by bot-01-systems-backend)\n  FOREIGN  prompts/bot-02-web-edge.xml  (owned by bot-02-web-edge)\n  FOREIGN  prompts/bot-03-android.xml  (owned by bot-03-android)\n  FOREIGN  prompts/bot-04-ios.xml  (owned by bot-04-ios)\n  FOREIGN  prompts/bot-05-infrastructure.xml  (owned by bot-05-infrastructure)\n  FOREIGN  prompts/bot-06-quality-security.xml  (owned by bot-06-quality-security)\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.3,
+      "output_tail": "G-3 PASS \u2014 22 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.2,
+      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/seat-prompts-refresh.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.2,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/seat-prompts-refresh.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/seat-prompts-refresh.json",
+      "exit_code": 0,
+      "duration_s": 0.1,
+      "output_tail": "G-5/G-6 PASS \u2014 no deployments or destructive operations in this receipt"
+    }
+  ],
+  "claims": [
+    {
+      "claim": "The production-loop consistency script passes on this checkout",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "Assembled prompts match the seat sources for the current roster",
+      "evidence_command_index": 1
+    },
+    {
+      "claim": "Grok Bot templates still match the generator",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "prompts/_shared/core-directives.xml is unchanged from origin/main",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Each seat source names the lease heartbeat, the anchor timer, and UpstreamHealthPoller as pending merge - NOT INSTALLED, cites the substrate and swarm skill paths, and the tooling block is present on the INFRA and QUALITY sources",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "ci/tests pytest run passed",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "G-1 fails because the other seat prompt sources and the assembled copies are not owned by bot-00-programming-lead",
+      "evidence_command_index": 6,
+      "expects_failure": true
+    },
+    {
+      "claim": "The committed diff has no secret material",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "The diff touches no contract surface",
+      "evidence_command_index": 8
+    },
+    {
+      "claim": "Desk integrity passes, including assembled prompts with no unfilled placeholders",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "G-2 strict fails because approved_by is missing",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    },
+    {
+      "claim": "G-5/G-6 finds no deployment or destructive operation in this receipt",
+      "evidence_command_index": 11
+    }
+  ],
+  "unverified": [
+    "G-1 fails on this branch. prompts/bot-01-systems-backend.xml through prompts/bot-06-quality-security.xml are owned by those seats. prompts/<SEAT>.xml and prompts-assembled/** are owned by bot-06-quality-security. The assigned task was to refresh prompts/ and regenerate the assembled copies on bot-00-programming-lead/seat-prompts-refresh. The gate was not waived and this draft is not merge-ready.",
+    "Sibling branches bot-00-programming-lead/desk-substrate-memory-skills and bot-00-programming-lead/swarm-skills-v2-1 were absent from origin at edit time (git ls-remote returned no heads). The cited paths grokbot/skills/desk-substrate-memory/SKILL.md and grokbot/skills/swarm-v2-1/SKILL.md are the skill paths this prompt uses. They were not opened on those branches.",
+    "Pull requests 216, 220, and 221 were open drafts when the status lines were written. pending merge - NOT INSTALLED is the status until those pull requests merge. Nothing was installed, enabled, or deployed.",
+    "desk_brief succeeded (substrate.ok true, recall banks pd-lead, pd-desk, and pd-lead-reports returned ok) and exposed no etag. No loop_acks entry is recorded: no human ack id was issued this turn, and one was not invented.",
+    "Purple-team and omega-prime pointers were taken from the public README and skill-path listings. Neither repository was cloned, installed, or executed.",
+    "Greptile has not run. A FAILED, SKIPPED, or missing review is a blocker, not a pass.",
+    "approved_by is unset. The authoring seat does not stamp its own receipt."
+  ],
+  "files_changed": [
+    "prompts/bot-00-programming-lead.xml",
+    "prompts/bot-01-systems-backend.xml",
+    "prompts/bot-02-web-edge.xml",
+    "prompts/bot-03-android.xml",
+    "prompts/bot-04-ios.xml",
+    "prompts/bot-05-infrastructure.xml",
+    "prompts/bot-06-quality-security.xml",
+    "prompts/LEAD.xml",
+    "prompts/SYSTEMS.xml",
+    "prompts/WEB.xml",
+    "prompts/ANDROID.xml",
+    "prompts/IOS.xml",
+    "prompts/INFRA.xml",
+    "prompts/QUALITY.xml",
+    "prompts-assembled/LEAD.xml",
+    "prompts-assembled/SYSTEMS.xml",
+    "prompts-assembled/WEB.xml",
+    "prompts-assembled/ANDROID.xml",
+    "prompts-assembled/IOS.xml",
+    "prompts-assembled/INFRA.xml",
+    "prompts-assembled/QUALITY.xml",
+    "skills/desk-bootstrap/desk-production-loop/SKILL.md",
+    ".receipts/bot-00-programming-lead/seat-prompts-refresh.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert the prompt-refresh commit. The assembled files are generated output of scripts/assemble-prompts.sh; reverting the sources and running that script restores the previous text. No service was deployed and no unit was enabled.",
+  "approvals": [],
+  "loop_acks": []
+}

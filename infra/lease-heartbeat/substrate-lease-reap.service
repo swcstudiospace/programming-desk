@@ -1,4 +1,4 @@
-# STUB — not installed. SPE-4792 INFRA half, lease sweeper.
+# SPE-12501. Copied by install.sh. Not enabled unless install.sh is passed --enable.
 #
 # One periodic call to the SYSTEMS-owned `coord_reap_leases` tool on the local substrate-mcp, so
 # leases whose holder died still get released on a quiet desk. INFRA schedules the call; it does
@@ -13,11 +13,12 @@
 # NO SECRETS IN THIS UNIT. The bearer lives in the curl config file named by
 # SUBSTRATE_LEASE_REAP_CURL_CONFIG (root:root 0600) — not in an Environment= line and not on the
 # command line, because a command line is visible in `ps` and in `systemctl show` to every local
-# user. Every value below comes from the EnvironmentFile; empty means the installer has not run.
+# user. Every value below comes from the EnvironmentFile; empty means the installer has not filled
+# the reap names in from lease-heartbeat.env.example.
 
 [Unit]
-Description=Reap expired Programming Desk seat leases (SPE-4792)
-Documentation=file:///opt/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
+Description=Reap expired Programming Desk seat leases (SPE-12501)
+Documentation=file:///opt/desk-gateway/programming-desk/infra/lease-heartbeat/LEASE-HEARTBEAT.md
 After=network-online.target substrate-mcp.service
 Wants=substrate-mcp.service
 # Loopback only, so no network dependency beyond the substrate being up. If it is down the sweep
@@ -27,6 +28,7 @@ Wants=substrate-mcp.service
 Type=oneshot
 User=root
 Group=root
+WorkingDirectory=/opt/desk-gateway/programming-desk
 # REQUIRED, no `-` prefix: without the env file every ${...} below expands empty and curl is
 # invoked with no URL, no config and no request body. Fail on the missing file instead.
 EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
@@ -38,11 +40,9 @@ EnvironmentFile=/etc/desk-lease-heartbeat/heartbeat.env
 # the tool actually ran and actually succeeded; its exit codes are listed in its own header and in
 # LEASE-HEARTBEAT.md §6. It also keeps the curl invocation out of a systemd command line, where
 # `%` is special and would have to be escaped.
-#
-# STUB: the request body and curl config are written by the installer; see LEASE-HEARTBEAT.md §6.
-ExecStart=/opt/programming-desk/infra/lease-heartbeat/substrate-lease-reap.sh
-# Keep below the timer interval, or a hung sweep occupies the next tick. Generated from
-# SUBSTRATE_LEASE_REAP_TIMEOUT_SEC at install time — PLACEHOLDER literal here.
+ExecStart=/opt/desk-gateway/programming-desk/infra/lease-heartbeat/substrate-lease-reap.sh
+# Shipped literal, copied by install.sh and not rewritten. Kept below the 45s timer interval so a
+# hung sweep cannot occupy the next tick.
 TimeoutStartSec=30
 NoNewPrivileges=true
 PrivateTmp=true

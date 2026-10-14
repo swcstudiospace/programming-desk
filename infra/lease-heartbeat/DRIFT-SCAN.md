@@ -151,7 +151,7 @@ the host the substrate is actually pointed at.
   "checked_at": "2026-09-30T00:00:00Z",
   "ok": true,
   "git_tip": {
-    "probe": "git_tip", "ok": true, "repo_dir": "/opt/programming-desk",
+    "probe": "git_tip", "ok": true, "repo_dir": "/opt/desk-gateway/programming-desk",
     "branch": "main", "local_tip": "<sha>", "dirty": false,
     "remote": "origin", "remote_branch": "main", "remote_tip": "<sha>",
     "remote_checked": true,

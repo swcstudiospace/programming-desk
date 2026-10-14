@@ -43,6 +43,8 @@ came from the skill or from its application.
 | `ragflow-docs` | all | Docs search finds where; the file is the fact. Datasets and citing |
 | `tool-packs` | 2, 3, 4 | Loading and unloading app packs, the 20-tool ceiling, pack authoring |
 | `platforms/railway-tailscale` | 5 | Forwarders per Railway project, ACL tags, VPS cutover, rollback |
+| `projects/spectrumwebco-marketing` | 2, 0 | Next.js marketing site: Convex Sydney, Tavus PAL, Supabase auth, Vercel. Deploy needs Ming's yes |
+| `projects/omega-prime` | 0, 1 | Omega Prime at omes-bot `2322d46`: v17 XML prompts, Purple-Team batches 07–18. Deploy needs Ming's yes |
 
 ## Authoring rules
 

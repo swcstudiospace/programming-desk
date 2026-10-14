@@ -134,7 +134,7 @@ async def test_poller_stops_on_shutdown_without_leaked_tasks(tmp_path: Path) -> 
 
 @pytest.mark.asyncio
 async def test_failing_upstream_does_not_kill_poll_loop(caplog: pytest.LogCaptureFixture) -> None:
-    secret = "postgres://operator:secret-token@db.internal/desk"
+    secret = "postgres://operator:secret-token@db.internal/desk"  # pragma: allowlist secret (redaction fixture)
     calls = 0
 
     async def explode() -> dict[str, object]:

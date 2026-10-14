@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -89,6 +90,77 @@ def test_verify_anchor_proofs_detects_corrupted_merkle_or_tx(tmp_path):
     assert res["merkle_valid"] is False
     assert res["tx_confirmed"] is False
     assert res["verified"] is False
+
+
+def _unit_directives(path: Path) -> dict[str, str]:
+    """Last assignment wins. Comments and section headers are ignored."""
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or line.startswith(";"):
+            continue
+        if line.startswith("[") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip()
+    return values
+
+
+def test_anchor_proof_systemd_units_match_hourly_oneshot_contract():
+    """SPE-12502: the timer is an hourly calendar unit and the service is oneshot."""
+    service = _unit_directives(REPO_ROOT / "infra/telemetry/verify-anchor-proofs.service")
+    timer = _unit_directives(REPO_ROOT / "infra/telemetry/verify-anchor-proofs.timer")
+
+    assert service["Type"] == "oneshot"
+    assert service["User"] == "root"
+    assert service["WorkingDirectory"] == "/opt/programming-desk"
+    assert service["EnvironmentFile"] == "-/etc/desk-anchor-proofs/anchor.env"
+    assert service["ExecStart"].endswith("/infra/telemetry/verify-anchor-proofs.sh")
+    assert service["NoNewPrivileges"] == "true"
+    assert service["PrivateTmp"] == "true"
+    assert service["ProtectSystem"] == "strict"
+    assert service["ProtectHome"] == "true"
+    assert service["StateDirectory"] == "desk-anchor-proofs"
+    assert "REPORT_OUTPUT_DIR=/var/lib/desk-anchor-proofs" in service["Environment"]
+
+    assert timer["OnCalendar"] == "hourly"
+    assert timer["Persistent"] == "true"
+    assert timer["Unit"] == "verify-anchor-proofs.service"
+    delay = int(timer["RandomizedDelaySec"])
+    assert 1 <= delay <= 300
+
+
+def test_anchor_proof_units_pass_systemd_analyze_verify():
+    """SPE-12502: unit syntax is clean once ExecStart points at a real checkout.
+
+    The committed paths use /opt/programming-desk, which is the VPS checkout and
+    is absent on a dev machine. systemd-analyze then exits 1 for that missing
+    binary alone. This rewrites those prefixes to the repo root and verifies
+    the copies. It does not install or enable either unit.
+    """
+    analyze = shutil.which("systemd-analyze")
+    if analyze is None:
+        pytest.skip("systemd-analyze is not installed")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        for name in ("verify-anchor-proofs.service", "verify-anchor-proofs.timer"):
+            source = (REPO_ROOT / "infra/telemetry" / name).read_text(encoding="utf-8")
+            rewritten = source.replace("/opt/programming-desk", str(REPO_ROOT))
+            (root / name).write_text(rewritten, encoding="utf-8")
+        proc = subprocess.run(
+            [
+                analyze,
+                "verify",
+                str(root / "verify-anchor-proofs.service"),
+                str(root / "verify-anchor-proofs.timer"),
+            ],
+            capture_output=True,
+            text=True,
+        )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert proc.stdout == ""
+    assert proc.stderr == ""
 
 
 def test_synthetic_stress_telemetry_audit_suite():

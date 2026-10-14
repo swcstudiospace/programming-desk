@@ -1,0 +1,34 @@
+# NOT INSTALLED. SPE-12502. Pairs with verify-anchor-proofs.timer.
+#
+# Schedules infra/telemetry/verify-anchor-proofs.sh. This unit does not install,
+# enable, or copy itself onto a host. Enablement is a separate operator step
+# recorded in ANCHOR-PROOFS.md. No secrets in this file.
+
+[Unit]
+Description=Verify GreptimeDB Solana devnet anchor proofs (SPE-12502)
+Documentation=file:///opt/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/opt/programming-desk
+# The script's own default report directory is /tmp/desk-anchors. PrivateTmp
+# throws that directory away when the oneshot exits, so the JSON would never
+# outlive the run. StateDirectory keeps it. An assignment in the EnvironmentFile
+# overrides this; a missing file does not, because of the `-` prefix.
+Environment=REPORT_OUTPUT_DIR=/var/lib/desk-anchor-proofs
+EnvironmentFile=-/etc/desk-anchor-proofs/anchor.env
+ExecStart=/opt/programming-desk/infra/telemetry/verify-anchor-proofs.sh
+TimeoutStartSec=120
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+StateDirectory=desk-anchor-proofs
+StateDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=verify-anchor-proofs

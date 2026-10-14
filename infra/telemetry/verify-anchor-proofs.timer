@@ -1,0 +1,20 @@
+# NOT INSTALLED. SPE-12502. Pairs with verify-anchor-proofs.service.
+#
+# Hourly calendar timer. Persistent= only replays a missed run for OnCalendar
+# timers, which is why this is not OnUnitActiveSec. RandomizedDelaySec is one
+# minute: small next to the hour, enough that hosts do not hit Greptime and
+# Solana devnet on the same second.
+
+[Unit]
+Description=Hourly Solana devnet anchor proof verification (SPE-12502)
+Documentation=file:///opt/programming-desk/infra/telemetry/ANCHOR-PROOFS.md
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=60
+AccuracySec=1s
+Unit=verify-anchor-proofs.service
+
+[Install]
+WantedBy=timers.target

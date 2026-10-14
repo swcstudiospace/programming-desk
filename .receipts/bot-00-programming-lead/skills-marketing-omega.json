@@ -1,0 +1,145 @@
+{
+  "task_id": "skills-marketing-omega",
+  "bot": "bot-00-programming-lead",
+  "started_at": "2026-10-14T13:50:53Z",
+  "completed_at": "2026-10-14T14:03:06Z",
+  "brief_read_at": 1791985950.030013,
+  "cached": false,
+  "commands": [
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --validate-manifest",
+      "exit_code": 0,
+      "duration_s": 0.07,
+      "output_tail": "G-1 manifest OK \u2014 7 bots, 115 rules"
+    },
+    {
+      "cmd": "python3 ci/gates/check_ownership.py --bot bot-00-programming-lead --base origin/main",
+      "exit_code": 1,
+      "duration_s": 0.06,
+      "output_tail": "G-1 FAIL \u2014 bot-00-programming-lead\n  FOREIGN  skills/README.md  (owned by bot-06-quality-security)\n  FOREIGN  skills/projects/omega-prime/SKILL.md  (owned by bot-06-quality-security)\n  FOREIGN  skills/projects/spectrumwebco-marketing/SKILL.md  (owned by bot-06-quality-security)\n\n  Cross-bot work goes through docs/cross-bot-protocol.md, not direct edits."
+    },
+    {
+      "cmd": "bash skills/desk-bootstrap/desk-production-loop/verify.sh",
+      "exit_code": 0,
+      "duration_s": 0.29,
+      "output_tail": "ok: frontmatter, phase order, R2a nested-error test, R3 per-bank recall, R2b read-timestamp semantics, R1a etag/degraded split, R1b event routing, R1c doctor gap, R6a call-level vs nested shapes, R6b no-marker ack, R6c non-atomic memory write, R6d payload.event routing gap, R6e distinct payload fields, R6f absent cached, R7a loop_acks vs approvals, R7b first-stamp obstacle + TOCTOU, R7c no false CI claim, R8a sha-bound approval, R8b G-6 fixtures executed, R8c scratch-root negative tests, R8d loop_acks contract, R9a human grantor, R10b executable loop_acks checker + 4 companion specs, R10c post-companion framing, R9d three G-6 fixtures, raw-connector denial, skills.approve, 5 packet fields, all 7 named seat templates present, no stale wording, no credential literal"
+    },
+    {
+      "cmd": "python3 -m pytest ci/tests -q",
+      "exit_code": 0,
+      "duration_s": 10.05,
+      "output_tail": "299 passed in 9.79s"
+    },
+    {
+      "cmd": "python3 ci/gates/check_secrets.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-3 PASS \u2014 3 file(s) scanned, no secrets detected"
+    },
+    {
+      "cmd": "python3 ci/gates/check_contracts.py --base origin/main",
+      "exit_code": 0,
+      "duration_s": 0.05,
+      "output_tail": "G-4 PASS \u2014 no contract surfaces touched"
+    },
+    {
+      "cmd": "python3 ci/gates/check_desk_integrity.py --repo .",
+      "exit_code": 0,
+      "duration_s": 0.12,
+      "output_tail": "7 template(s) clean\nG-7 PASS \u2014 desk integrity: 7 rosters, 8 packs, 22 prompt files checked"
+    },
+    {
+      "cmd": "python3 ci/gates/check_rollback.py --receipt .receipts/bot-00-programming-lead/skills-marketing-omega.json",
+      "exit_code": 0,
+      "duration_s": 0.03,
+      "output_tail": "G-5/G-6 PASS \u2014 no deployments or destructive operations in this receipt"
+    },
+    {
+      "cmd": "python3 ci/gates/check_receipt.py --receipt .receipts/bot-00-programming-lead/skills-marketing-omega.json --bot bot-00-programming-lead --strict",
+      "exit_code": 1,
+      "duration_s": 0.03,
+      "output_tail": "G-2 FAIL \u2014 .receipts/bot-00-programming-lead/skills-marketing-omega.json\n  - 'approved_by' is missing \u2014 work must be reviewed by someone else"
+    },
+    {
+      "cmd": "python3 skills/desk-bootstrap/desk-production-loop/fixtures/check-loop-acks.py .receipts/bot-00-programming-lead/skills-marketing-omega.json",
+      "exit_code": 0,
+      "duration_s": 0.02,
+      "output_tail": "ok: .receipts/bot-00-programming-lead/skills-marketing-omega.json \u2014 0 loop_acks entries, well formed"
+    },
+    {
+      "cmd": "python3 ci/gates/run_all.py --bot bot-00-programming-lead --base origin/main --receipt .receipts/bot-00-programming-lead/skills-marketing-omega.json",
+      "exit_code": 1,
+      "duration_s": 0.36,
+      "output_tail": "[FAIL] G-1 Path ownership\n[FAIL] G-2 Verification receipt\n[PASS] G-3 Committed secrets\n[PASS] G-4 Contract-first changes\n[PASS] G-5/G-6 Rollback and destructive ops\n[PASS] G-7 Desk integrity\n2 gate(s) failed.\nG-1 FOREIGN skills/README.md, skills/projects/omega-prime/SKILL.md, skills/projects/spectrumwebco-marketing/SKILL.md (bot-06-quality-security). G-2 only: approved_by is missing."
+    }
+  ],
+  "claims": [
+    {
+      "claim": "ownership.yaml still validates",
+      "evidence_command_index": 0
+    },
+    {
+      "claim": "G-1 fails because the three skill paths are owned by bot-06-quality-security",
+      "evidence_command_index": 1,
+      "expects_failure": true
+    },
+    {
+      "claim": "desk-production-loop verify.sh exits 0",
+      "evidence_command_index": 2
+    },
+    {
+      "claim": "ci/tests pytest exits 0 with 299 passed",
+      "evidence_command_index": 3
+    },
+    {
+      "claim": "Secret scan of the branch diff exits 0",
+      "evidence_command_index": 4
+    },
+    {
+      "claim": "No contract surface is in the diff",
+      "evidence_command_index": 5
+    },
+    {
+      "claim": "Desk integrity check exits 0",
+      "evidence_command_index": 6
+    },
+    {
+      "claim": "Rollback gate passes with no deploy or destructive command",
+      "evidence_command_index": 7
+    },
+    {
+      "claim": "Strict G-2 fails because approved_by is unset",
+      "evidence_command_index": 8,
+      "expects_failure": true
+    },
+    {
+      "claim": "loop_acks checker accepts the empty list",
+      "evidence_command_index": 9
+    },
+    {
+      "claim": "run_all exits 1 on G-1 FOREIGN and G-2 missing approved_by",
+      "evidence_command_index": 10,
+      "expects_failure": true
+    }
+  ],
+  "unverified": [
+    "desk_brief retry at generated_at 1791985950.030013 succeeded (substrate.ok, no substrate.error, no recall.error, no recall.results[].error). The response had no cached key, recorded as cached false, and no etag. No human returned a loop ack id, so loop_acks is empty. Repo work still happened because the ticket required the skill files.",
+    "First desk_brief in this turn timed out on bank pd-lead (reason: hindsight bank pd-lead exceeded the 6s recall budget). The retry above is the brief this receipt records.",
+    "swcstudiospace/spectrumwebco-marketing at e0b71bd was not checked out: git clone and gh repo view returned 404. Marketing facts are docs-plane chunks plus the live www.spectrumweb.co bundle, not that commit's git log.",
+    "GenUI overlays and a v2.2 version label were not in the ingested marketing chunks or the home/docs HTML. The skill tells the reader not to invent them.",
+    "Omega Prime commands in the skill were read from commit 2322d46 and were not re-executed in this seat (no venv, no pytest of omes-bot).",
+    "G-1 FOREIGN on skills/** is a merge blocker. ownership.yaml was not given a LEAD carve-out.",
+    "approved_by is unset until bot-00 is reviewed by someone else. Greptile was not run. Nothing was deployed and the VPS was not touched.",
+    "Intake queue and loaded_packs came back empty from desk_brief; an empty local store is indistinguishable from an unreadable one, so emptiness is not claimed."
+  ],
+  "files_changed": [
+    "skills/projects/spectrumwebco-marketing/SKILL.md",
+    "skills/projects/omega-prime/SKILL.md",
+    "skills/README.md",
+    ".receipts/bot-00-programming-lead/skills-marketing-omega.json"
+  ],
+  "contract_changes": [],
+  "rollback_plan": null,
+  "approvals": [],
+  "loop_acks": []
+}

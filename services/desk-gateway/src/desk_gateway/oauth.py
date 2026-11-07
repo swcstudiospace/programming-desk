@@ -316,6 +316,12 @@ class SeatOAuthProvider:
                 return None
             return at
 
+    def has_live_access_token(self, token: str) -> bool:
+        """True only for an unexpired OAuth access token. Never evaluates a seat passphrase."""
+        with self._lock:
+            at = self._access.get(token)
+            return at is not None and (at.expires_at is None or at.expires_at >= time.time())
+
     async def revoke_token(self, token: AccessToken | RefreshToken) -> None:
         with self._lock:
             if isinstance(token, AccessToken):

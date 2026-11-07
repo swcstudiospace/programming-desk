@@ -23,13 +23,13 @@ REPO = ROOT.parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 PASS = {
-    "lead": "lead-pass-1234567890",
-    "systems": "systems-pass-1234567890",
-    "web": "web-pass-1234567890",
-    "android": "android-pass-1234567890",
-    "ios": "ios-pass-1234567890",
-    "infra": "infra-pass-1234567890",
-    "quality": "quality-pass-1234567890",
+    "lead": "lead-pass-1234567890-abcdefghijkl",
+    "systems": "systems-pass-1234567890-abcdefghijkl",
+    "web": "web-pass-1234567890-abcdefghijkl",
+    "android": "android-pass-1234567890-abcdefghijkl",
+    "ios": "ios-pass-1234567890-abcdefghijkl",
+    "infra": "infra-pass-1234567890-abcdefghijkl",
+    "quality": "quality-pass-1234567890-abcdefghijkl",
 }
 INTAKE_TOKEN = "test_origin_token_github_0001"
 MCP_HEADERS = {

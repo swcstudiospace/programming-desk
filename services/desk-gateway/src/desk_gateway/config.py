@@ -6,6 +6,9 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+# A seat passphrase shorter than this is never compared, on any route and in consent.
+MIN_SEAT_PASSPHRASE_CHARS = 24
+
 SEATS: dict[str, str] = {
     "lead": "bot-00-programming-lead",
     "systems": "bot-01-systems-backend",
@@ -147,7 +150,7 @@ class Settings:
     def seat_for_passphrase(self, passphrase: str) -> str | None:
         import secrets
 
-        if not passphrase:
+        if not passphrase or len(passphrase) < MIN_SEAT_PASSPHRASE_CHARS:
             return None
         for seat, expected in self.seat_passphrases.items():
             if expected and secrets.compare_digest(passphrase.encode(), expected.encode()):

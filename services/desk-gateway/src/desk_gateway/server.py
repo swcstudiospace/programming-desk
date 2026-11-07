@@ -162,6 +162,7 @@ from desk_gateway.rbac import (
     Role,
 )
 from desk_gateway.failover import FailoverError, FailoverRouter
+from desk_gateway.bearer_guard import BearerGuard, FailureTracker
 from desk_gateway.federation import (
     FederatedTokenValidator,
     FederationError,
@@ -10428,6 +10429,7 @@ def build_app(settings: Settings | None = None) -> tuple[Any, Settings]:
 
     starlette_app.routes.append(WebSocketRoute("/desk/events", desk_events))
     app = ConnectorKeyHeader(SeatRouter(starlette_app, oauth, rosters, isolation_manager=iso_manager, failover_router=failover_router, edge_gateway=edge_gw, supervisor=getattr(mcp, "_healing_supervisor", None)))
+    app = BearerGuard(app, tracker=FailureTracker(), is_live_oauth_token=oauth.has_live_access_token)
     app.state = {
         "store": store,
         "services": services,

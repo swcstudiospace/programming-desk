@@ -13,6 +13,9 @@ ENABLED=/etc/nginx/sites-enabled
 CERT="/etc/letsencrypt/live/$HOST/fullchain.pem"
 
 install -d -m 0755 /var/www/certbot
+install -d -m 0755 /etc/nginx/snippets /etc/nginx/conf.d
+install -m 0644 "$HERE/cloudflare-realip.conf" /etc/nginx/snippets/cloudflare-realip.conf
+install -m 0644 "$HERE/desk-auth-ratelimit.conf" /etc/nginx/conf.d/desk-auth-ratelimit.conf
 install -m 0644 "$HERE/nginx-$HOST.conf"     "$AVAIL/$HOST.conf"
 install -m 0644 "$HERE/nginx-$HOST-ssl.conf" "$AVAIL/$HOST-ssl.conf"
 ln -sfn "$AVAIL/$HOST.conf" "$ENABLED/$HOST.conf"

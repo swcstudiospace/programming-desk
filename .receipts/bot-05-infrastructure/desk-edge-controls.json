@@ -1,0 +1,44 @@
+{
+  "task_id": "desk-edge-controls",
+  "bot": "bot-05-infrastructure",
+  "evaluated_commit": "68f5cad",
+  "commands": [
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "output_tail": "G-1 manifest OK — 7 bots, 115 rules" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_ownership.py --bot bot-05-infrastructure --base origin/main", "exit_code": 0, "output_tail": "G-1 PASS — bot-05-infrastructure: 5 file(s) within owned paths" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_desk_integrity.py --repo .", "exit_code": 0, "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_secrets.py --base origin/main", "exit_code": 0, "output_tail": "G-3 PASS — 5 file(s) scanned, no secrets detected" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_contracts.py --base origin/main", "exit_code": 0, "output_tail": "G-4 PASS — no contract surfaces touched" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python -m pytest ci/tests/ -q -p no:cacheprovider", "exit_code": 0, "output_tail": "299 passed in 17.34s" },
+    { "cmd": "bash -n infra/desk-gateway/install-nginx.sh", "exit_code": 0, "output_tail": "" },
+    { "cmd": "diff /etc/nginx/sites-available/desk.swcstudio.space-ssl.conf infra/desk-gateway/nginx-desk.swcstudio.space-ssl.conf (IPv4 addresses masked as <ip> in output_tail)", "exit_code": 1, "output_tail": "10,11d9\n< # The listener is bound to the public address because tailscaled holds :443 on the tailnet\n< # address; a wildcard `listen 443` would fail to bind next to it.\n14c12,13\n<     listen <ip>:443 ssl http2;\n---\n>     listen 443 ssl;\n>     listen [::]:443 ssl;" },
+    { "cmd": "/root/src/worktrees/gates-venv/bin/python ci/gates/check_rollback.py --receipt .receipts/bot-05-infrastructure/desk-edge-controls.json", "exit_code": 0, "output_tail": "G-5/G-6 PASS — no deployments or destructive operations in this receipt" }
+  ],
+  "claims": [
+    { "claim": "All changed files are inside bot-05-infrastructure's owned paths", "evidence_command_index": 1 },
+    { "claim": "The changed files contain no secrets", "evidence_command_index": 3 },
+    { "claim": "No contract surface is touched", "evidence_command_index": 4 },
+    { "claim": "The CI self-tests pass", "evidence_command_index": 5 },
+    { "claim": "install-nginx.sh parses", "evidence_command_index": 6 },
+    { "claim": "The template differs from the live vhost in two hunks only: the tailnet comment and the listen directives", "evidence_command_index": 7, "expects_failure": true },
+    { "claim": "The rollback gate passes: no deployment or destructive operation in this receipt", "evidence_command_index": 8 }
+  ],
+  "unverified": [
+    "nginx -t was not run against the template: it names the Let's Encrypt certificates, and the wildcard listen addresses are a deploy decision for this host",
+    "install-nginx.sh was not executed: it writes to /etc/nginx and reloads nginx",
+    "The wildcard listen addresses will not bind on the live host, where tailscaled holds :443 on the tailnet address; the bind address needs an owner decision before a deploy",
+    "Origin port 443 accepts connections without going through Cloudflare: the nftables INPUT chain has policy accept and no rule filters 443. This PR does not change it; it needs an owner decision (restrict 443 to Cloudflare ranges, or Authenticated Origin Pulls)",
+    "Cloudflare's published ranges are a snapshot from 2026-11-07 and need refreshing when Cloudflare publishes changes",
+    "The live behaviour of the new template was not re-tested after the copy; the live vhost was checked separately (nginx -T counts, a 30-request burst on /authorize, and a spoofed-header burst on /view/login)",
+    "Greptile review and the QUALITY merge gate have not run: they run after the draft PR exists",
+    "approved_by is absent until an independent reviewer stamps this receipt, so G-2 is expected to fail on it"
+  ],
+  "files_changed": [
+    "infra/desk-gateway/install-nginx.sh",
+    "infra/desk-gateway/nginx-desk.swcstudio.space-ssl.conf",
+    "infra/desk-gateway/cloudflare-realip.conf",
+    "infra/desk-gateway/desk-auth-ratelimit.conf"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert this commit. On the host, restore /etc/nginx/sites-available/desk.swcstudio.space-ssl.conf from /root/src/worktrees/backups/nginx-desk.pre-ratelimit.bak if the live vhost must return to its pre-edit state, then run `nginx -t && systemctl reload nginx`. Remove /etc/nginx/snippets/cloudflare-realip.conf and /etc/nginx/conf.d/desk-auth-ratelimit.conf only after the vhost no longer includes them.",
+  "approvals": []
+}

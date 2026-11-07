@@ -1,0 +1,49 @@
+{
+  "task_id": "bearer-passphrase-guard",
+  "bot": "bot-01-systems-backend",
+  "started_at": "2026-11-07T05:00:00Z",
+  "completed_at": "2026-11-07T06:06:08Z",
+  "commands": [
+    { "cmd": "python3 ci/gates/check_ownership.py --validate-manifest", "exit_code": 0, "duration_s": 1.0, "output_tail": "G-1 manifest OK — 7 bots, 115 rules" },
+    { "cmd": "python3 ci/gates/check_ownership.py --bot bot-01-systems-backend --base origin/main", "exit_code": 0, "duration_s": 1.0, "output_tail": "G-1 PASS — bot-01-systems-backend: 6 file(s) within owned paths" },
+    { "cmd": "python3 ci/gates/check_desk_integrity.py --repo .", "exit_code": 0, "duration_s": 2.0, "output_tail": "G-7 PASS — desk integrity: 7 rosters, 8 packs, 22 prompt files checked" },
+    { "cmd": "python3 ci/gates/check_secrets.py --base origin/main", "exit_code": 0, "duration_s": 1.0, "output_tail": "G-3 PASS — 6 file(s) scanned, no secrets detected" },
+    { "cmd": "python3 ci/gates/check_contracts.py --base origin/main", "exit_code": 0, "duration_s": 1.0, "output_tail": "G-4 PASS — no contract surfaces touched" },
+    { "cmd": "python3 -m pytest ci/tests/ -q", "exit_code": 0, "duration_s": 18.1, "output_tail": "299 passed in 18.10s" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests/test_bearer_guard.py -q", "exit_code": 0, "duration_s": 1.2, "output_tail": "7 passed in 1.23s" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests/test_alerts.py -q", "exit_code": 0, "duration_s": 1.7, "output_tail": "6 passed in 1.72s" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests/test_cutover.py -q", "exit_code": 0, "duration_s": 1.7, "output_tail": "8 passed in 1.71s" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests/test_chaos_recovery.py -q", "exit_code": 0, "duration_s": 2.0, "output_tail": "8 passed in 1.95s" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests -q", "exit_code": 1, "duration_s": 56.7, "output_tail": "1 failed, 696 passed, 2 warnings in 56.70s (FAILED tests/test_dragonfly_limiter.py::test_one_reload_serves_a_noscript_burst)" },
+    { "cmd": "services/desk-gateway/.venv/bin/python -m pytest tests/test_dragonfly_limiter.py::test_one_reload_serves_a_noscript_burst -q (on a clean origin/main worktree)", "exit_code": 1, "duration_s": 1.2, "output_tail": "1 failed in 1.22s: the same assertion fails without this change" }
+  ],
+  "claims": [
+    { "claim": "The changed files are inside bot-01-systems-backend's owned paths", "evidence_command_index": 1 },
+    { "claim": "The changed files contain no secrets", "evidence_command_index": 3 },
+    { "claim": "No contract surface is touched", "evidence_command_index": 4 },
+    { "claim": "The gate self-tests pass", "evidence_command_index": 5 },
+    { "claim": "The new bearer tests pass: passphrase floor, tracker, middleware, and the /v1 and /mcp routes through the app", "evidence_command_index": 6 },
+    { "claim": "The modules that send seat passphrases as Bearer tokens pass", "evidence_command_index": 7 },
+    { "claim": "The full desk suite passes except one test that also fails on a clean origin/main", "evidence_command_index": 9, "expects_failure": true }
+  ],
+  "unverified": [
+    "The guard has not run against live traffic. The 429 path was exercised only through the in-process ASGI client, not through nginx and Cloudflare",
+    "The client address depends on the edge change (bot-05 draft PR) being deployed. Until it is, a request that reaches the origin directly can set CF-Connecting-IP itself and pick its own bucket",
+    "desk-gateway is not restarted. The change takes effect only after a restart following review",
+    "Thresholds (10 rejections in 10 minutes) are not tuned against real client behaviour. Expired OAuth tokens count as rejections",
+    "The full suite has one failure, tests/test_dragonfly_limiter.py::test_one_reload_serves_a_noscript_burst, which needs a Dragonfly service this host does not run and fails identically on origin/main",
+    "Greptile review and the QUALITY merge gate have not run: they run after the draft PR exists",
+    "approved_by is absent until an independent reviewer stamps this receipt, so G-2 is expected to fail on it"
+  ],
+  "files_changed": [
+    "services/desk-gateway/src/desk_gateway/bearer_guard.py",
+    "services/desk-gateway/src/desk_gateway/config.py",
+    "services/desk-gateway/src/desk_gateway/oauth.py",
+    "services/desk-gateway/src/desk_gateway/server.py",
+    "services/desk-gateway/tests/conftest.py",
+    "services/desk-gateway/tests/test_bearer_guard.py"
+  ],
+  "contract_changes": [],
+  "rollback_plan": "Revert the commit and restart desk-gateway. Reverting restores the old behaviour: passphrases of any length are accepted, and there is no per-client limit.",
+  "approvals": []
+}
